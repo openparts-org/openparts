@@ -1,0 +1,61 @@
+# Code PR CI (Testing and Quality Specification section 12): formatting,
+# static checks, and the unit/integration test suite, including a
+# representative CAD-generation smoke check against the exemplar fixture
+# in the sibling openparts-data repository.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out openparts
+        uses: actions/checkout@v4
+
+      - name: Check out openparts-data (sibling fixture data)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/openparts-data
+          path: openparts-data-checkout
+
+      - name: Use sibling layout expected by tests/CLI
+        run: |
+          rm -rf ../openparts-data
+          mv openparts-data-checkout ../openparts-data
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: Representative CAD generation smoke check
+        run: |
+          cargo run -p openparts-cli -- validate \
+            --part ../openparts-data/parts/exemplar/ex48/EX48F100Q6.yaml \
+            --device ../openparts-data/devices/exemplar/EX48F100.yaml \
+            --package ../openparts-data/packages/standards/lqfp/LQFP48-7x7-P0.5.yaml \
+            --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml
+          cargo run -p openparts-cli -- generate \
+            --part ../openparts-data/parts/exemplar/ex48/EX48F100Q6.yaml \
+            --device ../openparts-data/devices/exemplar/EX48F100.yaml \
+            --package ../openparts-data/packages/standards/lqfp/LQFP48-7x7-P0.5.yaml \
+            --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml \
+            --out /tmp/openparts-ci-out
+          test -s /tmp/openparts-ci-out/EX48F100Q6.kicad_sym
+          test -s /tmp/openparts-ci-out/EX48F100Q6.kicad_mod
+          test -s /tmp/openparts-ci-out/EX48F100Q6.step

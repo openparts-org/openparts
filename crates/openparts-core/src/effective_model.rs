@@ -45,13 +45,14 @@ pub fn build_effective_model(
     let mut effective_device = device.clone();
 
     if let Some(rev_id) = revision {
-        let rev = device
-            .revisions
-            .get(rev_id)
-            .ok_or_else(|| EffectiveModelError::UnknownRevision {
-                device: device.id.clone(),
-                revision: rev_id.to_string(),
-            })?;
+        let rev =
+            device
+                .revisions
+                .get(rev_id)
+                .ok_or_else(|| EffectiveModelError::UnknownRevision {
+                    device: device.id.clone(),
+                    revision: rev_id.to_string(),
+                })?;
 
         for (number, pin_override) in &rev.overrides.pins {
             let merged = match effective_device.pins.get(number) {
@@ -210,8 +211,7 @@ mod tests {
     #[test]
     fn no_revision_keeps_base_pins() {
         let device = sample_device();
-        let model =
-            build_effective_model(sample_part(), &device, sample_package(), None).unwrap();
+        let model = build_effective_model(sample_part(), &device, sample_package(), None).unwrap();
         assert_eq!(model.device.pins["42"].name, "VSS");
         assert_eq!(model.applied_revision, None);
     }
@@ -222,8 +222,7 @@ mod tests {
         let before = device.clone();
 
         let model =
-            build_effective_model(sample_part(), &device, sample_package(), Some("rev-b"))
-                .unwrap();
+            build_effective_model(sample_part(), &device, sample_package(), Some("rev-b")).unwrap();
 
         assert_eq!(model.device.pins["42"].name, "PDR_ON");
         // Unrelated pin and unrelated field are untouched.

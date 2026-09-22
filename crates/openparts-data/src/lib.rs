@@ -145,7 +145,8 @@ sources: []
 
     #[test]
     fn wrong_kind_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("openparts-data-test-kind-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("openparts-data-test-kind-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("part.yaml");
 
@@ -173,7 +174,8 @@ lifecycle:
 
     #[test]
     fn duplicate_pin_key_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("openparts-data-test-dup-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("openparts-data-test-dup-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("device.yaml");
 
@@ -200,7 +202,10 @@ pins:
 
     #[test]
     fn non_numeric_pin_keys_are_preserved_as_strings() {
-        let dir = std::env::temp_dir().join(format!("openparts-data-test-pinkeys-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "openparts-data-test-pinkeys-{}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("device.yaml");
 

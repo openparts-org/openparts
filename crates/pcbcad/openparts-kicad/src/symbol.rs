@@ -107,7 +107,14 @@ pub fn parse_symbol_pins(text: &str) -> Vec<ParsedPin> {
         let number_line = lines.next().expect("pin must be followed by a number line");
         let number = extract_quoted(number_line).expect("number line must contain a quoted string");
 
-        pins.push(ParsedPin { number, name, electrical_type, x, y, angle });
+        pins.push(ParsedPin {
+            number,
+            name,
+            electrical_type,
+            x,
+            y,
+            angle,
+        });
     }
     pins
 }

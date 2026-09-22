@@ -50,21 +50,31 @@ pub fn parse_footprint_pads(text: &str) -> Vec<ParsedPad> {
         }
         let number = extract_quoted(trimmed).expect("pad line must contain a quoted number");
 
-        let at_idx = trimmed.find("(at ").expect("pad line must contain (at ...)");
+        let at_idx = trimmed
+            .find("(at ")
+            .expect("pad line must contain (at ...)");
         let after_at = &trimmed[at_idx + 4..];
         let at_close = after_at.find(')').unwrap();
         let mut at_nums = after_at[..at_close].split_whitespace();
         let x: f64 = at_nums.next().unwrap().parse().unwrap();
         let y: f64 = at_nums.next().unwrap().parse().unwrap();
 
-        let size_idx = trimmed.find("(size ").expect("pad line must contain (size ...)");
+        let size_idx = trimmed
+            .find("(size ")
+            .expect("pad line must contain (size ...)");
         let after_size = &trimmed[size_idx + 6..];
         let size_close = after_size.find(')').unwrap();
         let mut size_nums = after_size[..size_close].split_whitespace();
         let width: f64 = size_nums.next().unwrap().parse().unwrap();
         let height: f64 = size_nums.next().unwrap().parse().unwrap();
 
-        pads.push(ParsedPad { number, x, y, width, height });
+        pads.push(ParsedPad {
+            number,
+            x,
+            y,
+            width,
+            height,
+        });
     }
     pads
 }

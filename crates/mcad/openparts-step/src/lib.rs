@@ -26,7 +26,10 @@ struct StepWriter {
 
 impl StepWriter {
     fn new() -> Self {
-        StepWriter { next_id: 1, lines: Vec::new() }
+        StepWriter {
+            next_id: 1,
+            lines: Vec::new(),
+        }
     }
 
     fn alloc(&mut self) -> u32 {
@@ -95,7 +98,11 @@ impl StepWriter {
         ));
         // Arbitrary reference direction not parallel to normal; the exact
         // in-plane rotation doesn't matter for a flat rectangular face.
-        let ref_dir = if normal[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
+        let ref_dir = if normal[0].abs() < 0.9 {
+            [1.0, 0.0, 0.0]
+        } else {
+            [0.0, 1.0, 0.0]
+        };
         let ref_id = self.emit(&format!(
             "DIRECTION('', ({:.6}, {:.6}, {:.6}))",
             ref_dir[0], ref_dir[1], ref_dir[2]
@@ -104,7 +111,9 @@ impl StepWriter {
             "AXIS2_PLACEMENT_3D('', #{origin_id}, #{normal_id}, #{ref_id})"
         ));
         let plane_id = self.emit(&format!("PLANE('', #{axis_id})"));
-        self.emit(&format!("ADVANCED_FACE('', (#{bound_id}), #{plane_id}, .T.)"))
+        self.emit(&format!(
+            "ADVANCED_FACE('', (#{bound_id}), #{plane_id}, .T.)"
+        ))
     }
 
     /// Writes one axis-aligned box centered at `center` with the given
@@ -129,16 +138,28 @@ impl StepWriter {
 
         // 12 edges: 4 bottom, 4 top, 4 vertical.
         let edge_defs: [(usize, usize); 12] = [
-            (0, 1), (1, 2), (2, 3), (3, 0), // bottom loop
-            (4, 5), (5, 6), (6, 7), (7, 4), // top loop
-            (0, 4), (1, 5), (2, 6), (3, 7), // verticals
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0), // bottom loop
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4), // top loop
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7), // verticals
         ];
         let mut edges = std::collections::HashMap::new();
         for (a, b) in edge_defs {
             let id = self.edge(verts[a], coords[a], verts[b], coords[b]);
             edges.insert((a, b), id);
         }
-        let edge_between = |edges: &std::collections::HashMap<(usize, usize), u32>, a: usize, b: usize| -> (u32, bool) {
+        let edge_between = |edges: &std::collections::HashMap<(usize, usize), u32>,
+                            a: usize,
+                            b: usize|
+         -> (u32, bool) {
             if let Some(&id) = edges.get(&(a, b)) {
                 (id, true)
             } else {
@@ -209,7 +230,11 @@ impl StepWriter {
         );
 
         let faces = [bottom, top, front, back, left, right];
-        let face_list = faces.iter().map(|f| format!("#{f}")).collect::<Vec<_>>().join(", ");
+        let face_list = faces
+            .iter()
+            .map(|f| format!("#{f}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let shell_id = self.emit(&format!("CLOSED_SHELL('', ({face_list}))"));
         self.emit(&format!("MANIFOLD_SOLID_BREP('', #{shell_id})"))
     }
@@ -217,13 +242,24 @@ impl StepWriter {
 
 /// Renders `geometry` (one box per body + lead) as a complete STEP AP214
 /// file named after `product_name`.
-pub fn generate_step(geometry: &MechanicalGeometry, product_name: &str) -> Result<String, StepError> {
+pub fn generate_step(
+    geometry: &MechanicalGeometry,
+    product_name: &str,
+) -> Result<String, StepError> {
     let mut w = StepWriter::new();
 
     let mut brep_ids = Vec::new();
     brep_ids.push(w.write_box(
-        [geometry.body.position.x, geometry.body.position.y, geometry.body.position.z],
-        [geometry.body.size.x, geometry.body.size.y, geometry.body.size.z],
+        [
+            geometry.body.position.x,
+            geometry.body.position.y,
+            geometry.body.position.z,
+        ],
+        [
+            geometry.body.size.x,
+            geometry.body.size.y,
+            geometry.body.size.z,
+        ],
     ));
     for lead in &geometry.leads {
         brep_ids.push(w.write_box(
@@ -268,7 +304,11 @@ pub fn generate_step(geometry: &MechanicalGeometry, product_name: &str) -> Resul
         "PRODUCT_DEFINITION_SHAPE('', '', #{product_definition})"
     ));
 
-    let brep_list = brep_ids.iter().map(|id| format!("#{id}")).collect::<Vec<_>>().join(", ");
+    let brep_list = brep_ids
+        .iter()
+        .map(|id| format!("#{id}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     let absr = w.emit(&format!(
         "ADVANCED_BREP_SHAPE_REPRESENTATION('', ({brep_list}), #{geom_context})"
     ));
@@ -297,27 +337,58 @@ pub fn generate_step(geometry: &MechanicalGeometry, product_name: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openparts_mcad::{Body, Lead, MarkerKind, Marker, Point3, Size3};
+    use openparts_mcad::{Body, Lead, Marker, MarkerKind, Point3, Size3};
 
     fn tiny_geometry() -> MechanicalGeometry {
         MechanicalGeometry {
             body: Body {
-                position: Point3 { x: 0.0, y: 0.0, z: 0.5 },
-                size: Size3 { x: 3.0, y: 3.0, z: 1.0 },
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.5,
+                },
+                size: Size3 {
+                    x: 3.0,
+                    y: 3.0,
+                    z: 1.0,
+                },
             },
             leads: vec![
                 Lead {
                     number: "1".into(),
-                    position: Point3 { x: -2.0, y: 0.0, z: 0.05 },
-                    size: Size3 { x: 0.6, y: 0.2, z: 0.1 },
+                    position: Point3 {
+                        x: -2.0,
+                        y: 0.0,
+                        z: 0.05,
+                    },
+                    size: Size3 {
+                        x: 0.6,
+                        y: 0.2,
+                        z: 0.1,
+                    },
                 },
                 Lead {
                     number: "2".into(),
-                    position: Point3 { x: 2.0, y: 0.0, z: 0.05 },
-                    size: Size3 { x: 0.6, y: 0.2, z: 0.1 },
+                    position: Point3 {
+                        x: 2.0,
+                        y: 0.0,
+                        z: 0.05,
+                    },
+                    size: Size3 {
+                        x: 0.6,
+                        y: 0.2,
+                        z: 0.1,
+                    },
                 },
             ],
-            markers: vec![Marker { kind: MarkerKind::Pin1Dot, position: Point3 { x: -1.0, y: 1.0, z: 1.0 } }],
+            markers: vec![Marker {
+                kind: MarkerKind::Pin1Dot,
+                position: Point3 {
+                    x: -1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
+            }],
         }
     }
 

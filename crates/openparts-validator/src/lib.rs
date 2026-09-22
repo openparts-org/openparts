@@ -126,13 +126,23 @@ pub fn validate_part(
                 "ref.unknown_source",
                 &part_entity,
                 Some("/sources"),
-                format!("part references source \"{source}\" which was not supplied for validation"),
+                format!(
+                    "part references source \"{source}\" which was not supplied for validation"
+                ),
             ));
         }
     }
 
-    out.extend(check_provenance(&part_entity, &part.provenance, known_sources));
-    out.extend(check_provenance(&device_entity, &device.provenance, known_sources));
+    out.extend(check_provenance(
+        &part_entity,
+        &part.provenance,
+        known_sources,
+    ));
+    out.extend(check_provenance(
+        &device_entity,
+        &device.provenance,
+        known_sources,
+    ));
     out.extend(check_provenance(
         &format!("package:{}", package.id),
         &package.provenance,
@@ -142,11 +152,7 @@ pub fn validate_part(
     out.extend(check_duplicate_pin_names(&device_entity, device));
 
     let package_entity = format!("package:{}", package.id);
-    out.extend(check_dimension(
-        &package_entity,
-        "/pitch",
-        &package.pitch,
-    ));
+    out.extend(check_dimension(&package_entity, "/pitch", &package.pitch));
     out.extend(check_dimension(
         &package_entity,
         "/dimensions/body_width",
@@ -173,7 +179,10 @@ pub fn validate_part(
 /// pins). Every other type ("signal" pins) is expected to have a unique
 /// name per Device -- a repeat there is usually a copy-paste error.
 fn allows_repeated_names(pin_type: PinType) -> bool {
-    matches!(pin_type, PinType::Power | PinType::Ground | PinType::Nc | PinType::Reserved)
+    matches!(
+        pin_type,
+        PinType::Power | PinType::Ground | PinType::Nc | PinType::Reserved
+    )
 }
 
 fn check_duplicate_pin_names(entity: &str, device: &Device) -> Vec<Diagnostic> {
@@ -200,7 +209,11 @@ fn check_duplicate_pin_names(entity: &str, device: &Device) -> Vec<Diagnostic> {
     out
 }
 
-fn check_dimension(entity: &str, field_path: &str, dim: &openparts_core::Dimension) -> Option<Diagnostic> {
+fn check_dimension(
+    entity: &str,
+    field_path: &str,
+    dim: &openparts_core::Dimension,
+) -> Option<Diagnostic> {
     let (Some(nominal), Some(min), Some(max)) = (dim.nominal, dim.min, dim.max) else {
         // Only checkable when all three are present (Testing and Quality
         // Specification section 6: never synthesize a missing value in
@@ -231,7 +244,9 @@ fn check_provenance(
                 "provenance.invalid_path",
                 entity,
                 Some(path),
-                format!("provenance path \"{path}\" is not JSON-Pointer-shaped (must start with \"/\")"),
+                format!(
+                    "provenance path \"{path}\" is not JSON-Pointer-shaped (must start with \"/\")"
+                ),
             ));
         }
         for entry in entries {
@@ -255,8 +270,8 @@ fn check_provenance(
 mod tests {
     use super::*;
     use openparts_core::{
-        Dimension, Existence, ExistenceStatus, Kind, Lifecycle, LifecycleStatus,
-        ManufacturerId, PackageDimensions, PartId,
+        Dimension, Existence, ExistenceStatus, Kind, Lifecycle, LifecycleStatus, ManufacturerId,
+        PackageDimensions, PartId,
     };
     use std::collections::BTreeMap;
 
@@ -269,8 +284,13 @@ mod tests {
             mpn: "EX1".into(),
             device: openparts_core::DeviceId::from("ex/DEV1"),
             package: openparts_core::PackageId::from("standards/PKG1"),
-            existence: Existence { status: ExistenceStatus::Unverified },
-            lifecycle: Lifecycle { status: LifecycleStatus::Active, replacement: vec![] },
+            existence: Existence {
+                status: ExistenceStatus::Unverified,
+            },
+            lifecycle: Lifecycle {
+                status: LifecycleStatus::Active,
+                replacement: vec![],
+            },
             sources: vec![],
             provenance: BTreeMap::new(),
         }
@@ -278,11 +298,14 @@ mod tests {
 
     fn base_device() -> Device {
         let mut pins = BTreeMap::new();
-        pins.insert("1".to_string(), openparts_core::Pin {
-            name: "VBAT".into(),
-            pin_type: openparts_core::PinType::Power,
-            alternate_functions: vec![],
-        });
+        pins.insert(
+            "1".to_string(),
+            openparts_core::Pin {
+                name: "VBAT".into(),
+                pin_type: openparts_core::PinType::Power,
+                alternate_functions: vec![],
+            },
+        );
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
@@ -302,10 +325,25 @@ mod tests {
             id: openparts_core::PackageId::from("standards/PKG1"),
             family: "lqfp".into(),
             lead_count: 4,
-            pitch: Dimension { nominal: Some(0.5), min: None, max: None, unit: "mm".into() },
+            pitch: Dimension {
+                nominal: Some(0.5),
+                min: None,
+                max: None,
+                unit: "mm".into(),
+            },
             dimensions: PackageDimensions {
-                body_width: Dimension { nominal: Some(5.0), min: Some(4.9), max: Some(5.1), unit: "mm".into() },
-                body_length: Dimension { nominal: Some(5.0), min: None, max: None, unit: "mm".into() },
+                body_width: Dimension {
+                    nominal: Some(5.0),
+                    min: Some(4.9),
+                    max: Some(5.1),
+                    unit: "mm".into(),
+                },
+                body_length: Dimension {
+                    nominal: Some(5.0),
+                    min: None,
+                    max: None,
+                    unit: "mm".into(),
+                },
                 body_height: None,
             },
             geometry: None,
@@ -315,7 +353,12 @@ mod tests {
 
     #[test]
     fn accepts_consistent_triple() {
-        let diags = validate_part(&base_part(), &base_device(), &base_package(), &BTreeSet::new());
+        let diags = validate_part(
+            &base_part(),
+            &base_device(),
+            &base_package(),
+            &BTreeSet::new(),
+        );
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     }
 
@@ -330,16 +373,22 @@ mod tests {
     #[test]
     fn rejects_duplicate_signal_pin_names() {
         let mut device = base_device();
-        device.pins.insert("2".to_string(), openparts_core::Pin {
-            name: "PA0".into(),
-            pin_type: openparts_core::PinType::Io,
-            alternate_functions: vec![],
-        });
-        device.pins.insert("3".to_string(), openparts_core::Pin {
-            name: "PA0".into(),
-            pin_type: openparts_core::PinType::Io,
-            alternate_functions: vec![],
-        });
+        device.pins.insert(
+            "2".to_string(),
+            openparts_core::Pin {
+                name: "PA0".into(),
+                pin_type: openparts_core::PinType::Io,
+                alternate_functions: vec![],
+            },
+        );
+        device.pins.insert(
+            "3".to_string(),
+            openparts_core::Pin {
+                name: "PA0".into(),
+                pin_type: openparts_core::PinType::Io,
+                alternate_functions: vec![],
+            },
+        );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());
         assert!(diags.iter().any(|d| d.rule_id == "pin.duplicate_name"));
     }
@@ -350,26 +399,38 @@ mod tests {
         // base_device already has pin "1" = VBAT/Power. Add several more
         // power/ground pins reusing common names -- this is normal on
         // real packages and must not be flagged.
-        device.pins.insert("2".to_string(), openparts_core::Pin {
-            name: "VDD".into(),
-            pin_type: openparts_core::PinType::Power,
-            alternate_functions: vec![],
-        });
-        device.pins.insert("3".to_string(), openparts_core::Pin {
-            name: "VDD".into(),
-            pin_type: openparts_core::PinType::Power,
-            alternate_functions: vec![],
-        });
-        device.pins.insert("4".to_string(), openparts_core::Pin {
-            name: "VSS".into(),
-            pin_type: openparts_core::PinType::Ground,
-            alternate_functions: vec![],
-        });
-        device.pins.insert("5".to_string(), openparts_core::Pin {
-            name: "VSS".into(),
-            pin_type: openparts_core::PinType::Ground,
-            alternate_functions: vec![],
-        });
+        device.pins.insert(
+            "2".to_string(),
+            openparts_core::Pin {
+                name: "VDD".into(),
+                pin_type: openparts_core::PinType::Power,
+                alternate_functions: vec![],
+            },
+        );
+        device.pins.insert(
+            "3".to_string(),
+            openparts_core::Pin {
+                name: "VDD".into(),
+                pin_type: openparts_core::PinType::Power,
+                alternate_functions: vec![],
+            },
+        );
+        device.pins.insert(
+            "4".to_string(),
+            openparts_core::Pin {
+                name: "VSS".into(),
+                pin_type: openparts_core::PinType::Ground,
+                alternate_functions: vec![],
+            },
+        );
+        device.pins.insert(
+            "5".to_string(),
+            openparts_core::Pin {
+                name: "VSS".into(),
+                pin_type: openparts_core::PinType::Ground,
+                alternate_functions: vec![],
+            },
+        );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());
         assert!(!diags.iter().any(|d| d.rule_id == "pin.duplicate_name"));
     }
@@ -391,8 +452,15 @@ mod tests {
     fn does_not_invent_a_missing_nominal() {
         // body_length has no min/max in base_package -> not checkable, no
         // diagnostic should be synthesized just because it's incomplete.
-        let diags = validate_part(&base_part(), &base_device(), &base_package(), &BTreeSet::new());
-        assert!(!diags.iter().any(|d| d.field_path.as_deref() == Some("/dimensions/body_length")));
+        let diags = validate_part(
+            &base_part(),
+            &base_device(),
+            &base_package(),
+            &BTreeSet::new(),
+        );
+        assert!(!diags
+            .iter()
+            .any(|d| d.field_path.as_deref() == Some("/dimensions/body_length")));
     }
 
     #[test]

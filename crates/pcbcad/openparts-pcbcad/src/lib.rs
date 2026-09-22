@@ -133,19 +133,31 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 
         let (position, orientation) = match side {
             0 => (
-                Point2 { x: -half_extent - PIN_LENGTH_MM, y: half_extent - index_on_side * GRID_MM },
+                Point2 {
+                    x: -half_extent - PIN_LENGTH_MM,
+                    y: half_extent - index_on_side * GRID_MM,
+                },
                 PinOrientation::Left,
             ),
             1 => (
-                Point2 { x: -half_extent + index_on_side * GRID_MM, y: -half_extent - PIN_LENGTH_MM },
+                Point2 {
+                    x: -half_extent + index_on_side * GRID_MM,
+                    y: -half_extent - PIN_LENGTH_MM,
+                },
                 PinOrientation::Bottom,
             ),
             2 => (
-                Point2 { x: half_extent + PIN_LENGTH_MM, y: -half_extent + index_on_side * GRID_MM },
+                Point2 {
+                    x: half_extent + PIN_LENGTH_MM,
+                    y: -half_extent + index_on_side * GRID_MM,
+                },
                 PinOrientation::Right,
             ),
             _ => (
-                Point2 { x: half_extent - index_on_side * GRID_MM, y: half_extent + PIN_LENGTH_MM },
+                Point2 {
+                    x: half_extent - index_on_side * GRID_MM,
+                    y: half_extent + PIN_LENGTH_MM,
+                },
                 PinOrientation::Top,
             ),
         };
@@ -166,8 +178,14 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         pins,
         graphics: vec![Graphic {
             kind: GraphicKind::Rectangle {
-                start: Point2 { x: -half_extent, y: half_extent },
-                end: Point2 { x: half_extent, y: -half_extent },
+                start: Point2 {
+                    x: -half_extent,
+                    y: half_extent,
+                },
+                end: Point2 {
+                    x: half_extent,
+                    y: -half_extent,
+                },
             },
         }],
     }
@@ -182,7 +200,10 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
         .iter()
         .map(|lead| Pad {
             number: lead.number.clone(),
-            position: Point2 { x: lead.position.x, y: lead.position.y },
+            position: Point2 {
+                x: lead.position.x,
+                y: lead.position.y,
+            },
             size: (lead.size.x, lead.size.y),
             shape: PadShape::Rect,
         })
@@ -242,13 +263,29 @@ mod tests {
         use openparts_mcad::{Body, Lead, MechanicalGeometry, Point3, Size3};
         let geometry = MechanicalGeometry {
             body: Body {
-                position: Point3 { x: 0.0, y: 0.0, z: 0.0 },
-                size: Size3 { x: 1.0, y: 1.0, z: 1.0 },
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                size: Size3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
             },
             leads: vec![Lead {
                 number: "1".into(),
-                position: Point3 { x: 1.0, y: 2.0, z: 0.0 },
-                size: Size3 { x: 0.3, y: 0.2, z: 0.1 },
+                position: Point3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 0.0,
+                },
+                size: Size3 {
+                    x: 0.3,
+                    y: 0.2,
+                    z: 0.1,
+                },
             }],
             markers: vec![],
         };

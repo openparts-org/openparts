@@ -42,10 +42,21 @@ enum Commands {
         #[arg(long = "source")]
         sources: Vec<PathBuf>,
     },
-    Search { query: String },
-    Show { manufacturer: String, mpn: String },
-    Provenance { manufacturer: String, mpn: String },
-    Diff { from: String, to: String },
+    Search {
+        query: String,
+    },
+    Show {
+        manufacturer: String,
+        mpn: String,
+    },
+    Provenance {
+        manufacturer: String,
+        mpn: String,
+    },
+    Diff {
+        from: String,
+        to: String,
+    },
     Install,
     Update,
     Bundle,
@@ -54,14 +65,24 @@ enum Commands {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Generate { part, device, package, sources, revision, out } => {
-            cmd_generate(part, device, package, sources, revision, out)
-        }
-        Commands::Validate { part, device, package, sources } => {
-            cmd_validate(part, device, package, sources)
-        }
+        Commands::Generate {
+            part,
+            device,
+            package,
+            sources,
+            revision,
+            out,
+        } => cmd_generate(part, device, package, sources, revision, out),
+        Commands::Validate {
+            part,
+            device,
+            package,
+            sources,
+        } => cmd_validate(part, device, package, sources),
         _ => {
-            eprintln!("this subcommand is not implemented yet (Architecture Specification section 7.5)");
+            eprintln!(
+                "this subcommand is not implemented yet (Architecture Specification section 7.5)"
+            );
             Ok(())
         }
     }
@@ -81,7 +102,11 @@ fn load_triple(
     part: &PathBuf,
     device: &PathBuf,
     package: &PathBuf,
-) -> anyhow::Result<(openparts_core::Part, openparts_core::Device, openparts_core::Package)> {
+) -> anyhow::Result<(
+    openparts_core::Part,
+    openparts_core::Device,
+    openparts_core::Package,
+)> {
     let part = openparts_data::load_part(part).context("loading part")?;
     let device = openparts_data::load_device(device).context("loading device")?;
     let package = openparts_data::load_package(package).context("loading package")?;
@@ -100,7 +125,10 @@ fn run_validation(
 fn print_diagnostics(diags: &[openparts_validator::Diagnostic]) {
     for d in diags {
         let field = d.field_path.as_deref().unwrap_or("");
-        eprintln!("[{:?}] {} {} {}: {}", d.severity, d.rule_id, d.entity, field, d.message);
+        eprintln!(
+            "[{:?}] {} {} {}: {}",
+            d.severity, d.rule_id, d.entity, field, d.message
+        );
     }
 }
 
@@ -136,7 +164,10 @@ fn cmd_generate(
     let diags = run_validation(&part, &device, &package, &known_sources);
     if !diags.is_empty() {
         print_diagnostics(&diags);
-        anyhow::bail!("{} validation diagnostic(s); aborting generate", diags.len());
+        anyhow::bail!(
+            "{} validation diagnostic(s); aborting generate",
+            diags.len()
+        );
     }
 
     let model = openparts_core::build_effective_model(
@@ -157,9 +188,13 @@ fn cmd_generate(
 
     let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
     let footprint_text = openparts_kicad::render_footprint(&footprint);
-    std::fs::write(out_dir.join(format!("{}.kicad_mod", part.mpn)), footprint_text)?;
+    std::fs::write(
+        out_dir.join(format!("{}.kicad_mod", part.mpn)),
+        footprint_text,
+    )?;
 
-    let step_text = openparts_step::generate_step(&geometry, &part.mpn).context("generating STEP")?;
+    let step_text =
+        openparts_step::generate_step(&geometry, &part.mpn).context("generating STEP")?;
     std::fs::write(out_dir.join(format!("{}.step", part.mpn)), step_text)?;
 
     // Reproducibility record (Testing and Quality Specification section
@@ -174,7 +209,10 @@ fn cmd_generate(
         env!("CARGO_PKG_VERSION"),
         rustc_version(),
     );
-    std::fs::write(out_dir.join(format!("{}.generation-report.yaml", part.mpn)), report)?;
+    std::fs::write(
+        out_dir.join(format!("{}.generation-report.yaml", part.mpn)),
+        report,
+    )?;
 
     println!(
         "Generated KiCad symbol/footprint, STEP model, and a generation report into {}",

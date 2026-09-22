@@ -31,7 +31,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
     }
 
     let lead_count = package.lead_count;
-    if lead_count == 0 || lead_count % 4 != 0 {
+    if lead_count == 0 || !lead_count.is_multiple_of(4) {
         return Err(McadError::InvalidLeadCount(lead_count));
     }
     let pins_per_side = lead_count / 4;
@@ -49,7 +49,9 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
         .dimensions
         .body_length
         .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_length.nominal"))?;
+        .ok_or(McadError::MissingDimension(
+            "dimensions.body_length.nominal",
+        ))?;
     let body_h = package
         .dimensions
         .body_height
@@ -58,8 +60,16 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
         .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
 
     let body = Body {
-        position: Point3 { x: 0.0, y: 0.0, z: body_h / 2.0 },
-        size: Size3 { x: body_w, y: body_l, z: body_h },
+        position: Point3 {
+            x: 0.0,
+            y: 0.0,
+            z: body_h / 2.0,
+        },
+        size: Size3 {
+            x: body_w,
+            y: body_l,
+            z: body_h,
+        },
     };
 
     let span = (pins_per_side as f64 - 1.0) * pitch;
@@ -145,7 +155,11 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
         },
     }];
 
-    Ok(MechanicalGeometry { body, leads, markers })
+    Ok(MechanicalGeometry {
+        body,
+        leads,
+        markers,
+    })
 }
 
 #[cfg(test)]
@@ -161,10 +175,25 @@ mod tests {
             id: openparts_core::PackageId::from("standards/LQFP8-TEST"),
             family: "lqfp".into(),
             lead_count: 8,
-            pitch: Dimension { nominal: Some(0.5), min: None, max: None, unit: "mm".into() },
+            pitch: Dimension {
+                nominal: Some(0.5),
+                min: None,
+                max: None,
+                unit: "mm".into(),
+            },
             dimensions: PackageDimensions {
-                body_width: Dimension { nominal: Some(3.0), min: None, max: None, unit: "mm".into() },
-                body_length: Dimension { nominal: Some(3.0), min: None, max: None, unit: "mm".into() },
+                body_width: Dimension {
+                    nominal: Some(3.0),
+                    min: None,
+                    max: None,
+                    unit: "mm".into(),
+                },
+                body_length: Dimension {
+                    nominal: Some(3.0),
+                    min: None,
+                    max: None,
+                    unit: "mm".into(),
+                },
                 body_height: None,
             },
             geometry: None,

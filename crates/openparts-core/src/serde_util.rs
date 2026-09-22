@@ -54,7 +54,8 @@ mod tests {
     use serde::de::value::{Error as ValueError, MapDeserializer};
 
     fn run(pairs: Vec<(&str, i32)>) -> Result<BTreeMap<String, i32>, ValueError> {
-        let owned: Vec<(String, i32)> = pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        let owned: Vec<(String, i32)> =
+            pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
         let deserializer: MapDeserializer<_, ValueError> = MapDeserializer::new(owned.into_iter());
         deserialize_no_dup_map(deserializer)
     }
