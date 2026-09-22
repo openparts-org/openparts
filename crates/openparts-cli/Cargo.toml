@@ -16,5 +16,6 @@ openparts-step = { path = "../mcad/openparts-step" }
 openparts-stl = { path = "../mcad/openparts-stl" }
 openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "../pcbcad/openparts-kicad" }
+openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
 clap = { workspace = true }
 anyhow = { workspace = true }

@@ -200,13 +200,25 @@ fn cmd_generate(
     let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).context("generating STL")?;
     std::fs::write(out_dir.join(format!("{}.stl", part.mpn)), stl_text)?;
 
+    // LibrePCB library element (a directory tree, not a single file --
+    // written under <out>/<mpn>.lplib/).
+    let librepcb_dir = out_dir.join(format!("{}.lplib", part.mpn));
+    for file in openparts_librepcb::generate_library(&part.mpn, &symbol, &footprint) {
+        let path = librepcb_dir.join(&file.path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, file.content)?;
+    }
+
     // Reproducibility record (Testing and Quality Specification section
     // 10): the conditions this specific output was generated under.
     let report = format!(
-        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n",
+        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\n  openparts_librepcb: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n",
         part.schema_version,
         part.id,
         model.applied_revision.as_deref().map(|r| format!("\"{r}\"")).unwrap_or_else(|| "null".to_string()),
+        env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
@@ -219,7 +231,7 @@ fn cmd_generate(
     )?;
 
     println!(
-        "Generated KiCad symbol/footprint, STEP/STL models, and a generation report into {}",
+        "Generated KiCad symbol/footprint, STEP/STL models, a LibrePCB library, and a generation report into {}",
         out_dir.display()
     );
     Ok(())
