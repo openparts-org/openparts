@@ -58,6 +58,12 @@ pub struct SymbolPin {
     pub position: Point2,
     pub length: f64,
     pub orientation: PinOrientation,
+    /// Which KiCad symbol unit this pin belongs to. `1` for an ordinary
+    /// (non-split) symbol. `0` is KiCad's "common to every unit" sentinel
+    /// -- used only when [`build_symbol`] splits a very large pin bus
+    /// across multiple units (see its docs), to hold the pins (power,
+    /// ground, misc signals) shared by every numbered unit.
+    pub unit: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -149,6 +155,11 @@ fn text_half_extent(name: &str) -> f64 {
     (name.chars().count() as f64 * CHAR_WIDTH_MM / 2.0).max(GRID_MM / 2.0)
 }
 
+/// A pin's required half-extent along a packing axis, plus an optional
+/// group key (used by `pack_centered` to insert extra gaps between
+/// different groups).
+type PinSpec = (f64, Option<String>);
+
 /// Packs `specs` (each pin's required half-extent along the packing
 /// axis, plus an optional group key) end to end -- consecutive pins get
 /// exactly `half_extent[i] + half_extent[i+1]` apart, plus one extra
@@ -160,7 +171,7 @@ fn text_half_extent(name: &str) -> f64 {
 /// a 1D layout it can be solved exactly in one pass, so unlike an
 /// iterative force/spring relaxation there's no convergence tolerance or
 /// iteration count to pick and the result is exactly reproducible.
-fn pack_centered(specs: &[(f64, Option<String>)]) -> Vec<f64> {
+fn pack_centered(specs: &[PinSpec]) -> Vec<f64> {
     if specs.is_empty() {
         return Vec::new();
     }
@@ -188,6 +199,11 @@ fn pack_centered(specs: &[(f64, Option<String>)]) -> Vec<f64> {
     positions
 }
 
+/// Above this many pins, the bus family (e.g. a GPIO bank) is split
+/// across multiple KiCad symbol units rather than stacked on one
+/// ever-taller right edge -- see [`build_symbol`]'s docs.
+const BUS_UNIT_MAX_PINS: usize = 32;
+
 /// Builds a Symbol from a Device's pins, grouped onto sides the way a
 /// hand-authored MCU symbol is: `power`-type pins on top, the
 /// `ground`-type pin(s) on bottom, the single largest same-family signal
@@ -199,6 +215,28 @@ fn pack_centered(specs: &[(f64, Option<String>)]) -> Vec<f64> {
 /// spacing stays a fixed row height but widens between different
 /// families. Body width/height follow from the resulting extents,
 /// never forcing a square.
+///
+/// When the bus exceeds [`BUS_UNIT_MAX_PINS`], it's split across
+/// multiple KiCad symbol units instead of making one unit taller
+/// without limit -- confirmed against the official KiCad Library
+/// Convention rather than invented (klc.kicad.org, S3.8 "Multi unit
+/// symbols": large parts should be split into units, and pins shared by
+/// every unit -- power here -- belong in a dedicated unit). KiCad's own
+/// `.kicad_sym` format already supports this directly: a sub-symbol
+/// named `"{name}_0_1"` (unit 0) is automatically composited into
+/// *every* unit the user places, so top/bottom/left pins only need to
+/// be written once, tagged unit 0, rather than repeated per bus chunk.
+///
+/// ```mermaid
+/// flowchart TD
+///     A[build_symbol] --> B["bucket pins: power -> top, ground -> bottom,<br/>rest -> grouped by name family"]
+///     B --> C["find the bus: largest family in `rest`"]
+///     C --> D{"bus pin count > 32?"}
+///     D -- "no" --> E["single unit (unit 1):<br/>top + bottom + left + bus, as today"]
+///     D -- "yes" --> F["unit 0 (shared, composited into every<br/>unit KiCad places): top + bottom + left,<br/>no bus pins"]
+///     F --> G["split the bus into chunks of &le; 32,<br/>in ascending pin-number order"]
+///     G --> H["unit 1..N: one chunk each,<br/>right side, shared rectangle from unit 0"]
+/// ```
 pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let mut numbers: Vec<&String> = device.pins.keys().collect();
     numbers.sort_by_key(|n| n.parse::<u32>().unwrap_or(u32::MAX));
@@ -239,23 +277,31 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         target.extend(groups[key].iter().copied());
     }
 
-    // Top/bottom: no group gaps (each power/ground pin already stands on
-    // its own), spacing driven by label length.
-    let top_specs: Vec<(f64, Option<String>)> = top
+    // Top/bottom: spacing driven by label length, same family-boundary
+    // gap treatment as left/right -- e.g. RP2040's six IOVDD pins pack
+    // tightly together, then get a gap before DVDD, ADC_AVDD, the
+    // VREG_VIN/VREG_VOUT pair (sharing the "VREG" family), and USB_VDD.
+    let top_specs: Vec<PinSpec> = top
         .iter()
-        .map(|n| (text_half_extent(&device.pins[*n].name), None))
+        .map(|n| {
+            (
+                text_half_extent(&device.pins[*n].name),
+                Some(pin_group_key(&device.pins[*n].name)),
+            )
+        })
         .collect();
-    let bottom_specs: Vec<(f64, Option<String>)> = bottom
+    let bottom_specs: Vec<PinSpec> = bottom
         .iter()
-        .map(|n| (text_half_extent(&device.pins[*n].name), None))
+        .map(|n| {
+            (
+                text_half_extent(&device.pins[*n].name),
+                Some(pin_group_key(&device.pins[*n].name)),
+            )
+        })
         .collect();
-    // Left/right: fixed row height, but grouped -- an extra gap opens up
+    // Left: fixed row height, but grouped -- an extra gap opens up
     // wherever the pin family changes (e.g. between QSPI_* and USB_*).
-    let left_specs: Vec<(f64, Option<String>)> = left
-        .iter()
-        .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
-        .collect();
-    let right_specs: Vec<(f64, Option<String>)> = right
+    let left_specs: Vec<PinSpec> = left
         .iter()
         .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
         .collect();
@@ -263,21 +309,47 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let top_pos = pack_centered(&top_specs);
     let bottom_pos = pack_centered(&bottom_specs);
     let left_pos = pack_centered(&left_specs);
-    let right_pos = pack_centered(&right_specs);
 
-    let half_width = top_pos
+    // The bus (`right`) is split into units of at most
+    // BUS_UNIT_MAX_PINS once it exceeds that size -- see this
+    // function's docs/flowchart. Below that size this is just one
+    // "chunk" containing every bus pin, identical to the pre-split
+    // behavior.
+    let bus_chunks: Vec<&[&String]> = right.chunks(BUS_UNIT_MAX_PINS).collect();
+    let splitting = bus_chunks.len() > 1;
+    let chunk_specs_pos: Vec<(Vec<PinSpec>, Vec<f64>)> = bus_chunks
         .iter()
-        .chain(bottom_pos.iter())
-        .map(|p| p.abs())
-        .fold(GRID_MM, f64::max);
-    let half_height = left_pos
+        .map(|chunk| {
+            let specs: Vec<PinSpec> = chunk
+                .iter()
+                .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
+                .collect();
+            let pos = pack_centered(&specs);
+            (specs, pos)
+        })
+        .collect();
+
+    // The body must reach past each outermost pin's own label extent,
+    // not just its center position -- otherwise the outermost label
+    // hangs off past the drawn rectangle edge.
+    let widest_reach = |specs: &[PinSpec], positions: &[f64]| {
+        specs
+            .iter()
+            .zip(positions.iter())
+            .map(|((half, _), pos)| pos.abs() + half)
+            .fold(GRID_MM, f64::max)
+    };
+    let half_width =
+        widest_reach(&top_specs, &top_pos).max(widest_reach(&bottom_specs, &bottom_pos));
+    // Every unit shares one rectangle, so this must cover the largest
+    // bus chunk, not just whichever chunk happens to be last.
+    let half_height = chunk_specs_pos
         .iter()
-        .chain(right_pos.iter())
-        .map(|p| p.abs())
-        .fold(GRID_MM, f64::max);
+        .map(|(s, p)| widest_reach(s, p))
+        .fold(widest_reach(&left_specs, &left_pos), f64::max);
 
     let mut pins = Vec::with_capacity(numbers.len());
-    let mut push_pin = |number: &String, position: Point2, side: PinOrientation| {
+    let mut push_pin = |number: &String, position: Point2, side: PinOrientation, unit: u32| {
         let pin = &device.pins[number];
         pins.push(SymbolPin {
             number: number.clone(),
@@ -286,8 +358,13 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             position,
             length: PIN_LENGTH_MM,
             orientation: side,
+            unit,
         });
     };
+    // Top/bottom/left are shared across every unit once splitting, so
+    // they land in KiCad's unit-0 sentinel; otherwise (the common case)
+    // everything is unit 1, exactly as before this feature existed.
+    let shared_unit: u32 = if splitting { 0 } else { 1 };
     // `pack_centered` lays its first item at the most-negative position;
     // left/top's first item is conventionally the "start" (top-most /
     // right-most) side, the opposite direction, so their axis is negated.
@@ -299,6 +376,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 y: -y,
             },
             PinOrientation::Left,
+            shared_unit,
         );
     }
     for (number, &x) in bottom.iter().zip(bottom_pos.iter()) {
@@ -309,16 +387,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 y: -half_height - PIN_LENGTH_MM,
             },
             PinOrientation::Bottom,
-        );
-    }
-    for (number, &y) in right.iter().zip(right_pos.iter()) {
-        push_pin(
-            number,
-            Point2 {
-                x: half_width + PIN_LENGTH_MM,
-                y,
-            },
-            PinOrientation::Right,
+            shared_unit,
         );
     }
     for (number, &x) in top.iter().zip(top_pos.iter()) {
@@ -329,12 +398,36 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 y: half_height + PIN_LENGTH_MM,
             },
             PinOrientation::Top,
+            shared_unit,
         );
     }
+    for (chunk_index, chunk) in bus_chunks.iter().enumerate() {
+        let (_, chunk_pos) = &chunk_specs_pos[chunk_index];
+        let unit = if splitting { chunk_index as u32 + 1 } else { 1 };
+        for (number, &y) in chunk.iter().zip(chunk_pos.iter()) {
+            push_pin(
+                number,
+                Point2 {
+                    x: half_width + PIN_LENGTH_MM,
+                    y,
+                },
+                PinOrientation::Right,
+                unit,
+            );
+        }
+    }
+
+    let units = if splitting {
+        (1..=bus_chunks.len() as u32)
+            .map(|index| SymbolUnit { index })
+            .collect()
+    } else {
+        vec![SymbolUnit { index: 1 }]
+    };
 
     PcbSymbol {
         name: name.to_string(),
-        units: vec![SymbolUnit { index: 1 }],
+        units,
         pins,
         graphics: vec![Graphic {
             kind: GraphicKind::Rectangle {
@@ -656,6 +749,109 @@ mod tests {
             (width - height).abs() > 1.0,
             "expected a non-square body, got {width} x {height}"
         );
+    }
+
+    /// A device with `gpio_count` GPIO pins (the entire non-power/ground
+    /// bus, so there's no `left` side content to muddy comparisons), one
+    /// IOVDD power pin, and one GND pin.
+    fn device_with_a_gpio_count(gpio_count: u32) -> Device {
+        let mut pins = BTreeMap::new();
+        for i in 0..gpio_count {
+            pins.insert(
+                (i + 1).to_string(),
+                Pin {
+                    name: format!("GPIO{i}"),
+                    pin_type: PinType::Io,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        pins.insert(
+            (gpio_count + 1).to_string(),
+            Pin {
+                name: "IOVDD".into(),
+                pin_type: PinType::Power,
+                alternate_functions: vec![],
+            },
+        );
+        pins.insert(
+            "EP".into(),
+            Pin {
+                name: "GND".into(),
+                pin_type: PinType::Ground,
+                alternate_functions: vec![],
+            },
+        );
+        Device {
+            schema_version: "0.1".into(),
+            kind: Kind::Device,
+            id: DeviceId::from("ex/BIGMCU"),
+            manufacturer: ManufacturerId::from("ex"),
+            family: None,
+            pins,
+            revisions: BTreeMap::new(),
+            provenance: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn bus_at_the_threshold_stays_a_single_unit() {
+        let symbol = build_symbol("BIGMCU", &device_with_a_gpio_count(32));
+        assert_eq!(symbol.units, vec![SymbolUnit { index: 1 }]);
+        assert!(symbol.pins.iter().all(|p| p.unit == 1));
+    }
+
+    #[test]
+    fn bus_over_the_threshold_splits_into_multiple_units() {
+        let symbol = build_symbol("BIGMCU", &device_with_a_gpio_count(70));
+        assert_eq!(
+            symbol.units,
+            vec![
+                SymbolUnit { index: 1 },
+                SymbolUnit { index: 2 },
+                SymbolUnit { index: 3 },
+            ]
+        );
+
+        // IOVDD/GND are shared -- unit 0, appearing exactly once each,
+        // never duplicated per chunk.
+        let iovdd: Vec<&SymbolPin> = symbol.pins.iter().filter(|p| p.name == "IOVDD").collect();
+        assert_eq!(iovdd.len(), 1);
+        assert_eq!(iovdd[0].unit, 0);
+        let gnd: Vec<&SymbolPin> = symbol.pins.iter().filter(|p| p.name == "GND").collect();
+        assert_eq!(gnd.len(), 1);
+        assert_eq!(gnd[0].unit, 0);
+
+        // The 70 GPIO pins partition into three chunks (32 + 32 + 6),
+        // each pin appearing exactly once, ascending order preserved.
+        for (unit, expected_range) in [(1u32, 0..32), (2, 32..64), (3, 64..70)] {
+            let mut numbers_in_unit: Vec<u32> = symbol
+                .pins
+                .iter()
+                .filter(|p| p.name.starts_with("GPIO") && p.unit == unit)
+                .map(|p| p.name.trim_start_matches("GPIO").parse().unwrap())
+                .collect();
+            numbers_in_unit.sort();
+            let expected: Vec<u32> = expected_range.collect();
+            assert_eq!(numbers_in_unit, expected, "unit {unit}");
+        }
+    }
+
+    #[test]
+    fn shared_rectangle_covers_the_largest_bus_chunk() {
+        // With no `left` side content in this fixture, the body height
+        // is driven entirely by the bus. A single 32-pin unit and a
+        // split-into-3 (32+32+6) symbol both have 32 as their largest
+        // chunk, so they must produce the same body height.
+        let single = build_symbol("BIGMCU", &device_with_a_gpio_count(32));
+        let split = build_symbol("BIGMCU", &device_with_a_gpio_count(70));
+        let height_of = |s: &PcbSymbol| {
+            let Graphic {
+                kind: GraphicKind::Rectangle { start, end },
+            } = s.graphics[0];
+            (end.y - start.y).abs()
+        };
+        assert!((height_of(&single) - height_of(&split)).abs() < 1e-9);
     }
 
     #[test]

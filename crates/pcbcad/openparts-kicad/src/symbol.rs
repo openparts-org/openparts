@@ -30,40 +30,64 @@ pub fn render_symbol(symbol: &PcbSymbol) -> String {
     out.push_str(&format!("  (symbol \"{}\"\n", symbol.name));
     out.push_str("    (in_bom yes) (on_board yes)\n");
 
-    for graphic in &symbol.graphics {
-        let openparts_pcbcad::GraphicKind::Rectangle { start, end } = graphic.kind;
+    // Unit 0: the body outline, plus any pins shared across every
+    // numbered unit (only present when build_symbol split a large bus
+    // across multiple units -- see its docs). These must land in one
+    // combined block, not two separately-opened-and-closed blocks that
+    // happen to share a name: KiCad's `.kicad_sym` format requires each
+    // "{name}_{unit}_{style}" sub-symbol name to appear exactly once.
+    let has_unit_zero_pins = symbol.pins.iter().any(|p| p.unit == 0);
+    if !symbol.graphics.is_empty() || has_unit_zero_pins {
         out.push_str(&format!("    (symbol \"{}_0_1\"\n", symbol.name));
-        out.push_str(&format!(
-            "      (rectangle (start {:.2} {:.2}) (end {:.2} {:.2})\n",
-            start.x, start.y, end.x, end.y
-        ));
-        out.push_str("        (stroke (width 0.254) (type default))\n");
-        out.push_str("        (fill (type background))))\n");
+        for graphic in &symbol.graphics {
+            let openparts_pcbcad::GraphicKind::Rectangle { start, end } = graphic.kind;
+            out.push_str(&format!(
+                "      (rectangle (start {:.2} {:.2}) (end {:.2} {:.2})\n",
+                start.x, start.y, end.x, end.y
+            ));
+            out.push_str("        (stroke (width 0.254) (type default))\n");
+            out.push_str("        (fill (type background)))\n");
+        }
+        for pin in symbol.pins.iter().filter(|p| p.unit == 0) {
+            write_pin(&mut out, pin);
+        }
+        out.push_str("    )\n");
     }
 
-    out.push_str(&format!("    (symbol \"{}_1_1\"\n", symbol.name));
-    for pin in &symbol.pins {
-        out.push_str(&format!(
-            "      (pin {} line (at {:.2} {:.2} {:.0}) (length {:.2})\n",
-            electrical_type_str(pin.electrical_type),
-            pin.position.x,
-            pin.position.y,
-            orientation_angle(pin.orientation),
-            pin.length,
-        ));
-        out.push_str(&format!(
-            "        (name \"{}\" (effects (font (size 1.27 1.27))))\n",
-            pin.name
-        ));
-        out.push_str(&format!(
-            "        (number \"{}\" (effects (font (size 1.27 1.27)))))\n",
-            pin.number
-        ));
+    // Ordinarily just unit 1. A symbol whose bus was split across
+    // multiple units gets one block per chunk here, each depending on
+    // unit 0 (above) for the shared pins KiCad composites in for them.
+    let mut unit_indices: Vec<u32> = symbol.units.iter().map(|u| u.index).collect();
+    unit_indices.sort_unstable();
+    for unit in unit_indices {
+        out.push_str(&format!("    (symbol \"{}_{}_1\"\n", symbol.name, unit));
+        for pin in symbol.pins.iter().filter(|p| p.unit == unit) {
+            write_pin(&mut out, pin);
+        }
+        out.push_str("    )\n");
     }
-    out.push_str("    )\n");
     out.push_str("  )\n");
     out.push_str(")\n");
     out
+}
+
+fn write_pin(out: &mut String, pin: &openparts_pcbcad::SymbolPin) {
+    out.push_str(&format!(
+        "      (pin {} line (at {:.2} {:.2} {:.0}) (length {:.2})\n",
+        electrical_type_str(pin.electrical_type),
+        pin.position.x,
+        pin.position.y,
+        orientation_angle(pin.orientation),
+        pin.length,
+    ));
+    out.push_str(&format!(
+        "        (name \"{}\" (effects (font (size 1.27 1.27))))\n",
+        pin.name
+    ));
+    out.push_str(&format!(
+        "        (number \"{}\" (effects (font (size 1.27 1.27)))))\n",
+        pin.number
+    ));
 }
 
 /// Minimal read-back check used by tests (Testing and Quality
@@ -142,6 +166,7 @@ mod tests {
                 position: Point2 { x: -10.16, y: 2.54 },
                 length: 2.54,
                 orientation: PinOrientation::Left,
+                unit: 1,
             }],
             graphics: vec![Graphic {
                 kind: GraphicKind::Rectangle {
@@ -160,5 +185,67 @@ mod tests {
         assert!((parsed[0].x - (-10.16)).abs() < 1e-6);
         assert!((parsed[0].y - 2.54).abs() < 1e-6);
         assert!((parsed[0].angle - 0.0).abs() < 1e-6);
+    }
+
+    fn pin(number: &str, name: &str, unit: u32) -> SymbolPin {
+        SymbolPin {
+            number: number.into(),
+            name: name.into(),
+            electrical_type: PinElectricalType::Bidirectional,
+            position: Point2 { x: 0.0, y: 0.0 },
+            length: 2.54,
+            orientation: PinOrientation::Right,
+            unit,
+        }
+    }
+
+    #[test]
+    fn multi_unit_symbols_get_one_block_per_unit_plus_a_shared_unit_zero_block() {
+        let symbol = PcbSymbol {
+            name: "BIGMCU".into(),
+            units: vec![SymbolUnit { index: 1 }, SymbolUnit { index: 2 }],
+            pins: vec![
+                pin("57", "IOVDD", 0),
+                pin("1", "GPIO0", 1),
+                pin("2", "GPIO1", 1),
+                pin("33", "GPIO32", 2),
+            ],
+            graphics: vec![Graphic {
+                kind: GraphicKind::Rectangle {
+                    start: Point2 { x: -7.62, y: 7.62 },
+                    end: Point2 { x: 7.62, y: -7.62 },
+                },
+            }],
+        };
+
+        let text = render_symbol(&symbol);
+        // Exactly one "_0_1" block: the rectangle graphic and unit-0's
+        // shared pins (IOVDD here) must land in the *same* opened block,
+        // not two separately-opened blocks that happen to share a name
+        // (KiCad requires each sub-symbol name to appear once).
+        assert_eq!(text.matches("(symbol \"BIGMCU_0_1\"\n").count(), 1);
+        assert!(text.contains("(symbol \"BIGMCU_1_1\"\n"));
+        assert!(text.contains("(symbol \"BIGMCU_2_1\"\n"));
+        assert!(text.contains("(rectangle "));
+        assert!(text.contains("(name \"IOVDD\""));
+        // Every opened "(symbol ...)" block is properly closed: the
+        // whole file has balanced parentheses.
+        assert_eq!(text.matches('(').count(), text.matches(')').count());
+        // Unit 0 comes first, since the numbered units depend on it.
+        let pos0 = text.find("BIGMCU_0_1").unwrap();
+        let pos1 = text.find("BIGMCU_1_1").unwrap();
+        let pos2 = text.find("BIGMCU_2_1").unwrap();
+        assert!(pos0 < pos1 && pos1 < pos2);
+
+        // Every pin round-trips regardless of which unit block it's in.
+        let parsed = parse_symbol_pins(&text);
+        let numbers: std::collections::BTreeSet<&str> =
+            parsed.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(
+            numbers,
+            ["57", "1", "2", "33"]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>()
+        );
     }
 }

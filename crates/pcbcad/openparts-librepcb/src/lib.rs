@@ -414,6 +414,7 @@ mod tests {
                     position: Point2 { x: -7.62, y: 0.0 },
                     length: 2.54,
                     orientation: PinOrientation::Left,
+                    unit: 1,
                 },
                 SymbolPin {
                     number: "2".into(),
@@ -422,6 +423,7 @@ mod tests {
                     position: Point2 { x: 7.62, y: 0.0 },
                     length: 2.54,
                     orientation: PinOrientation::Right,
+                    unit: 1,
                 },
             ],
             graphics: vec![Graphic {
