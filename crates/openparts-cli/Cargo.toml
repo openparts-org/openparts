@@ -1,0 +1,19 @@
+[package]
+name = "openparts-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "openparts"
+path = "src/main.rs"
+
+[dependencies]
+openparts-core = { path = "../openparts-core" }
+openparts-data = { path = "../openparts-data" }
+openparts-validator = { path = "../openparts-validator" }
+openparts-mcad = { path = "../mcad/openparts-mcad" }
+openparts-step = { path = "../mcad/openparts-step" }
+openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
+openparts-kicad = { path = "../pcbcad/openparts-kicad" }
+clap = { workspace = true }
+anyhow = { workspace = true }

@@ -1,0 +1,8 @@
+[package]
+name = "openparts-altium"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openparts-pcbcad = { path = "../openparts-pcbcad" }
+thiserror = { workspace = true }

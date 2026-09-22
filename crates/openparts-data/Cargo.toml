@@ -1,0 +1,10 @@
+[package]
+name = "openparts-data"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openparts-core = { path = "../openparts-core" }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,8 @@
+[package]
+name = "openparts-client"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openparts-core = { path = "../openparts-core" }
+thiserror = { workspace = true }

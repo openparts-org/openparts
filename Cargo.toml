@@ -1,0 +1,45 @@
+[package]
+name = "openparts"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "OpenParts workspace root crate; hosts tests/ integration tests."
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/openparts-core",
+    "crates/openparts-data",
+    "crates/openparts-validator",
+    "crates/openparts-client",
+    "crates/openparts-cli",
+    "crates/pcbcad/openparts-pcbcad",
+    "crates/pcbcad/openparts-kicad",
+    "crates/pcbcad/openparts-librepcb",
+    "crates/pcbcad/openparts-altium",
+    "crates/mcad/openparts-mcad",
+    "crates/mcad/openparts-step",
+    "crates/mcad/openparts-stl",
+    "crates/mcad/openparts-gltf",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "TBD"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+thiserror = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+openparts-core = { path = "crates/openparts-core" }
+openparts-data = { path = "crates/openparts-data" }
+openparts-validator = { path = "crates/openparts-validator" }
+openparts-mcad = { path = "crates/mcad/openparts-mcad" }
+openparts-step = { path = "crates/mcad/openparts-step" }
+openparts-pcbcad = { path = "crates/pcbcad/openparts-pcbcad" }
+openparts-kicad = { path = "crates/pcbcad/openparts-kicad" }

@@ -1,0 +1,8 @@
+[package]
+name = "openparts-pcbcad"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openparts-core = { path = "../../openparts-core" }
+openparts-mcad = { path = "../../mcad/openparts-mcad" }
