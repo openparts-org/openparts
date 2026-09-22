@@ -38,7 +38,7 @@ impl From<PinType> for PinElectricalType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PinOrientation {
     /// Pin stub points toward +X, pin sits on the symbol's left edge.
     Left,
@@ -112,65 +112,118 @@ pub struct PcbFootprint {
 const GRID_MM: f64 = 2.54;
 const PIN_LENGTH_MM: f64 = 2.54;
 
-/// Builds a Symbol from a Device's pins: one rectangular body, pins
-/// distributed left/bottom/right/top in ascending pin-number order on a
-/// 2.54mm grid (same left->bottom->right->top ordering as the LQFP
-/// Mechanical Geometry generator, for visual consistency between the
-/// symbol and the footprint).
+/// Extracts a pin's "family" for grouping same-kind pins onto the same
+/// side: drop anything from `/` onward (an alternate-function suffix,
+/// e.g. `GPIO26/ADC0` -> `GPIO26`), take the text before the first `_`
+/// (e.g. `QSPI_SD0` -> `QSPI`), then strip trailing ASCII digits
+/// (`GPIO26` -> `GPIO`). A name with no shared prefix (`TESTEN`, `RUN`)
+/// becomes its own singleton group, same as any other family.
+///
+/// Deliberately simple/deterministic rather than a fuzzy label-similarity
+/// match: common MCU pin-naming conventions across vendors (STM32
+/// `PA0`/`PA1`, ESP32 `GPIO0`, RP2040 `QSPI_SD0`) already follow this
+/// "prefix + delimiter" pattern, and fuzzy matching would trade that for
+/// grouping decisions that are harder to predict or test.
+fn pin_group_key(name: &str) -> String {
+    let base = name.split('/').next().unwrap_or(name);
+    let first_word = base.split('_').next().unwrap_or(base);
+    let trimmed = first_word.trim_end_matches(|c: char| c.is_ascii_digit());
+    if trimmed.is_empty() {
+        first_word.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Builds a Symbol from a Device's pins, grouped onto sides the way a
+/// hand-authored MCU symbol is: `power`-type pins on top, the
+/// `ground`-type pin(s) on bottom, the single largest same-family signal
+/// group (e.g. a GPIO bus) on the right, and every other pin -- grouped
+/// by family via [`pin_group_key`], each family kept contiguous -- on the
+/// left. Width and height are sized independently from what each axis
+/// actually needs, rather than forcing a square body.
 pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let mut numbers: Vec<&String> = device.pins.keys().collect();
     numbers.sort_by_key(|n| n.parse::<u32>().unwrap_or(u32::MAX));
 
-    let n = numbers.len().max(1);
-    let per_side = n.div_ceil(4);
-    let half_extent = ((per_side as f64 - 1.0) * GRID_MM / 2.0).max(GRID_MM);
+    let mut top: Vec<&String> = Vec::new();
+    let mut bottom: Vec<&String> = Vec::new();
+    let mut rest: Vec<&String> = Vec::new();
+    for number in &numbers {
+        match device.pins[*number].pin_type {
+            PinType::Power => top.push(number),
+            PinType::Ground => bottom.push(number),
+            _ => rest.push(number),
+        }
+    }
+
+    let mut group_order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, Vec<&String>> =
+        std::collections::HashMap::new();
+    for number in &rest {
+        let key = pin_group_key(&device.pins[*number].name);
+        groups.entry(key.clone()).or_insert_with(|| {
+            group_order.push(key.clone());
+            Vec::new()
+        });
+        groups.get_mut(&key).unwrap().push(number);
+    }
+
+    let bus_key = group_order.iter().max_by_key(|k| groups[*k].len()).cloned();
+
+    let mut left: Vec<&String> = Vec::new();
+    let mut right: Vec<&String> = Vec::new();
+    for key in &group_order {
+        let target = if Some(key) == bus_key.as_ref() {
+            &mut right
+        } else {
+            &mut left
+        };
+        target.extend(groups[key].iter().copied());
+    }
+
+    let half_width =
+        ((top.len().max(bottom.len()).max(1) as f64 - 1.0) * GRID_MM / 2.0).max(GRID_MM);
+    let half_height =
+        ((left.len().max(right.len()).max(1) as f64 - 1.0) * GRID_MM / 2.0).max(GRID_MM);
 
     let mut pins = Vec::with_capacity(numbers.len());
-    for (i, number) in numbers.iter().enumerate() {
-        let side = i / per_side;
-        let index_on_side = (i % per_side) as f64;
-        let pin = &device.pins[*number];
-
-        let (position, orientation) = match side {
-            0 => (
-                Point2 {
-                    x: -half_extent - PIN_LENGTH_MM,
-                    y: half_extent - index_on_side * GRID_MM,
+    let mut place = |list: &[&String], side: PinOrientation| {
+        for (i, number) in list.iter().enumerate() {
+            let index = i as f64;
+            let pin = &device.pins[*number];
+            let position = match side {
+                PinOrientation::Left => Point2 {
+                    x: -half_width - PIN_LENGTH_MM,
+                    y: half_height - index * GRID_MM,
                 },
-                PinOrientation::Left,
-            ),
-            1 => (
-                Point2 {
-                    x: -half_extent + index_on_side * GRID_MM,
-                    y: -half_extent - PIN_LENGTH_MM,
+                PinOrientation::Bottom => Point2 {
+                    x: -half_width + index * GRID_MM,
+                    y: -half_height - PIN_LENGTH_MM,
                 },
-                PinOrientation::Bottom,
-            ),
-            2 => (
-                Point2 {
-                    x: half_extent + PIN_LENGTH_MM,
-                    y: -half_extent + index_on_side * GRID_MM,
+                PinOrientation::Right => Point2 {
+                    x: half_width + PIN_LENGTH_MM,
+                    y: -half_height + index * GRID_MM,
                 },
-                PinOrientation::Right,
-            ),
-            _ => (
-                Point2 {
-                    x: half_extent - index_on_side * GRID_MM,
-                    y: half_extent + PIN_LENGTH_MM,
+                PinOrientation::Top => Point2 {
+                    x: half_width - index * GRID_MM,
+                    y: half_height + PIN_LENGTH_MM,
                 },
-                PinOrientation::Top,
-            ),
-        };
-
-        pins.push(SymbolPin {
-            number: (*number).clone(),
-            name: pin.name.clone(),
-            electrical_type: pin.pin_type.into(),
-            position,
-            length: PIN_LENGTH_MM,
-            orientation,
-        });
-    }
+            };
+            pins.push(SymbolPin {
+                number: (*number).clone(),
+                name: pin.name.clone(),
+                electrical_type: pin.pin_type.into(),
+                position,
+                length: PIN_LENGTH_MM,
+                orientation: side,
+            });
+        }
+    };
+    place(&left, PinOrientation::Left);
+    place(&bottom, PinOrientation::Bottom);
+    place(&right, PinOrientation::Right);
+    place(&top, PinOrientation::Top);
 
     PcbSymbol {
         name: name.to_string(),
@@ -179,12 +232,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         graphics: vec![Graphic {
             kind: GraphicKind::Rectangle {
                 start: Point2 {
-                    x: -half_extent,
-                    y: half_extent,
+                    x: -half_width,
+                    y: half_height,
                 },
                 end: Point2 {
-                    x: half_extent,
-                    y: -half_extent,
+                    x: half_width,
+                    y: -half_height,
                 },
             },
         }],
@@ -245,6 +298,147 @@ mod tests {
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn pin_group_key_strips_suffixes_and_trailing_digits() {
+        assert_eq!(pin_group_key("GPIO0"), "GPIO");
+        assert_eq!(pin_group_key("GPIO26/ADC0"), "GPIO");
+        assert_eq!(pin_group_key("QSPI_SS"), "QSPI");
+        assert_eq!(pin_group_key("QSPI_SD0"), "QSPI");
+        assert_eq!(pin_group_key("USB_DM"), "USB");
+        assert_eq!(pin_group_key("USB_DP"), "USB");
+        assert_eq!(pin_group_key("TESTEN"), "TESTEN");
+    }
+
+    /// A device shaped like RP2040 in miniature: a large `io` family
+    /// sharing a name prefix (the "GPIO bus"), a couple of small
+    /// families, several same-named `power` pins, and one `ground` pin.
+    fn device_shaped_like_an_mcu() -> Device {
+        let mut pins = BTreeMap::new();
+        for i in 0..10u32 {
+            pins.insert(
+                (i + 1).to_string(),
+                Pin {
+                    name: format!("GPIO{i}"),
+                    pin_type: PinType::Io,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        for (n, name) in [("11", "QSPI_SS"), ("12", "QSPI_SCLK"), ("13", "QSPI_SD0")] {
+            pins.insert(
+                n.into(),
+                Pin {
+                    name: name.into(),
+                    pin_type: PinType::Io,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        pins.insert(
+            "14".into(),
+            Pin {
+                name: "TESTEN".into(),
+                pin_type: PinType::Reserved,
+                alternate_functions: vec![],
+            },
+        );
+        for n in ["15", "16", "17"] {
+            pins.insert(
+                n.into(),
+                Pin {
+                    name: "IOVDD".into(),
+                    pin_type: PinType::Power,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        pins.insert(
+            "EP".into(),
+            Pin {
+                name: "GND".into(),
+                pin_type: PinType::Ground,
+                alternate_functions: vec![],
+            },
+        );
+
+        Device {
+            schema_version: "0.1".into(),
+            kind: Kind::Device,
+            id: DeviceId::from("ex/MCU"),
+            manufacturer: ManufacturerId::from("ex"),
+            family: None,
+            pins,
+            revisions: BTreeMap::new(),
+            provenance: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn power_pins_land_on_top_and_ground_on_bottom() {
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        for pin in &symbol.pins {
+            if pin.name == "IOVDD" {
+                assert_eq!(pin.orientation, PinOrientation::Top, "pin {}", pin.number);
+            }
+            if pin.name == "GND" {
+                assert_eq!(
+                    pin.orientation,
+                    PinOrientation::Bottom,
+                    "pin {}",
+                    pin.number
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_largest_family_lands_together_on_one_side() {
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let gpio_sides: std::collections::HashSet<PinOrientation> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.name.starts_with("GPIO"))
+            .map(|p| p.orientation)
+            .collect();
+        assert_eq!(
+            gpio_sides.len(),
+            1,
+            "all 10 GPIO pins should share one side, got {gpio_sides:?}"
+        );
+        // The 10-pin GPIO bus is strictly larger than any other
+        // non-power/ground family (QSPI has 3, TESTEN has 1), so it
+        // must be the side chosen as the "bus" side.
+        let bus_side = *gpio_sides.iter().next().unwrap();
+        let qspi_sides: std::collections::HashSet<PinOrientation> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.name.starts_with("QSPI"))
+            .map(|p| p.orientation)
+            .collect();
+        assert_eq!(qspi_sides.len(), 1, "QSPI pins should share one side");
+        assert_ne!(
+            bus_side,
+            *qspi_sides.iter().next().unwrap(),
+            "the smaller QSPI family should not share the bus side"
+        );
+    }
+
+    #[test]
+    fn body_is_not_forced_square_when_side_counts_differ() {
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let Graphic {
+            kind: GraphicKind::Rectangle { start, end },
+        } = symbol.graphics[0];
+        let width = (end.x - start.x).abs();
+        let height = (end.y - start.y).abs();
+        // 10 GPIO + 4 (QSPI+TESTEN) pins split left/right vs. 3 power +
+        // 1 ground pins split top/bottom -- these must not coincide.
+        assert!(
+            (width - height).abs() > 1.0,
+            "expected a non-square body, got {width} x {height}"
+        );
     }
 
     #[test]
