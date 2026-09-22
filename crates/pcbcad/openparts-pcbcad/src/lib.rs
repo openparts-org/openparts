@@ -142,17 +142,60 @@ fn pin_group_key(name: &str) -> String {
 }
 
 /// Rough per-character glyph width for KiCad's default 1.27mm pin-name
-/// font, used only to estimate how much room a top/bottom pin's label
-/// needs along the axis it's stacked on (its text is rotated 90° there,
-/// so it runs parallel to that axis and can collide with a neighbor's
-/// text if they're packed at a fixed grid step regardless of name
-/// length). Not exact font metrics -- consistent with this project's
+/// font (cross-checked against the real widths in KiCad's own Newstroke
+/// font data, gitlab.com/kicad/code/kicad `common/newstroke_font.cpp`:
+/// digits/most capitals are ~20-22 font units wide against a ~21-unit
+/// cap height, i.e. width ≈ height, which is what this constant already
+/// assumed). Not exact font metrics -- consistent with this project's
 /// existing "structurally representative, not pixel-perfect" approach to
 /// generated geometry.
 const CHAR_WIDTH_MM: f64 = 1.0;
 
-fn text_half_extent(name: &str) -> f64 {
-    (name.chars().count() as f64 * CHAR_WIDTH_MM / 2.0).max(GRID_MM / 2.0)
+/// KiCad always draws each pin's electrical-type description (e.g.
+/// "Power input") *horizontally*, even for a vertically-oriented
+/// (top/bottom) pin whose own NAME text rotates to read vertically --
+/// confirmed directly in KiCad's source
+/// (eeschema/pin_layout_cache.cpp, `GetPinElectricalTypeInfo`:
+/// `info->m_Angle = ANGLE_HORIZONTAL` unconditionally, vs. the pin name
+/// info which branches on the pin's own orientation). That same source
+/// also explicitly has *no* overlap-checking logic of its own for this
+/// text, so getting it right is entirely this generator's job. Its font
+/// size is `max(pin_name_size * 0.75, 0.7mm)` in the same source.
+///
+/// This means it's the electrical-type label, not the pin name, that
+/// actually needs char-count-based spacing along a top/bottom pin's
+/// packing (X) axis -- the pin name barely takes any X-space there once
+/// rotated. Left/right pins need no equivalent treatment: their name
+/// stays horizontal and needs no extra row spacing (confirmed: no
+/// overlap has ever been reported in that column, only in the
+/// top/bottom rows), so they keep a fixed `GRID_MM / 2.0` half-extent.
+const ELECTRICAL_TYPE_FONT_SCALE: f64 = 0.75;
+
+/// Character count of the electrical-type label KiCad shows for a pin,
+/// sized for the worst case across locales -- a generated library file
+/// may be opened by KiCad in any language, and English labels run
+/// noticeably longer than e.g. Japanese ones ("Bidirectional" vs.
+/// "双方向"), so sizing for the shown locale (whatever the maintainer's
+/// KiCad happens to be set to) would under-count for other users.
+fn electrical_type_label_chars(t: PinElectricalType) -> usize {
+    match t {
+        PinElectricalType::Input => 5,          // "Input"
+        PinElectricalType::Output => 6,         // "Output"
+        PinElectricalType::Bidirectional => 13, // "Bidirectional"
+        PinElectricalType::PowerIn => 11,       // "Power input"
+        PinElectricalType::Passive => 7,        // "Passive"
+        PinElectricalType::NoConnect => 13,     // "No connection"
+        PinElectricalType::Unspecified => 11,   // "Unspecified"
+    }
+}
+
+/// Half-extent a top/bottom pin needs along its packing axis to fit its
+/// (always-horizontal) electrical-type label -- see
+/// [`ELECTRICAL_TYPE_FONT_SCALE`]'s docs for why this, not the pin name,
+/// is what matters there.
+fn electrical_type_half_extent(t: PinElectricalType) -> f64 {
+    let chars = electrical_type_label_chars(t) as f64;
+    (chars * CHAR_WIDTH_MM * ELECTRICAL_TYPE_FONT_SCALE / 2.0).max(GRID_MM / 2.0)
 }
 
 /// A pin's required half-extent along a packing axis, plus an optional
@@ -312,15 +355,19 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         target.extend(groups[key].iter().copied());
     }
 
-    // Top/bottom: spacing driven by label length, same family-boundary
-    // gap treatment as left/right -- e.g. RP2040's six IOVDD pins pack
-    // tightly together, then get a gap before DVDD, ADC_AVDD, the
-    // VREG_VIN/VREG_VOUT pair (sharing the "VREG" family), and USB_VDD.
+    // Top/bottom: spacing driven by the electrical-type label's length
+    // (not the pin name -- see electrical_type_half_extent's docs for
+    // why), same family-boundary gap treatment as left/right -- e.g.
+    // RP2040's six IOVDD pins pack tightly together, then get a gap
+    // before DVDD, ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the
+    // "VREG" family), and USB_VDD. Every top/bottom pin is Power/Ground
+    // (see the bucketing above), i.e. the same electrical type, so this
+    // works out to a uniform half-extent for all of them.
     let mut top_specs: Vec<PinSpec> = top
         .iter()
         .map(|n| {
             (
-                text_half_extent(&device.pins[*n].name),
+                electrical_type_half_extent(device.pins[*n].pin_type.into()),
                 Some(pin_group_key(&device.pins[*n].name)),
             )
         })
@@ -329,7 +376,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         .iter()
         .map(|n| {
             (
-                text_half_extent(&device.pins[*n].name),
+                electrical_type_half_extent(device.pins[*n].pin_type.into()),
                 Some(pin_group_key(&device.pins[*n].name)),
             )
         })
@@ -894,6 +941,60 @@ mod tests {
             (end.y - start.y).abs()
         };
         assert!((height_of(&single) - height_of(&split)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn electrical_type_half_extent_uses_the_labels_english_length() {
+        // "Power input" (11 chars) needs noticeably more room than
+        // "Input" (5 chars) -- this is what actually drives top/bottom
+        // spacing now, not the pin's own (short, rotated-to-vertical)
+        // name text.
+        let power = electrical_type_half_extent(PinElectricalType::PowerIn);
+        let input = electrical_type_half_extent(PinElectricalType::Input);
+        assert!(
+            power > input,
+            "\"Power input\" ({power}mm) should need more room than \"Input\" ({input}mm)"
+        );
+        // Every electrical type clears the same floor everything else
+        // in this file uses, even short labels like "Input"/"Output".
+        assert!(input >= GRID_MM / 2.0);
+    }
+
+    #[test]
+    fn power_pins_get_more_top_bottom_spacing_than_the_old_name_based_model_gave() {
+        // Regression guard for the real bug this fixed: KiCad renders
+        // each pin's electrical-type label ("Power input") horizontally
+        // even on a vertically-oriented pin, while the pin's own NAME
+        // rotates to vertical -- so sizing top/bottom spacing from the
+        // (short) pin name, as this crate used to, systematically
+        // under-counted the space actually needed.
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let mut top_xs: Vec<f64> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.orientation == PinOrientation::Top)
+            .map(|p| p.position.x)
+            .collect();
+        top_xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        for pair in top_xs.windows(2) {
+            let gap = pair[1] - pair[0];
+            // "IOVDD" is 5 characters; the old pin-name-based model
+            // would have sized this gap around 5mm. The electrical-type
+            // label ("Power input", 11 chars) needs roughly double that.
+            assert!(
+                gap > 2.0 * text_half_extent_like_the_old_model("IOVDD"),
+                "top-row gap {gap}mm no wider than the old name-based estimate"
+            );
+        }
+    }
+
+    /// Mirrors the pin-name-based formula this crate used before
+    /// discovering (from KiCad's own source) that the electrical-type
+    /// label, not the pin name, is what needs this spacing -- kept only
+    /// so the regression test above has something concrete to compare
+    /// against.
+    fn text_half_extent_like_the_old_model(name: &str) -> f64 {
+        (name.chars().count() as f64 * CHAR_WIDTH_MM / 2.0).max(GRID_MM / 2.0)
     }
 
     #[test]
