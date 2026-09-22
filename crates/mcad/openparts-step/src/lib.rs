@@ -167,13 +167,18 @@ impl StepWriter {
             }
         };
 
-        // 6 faces, vertices in outward-normal order.
+        // 6 faces, vertices in outward-normal order (right-hand rule: the
+        // loop's winding, viewed from outside the box, must match the
+        // declared normal below -- otherwise the face's topology
+        // contradicts its own surface orientation, which OpenCascade-based
+        // importers like KiCad's silently reject as an invalid solid
+        // instead of raising a parse error).
         let bottom = self.face(
             [
-                edge_between(&edges, 0, 1),
-                edge_between(&edges, 1, 2),
-                edge_between(&edges, 2, 3),
-                edge_between(&edges, 3, 0),
+                edge_between(&edges, 0, 3),
+                edge_between(&edges, 3, 2),
+                edge_between(&edges, 2, 1),
+                edge_between(&edges, 1, 0),
             ],
             coords[0],
             [0.0, 0.0, -1.0],
@@ -414,5 +419,174 @@ mod tests {
         let step = generate_step(&tiny_geometry(), "TEST").unwrap();
         let face_count = step.matches("ADVANCED_FACE(").count();
         assert_eq!(face_count, 6 * 3);
+    }
+
+    /// Independent geometric consistency check: for every ADVANCED_FACE in
+    /// the output, walks its EDGE_LOOP (respecting each ORIENTED_EDGE's
+    /// sense) to get the polygon's vertices, computes the normal implied
+    /// by that winding order via the right-hand rule, and checks it points
+    /// the same way as the face's own declared surface normal
+    /// (AXIS2_PLACEMENT_3D's axis direction).
+    ///
+    /// This parses the emitted STEP text with logic entirely separate from
+    /// `StepWriter` itself -- unlike the entity-count checks above, a
+    /// syntactically well-formed but topologically inconsistent face
+    /// (loop winding disagreeing with its declared normal) fails this
+    /// test. Real STEP consumers built on OpenCascade (including KiCad's
+    /// 3D viewer) can silently refuse to render such a face instead of
+    /// raising a parse error, which is exactly what an inverted winding on
+    /// `write_box`'s bottom face used to cause.
+    #[test]
+    fn every_face_winding_matches_its_declared_normal() {
+        let step = generate_step(&tiny_geometry(), "TEST").unwrap();
+        let entities = parse_entities(&step);
+
+        let advanced_faces: Vec<(&u32, &(String, Vec<String>))> = entities
+            .iter()
+            .filter(|(_, (ty, _))| ty == "ADVANCED_FACE")
+            .collect();
+        assert_eq!(advanced_faces.len(), 6 * 3);
+
+        for (face_id, (_, face_args)) in advanced_faces {
+            let bound_id = parse_ref(strip_outer_parens(&face_args[1]));
+            let plane_id = parse_ref(&face_args[2]);
+
+            let (_, bound_args) = &entities[&bound_id];
+            let loop_id = parse_ref(&bound_args[1]);
+
+            let (_, loop_args) = &entities[&loop_id];
+            let oe_ids: Vec<u32> = split_top_level(strip_outer_parens(&loop_args[1]))
+                .iter()
+                .map(|s| parse_ref(s))
+                .collect();
+
+            let mut polygon: Vec<[f64; 3]> = Vec::new();
+            for oe_id in &oe_ids {
+                let (_, oe_args) = &entities[oe_id];
+                let edge_id = parse_ref(&oe_args[3]);
+                let sense = oe_args[4].trim() == ".T.";
+
+                let (_, edge_args) = &entities[&edge_id];
+                let v0 = parse_ref(&edge_args[1]);
+                let v1 = parse_ref(&edge_args[2]);
+                let start_vertex = if sense { v0 } else { v1 };
+
+                let (_, vp_args) = &entities[&start_vertex];
+                let point_id = parse_ref(&vp_args[1]);
+                let (_, pt_args) = &entities[&point_id];
+                polygon.push(parse_point(&pt_args[1]));
+            }
+
+            assert!(polygon.len() >= 3, "face {face_id} has a degenerate loop");
+            let e1 = sub(polygon[1], polygon[0]);
+            let e2 = sub(polygon[2], polygon[1]);
+            let computed_normal = cross(e1, e2);
+
+            let (_, plane_args) = &entities[&plane_id];
+            let axis_id = parse_ref(&plane_args[1]);
+            let (_, axis_args) = &entities[&axis_id];
+            let normal_dir_id = parse_ref(&axis_args[2]);
+            let (_, dir_args) = &entities[&normal_dir_id];
+            let declared_normal = parse_point(&dir_args[1]);
+
+            let agreement = dot(computed_normal, declared_normal);
+            assert!(
+                agreement > 0.0,
+                "face {face_id}: loop winding implies normal {computed_normal:?}, \
+                 which disagrees with the declared surface normal {declared_normal:?} \
+                 (dot = {agreement})"
+            );
+        }
+    }
+
+    fn parse_entities(step: &str) -> std::collections::HashMap<u32, (String, Vec<String>)> {
+        let mut entities = std::collections::HashMap::new();
+        for line in step.lines() {
+            let line = line.trim();
+            if !line.starts_with('#') {
+                continue;
+            }
+            let Some(eq) = line.find(" = ") else {
+                continue;
+            };
+            let Ok(id) = line[1..eq].parse::<u32>() else {
+                continue;
+            };
+            let rest = line[eq + 3..].trim_end_matches(';');
+            let Some(paren) = rest.find('(') else {
+                continue;
+            };
+            let type_name = rest[..paren].to_string();
+            if type_name.is_empty() {
+                // Compound unit/context entities like
+                // "(GEOMETRIC_REPRESENTATION_CONTEXT(3) ...)" -- not
+                // needed for face-winding checks.
+                continue;
+            }
+            let args = split_top_level(strip_outer_parens(&rest[paren..]));
+            entities.insert(id, (type_name, args));
+        }
+        entities
+    }
+
+    fn strip_outer_parens(s: &str) -> &str {
+        let s = s.trim();
+        &s[1..s.len() - 1]
+    }
+
+    fn split_top_level(s: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        let mut depth = 0i32;
+        let mut current = String::new();
+        for c in s.chars() {
+            match c {
+                '(' => {
+                    depth += 1;
+                    current.push(c);
+                }
+                ')' => {
+                    depth -= 1;
+                    current.push(c);
+                }
+                ',' if depth == 0 => {
+                    parts.push(current.trim().to_string());
+                    current.clear();
+                }
+                _ => current.push(c),
+            }
+        }
+        if !current.trim().is_empty() {
+            parts.push(current.trim().to_string());
+        }
+        parts
+    }
+
+    fn parse_ref(s: &str) -> u32 {
+        s.trim().trim_start_matches('#').parse().unwrap()
+    }
+
+    fn parse_point(s: &str) -> [f64; 3] {
+        let inner = strip_outer_parens(s.trim());
+        let parts: Vec<f64> = inner
+            .split(',')
+            .map(|p| p.trim().parse().unwrap())
+            .collect();
+        [parts[0], parts[1], parts[2]]
+    }
+
+    fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+        [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+    }
+
+    fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    }
+
+    fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
     }
 }
