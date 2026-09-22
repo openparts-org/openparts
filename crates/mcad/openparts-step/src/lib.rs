@@ -70,7 +70,13 @@ impl StepWriter {
             unit[0], unit[1], unit[2]
         ));
         let vector_id = self.emit(&format!("VECTOR('', #{direction_id}, {len:.6})"));
-        let line_id = self.emit(&format!("LINE('', #{v0}, #{vector_id})"));
+        // LINE's origin must be a CARTESIAN_POINT, not a VERTEX_POINT --
+        // `v0` is the topological vertex id, which is a different entity
+        // type. Emitting a fresh point here (rather than trying to reuse
+        // one) keeps this function's signature simple and costs only one
+        // extra small entity per edge.
+        let line_origin_id = self.point(p0);
+        let line_id = self.emit(&format!("LINE('', #{line_origin_id}, #{vector_id})"));
         self.emit(&format!("EDGE_CURVE('', #{v0}, #{v1}, #{line_id}, .T.)"))
     }
 
@@ -495,6 +501,40 @@ mod tests {
                 "face {face_id}: loop winding implies normal {computed_normal:?}, \
                  which disagrees with the declared surface normal {declared_normal:?} \
                  (dot = {agreement})"
+            );
+        }
+    }
+
+    /// Independent type-checking pass: STEP entity references are just
+    /// integer ids with no type information at the reference site, so
+    /// nothing about `#emit`-based generation prevents accidentally
+    /// pointing at an entity of the wrong kind. This caught a real bug --
+    /// `LINE`'s origin argument must be a `CARTESIAN_POINT` (pure
+    /// geometry), not a `VERTEX_POINT` (topology) -- which was
+    /// syntactically valid STEP and passed every check above, but made
+    /// every edge's underlying curve fail to construct in a real STEP
+    /// reader (confirmed against OpenCascade), which cascaded into every
+    /// face, shell, and solid failing to form. No automated Rust test
+    /// caught that until this one was written in response.
+    #[test]
+    fn line_entities_reference_a_cartesian_point_not_a_vertex_point() {
+        let step = generate_step(&tiny_geometry(), "TEST").unwrap();
+        let entities = parse_entities(&step);
+
+        let lines: Vec<(&u32, &(String, Vec<String>))> = entities
+            .iter()
+            .filter(|(_, (ty, _))| ty == "LINE")
+            .collect();
+        assert!(!lines.is_empty());
+
+        for (line_id, (_, line_args)) in lines {
+            let origin_id = parse_ref(&line_args[1]);
+            let (origin_type, _) = &entities[&origin_id];
+            assert_eq!(
+                origin_type, "CARTESIAN_POINT",
+                "LINE {line_id}'s origin (#{origin_id}) is a {origin_type}, not a \
+                 CARTESIAN_POINT -- STEP readers need a pure geometric point here, \
+                 not a topological VERTEX_POINT"
             );
         }
     }
