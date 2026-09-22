@@ -4,9 +4,26 @@
 //! all derive their output from; STEP/STL/glTF are never themselves the
 //! canonical geometry.
 
+mod chip;
 mod lqfp;
+mod qfn;
 
+pub use chip::generate_chip;
 pub use lqfp::generate_lqfp;
+pub use qfn::generate_qfn;
+
+use openparts_core::Package;
+
+/// Dispatches to the generator matching `package.family`, so callers
+/// (CLI, tests) don't need to know which generator a given Package uses.
+pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
+    match package.family.to_ascii_lowercase().as_str() {
+        "lqfp" => generate_lqfp(package),
+        "qfn" => generate_qfn(package),
+        "chip" => generate_chip(package),
+        _ => Err(McadError::UnsupportedFamily(package.family.clone())),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point3 {
@@ -58,12 +75,12 @@ pub struct MechanicalGeometry {
 
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
-    #[error("package family \"{0}\" has no supported generator (only \"lqfp\" is implemented)")]
+    #[error("package family \"{0}\" has no supported generator (lqfp, qfn, chip are implemented)")]
     UnsupportedFamily(String),
-    #[error("package.geometry.generator is \"{0}\", expected \"lqfp\"")]
+    #[error("package.geometry.generator \"{0}\" does not match this package's family")]
     UnsupportedGenerator(String),
     #[error("missing required dimension: {0}")]
     MissingDimension(&'static str),
-    #[error("lead_count ({0}) is not evenly divisible by 4")]
+    #[error("lead_count ({0}) is not valid for this package family")]
     InvalidLeadCount(u32),
 }

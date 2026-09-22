@@ -150,6 +150,7 @@ mod tests {
                     unit: "mm".into(),
                 },
                 body_height: None,
+                exposed_pad: None,
             },
             geometry: None,
             provenance: BTreeMap::new(),

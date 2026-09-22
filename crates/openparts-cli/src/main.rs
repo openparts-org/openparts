@@ -178,7 +178,7 @@ fn cmd_generate(
     )
     .context("building effective model")?;
 
-    let geometry = openparts_mcad::generate_lqfp(&model.package).context("generating geometry")?;
+    let geometry = openparts_mcad::generate(&model.package).context("generating geometry")?;
 
     std::fs::create_dir_all(&out_dir)?;
 

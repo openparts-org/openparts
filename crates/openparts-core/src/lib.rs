@@ -30,7 +30,9 @@ pub use ids::{DeviceId, ManufacturerId, PackageId, PartId, SourceId};
 pub use kind::Kind;
 pub use lifecycle::{Lifecycle, LifecycleStatus};
 pub use manufacturer::{Manufacturer, Website};
-pub use package::{GeometryType, Package, PackageDimensions, PackageGeometrySpec};
+pub use package::{
+    ExposedPadDimensions, GeometryType, Package, PackageDimensions, PackageGeometrySpec,
+};
 pub use part::Part;
 pub use pin::{Pin, PinOverride, PinType};
 pub use provenance::{ProvenanceEntry, ProvenanceMap};

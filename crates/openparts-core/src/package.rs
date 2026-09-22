@@ -5,6 +5,16 @@ use crate::provenance::ProvenanceMap;
 use crate::serde_util::deserialize_no_dup_map;
 use serde::{Deserialize, Serialize};
 
+/// The center thermal/ground pad on the underside of leadframe packages
+/// (QFN, DFN, ...) -- a physical package fact from the datasheet's
+/// package outline drawing, independent of which Device pin (if any) is
+/// bonded to it. `None` means the package has no exposed pad.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExposedPadDimensions {
+    pub width: Dimension,
+    pub length: Dimension,
+}
+
 /// Canonical Data Specification section 20.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PackageDimensions {
@@ -12,6 +22,8 @@ pub struct PackageDimensions {
     pub body_length: Dimension,
     #[serde(default)]
     pub body_height: Option<Dimension>,
+    #[serde(default)]
+    pub exposed_pad: Option<ExposedPadDimensions>,
 }
 
 /// Canonical Data Specification section 21.

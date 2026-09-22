@@ -1,7 +1,8 @@
 //! End-to-end test of the First Vertical Slice (Architecture
 //! Specification section 32): Canonical YAML -> Parser -> Validator ->
-//! Effective Model -> KiCad + STEP, against the `exemplar` fixture data
-//! in the sibling `openparts-data` repository.
+//! Effective Model -> KiCad + STEP, against real fixture data (Raspberry
+//! Pi RP2040, and a Yageo chip resistor for the "chip" family) in the
+//! sibling `openparts-data` repository.
 //!
 //! KiCad output is checked by reading it back with the same parsers
 //! openparts-kicad's own unit tests use (Testing and Quality
@@ -18,20 +19,21 @@ fn data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../openparts-data")
 }
 
-fn load_fixture() -> (
+fn load_rp2040() -> (
     openparts_core::Part,
     openparts_core::Device,
     openparts_core::Package,
     BTreeSet<openparts_core::SourceId>,
 ) {
     let data = data_dir();
-    let part = openparts_data::load_part(data.join("parts/exemplar/ex48/EX48F100Q6.yaml")).unwrap();
-    let device = openparts_data::load_device(data.join("devices/exemplar/EX48F100.yaml")).unwrap();
+    let part =
+        openparts_data::load_part(data.join("parts/raspberrypi/rp2040/RP2040.yaml")).unwrap();
+    let device = openparts_data::load_device(data.join("devices/raspberrypi/RP2040.yaml")).unwrap();
     let package =
-        openparts_data::load_package(data.join("packages/standards/lqfp/LQFP48-7x7-P0.5.yaml"))
+        openparts_data::load_package(data.join("packages/standards/qfn/QFN56-RP2040.yaml"))
             .unwrap();
     let source =
-        openparts_data::load_source(data.join("sources/exemplar/EX-DS-0001.yaml")).unwrap();
+        openparts_data::load_source(data.join("sources/raspberrypi/RP-008371-DS.yaml")).unwrap();
 
     let mut known_sources = BTreeSet::new();
     known_sources.insert(source.id);
@@ -40,36 +42,46 @@ fn load_fixture() -> (
 }
 
 #[test]
-fn fixture_passes_validation() {
-    let (part, device, package, known_sources) = load_fixture();
+fn rp2040_fixture_passes_validation() {
+    let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 }
 
 #[test]
-fn full_pipeline_generates_semantically_correct_kicad_and_step() {
-    let (part, device, package, known_sources) = load_fixture();
+fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
+    let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
     let model = openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
         .expect("effective model");
 
-    let geometry = openparts_mcad::generate_lqfp(&model.package).expect("geometry");
-    assert_eq!(geometry.leads.len(), 48);
+    // Uses the family dispatcher (not generate_qfn directly), matching
+    // what the CLI actually calls.
+    let geometry = openparts_mcad::generate(&model.package).expect("geometry");
+    // 56 perimeter leads; no Exposed Pad lead, since its physical
+    // dimensions are not confirmed in the source datasheet (the Device
+    // still records the "EP" pin electrically -- see the symbol check
+    // below).
+    assert_eq!(geometry.leads.len(), 56);
 
     let symbol = openparts_pcbcad::build_symbol(&part.mpn, &model.device);
     let symbol_text = openparts_kicad::render_symbol(&symbol);
     let parsed_pins = openparts_kicad::parse_symbol_pins(&symbol_text);
-    assert_eq!(parsed_pins.len(), 48);
+    // 56 perimeter pins + the EP pin, since the symbol is built from the
+    // Device (electrical facts), independent of geometry confirmation.
+    assert_eq!(parsed_pins.len(), 57);
     let pin1 = parsed_pins.iter().find(|p| p.number == "1").unwrap();
-    assert_eq!(pin1.name, "VBAT");
+    assert_eq!(pin1.name, "IOVDD");
     assert_eq!(pin1.electrical_type, "power_in");
+    let ep_pin = parsed_pins.iter().find(|p| p.number == "EP").unwrap();
+    assert_eq!(ep_pin.name, "GND");
 
     let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
     let footprint_text = openparts_kicad::render_footprint(&footprint);
     let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
-    assert_eq!(parsed_pads.len(), 48);
+    assert_eq!(parsed_pads.len(), 56);
 
     // The footprint pad and the mechanical geometry lead agree on
     // position for every pin -- the IR conversion doesn't silently drop
@@ -85,44 +97,29 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step() {
 
     let step_text = openparts_step::generate_step(&geometry, &part.mpn).expect("step");
     assert!(step_text.starts_with("ISO-10303-21;\n"));
-    // 1 body + 48 leads = 49 boxes.
-    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 49);
+    // 1 body + 56 leads = 57 boxes.
+    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 57);
 }
 
 #[test]
-fn revision_override_changes_only_the_targeted_pin() {
-    let (part, device, package, known_sources) = load_fixture();
+fn known_revision_with_no_documented_overrides_matches_the_base_device() {
+    // RP2040's B0/B1/B2 silicon revisions are real and documented, but
+    // the datasheet documents no pinout/pin-behavior difference between
+    // them -- selecting one must not invent a difference that isn't
+    // there (Testing and Quality Specification section 4: never
+    // synthesize a value that wasn't actually given).
+    let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
     assert!(diags.is_empty());
 
     let base_model =
         openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
             .unwrap();
-    let rev_b_model =
-        openparts_core::build_effective_model(part, &device, package, Some("rev-b")).unwrap();
+    let b2_model =
+        openparts_core::build_effective_model(part, &device, package, Some("rev-b2")).unwrap();
 
-    assert_eq!(base_model.device.pins["42"].name, "VSS");
-    assert_eq!(rev_b_model.device.pins["42"].name, "PDR_ON");
-
-    // Every other pin is identical between the two Effective Models.
-    for (number, base_pin) in &base_model.device.pins {
-        if number == "42" {
-            continue;
-        }
-        assert_eq!(
-            &rev_b_model.device.pins[number], base_pin,
-            "pin {number} changed unexpectedly"
-        );
-    }
-
-    // The rendered symbol reflects the override.
-    let symbol = openparts_pcbcad::build_symbol("EX48F100Q6", &rev_b_model.device);
-    let text = openparts_kicad::render_symbol(&symbol);
-    let pins = openparts_kicad::parse_symbol_pins(&text);
-    assert_eq!(
-        pins.iter().find(|p| p.number == "42").unwrap().name,
-        "PDR_ON"
-    );
+    assert_eq!(base_model.device.pins, b2_model.device.pins);
+    assert_eq!(b2_model.applied_revision.as_deref(), Some("rev-b2"));
 }
 
 #[test]
@@ -130,7 +127,7 @@ fn unresolvable_dependency_stops_generation_instead_of_guessing() {
     // A revision that does not exist must be rejected, not silently
     // ignored (Testing and Quality Specification section 7: "一意に安全
     // な生成結果を決められない操作は停止する").
-    let (part, device, package, _) = load_fixture();
+    let (part, device, package, _) = load_rp2040();
     let err =
         openparts_core::build_effective_model(part, &device, package, Some("rev-does-not-exist"))
             .unwrap_err();
@@ -138,4 +135,39 @@ fn unresolvable_dependency_stops_generation_instead_of_guessing() {
         err,
         openparts_core::EffectiveModelError::UnknownRevision { .. }
     ));
+}
+
+#[test]
+fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
+    // Exercises the "chip" (2-terminal) family through the same
+    // dispatcher, proving the pipeline isn't LQFP/QFN-specific.
+    let data = data_dir();
+    let part =
+        openparts_data::load_part(data.join("parts/yageo/rc0603/RC0603FR-0710KL.yaml")).unwrap();
+    let device =
+        openparts_data::load_device(data.join("devices/yageo/RC0603-GENERAL-PURPOSE.yaml"))
+            .unwrap();
+    let package =
+        openparts_data::load_package(data.join("packages/standards/chip/CHIP0603-RC.yaml"))
+            .unwrap();
+    let source = openparts_data::load_source(data.join("sources/yageo/PYU-RC_GROUP.yaml")).unwrap();
+    let mut known_sources = BTreeSet::new();
+    known_sources.insert(source.id);
+
+    let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let model = openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
+        .unwrap();
+    let geometry = openparts_mcad::generate(&model.package).expect("geometry");
+    assert_eq!(geometry.leads.len(), 2);
+
+    let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
+    let footprint_text = openparts_kicad::render_footprint(&footprint);
+    let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
+    assert_eq!(parsed_pads.len(), 2);
+
+    let step_text = openparts_step::generate_step(&geometry, &part.mpn).unwrap();
+    // 1 body + 2 terminals = 3 boxes.
+    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 3);
 }
