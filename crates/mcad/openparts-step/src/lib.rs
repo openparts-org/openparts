@@ -122,9 +122,29 @@ impl StepWriter {
         ))
     }
 
+    /// Attaches an RGB (0.0-1.0 per channel) color to `target_id` (a
+    /// MANIFOLD_SOLID_BREP here) via a STYLED_ITEM, matching the standard
+    /// AP214 presentation-style chain real STEP exporters use for color.
+    fn style(&mut self, target_id: u32, rgb: [f64; 3]) {
+        let colour_id = self.emit(&format!(
+            "COLOUR_RGB('', {:.6}, {:.6}, {:.6})",
+            rgb[0], rgb[1], rgb[2]
+        ));
+        let fill_colour_id = self.emit(&format!("FILL_AREA_STYLE_COLOUR('', #{colour_id})"));
+        let fill_area_style_id = self.emit(&format!("FILL_AREA_STYLE('', (#{fill_colour_id}))"));
+        let surface_fill_id = self.emit(&format!("SURFACE_STYLE_FILL_AREA(#{fill_area_style_id})"));
+        let side_style_id = self.emit(&format!("SURFACE_SIDE_STYLE('', (#{surface_fill_id}))"));
+        let usage_id = self.emit(&format!("SURFACE_STYLE_USAGE(.BOTH., #{side_style_id})"));
+        let assignment_id = self.emit(&format!("PRESENTATION_STYLE_ASSIGNMENT((#{usage_id}))"));
+        self.emit(&format!(
+            "STYLED_ITEM('', (#{assignment_id}), #{target_id})"
+        ));
+    }
+
     /// Writes one axis-aligned box centered at `center` with the given
-    /// `size`, returning the id of its MANIFOLD_SOLID_BREP entity.
-    fn write_box(&mut self, center: [f64; 3], size: [f64; 3]) -> u32 {
+    /// `size` and RGB `color`, returning the id of its
+    /// MANIFOLD_SOLID_BREP entity.
+    fn write_box(&mut self, center: [f64; 3], size: [f64; 3], color: [f64; 3]) -> u32 {
         let (cx, cy, cz) = (center[0], center[1], center[2]);
         let (dx, dy, dz) = (size[0] / 2.0, size[1] / 2.0, size[2] / 2.0);
 
@@ -247,9 +267,16 @@ impl StepWriter {
             .collect::<Vec<_>>()
             .join(", ");
         let shell_id = self.emit(&format!("CLOSED_SHELL('', ({face_list}))"));
-        self.emit(&format!("MANIFOLD_SOLID_BREP('', #{shell_id})"))
+        let brep_id = self.emit(&format!("MANIFOLD_SOLID_BREP('', #{shell_id})"));
+        self.style(brep_id, color);
+        brep_id
     }
 }
+
+/// Dark charcoal, matching real epoxy mold compound IC body resin.
+const BODY_COLOR: [f64; 3] = [0.15, 0.15, 0.15];
+/// Metallic silver, matching exposed leads/pads.
+const LEAD_COLOR: [f64; 3] = [0.75, 0.75, 0.75];
 
 /// Renders `geometry` (one box per body + lead) as a complete STEP AP214
 /// file named after `product_name`.
@@ -271,11 +298,13 @@ pub fn generate_step(
             geometry.body.size.y,
             geometry.body.size.z,
         ],
+        BODY_COLOR,
     ));
     for lead in &geometry.leads {
         brep_ids.push(w.write_box(
             [lead.position.x, lead.position.y, lead.position.z],
             [lead.size.x, lead.size.y, lead.size.z],
+            LEAD_COLOR,
         ));
     }
 
@@ -401,6 +430,24 @@ mod tests {
                 },
             }],
         }
+    }
+
+    #[test]
+    fn every_solid_has_a_styled_color() {
+        let step = generate_step(&tiny_geometry(), "TEST").unwrap();
+        let styled_item_count = step.matches("STYLED_ITEM(").count();
+        let colour_count = step.matches("COLOUR_RGB(").count();
+        // 1 body + 2 leads = 3 boxes, one STYLED_ITEM/COLOUR_RGB pair each.
+        assert_eq!(styled_item_count, 3);
+        assert_eq!(colour_count, 3);
+        assert!(step.contains(&format!(
+            "COLOUR_RGB('', {:.6}, {:.6}, {:.6})",
+            BODY_COLOR[0], BODY_COLOR[1], BODY_COLOR[2]
+        )));
+        assert!(step.contains(&format!(
+            "COLOUR_RGB('', {:.6}, {:.6}, {:.6})",
+            LEAD_COLOR[0], LEAD_COLOR[1], LEAD_COLOR[2]
+        )));
     }
 
     #[test]
