@@ -1,7 +1,7 @@
 # Code PR CI (Testing and Quality Specification section 12): formatting,
 # static checks, and the unit/integration test suite, including a
-# representative CAD-generation smoke check against the exemplar fixture
-# in the sibling openparts-data repository.
+# representative CAD-generation smoke check against the real RP2040
+# fixture in the sibling openparts-data repository.
 name: ci
 
 on:
@@ -46,16 +46,16 @@ jobs:
       - name: Representative CAD generation smoke check
         run: |
           cargo run -p openparts-cli -- validate \
-            --part ../openparts-data/parts/exemplar/ex48/EX48F100Q6.yaml \
-            --device ../openparts-data/devices/exemplar/EX48F100.yaml \
-            --package ../openparts-data/packages/standards/lqfp/LQFP48-7x7-P0.5.yaml \
-            --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml
+            --part ../openparts-data/parts/raspberrypi/rp2040/RP2040.yaml \
+            --device ../openparts-data/devices/raspberrypi/RP2040.yaml \
+            --package ../openparts-data/packages/standards/qfn/QFN56-RP2040.yaml \
+            --source ../openparts-data/sources/raspberrypi/RP-008371-DS.yaml
           cargo run -p openparts-cli -- generate \
-            --part ../openparts-data/parts/exemplar/ex48/EX48F100Q6.yaml \
-            --device ../openparts-data/devices/exemplar/EX48F100.yaml \
-            --package ../openparts-data/packages/standards/lqfp/LQFP48-7x7-P0.5.yaml \
-            --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml \
+            --part ../openparts-data/parts/raspberrypi/rp2040/RP2040.yaml \
+            --device ../openparts-data/devices/raspberrypi/RP2040.yaml \
+            --package ../openparts-data/packages/standards/qfn/QFN56-RP2040.yaml \
+            --source ../openparts-data/sources/raspberrypi/RP-008371-DS.yaml \
             --out /tmp/openparts-ci-out
-          test -s /tmp/openparts-ci-out/EX48F100Q6.kicad_sym
-          test -s /tmp/openparts-ci-out/EX48F100Q6.kicad_mod
-          test -s /tmp/openparts-ci-out/EX48F100Q6.step
+          test -s /tmp/openparts-ci-out/RP2040.kicad_sym
+          test -s /tmp/openparts-ci-out/RP2040.kicad_mod
+          test -s /tmp/openparts-ci-out/RP2040.step
