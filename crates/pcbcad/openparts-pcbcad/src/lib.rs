@@ -135,13 +135,70 @@ fn pin_group_key(name: &str) -> String {
     }
 }
 
+/// Rough per-character glyph width for KiCad's default 1.27mm pin-name
+/// font, used only to estimate how much room a top/bottom pin's label
+/// needs along the axis it's stacked on (its text is rotated 90° there,
+/// so it runs parallel to that axis and can collide with a neighbor's
+/// text if they're packed at a fixed grid step regardless of name
+/// length). Not exact font metrics -- consistent with this project's
+/// existing "structurally representative, not pixel-perfect" approach to
+/// generated geometry.
+const CHAR_WIDTH_MM: f64 = 1.0;
+
+fn text_half_extent(name: &str) -> f64 {
+    (name.chars().count() as f64 * CHAR_WIDTH_MM / 2.0).max(GRID_MM / 2.0)
+}
+
+/// Packs `specs` (each pin's required half-extent along the packing
+/// axis, plus an optional group key) end to end -- consecutive pins get
+/// exactly `half_extent[i] + half_extent[i+1]` apart, plus one extra
+/// `GRID_MM` whenever the group key changes between them -- then shifts
+/// the whole run so it's centered on 0.
+///
+/// This is the closed-form solution to "space these out just enough to
+/// avoid collision, centered, with a gap between different groups": for
+/// a 1D layout it can be solved exactly in one pass, so unlike an
+/// iterative force/spring relaxation there's no convergence tolerance or
+/// iteration count to pick and the result is exactly reproducible.
+fn pack_centered(specs: &[(f64, Option<String>)]) -> Vec<f64> {
+    if specs.is_empty() {
+        return Vec::new();
+    }
+    let mut positions = Vec::with_capacity(specs.len());
+    let mut cursor = 0.0;
+    let mut prev_half = 0.0;
+    let mut prev_group: Option<&String> = None;
+    for (i, (half, group)) in specs.iter().enumerate() {
+        if i > 0 {
+            let gap = if group.is_some() && group.as_ref() != prev_group {
+                GRID_MM
+            } else {
+                0.0
+            };
+            cursor += prev_half + half + gap;
+        }
+        positions.push(cursor);
+        prev_half = *half;
+        prev_group = group.as_ref();
+    }
+    let shift = (positions[0] + positions[positions.len() - 1]) / 2.0;
+    for p in &mut positions {
+        *p -= shift;
+    }
+    positions
+}
+
 /// Builds a Symbol from a Device's pins, grouped onto sides the way a
 /// hand-authored MCU symbol is: `power`-type pins on top, the
 /// `ground`-type pin(s) on bottom, the single largest same-family signal
 /// group (e.g. a GPIO bus) on the right, and every other pin -- grouped
-/// by family via [`pin_group_key`], each family kept contiguous -- on the
-/// left. Width and height are sized independently from what each axis
-/// actually needs, rather than forcing a square body.
+/// by family via [`pin_group_key`], each family kept contiguous and
+/// separated from the next by an extra gap -- on the left. Pins on each
+/// side are packed via [`pack_centered`]: top/bottom spacing grows with
+/// label length (so long power-pin names don't collide), left/right
+/// spacing stays a fixed row height but widens between different
+/// families. Body width/height follow from the resulting extents,
+/// never forcing a square.
 pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let mut numbers: Vec<&String> = device.pins.keys().collect();
     numbers.sort_by_key(|n| n.parse::<u32>().unwrap_or(u32::MAX));
@@ -182,48 +239,98 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         target.extend(groups[key].iter().copied());
     }
 
-    let half_width =
-        ((top.len().max(bottom.len()).max(1) as f64 - 1.0) * GRID_MM / 2.0).max(GRID_MM);
-    let half_height =
-        ((left.len().max(right.len()).max(1) as f64 - 1.0) * GRID_MM / 2.0).max(GRID_MM);
+    // Top/bottom: no group gaps (each power/ground pin already stands on
+    // its own), spacing driven by label length.
+    let top_specs: Vec<(f64, Option<String>)> = top
+        .iter()
+        .map(|n| (text_half_extent(&device.pins[*n].name), None))
+        .collect();
+    let bottom_specs: Vec<(f64, Option<String>)> = bottom
+        .iter()
+        .map(|n| (text_half_extent(&device.pins[*n].name), None))
+        .collect();
+    // Left/right: fixed row height, but grouped -- an extra gap opens up
+    // wherever the pin family changes (e.g. between QSPI_* and USB_*).
+    let left_specs: Vec<(f64, Option<String>)> = left
+        .iter()
+        .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
+        .collect();
+    let right_specs: Vec<(f64, Option<String>)> = right
+        .iter()
+        .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
+        .collect();
+
+    let top_pos = pack_centered(&top_specs);
+    let bottom_pos = pack_centered(&bottom_specs);
+    let left_pos = pack_centered(&left_specs);
+    let right_pos = pack_centered(&right_specs);
+
+    let half_width = top_pos
+        .iter()
+        .chain(bottom_pos.iter())
+        .map(|p| p.abs())
+        .fold(GRID_MM, f64::max);
+    let half_height = left_pos
+        .iter()
+        .chain(right_pos.iter())
+        .map(|p| p.abs())
+        .fold(GRID_MM, f64::max);
 
     let mut pins = Vec::with_capacity(numbers.len());
-    let mut place = |list: &[&String], side: PinOrientation| {
-        for (i, number) in list.iter().enumerate() {
-            let index = i as f64;
-            let pin = &device.pins[*number];
-            let position = match side {
-                PinOrientation::Left => Point2 {
-                    x: -half_width - PIN_LENGTH_MM,
-                    y: half_height - index * GRID_MM,
-                },
-                PinOrientation::Bottom => Point2 {
-                    x: -half_width + index * GRID_MM,
-                    y: -half_height - PIN_LENGTH_MM,
-                },
-                PinOrientation::Right => Point2 {
-                    x: half_width + PIN_LENGTH_MM,
-                    y: -half_height + index * GRID_MM,
-                },
-                PinOrientation::Top => Point2 {
-                    x: half_width - index * GRID_MM,
-                    y: half_height + PIN_LENGTH_MM,
-                },
-            };
-            pins.push(SymbolPin {
-                number: (*number).clone(),
-                name: pin.name.clone(),
-                electrical_type: pin.pin_type.into(),
-                position,
-                length: PIN_LENGTH_MM,
-                orientation: side,
-            });
-        }
+    let mut push_pin = |number: &String, position: Point2, side: PinOrientation| {
+        let pin = &device.pins[number];
+        pins.push(SymbolPin {
+            number: number.clone(),
+            name: pin.name.clone(),
+            electrical_type: pin.pin_type.into(),
+            position,
+            length: PIN_LENGTH_MM,
+            orientation: side,
+        });
     };
-    place(&left, PinOrientation::Left);
-    place(&bottom, PinOrientation::Bottom);
-    place(&right, PinOrientation::Right);
-    place(&top, PinOrientation::Top);
+    // `pack_centered` lays its first item at the most-negative position;
+    // left/top's first item is conventionally the "start" (top-most /
+    // right-most) side, the opposite direction, so their axis is negated.
+    for (number, &y) in left.iter().zip(left_pos.iter()) {
+        push_pin(
+            number,
+            Point2 {
+                x: -half_width - PIN_LENGTH_MM,
+                y: -y,
+            },
+            PinOrientation::Left,
+        );
+    }
+    for (number, &x) in bottom.iter().zip(bottom_pos.iter()) {
+        push_pin(
+            number,
+            Point2 {
+                x,
+                y: -half_height - PIN_LENGTH_MM,
+            },
+            PinOrientation::Bottom,
+        );
+    }
+    for (number, &y) in right.iter().zip(right_pos.iter()) {
+        push_pin(
+            number,
+            Point2 {
+                x: half_width + PIN_LENGTH_MM,
+                y,
+            },
+            PinOrientation::Right,
+        );
+    }
+    for (number, &x) in top.iter().zip(top_pos.iter()) {
+        push_pin(
+            number,
+            Point2 {
+                x: -x,
+                y: half_height + PIN_LENGTH_MM,
+            },
+            PinOrientation::Top,
+        );
+    }
 
     PcbSymbol {
         name: name.to_string(),
@@ -309,6 +416,81 @@ mod tests {
         assert_eq!(pin_group_key("USB_DM"), "USB");
         assert_eq!(pin_group_key("USB_DP"), "USB");
         assert_eq!(pin_group_key("TESTEN"), "TESTEN");
+    }
+
+    #[test]
+    fn pack_centered_spaces_neighbors_by_their_combined_half_extent() {
+        let specs = vec![(2.0, None), (3.0, None), (1.0, None)];
+        let positions = pack_centered(&specs);
+        assert_eq!(positions.len(), 3);
+        assert!((positions[1] - positions[0] - 5.0).abs() < 1e-9); // 2.0+3.0
+        assert!((positions[2] - positions[1] - 4.0).abs() < 1e-9); // 3.0+1.0
+                                                                   // Centered: the run's midpoint sits at 0.
+        assert!((positions[0] + positions[2]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pack_centered_adds_a_gap_only_at_group_boundaries() {
+        let specs = vec![
+            (1.0, Some("A".to_string())),
+            (1.0, Some("A".to_string())),
+            (1.0, Some("B".to_string())),
+        ];
+        let positions = pack_centered(&specs);
+        let within_group_gap = positions[1] - positions[0];
+        let cross_group_gap = positions[2] - positions[1];
+        assert!((within_group_gap - 2.0).abs() < 1e-9); // 1.0+1.0, no extra gap
+        assert!((cross_group_gap - (2.0 + GRID_MM)).abs() < 1e-9); // + GRID_MM
+    }
+
+    #[test]
+    fn pack_centered_handles_empty_and_single_item() {
+        assert_eq!(pack_centered(&[]), Vec::<f64>::new());
+        let single = pack_centered(&[(3.0, None)]);
+        assert_eq!(single, vec![0.0]);
+    }
+
+    #[test]
+    fn top_pins_dont_overlap_when_names_are_long() {
+        // Every pin here is `power`-type with a long, distinct name --
+        // exactly the RP2040 top-row scenario that used to overlap under
+        // a fixed 2.54mm grid step.
+        let mut pins = BTreeMap::new();
+        for (n, name) in [
+            ("1", "USB_VDD"),
+            ("2", "ADC_AVDD"),
+            ("3", "VREG_VIN"),
+            ("4", "VREG_VOUT"),
+        ] {
+            pins.insert(
+                n.into(),
+                Pin {
+                    name: name.into(),
+                    pin_type: PinType::Power,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        let device = Device {
+            schema_version: "0.1".into(),
+            kind: Kind::Device,
+            id: DeviceId::from("ex/LONGNAMES"),
+            manufacturer: ManufacturerId::from("ex"),
+            family: None,
+            pins,
+            revisions: BTreeMap::new(),
+            provenance: BTreeMap::new(),
+        };
+        let symbol = build_symbol("LONGNAMES", &device);
+        let mut xs: Vec<f64> = symbol.pins.iter().map(|p| p.position.x).collect();
+        xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        for pair in xs.windows(2) {
+            let gap = pair[1] - pair[0];
+            // Every name here is at least 7 characters; the gap between
+            // any two neighbors must be at least enough for both their
+            // estimated text widths, never the old fixed 2.54mm.
+            assert!(gap > GRID_MM, "adjacent top pins only {gap}mm apart");
+        }
     }
 
     /// A device shaped like RP2040 in miniature: a large `io` family
@@ -422,6 +604,41 @@ mod tests {
             bus_side,
             *qspi_sides.iter().next().unwrap(),
             "the smaller QSPI family should not share the bus side"
+        );
+    }
+
+    #[test]
+    fn different_families_on_the_left_get_an_extra_gap() {
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let mut left: Vec<(String, f64)> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.orientation == PinOrientation::Left)
+            .map(|p| (pin_group_key(&p.name), p.position.y))
+            .collect();
+        left.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap()); // top to bottom
+
+        let gaps: Vec<(bool, f64)> = left
+            .windows(2)
+            .map(|pair| {
+                let is_boundary = pair[0].0 != pair[1].0;
+                (is_boundary, pair[0].1 - pair[1].1)
+            })
+            .collect();
+        let boundary_gap = gaps
+            .iter()
+            .find(|(is_boundary, _)| *is_boundary)
+            .map(|(_, g)| *g)
+            .expect("the left side has more than one family, so a boundary must exist");
+        let within_group_gap = gaps
+            .iter()
+            .find(|(is_boundary, _)| !*is_boundary)
+            .map(|(_, g)| *g)
+            .expect("QSPI has 3 pins, so a within-group gap must exist");
+        assert!(
+            boundary_gap > within_group_gap,
+            "expected a family boundary ({boundary_gap}mm) to be wider than a \
+             within-group gap ({within_group_gap}mm)"
         );
     }
 
