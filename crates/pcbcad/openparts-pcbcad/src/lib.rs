@@ -160,6 +160,41 @@ fn text_half_extent(name: &str) -> f64 {
 /// different groups).
 type PinSpec = (f64, Option<String>);
 
+/// Minimum clearance guaranteed between a side's outermost pin and the
+/// adjacent side's outermost pin at each of the symbol's four corners
+/// (e.g. the last power pin on top vs. the first bus pin on the right).
+///
+/// KiCad draws more than just the pin name next to each pin -- it also
+/// shows the pin's electrical-type description (e.g. "power input"),
+/// which this crate has no way to measure the exact rendered size of.
+/// Rather than trend the per-character text-width estimate elsewhere in
+/// this file (already an approximation) even higher across the board,
+/// this margin targets exactly the place that's actually at risk: two
+/// perpendicular sides meeting at a corner, where the estimate errors
+/// on each axis compound. See `widen_corner_ends`.
+const CORNER_MARGIN_MM: f64 = 4.0;
+
+/// Widens the first and last entries of `specs` (a side's outermost
+/// pins, which sit closest to the symbol's corners) to at least
+/// [`CORNER_MARGIN_MM`], leaving every pin in between untouched.
+///
+/// Growing a corner pin's own half-extent genuinely increases its
+/// clearance from an adjacent side's corner pin, not just the overall
+/// symbol size: each side's outermost pin sits exactly `half_extent`
+/// away from the body edge on its own axis (by construction, see
+/// `widest_reach` in `build_symbol`), so two perpendicular corner pins
+/// are `sqrt(a.half_extent² + b.half_extent²)` apart regardless of how
+/// large the body itself is. Guaranteeing each individually clears
+/// `CORNER_MARGIN_MM` guarantees their combined distance does too.
+fn widen_corner_ends(specs: &mut [PinSpec]) {
+    if let Some(first) = specs.first_mut() {
+        first.0 = first.0.max(CORNER_MARGIN_MM);
+    }
+    if let Some(last) = specs.last_mut() {
+        last.0 = last.0.max(CORNER_MARGIN_MM);
+    }
+}
+
 /// Packs `specs` (each pin's required half-extent along the packing
 /// axis, plus an optional group key) end to end -- consecutive pins get
 /// exactly `half_extent[i] + half_extent[i+1]` apart, plus one extra
@@ -281,7 +316,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // gap treatment as left/right -- e.g. RP2040's six IOVDD pins pack
     // tightly together, then get a gap before DVDD, ADC_AVDD, the
     // VREG_VIN/VREG_VOUT pair (sharing the "VREG" family), and USB_VDD.
-    let top_specs: Vec<PinSpec> = top
+    let mut top_specs: Vec<PinSpec> = top
         .iter()
         .map(|n| {
             (
@@ -290,7 +325,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             )
         })
         .collect();
-    let bottom_specs: Vec<PinSpec> = bottom
+    let mut bottom_specs: Vec<PinSpec> = bottom
         .iter()
         .map(|n| {
             (
@@ -301,10 +336,16 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         .collect();
     // Left: fixed row height, but grouped -- an extra gap opens up
     // wherever the pin family changes (e.g. between QSPI_* and USB_*).
-    let left_specs: Vec<PinSpec> = left
+    let mut left_specs: Vec<PinSpec> = left
         .iter()
         .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
         .collect();
+    // Guarantee corner clearance (see CORNER_MARGIN_MM) before packing --
+    // widening an outermost pin's half-extent shifts where it actually
+    // sits, so this must happen before pack_centered runs, not after.
+    widen_corner_ends(&mut top_specs);
+    widen_corner_ends(&mut bottom_specs);
+    widen_corner_ends(&mut left_specs);
 
     let top_pos = pack_centered(&top_specs);
     let bottom_pos = pack_centered(&bottom_specs);
@@ -320,10 +361,11 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let chunk_specs_pos: Vec<(Vec<PinSpec>, Vec<f64>)> = bus_chunks
         .iter()
         .map(|chunk| {
-            let specs: Vec<PinSpec> = chunk
+            let mut specs: Vec<PinSpec> = chunk
                 .iter()
                 .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
                 .collect();
+            widen_corner_ends(&mut specs);
             let pos = pack_centered(&specs);
             (specs, pos)
         })
@@ -852,6 +894,99 @@ mod tests {
             (end.y - start.y).abs()
         };
         assert!((height_of(&single) - height_of(&split)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn widen_corner_ends_only_touches_the_first_and_last_entries() {
+        let mut specs: Vec<PinSpec> = vec![
+            (1.0, Some("A".into())),
+            (1.0, Some("A".into())),
+            (1.0, Some("A".into())),
+        ];
+        widen_corner_ends(&mut specs);
+        assert_eq!(specs[0].0, CORNER_MARGIN_MM, "first entry should widen");
+        assert_eq!(specs[1].0, 1.0, "middle entry must stay untouched");
+        assert_eq!(specs[2].0, CORNER_MARGIN_MM, "last entry should widen");
+    }
+
+    #[test]
+    fn widen_corner_ends_never_shrinks_an_already_wide_entry() {
+        let mut specs: Vec<PinSpec> = vec![(CORNER_MARGIN_MM + 5.0, None)];
+        widen_corner_ends(&mut specs);
+        assert_eq!(specs[0].0, CORNER_MARGIN_MM + 5.0);
+    }
+
+    /// Boundary-labeling sanity check (see this crate's discussion of
+    /// prior art in build_symbol's docs): pack_centered's spacing only
+    /// guards same-side neighbors, so this checks the four corners,
+    /// where a side's outermost pin sits next to the *adjacent* side's
+    /// outermost pin. Note this measures raw pin-stub-tip distance, not
+    /// full label reach -- PIN_LENGTH alone already keeps stub tips
+    /// comfortably apart for this fixture's short names, so this test
+    /// mainly guards against a gross regression (e.g. corner pins ending
+    /// up literally coincident), not the finer label-overlap margin
+    /// that `widen_corner_ends`'s own tests above cover directly.
+    #[test]
+    fn corner_adjacent_pins_from_different_sides_keep_a_safety_margin() {
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+
+        let extreme = |side: PinOrientation, pick_max: bool, axis_x: bool| -> &SymbolPin {
+            symbol
+                .pins
+                .iter()
+                .filter(|p| p.orientation == side)
+                .max_by(|a, b| {
+                    let (av, bv) = if axis_x {
+                        (a.position.x, b.position.x)
+                    } else {
+                        (a.position.y, b.position.y)
+                    };
+                    let ord = av.partial_cmp(&bv).unwrap();
+                    if pick_max {
+                        ord
+                    } else {
+                        ord.reverse()
+                    }
+                })
+                .unwrap()
+        };
+        let distance = |a: &SymbolPin, b: &SymbolPin| {
+            let dx = a.position.x - b.position.x;
+            let dy = a.position.y - b.position.y;
+            (dx * dx + dy * dy).sqrt()
+        };
+
+        // (side near this corner, pick the pin closest to the corner on
+        // its own axis) for each of the four corners.
+        let top_right = distance(
+            extreme(PinOrientation::Top, true, true), // top pin closest to +x
+            extreme(PinOrientation::Right, true, false), // right pin closest to +y
+        );
+        let top_left = distance(
+            extreme(PinOrientation::Top, false, true), // top pin closest to -x
+            extreme(PinOrientation::Left, true, false), // left pin closest to +y
+        );
+        let bottom_right = distance(
+            extreme(PinOrientation::Bottom, true, true), // bottom pin closest to +x
+            extreme(PinOrientation::Right, false, false), // right pin closest to -y
+        );
+        let bottom_left = distance(
+            extreme(PinOrientation::Bottom, false, true), // bottom pin closest to -x
+            extreme(PinOrientation::Left, false, false),  // left pin closest to -y
+        );
+
+        for (label, gap) in [
+            ("top-right", top_right),
+            ("top-left", top_left),
+            ("bottom-right", bottom_right),
+            ("bottom-left", bottom_left),
+        ] {
+            assert!(
+                gap >= CORNER_MARGIN_MM,
+                "{label} corner: adjacent-side pins only {gap:.2}mm apart \
+                 (want >= {CORNER_MARGIN_MM}mm)"
+            );
+        }
     }
 
     #[test]
