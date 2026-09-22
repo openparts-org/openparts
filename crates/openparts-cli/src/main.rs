@@ -197,13 +197,17 @@ fn cmd_generate(
         openparts_step::generate_step(&geometry, &part.mpn).context("generating STEP")?;
     std::fs::write(out_dir.join(format!("{}.step", part.mpn)), step_text)?;
 
+    let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).context("generating STL")?;
+    std::fs::write(out_dir.join(format!("{}.stl", part.mpn)), stl_text)?;
+
     // Reproducibility record (Testing and Quality Specification section
     // 10): the conditions this specific output was generated under.
     let report = format!(
-        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n",
+        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n",
         part.schema_version,
         part.id,
         model.applied_revision.as_deref().map(|r| format!("\"{r}\"")).unwrap_or_else(|| "null".to_string()),
+        env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
@@ -215,7 +219,7 @@ fn cmd_generate(
     )?;
 
     println!(
-        "Generated KiCad symbol/footprint, STEP model, and a generation report into {}",
+        "Generated KiCad symbol/footprint, STEP/STL models, and a generation report into {}",
         out_dir.display()
     );
     Ok(())

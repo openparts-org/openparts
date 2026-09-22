@@ -41,5 +41,6 @@ openparts-data = { path = "crates/openparts-data" }
 openparts-validator = { path = "crates/openparts-validator" }
 openparts-mcad = { path = "crates/mcad/openparts-mcad" }
 openparts-step = { path = "crates/mcad/openparts-step" }
+openparts-stl = { path = "crates/mcad/openparts-stl" }
 openparts-pcbcad = { path = "crates/pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "crates/pcbcad/openparts-kicad" }

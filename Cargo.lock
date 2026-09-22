@@ -437,6 +437,7 @@ dependencies = [
  "openparts-mcad",
  "openparts-pcbcad",
  "openparts-step",
+ "openparts-stl",
  "openparts-validator",
 ]
 
@@ -460,6 +461,7 @@ dependencies = [
  "openparts-mcad",
  "openparts-pcbcad",
  "openparts-step",
+ "openparts-stl",
  "openparts-validator",
 ]
 

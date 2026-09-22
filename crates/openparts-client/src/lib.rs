@@ -24,6 +24,7 @@ pub enum ArtifactKind {
     KicadSymbol,
     KicadFootprint,
     Step,
+    Stl,
 }
 
 impl ArtifactKind {
@@ -32,6 +33,7 @@ impl ArtifactKind {
             ArtifactKind::KicadSymbol => "kicad-symbol",
             ArtifactKind::KicadFootprint => "kicad-footprint",
             ArtifactKind::Step => "step",
+            ArtifactKind::Stl => "stl",
         }
     }
 }

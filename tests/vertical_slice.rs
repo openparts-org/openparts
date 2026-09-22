@@ -99,6 +99,11 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     assert!(step_text.starts_with("ISO-10303-21;\n"));
     // 1 body + 56 leads = 57 boxes.
     assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 57);
+
+    let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).expect("stl");
+    assert!(stl_text.starts_with("solid RP2040\n"));
+    // 57 boxes * 12 facets each.
+    assert_eq!(stl_text.matches("facet normal").count(), 57 * 12);
 }
 
 #[test]
