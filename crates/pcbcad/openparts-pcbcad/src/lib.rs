@@ -209,7 +209,7 @@ type PinSpec = (f64, Option<String>);
 ///
 /// Must exceed the largest natural half-extent this file computes
 /// anywhere (currently `electrical_type_half_extent`'s biggest value,
-/// ~4.9mm for "Bidirectional") -- `widen_corner_ends` only ever takes
+/// ~4.9mm for "Bidirectional") -- `corner_boosted_reach` only ever takes
 /// the *max* of this and a pin's own natural half-extent, so once this
 /// margin stops being the larger of the two it silently stops doing
 /// anything at that corner. That's exactly what happened when
@@ -227,28 +227,46 @@ type PinSpec = (f64, Option<String>);
 /// this file (already an approximation) even higher across the board,
 /// this margin targets exactly the place that's actually at risk: two
 /// perpendicular sides meeting at a corner, where the estimate errors
-/// on each axis compound. See `widen_corner_ends`.
+/// on each axis compound. See `corner_boosted_reach`.
 const CORNER_MARGIN_MM: f64 = 10.0;
 
-/// Widens the first and last entries of `specs` (a side's outermost
-/// pins, which sit closest to the symbol's corners) to at least
-/// [`CORNER_MARGIN_MM`], leaving every pin in between untouched.
+/// Computes the same thing as `widest_reach` (in `build_symbol`), but
+/// the first/last item -- a side's outermost pin, which sits closest to
+/// the symbol's corners -- has its contribution to the reach boosted to
+/// at least [`CORNER_MARGIN_MM`], every other item using its own
+/// natural half-extent unchanged.
 ///
-/// Growing a corner pin's own half-extent genuinely increases its
-/// clearance from an adjacent side's corner pin, not just the overall
-/// symbol size: each side's outermost pin sits exactly `half_extent`
-/// away from the body edge on its own axis (by construction, see
-/// `widest_reach` in `build_symbol`), so two perpendicular corner pins
-/// are `sqrt(a.half_extent² + b.half_extent²)` apart regardless of how
-/// large the body itself is. Guaranteeing each individually clears
+/// This intentionally only affects the *rectangle size* this reach
+/// feeds into, not the corner pin's actual packed position:
+/// `pack_centered` was previously given the boosted half-extent
+/// directly, which genuinely fixed cross-side corner clearance but as
+/// a side effect also pushed the corner pin unnecessarily far from its
+/// own same-side neighbor (e.g. GPIO29 from GPIO28) -- a real,
+/// maintainer-reported regression. Boosting only the reach, not the
+/// packing input, keeps every same-side gap exactly as tight as
+/// `pack_centered` naturally makes it, while still growing the
+/// rectangle enough that the *other* (perpendicular) side's corner pin
+/// -- whose position is fixed relative to this rectangle's size, not
+/// to this side's packing -- ends up far enough away. Each side's
+/// outermost pin's reach contribution is `pos.abs() + half_extent`; two
+/// perpendicular corner pins end up `sqrt(a² + b²)` apart regardless of
+/// the body's overall size, so guaranteeing each clears
 /// `CORNER_MARGIN_MM` guarantees their combined distance does too.
-fn widen_corner_ends(specs: &mut [PinSpec]) {
-    if let Some(first) = specs.first_mut() {
-        first.0 = first.0.max(CORNER_MARGIN_MM);
-    }
-    if let Some(last) = specs.last_mut() {
-        last.0 = last.0.max(CORNER_MARGIN_MM);
-    }
+fn corner_boosted_reach(specs: &[PinSpec], positions: &[f64]) -> f64 {
+    let last_index = specs.len().saturating_sub(1);
+    specs
+        .iter()
+        .zip(positions.iter())
+        .enumerate()
+        .map(|(i, ((half, _), pos))| {
+            let half = if i == 0 || i == last_index {
+                half.max(CORNER_MARGIN_MM)
+            } else {
+                *half
+            };
+            pos.abs() + half
+        })
+        .fold(GRID_MM, f64::max)
 }
 
 /// Packs `specs` (each pin's required half-extent along the packing
@@ -376,7 +394,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // "VREG" family), and USB_VDD. Every top/bottom pin is Power/Ground
     // (see the bucketing above), i.e. the same electrical type, so this
     // works out to a uniform half-extent for all of them.
-    let mut top_specs: Vec<PinSpec> = top
+    let top_specs: Vec<PinSpec> = top
         .iter()
         .map(|n| {
             (
@@ -385,7 +403,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             )
         })
         .collect();
-    let mut bottom_specs: Vec<PinSpec> = bottom
+    let bottom_specs: Vec<PinSpec> = bottom
         .iter()
         .map(|n| {
             (
@@ -396,16 +414,10 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         .collect();
     // Left: fixed row height, but grouped -- an extra gap opens up
     // wherever the pin family changes (e.g. between QSPI_* and USB_*).
-    let mut left_specs: Vec<PinSpec> = left
+    let left_specs: Vec<PinSpec> = left
         .iter()
         .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
         .collect();
-    // Guarantee corner clearance (see CORNER_MARGIN_MM) before packing --
-    // widening an outermost pin's half-extent shifts where it actually
-    // sits, so this must happen before pack_centered runs, not after.
-    widen_corner_ends(&mut top_specs);
-    widen_corner_ends(&mut bottom_specs);
-    widen_corner_ends(&mut left_specs);
 
     let top_pos = pack_centered(&top_specs);
     let bottom_pos = pack_centered(&bottom_specs);
@@ -421,34 +433,28 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let chunk_specs_pos: Vec<(Vec<PinSpec>, Vec<f64>)> = bus_chunks
         .iter()
         .map(|chunk| {
-            let mut specs: Vec<PinSpec> = chunk
+            let specs: Vec<PinSpec> = chunk
                 .iter()
                 .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
                 .collect();
-            widen_corner_ends(&mut specs);
             let pos = pack_centered(&specs);
             (specs, pos)
         })
         .collect();
 
-    // The body must reach past each outermost pin's own label extent,
-    // not just its center position -- otherwise the outermost label
-    // hangs off past the drawn rectangle edge.
-    let widest_reach = |specs: &[PinSpec], positions: &[f64]| {
-        specs
-            .iter()
-            .zip(positions.iter())
-            .map(|((half, _), pos)| pos.abs() + half)
-            .fold(GRID_MM, f64::max)
-    };
-    let half_width =
-        widest_reach(&top_specs, &top_pos).max(widest_reach(&bottom_specs, &bottom_pos));
+    // The body must reach past each outermost pin's own label extent
+    // (otherwise the outermost label hangs off past the drawn rectangle
+    // edge) and, at the four corners specifically, past CORNER_MARGIN_MM
+    // -- see corner_boosted_reach's docs for why that's computed
+    // separately from each side's own packed positions above.
+    let half_width = corner_boosted_reach(&top_specs, &top_pos)
+        .max(corner_boosted_reach(&bottom_specs, &bottom_pos));
     // Every unit shares one rectangle, so this must cover the largest
     // bus chunk, not just whichever chunk happens to be last.
     let half_height = chunk_specs_pos
         .iter()
-        .map(|(s, p)| widest_reach(s, p))
-        .fold(widest_reach(&left_specs, &left_pos), f64::max);
+        .map(|(s, p)| corner_boosted_reach(s, p))
+        .fold(corner_boosted_reach(&left_specs, &left_pos), f64::max);
 
     let mut pins = Vec::with_capacity(numbers.len());
     let mut push_pin = |number: &String, position: Point2, side: PinOrientation, unit: u32| {
@@ -1011,26 +1017,63 @@ mod tests {
     }
 
     #[test]
-    fn widen_corner_ends_only_touches_the_first_and_last_entries() {
-        let mut specs: Vec<PinSpec> = vec![
+    fn corner_boosted_reach_only_boosts_the_first_and_last_entries() {
+        // Three items 3.0mm apart center-to-center (half-extent 1.0
+        // each -> positions -3, 0, 3 after centering). Reach should
+        // equal 3.0 + 1.0 = 4.0 *without* boosting, since 1.0 < margin
+        // only matters for the boosted first/last entries.
+        let specs: Vec<PinSpec> = vec![
             (1.0, Some("A".into())),
             (1.0, Some("A".into())),
             (1.0, Some("A".into())),
         ];
-        widen_corner_ends(&mut specs);
-        assert_eq!(specs[0].0, CORNER_MARGIN_MM, "first entry should widen");
-        assert_eq!(specs[1].0, 1.0, "middle entry must stay untouched");
-        assert_eq!(specs[2].0, CORNER_MARGIN_MM, "last entry should widen");
+        let positions = pack_centered(&specs);
+        let reach = corner_boosted_reach(&specs, &positions);
+        let outermost = positions.iter().map(|p| p.abs()).fold(0.0, f64::max);
+        assert_eq!(
+            reach,
+            outermost + CORNER_MARGIN_MM,
+            "reach should use the boosted (corner-margin) half-extent for the outermost item"
+        );
     }
 
     #[test]
-    fn widen_corner_ends_never_shrinks_an_already_wide_entry() {
-        let mut specs: Vec<PinSpec> = vec![(CORNER_MARGIN_MM + 5.0, None)];
-        widen_corner_ends(&mut specs);
-        assert_eq!(specs[0].0, CORNER_MARGIN_MM + 5.0);
+    fn corner_boosted_reach_never_shrinks_an_already_wide_entry() {
+        let specs: Vec<PinSpec> = vec![(CORNER_MARGIN_MM + 5.0, None)];
+        let positions = pack_centered(&specs);
+        assert_eq!(
+            corner_boosted_reach(&specs, &positions),
+            CORNER_MARGIN_MM + 5.0
+        );
     }
 
-    /// `widen_corner_ends` only ever takes `max(natural, CORNER_MARGIN_MM)`
+    #[test]
+    fn corner_boosting_does_not_change_same_side_neighbor_spacing() {
+        // Regression guard for the real bug this fixed: boosting the
+        // outermost pin's half-extent for the *rectangle-size*
+        // calculation must not also inflate the gap to its own
+        // same-side neighbor (e.g. GPIO29 pulling away from GPIO28) --
+        // pack_centered must only ever see each pin's natural
+        // half-extent, never the corner-boosted one.
+        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let mut right_ys: Vec<f64> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.orientation == PinOrientation::Right)
+            .map(|p| p.position.y)
+            .collect();
+        right_ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        for pair in right_ys.windows(2) {
+            let gap = pair[1] - pair[0];
+            assert!(
+                (gap - GRID_MM).abs() < 1e-9,
+                "expected uniform {GRID_MM}mm GPIO row spacing throughout, \
+                 including near the corners, got {gap}mm"
+            );
+        }
+    }
+
+    /// `corner_boosted_reach` only ever takes `max(natural, CORNER_MARGIN_MM)`
     /// -- so if some pin's natural half-extent ever grows to meet or
     /// exceed CORNER_MARGIN_MM, the margin silently stops adding
     /// anything at that corner, with no visible signal that it happened.
@@ -1060,7 +1103,7 @@ mod tests {
             CORNER_MARGIN_MM > largest_electrical_type_half_extent,
             "CORNER_MARGIN_MM ({CORNER_MARGIN_MM}mm) must exceed the largest \
              electrical-type half-extent ({largest_electrical_type_half_extent}mm), \
-             or widen_corner_ends becomes a no-op at that corner"
+             or corner_boosted_reach becomes a no-op at that corner"
         );
     }
 
@@ -1073,7 +1116,7 @@ mod tests {
     /// comfortably apart for this fixture's short names, so this test
     /// mainly guards against a gross regression (e.g. corner pins ending
     /// up literally coincident), not the finer label-overlap margin
-    /// that `widen_corner_ends`'s own tests above cover directly.
+    /// that `corner_boosted_reach`'s own tests above cover directly.
     #[test]
     fn corner_adjacent_pins_from_different_sides_keep_a_safety_margin() {
         let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
