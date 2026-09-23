@@ -216,6 +216,17 @@ fn cmd_show(registry: &str, manufacturer: &str, mpn: &str) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Real MPNs can legitimately contain characters that aren't safe in a
+/// filename component -- confirmed with a real part this project
+/// generates output for: NXP's own ordering-table MPN is literally
+/// "LPC1114FBD48/302" (the "/" is NXP's own separator convention, not
+/// a typo). Used only for filesystem paths below; `part.mpn` itself
+/// (used for symbol/footprint/STEP/STL content, which has no such
+/// constraint) is passed through unsanitized everywhere else.
+fn safe_filename(mpn: &str) -> String {
+    mpn.replace(['/', '\\'], "-")
+}
+
 fn cmd_generate(
     part_path: PathBuf,
     device_path: PathBuf,
@@ -247,28 +258,29 @@ fn cmd_generate(
     let geometry = openparts_mcad::generate(&model.package).context("generating geometry")?;
 
     std::fs::create_dir_all(&out_dir)?;
+    let mpn_file = safe_filename(&part.mpn);
 
     let symbol = openparts_pcbcad::build_symbol(&part.mpn, &model.device);
     let symbol_text = openparts_kicad::render_symbol(&symbol);
-    std::fs::write(out_dir.join(format!("{}.kicad_sym", part.mpn)), symbol_text)?;
+    std::fs::write(out_dir.join(format!("{mpn_file}.kicad_sym")), symbol_text)?;
 
     let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
     let footprint_text = openparts_kicad::render_footprint(&footprint);
     std::fs::write(
-        out_dir.join(format!("{}.kicad_mod", part.mpn)),
+        out_dir.join(format!("{mpn_file}.kicad_mod")),
         footprint_text,
     )?;
 
     let step_text =
         openparts_step::generate_step(&geometry, &part.mpn).context("generating STEP")?;
-    std::fs::write(out_dir.join(format!("{}.step", part.mpn)), step_text)?;
+    std::fs::write(out_dir.join(format!("{mpn_file}.step")), step_text)?;
 
     let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).context("generating STL")?;
-    std::fs::write(out_dir.join(format!("{}.stl", part.mpn)), stl_text)?;
+    std::fs::write(out_dir.join(format!("{mpn_file}.stl")), stl_text)?;
 
     // LibrePCB library element (a directory tree, not a single file --
     // written under <out>/<mpn>.lplib/).
-    let librepcb_dir = out_dir.join(format!("{}.lplib", part.mpn));
+    let librepcb_dir = out_dir.join(format!("{mpn_file}.lplib"));
     for file in openparts_librepcb::generate_library(&part.mpn, &symbol, &footprint) {
         let path = librepcb_dir.join(&file.path);
         if let Some(parent) = path.parent() {
@@ -292,7 +304,7 @@ fn cmd_generate(
         rustc_version(),
     );
     std::fs::write(
-        out_dir.join(format!("{}.generation-report.yaml", part.mpn)),
+        out_dir.join(format!("{mpn_file}.generation-report.yaml")),
         report,
     )?;
 
@@ -311,4 +323,21 @@ fn rustc_version() -> String {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for a real bug found generating a real part:
+    /// NXP's own ordering-table MPN is "LPC1114FBD48/302" -- the "/" is
+    /// NXP's own separator, not a typo -- and `out_dir.join(format!("{mpn}.step"))`
+    /// silently treated it as a path separator, failing with "No such
+    /// file or directory" because the resulting nested directory
+    /// (`.../LPC1114FBD48/302.step`) was never created.
+    #[test]
+    fn sanitizes_slashes_in_real_world_mpns() {
+        assert_eq!(safe_filename("LPC1114FBD48/302"), "LPC1114FBD48-302");
+        assert_eq!(safe_filename("2N7002ET1G"), "2N7002ET1G");
+    }
 }
