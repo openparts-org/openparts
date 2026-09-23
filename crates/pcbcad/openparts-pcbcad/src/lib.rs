@@ -141,6 +141,48 @@ fn pin_group_key(name: &str) -> String {
     }
 }
 
+/// Groups `numbers` (device pin-number references) into runs sharing
+/// the exact same pin name, preserving first-appearance order -- e.g.
+/// RP2040's six IOVDD pins (device pin numbers 1, 10, 22, 33, 42, 49)
+/// become one group.
+///
+/// Used to place pins wired to the same net at a single shared
+/// schematic position, matching KiCad's own official RP2040 library
+/// symbol (confirmed by the maintainer against their real KiCad 10
+/// install) rather than giving each physical pin its own row: KiCad
+/// 10+ native pin stacking places multiple separate pin objects at the
+/// identical coordinate, each still keeping its own correct number, and
+/// recognizes them as one connection point in the schematic. This is
+/// purely a schematic/netlist-declaration technique -- the footprint
+/// (`build_footprint`, built independently from `MechanicalGeometry`,
+/// never from pin names) still has one full-fledged, individually
+/// numbered copper pad per physical pin, so nothing about the real PCB
+/// connections changes; wiring the one visible stacked pin still nets
+/// every underlying pin number together, exactly as if each had been
+/// wired separately.
+///
+/// This is a different, narrower concept from [`pin_group_key`]'s
+/// family grouping: `QSPI_SD0`/`QSPI_SD1` share a *family* (kept
+/// visually close, never merged, since they're different signals), but
+/// only pins sharing the exact same *name* -- the same net -- stack.
+fn group_by_exact_name<'a>(numbers: &[&'a String], device: &Device) -> Vec<Vec<&'a String>> {
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, Vec<&'a String>> =
+        std::collections::HashMap::new();
+    for &number in numbers {
+        let name = device.pins[number].name.clone();
+        groups.entry(name.clone()).or_insert_with(|| {
+            order.push(name.clone());
+            Vec::new()
+        });
+        groups.get_mut(&name).unwrap().push(number);
+    }
+    order
+        .into_iter()
+        .map(|name| groups.remove(&name).unwrap())
+        .collect()
+}
+
 /// Rough per-character glyph width for KiCad's default 1.27mm pin-name
 /// font (cross-checked against the real widths in KiCad's own Newstroke
 /// font data, gitlab.com/kicad/code/kicad `common/newstroke_font.cpp`:
@@ -386,37 +428,47 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         target.extend(groups[key].iter().copied());
     }
 
+    // Stack pins that share the exact same name (e.g. RP2040's six
+    // IOVDD pins) at a single schematic position -- see
+    // group_by_exact_name's docs. From here on, pack_centered operates
+    // on one PinSpec per name-group rather than per physical pin; each
+    // group's packed position is applied to every member pin when
+    // SymbolPins are finally emitted below.
+    let top_groups = group_by_exact_name(&top, device);
+    let bottom_groups = group_by_exact_name(&bottom, device);
+    let left_groups = group_by_exact_name(&left, device);
+
     // Top/bottom: spacing driven by the electrical-type label's length
     // (not the pin name -- see electrical_type_half_extent's docs for
     // why), same family-boundary gap treatment as left/right -- e.g.
-    // RP2040's six IOVDD pins pack tightly together, then get a gap
-    // before DVDD, ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the
-    // "VREG" family), and USB_VDD. Every top/bottom pin is Power/Ground
-    // (see the bucketing above), i.e. the same electrical type, so this
+    // RP2040's IOVDD group packs tightly against DVDD, then gets a gap
+    // before ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the "VREG"
+    // family), and USB_VDD. Every top/bottom pin is Power/Ground (see
+    // the bucketing above), i.e. the same electrical type, so this
     // works out to a uniform half-extent for all of them.
-    let top_specs: Vec<PinSpec> = top
+    let top_specs: Vec<PinSpec> = top_groups
         .iter()
-        .map(|n| {
+        .map(|g| {
             (
-                electrical_type_half_extent(device.pins[*n].pin_type.into()),
-                Some(pin_group_key(&device.pins[*n].name)),
+                electrical_type_half_extent(device.pins[g[0]].pin_type.into()),
+                Some(pin_group_key(&device.pins[g[0]].name)),
             )
         })
         .collect();
-    let bottom_specs: Vec<PinSpec> = bottom
+    let bottom_specs: Vec<PinSpec> = bottom_groups
         .iter()
-        .map(|n| {
+        .map(|g| {
             (
-                electrical_type_half_extent(device.pins[*n].pin_type.into()),
-                Some(pin_group_key(&device.pins[*n].name)),
+                electrical_type_half_extent(device.pins[g[0]].pin_type.into()),
+                Some(pin_group_key(&device.pins[g[0]].name)),
             )
         })
         .collect();
     // Left: fixed row height, but grouped -- an extra gap opens up
     // wherever the pin family changes (e.g. between QSPI_* and USB_*).
-    let left_specs: Vec<PinSpec> = left
+    let left_specs: Vec<PinSpec> = left_groups
         .iter()
-        .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
+        .map(|g| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[g[0]].name))))
         .collect();
 
     let top_pos = pack_centered(&top_specs);
@@ -424,18 +476,21 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let left_pos = pack_centered(&left_specs);
 
     // The bus (`right`) is split into units of at most
-    // BUS_UNIT_MAX_PINS once it exceeds that size -- see this
-    // function's docs/flowchart. Below that size this is just one
-    // "chunk" containing every bus pin, identical to the pre-split
-    // behavior.
-    let bus_chunks: Vec<&[&String]> = right.chunks(BUS_UNIT_MAX_PINS).collect();
+    // BUS_UNIT_MAX_PINS name-groups once it exceeds that size -- see
+    // this function's docs/flowchart. Below that size this is just one
+    // "chunk" containing every bus group, identical to the pre-split
+    // behavior. Grouped before chunking so a stacked bus pin (unlikely
+    // in practice -- bus signals are normally uniquely named -- but
+    // possible) never gets split across a unit boundary.
+    let right_groups = group_by_exact_name(&right, device);
+    let bus_chunks: Vec<&[Vec<&String>]> = right_groups.chunks(BUS_UNIT_MAX_PINS).collect();
     let splitting = bus_chunks.len() > 1;
     let chunk_specs_pos: Vec<(Vec<PinSpec>, Vec<f64>)> = bus_chunks
         .iter()
         .map(|chunk| {
             let specs: Vec<PinSpec> = chunk
                 .iter()
-                .map(|n| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[*n].name))))
+                .map(|g| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[g[0]].name))))
                 .collect();
             let pos = pack_centered(&specs);
             (specs, pos)
@@ -475,53 +530,64 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let shared_unit: u32 = if splitting { 0 } else { 1 };
     // `pack_centered` lays its first item at the most-negative position;
     // left/top's first item is conventionally the "start" (top-most /
-    // right-most) side, the opposite direction, so their axis is negated.
-    for (number, &y) in left.iter().zip(left_pos.iter()) {
-        push_pin(
-            number,
-            Point2 {
-                x: -half_width - PIN_LENGTH_MM,
-                y: -y,
-            },
-            PinOrientation::Left,
-            shared_unit,
-        );
+    // right-most) side, the opposite direction, so their axis is
+    // negated. Every member of a name-group shares its group's one
+    // packed position (native KiCad pin stacking -- see
+    // group_by_exact_name's docs).
+    for (group, &y) in left_groups.iter().zip(left_pos.iter()) {
+        for &number in group {
+            push_pin(
+                number,
+                Point2 {
+                    x: -half_width - PIN_LENGTH_MM,
+                    y: -y,
+                },
+                PinOrientation::Left,
+                shared_unit,
+            );
+        }
     }
-    for (number, &x) in bottom.iter().zip(bottom_pos.iter()) {
-        push_pin(
-            number,
-            Point2 {
-                x,
-                y: -half_height - PIN_LENGTH_MM,
-            },
-            PinOrientation::Bottom,
-            shared_unit,
-        );
+    for (group, &x) in bottom_groups.iter().zip(bottom_pos.iter()) {
+        for &number in group {
+            push_pin(
+                number,
+                Point2 {
+                    x,
+                    y: -half_height - PIN_LENGTH_MM,
+                },
+                PinOrientation::Bottom,
+                shared_unit,
+            );
+        }
     }
-    for (number, &x) in top.iter().zip(top_pos.iter()) {
-        push_pin(
-            number,
-            Point2 {
-                x: -x,
-                y: half_height + PIN_LENGTH_MM,
-            },
-            PinOrientation::Top,
-            shared_unit,
-        );
+    for (group, &x) in top_groups.iter().zip(top_pos.iter()) {
+        for &number in group {
+            push_pin(
+                number,
+                Point2 {
+                    x: -x,
+                    y: half_height + PIN_LENGTH_MM,
+                },
+                PinOrientation::Top,
+                shared_unit,
+            );
+        }
     }
     for (chunk_index, chunk) in bus_chunks.iter().enumerate() {
         let (_, chunk_pos) = &chunk_specs_pos[chunk_index];
         let unit = if splitting { chunk_index as u32 + 1 } else { 1 };
-        for (number, &y) in chunk.iter().zip(chunk_pos.iter()) {
-            push_pin(
-                number,
-                Point2 {
-                    x: half_width + PIN_LENGTH_MM,
-                    y,
-                },
-                PinOrientation::Right,
-                unit,
-            );
+        for (group, &y) in chunk.iter().zip(chunk_pos.iter()) {
+            for &number in group {
+                push_pin(
+                    number,
+                    Point2 {
+                        x: half_width + PIN_LENGTH_MM,
+                        y,
+                    },
+                    PinOrientation::Right,
+                    unit,
+                );
+            }
         }
     }
 
@@ -617,6 +683,29 @@ mod tests {
         assert_eq!(pin_group_key("USB_DM"), "USB");
         assert_eq!(pin_group_key("USB_DP"), "USB");
         assert_eq!(pin_group_key("TESTEN"), "TESTEN");
+    }
+
+    #[test]
+    fn group_by_exact_name_groups_and_preserves_first_appearance_order() {
+        let device = device_shaped_like_an_mcu();
+        let numbers: Vec<&String> = ["15", "16", "17", "14"]
+            .iter()
+            .map(|n| {
+                device
+                    .pins
+                    .keys()
+                    .find(|k| k.as_str() == *n)
+                    .expect("fixture has this pin")
+            })
+            .collect();
+        let groups = group_by_exact_name(&numbers, &device);
+        // 15/16/17 are all "IOVDD" (one group of 3); 14 is "TESTEN"
+        // (its own singleton group), in first-appearance order.
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].len(), 3);
+        assert!(groups[0].iter().all(|n| device.pins[*n].name == "IOVDD"));
+        assert_eq!(groups[1].len(), 1);
+        assert_eq!(device.pins[groups[1][0]].name, "TESTEN");
     }
 
     #[test]
@@ -774,6 +863,50 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn same_named_pins_stack_at_one_position_without_losing_any() {
+        // KiCad 10+ native pin stacking (see group_by_exact_name's
+        // docs): pins sharing an exact name -- this fixture's three
+        // IOVDD pins (device pin numbers 15, 16, 17) -- share one
+        // schematic position, but each still exists as its own
+        // SymbolPin with its own correct number. Confirms the "1
+        // SymbolPin object per device pin" invariant genuinely holds
+        // (this is not the same thing as merging pin *count*).
+        let device = device_shaped_like_an_mcu();
+        let symbol = build_symbol("MCU", &device);
+        assert_eq!(
+            symbol.pins.len(),
+            device.pins.len(),
+            "every device pin must still produce its own SymbolPin"
+        );
+
+        let iovdd: Vec<&SymbolPin> = symbol.pins.iter().filter(|p| p.name == "IOVDD").collect();
+        assert_eq!(iovdd.len(), 3);
+        let numbers: std::collections::BTreeSet<&str> =
+            iovdd.iter().map(|p| p.number.as_str()).collect();
+        assert_eq!(
+            numbers,
+            ["15", "16", "17"]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>(),
+            "each stacked pin must keep its own correct number"
+        );
+        let positions: std::collections::HashSet<(i64, i64)> = iovdd
+            .iter()
+            .map(|p| {
+                (
+                    (p.position.x * 1000.0).round() as i64,
+                    (p.position.y * 1000.0).round() as i64,
+                )
+            })
+            .collect();
+        assert_eq!(
+            positions.len(),
+            1,
+            "all three IOVDD pins should share one schematic position, got {iovdd:?}"
+        );
     }
 
     #[test]
@@ -995,6 +1128,11 @@ mod tests {
             .map(|p| p.position.x)
             .collect();
         top_xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        // This fixture's three IOVDD pins now share one stacked
+        // position (see group_by_exact_name) -- dedupe to check the
+        // gap between *distinct* schematic positions, not between
+        // same-position stacked pins (which is legitimately 0).
+        top_xs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
         for pair in top_xs.windows(2) {
             let gap = pair[1] - pair[0];
             // "IOVDD" is 5 characters; the old pin-name-based model
