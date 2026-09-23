@@ -53,11 +53,10 @@ pub enum BodyShape {
     Box,
     /// An exact cylinder -- `size.x`/`size.y` (equal) are the diameter,
     /// `size.z` is the height. Deliberately exact, not pre-tessellated:
-    /// how many sides to approximate it with when drawing is an
-    /// output-format concern (STL has no choice but to tessellate;
-    /// STEP could later emit a true CYLINDRICAL_SURFACE instead), not
-    /// a fact about the part -- so that choice belongs to each writer,
-    /// not to this shared geometry model. See `cylinder_ring`.
+    /// turning this into a renderable shape (a true curved STEP surface,
+    /// or a tessellated STL mesh) is `openparts-brep`'s job, not a fact
+    /// about the part, so that choice belongs downstream, not to this
+    /// shared geometry model.
     Cylinder,
 }
 
@@ -67,24 +66,6 @@ pub struct Body {
     pub position: Point3,
     pub size: Size3,
     pub shape: BodyShape,
-}
-
-/// N points evenly spaced around a circle of `diameter` in the XY
-/// plane, centered on the origin -- the one piece of cylinder-
-/// tessellation math both `openparts-step` and `openparts-stl` need
-/// identically for `BodyShape::Cylinder`, shared here so their
-/// polygon approximations of the same body can never quietly drift
-/// apart from each other. Each writer picks its own `segments` count
-/// and does its own face/triangle construction from the ring -- this
-/// function only computes the ring itself.
-pub fn cylinder_ring(diameter: f64, segments: u32) -> Vec<(f64, f64)> {
-    let radius = diameter / 2.0;
-    (0..segments)
-        .map(|i| {
-            let angle = 2.0 * std::f64::consts::PI * i as f64 / segments as f64;
-            (radius * angle.cos(), radius * angle.sin())
-        })
-        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,29 +134,4 @@ pub enum McadError {
     MissingLeadLayout { family: String },
     #[error("lead_layout {layout:?} does not sum to lead_count ({lead_count})")]
     InvalidLeadLayout { layout: Vec<u32>, lead_count: u32 },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cylinder_ring_returns_the_requested_point_count() {
-        assert_eq!(cylinder_ring(5.0, 24).len(), 24);
-    }
-
-    #[test]
-    fn cylinder_ring_points_all_sit_on_the_circle() {
-        let radius = 2.5;
-        for (x, y) in cylinder_ring(radius * 2.0, 16) {
-            assert!(((x * x + y * y).sqrt() - radius).abs() < 1e-9);
-        }
-    }
-
-    #[test]
-    fn cylinder_ring_first_point_is_on_the_positive_x_axis() {
-        let ring = cylinder_ring(5.0, 8);
-        assert!((ring[0].0 - 2.5).abs() < 1e-9);
-        assert!(ring[0].1.abs() < 1e-9);
-    }
 }

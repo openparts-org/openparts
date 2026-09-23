@@ -5,4 +5,8 @@ edition.workspace = true
 
 [dependencies]
 openparts-mcad = { path = "../openparts-mcad" }
+openparts-brep = { path = "../openparts-brep" }
 thiserror = { workspace = true }
+truck-modeling = { workspace = true }
+truck-meshalgo = { workspace = true }
+truck-polymesh = { workspace = true }

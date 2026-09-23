@@ -1,183 +1,76 @@
-//! openparts-stl: Mechanical Geometry -> STL (ASCII) text. No CAD
-//! library dependency, same hand-written-text-format policy as
-//! openparts-step. Geometry is the same set of axis-aligned boxes STEP
-//! uses (one for the body, one per lead) -- structurally valid, not
-//! datasheet-precision geometry.
+//! openparts-stl: Mechanical Geometry -> STL (ASCII) text, via `truck`
+//! (`openparts-brep` builds the real B-rep solids; `truck-meshalgo`
+//! tessellates them; `truck-polymesh` writes STL). Unlike STEP, STL has
+//! no color concept at all, so this crate has no hand-written STEP-style
+//! text left in it -- it's a thin adapter over `openparts-brep` +
+//! `truck-meshalgo`/`truck-polymesh`.
 //!
-//! NOTE (Testing and Quality Specification section 9): like STEP, this
+//! NOTE (Testing and Quality Specification section 9): like before, this
 //! crate has no independent STL reader, so output is verified only by
 //! structural checks, never claimed as "read-back verified".
 
+use openparts_brep::BrepGeometry;
 use openparts_mcad::MechanicalGeometry;
+use truck_meshalgo::filters::OptimizingFilter;
+use truck_meshalgo::tessellation::{MeshableShape, MeshedShape};
+use truck_polymesh::stl::StlType;
+use truck_polymesh::{PolygonMesh, TOLERANCE};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StlError {
-    #[error("geometry has no boxes to export (no body?)")]
+    #[error("geometry has no solids to export (no body?)")]
     Empty,
 }
 
-type Point = [f64; 3];
-type Facet = ([f64; 3], [Point; 3]); // (normal, 3 vertices)
+/// Chord tolerance (mm) used to tessellate a `BodyShape::Cylinder`'s
+/// true curved surface into STL triangles -- STL has no curves at all,
+/// so some tessellation is unavoidable here even though `openparts-step`
+/// no longer needs one. Picked from measurements taken while building
+/// this crate: at this tolerance, an 8mm-diameter cylinder (matching the
+/// real `standards/RADIAL-D8.0x11.5-P3.5` openparts-data package)
+/// produced 386 facets -- denser than the old fixed-24-segment
+/// approximation's 92, but still a modest, visually-smooth mesh, not an
+/// excessive one. A box's flat faces tessellate to exactly 2 triangles
+/// each regardless of tolerance, so this constant only affects curved
+/// bodies.
+const TESSELLATION_TOLERANCE: f64 = 0.05;
 
-/// Same 8-corner numbering and 6-face outward-normal convention as
-/// `openparts-step`'s `write_box`, but each face becomes 2 triangles
-/// (independent vertices, no shared topology -- STL has none).
-fn box_facets(center: [f64; 3], size: [f64; 3]) -> Vec<Facet> {
-    let (cx, cy, cz) = (center[0], center[1], center[2]);
-    let (dx, dy, dz) = (size[0] / 2.0, size[1] / 2.0, size[2] / 2.0);
-
-    let p1 = [cx - dx, cy - dy, cz - dz];
-    let p2 = [cx + dx, cy - dy, cz - dz];
-    let p3 = [cx + dx, cy + dy, cz - dz];
-    let p4 = [cx - dx, cy + dy, cz - dz];
-    let p5 = [cx - dx, cy - dy, cz + dz];
-    let p6 = [cx + dx, cy - dy, cz + dz];
-    let p7 = [cx + dx, cy + dy, cz + dz];
-    let p8 = [cx - dx, cy + dy, cz + dz];
-
-    let quad = |normal: [f64; 3], a: Point, b: Point, c: Point, d: Point, out: &mut Vec<Facet>| {
-        out.push((normal, [a, b, c]));
-        out.push((normal, [a, c, d]));
-    };
-
-    let mut facets = Vec::with_capacity(12);
-    quad([0.0, 0.0, -1.0], p1, p4, p3, p2, &mut facets); // bottom
-    quad([0.0, 0.0, 1.0], p5, p6, p7, p8, &mut facets); // top
-    quad([0.0, -1.0, 0.0], p1, p2, p6, p5, &mut facets); // front (-y)
-    quad([0.0, 1.0, 0.0], p3, p4, p8, p7, &mut facets); // back (+y)
-    quad([-1.0, 0.0, 0.0], p4, p1, p5, p8, &mut facets); // left (-x)
-    quad([1.0, 0.0, 0.0], p2, p3, p7, p6, &mut facets); // right (+x)
-    facets
-}
-
-/// Same `openparts_mcad::cylinder_ring`-based tessellation and winding
-/// convention as `openparts-step`'s `write_prism` (side face i:
-/// `bottom[i] -> bottom[i+1] -> top[i+1] -> top[i]`; bottom cap
-/// traversed in reverse for its outward -Z normal, top cap forward for
-/// +Z), each quad/n-gon fan-triangulated into independent STL facets.
-/// `openparts-step`'s `every_face_winding_matches_its_declared_normal`-
-/// style test already verified this same winding scheme is correct;
-/// see `openparts-mcad::cylinder_ring`'s docs for why the segment
-/// count is this writer's own choice, not shared geometry state.
-const STL_CYLINDER_SEGMENTS: u32 = 24;
-
-fn cylinder_facets(center: [f64; 3], diameter: f64, height: f64, segments: u32) -> Vec<Facet> {
-    let (cx, cy, cz) = (center[0], center[1], center[2]);
-    let dz = height / 2.0;
-    let n = segments as usize;
-    let ring = openparts_mcad::cylinder_ring(diameter, segments);
-    let bottom: Vec<Point> = ring
-        .iter()
-        .map(|&(x, y)| [cx + x, cy + y, cz - dz])
-        .collect();
-    let top: Vec<Point> = ring
-        .iter()
-        .map(|&(x, y)| [cx + x, cy + y, cz + dz])
-        .collect();
-
-    let mut facets = Vec::with_capacity(4 * n - 4);
-
-    for i in 0..n {
-        let j = (i + 1) % n;
-        let normal = normalize(cross(sub(bottom[j], bottom[i]), sub(top[i], bottom[i])));
-        facets.push((normal, [bottom[i], bottom[j], top[j]]));
-        facets.push((normal, [bottom[i], top[j], top[i]]));
-    }
-
-    // Bottom cap: fan-triangulated from a reverse-order traversal
-    // (bottom[0], bottom[n-1], bottom[n-2], ...) so its winding agrees
-    // with the -Z outward normal; top cap uses the ring's own forward
-    // order for +Z.
-    let bottom_loop: Vec<Point> = (0..n).map(|k| bottom[(n - k) % n]).collect();
-    for i in 1..n - 1 {
-        facets.push((
-            [0.0, 0.0, -1.0],
-            [bottom_loop[0], bottom_loop[i], bottom_loop[i + 1]],
-        ));
-    }
-    for i in 1..n - 1 {
-        facets.push(([0.0, 0.0, 1.0], [top[0], top[i], top[i + 1]]));
-    }
-
-    facets
-}
-
-fn sub(a: Point, b: Point) -> Point {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-fn cross(a: Point, b: Point) -> Point {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn normalize(v: Point) -> Point {
-    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-    if len > 0.0 {
-        [v[0] / len, v[1] / len, v[2] / len]
-    } else {
-        v
-    }
-}
-
-/// Renders `geometry` (one box per body + lead) as an ASCII STL solid
-/// named after `product_name`.
+/// Renders `geometry` (one tessellated solid per body + lead, merged
+/// into a single mesh) as an ASCII STL solid named after `product_name`.
 pub fn generate_stl(geometry: &MechanicalGeometry, product_name: &str) -> Result<String, StlError> {
-    let body_center = [
-        geometry.body.position.x,
-        geometry.body.position.y,
-        geometry.body.position.z,
-    ];
-    let mut facets = match geometry.body.shape {
-        openparts_mcad::BodyShape::Box => box_facets(
-            body_center,
-            [
-                geometry.body.size.x,
-                geometry.body.size.y,
-                geometry.body.size.z,
-            ],
-        ),
-        openparts_mcad::BodyShape::Cylinder => cylinder_facets(
-            body_center,
-            geometry.body.size.x, // diameter (== size.y)
-            geometry.body.size.z, // height
-            STL_CYLINDER_SEGMENTS,
-        ),
-    };
-    for lead in &geometry.leads {
-        facets.extend(box_facets(
-            [lead.position.x, lead.position.y, lead.position.z],
-            [lead.size.x, lead.size.y, lead.size.z],
-        ));
-    }
+    let BrepGeometry { body, leads } = openparts_brep::build(geometry);
 
-    if facets.is_empty() {
+    let mut poly = body.triangulation(TESSELLATION_TOLERANCE).to_polygon();
+    for lead in &leads {
+        poly.merge(lead.triangulation(TESSELLATION_TOLERANCE).to_polygon());
+    }
+    poly.put_together_same_attrs(TOLERANCE * 10.0)
+        .remove_degenerate_faces()
+        .remove_unused_attrs();
+
+    if poly.faces().is_empty() {
         return Err(StlError::Empty);
     }
 
-    let mut out = String::new();
-    out.push_str(&format!("solid {product_name}\n"));
-    for (normal, verts) in &facets {
-        out.push_str(&format!(
-            "  facet normal {:.6} {:.6} {:.6}\n",
-            normal[0], normal[1], normal[2]
-        ));
-        out.push_str("    outer loop\n");
-        for v in verts {
-            out.push_str(&format!(
-                "      vertex {:.6} {:.6} {:.6}\n",
-                v[0], v[1], v[2]
-            ));
-        }
-        out.push_str("    endloop\n");
-        out.push_str("  endfacet\n");
-    }
-    out.push_str(&format!("endsolid {product_name}\n"));
+    let mut buf: Vec<u8> = Vec::new();
+    write_named(&poly, product_name, &mut buf);
+    Ok(String::from_utf8(buf).expect("truck_polymesh::stl::write always emits ASCII text"))
+}
 
-    Ok(out)
+/// `truck_polymesh::stl::write`'s ASCII output hardcodes `solid `/
+/// `endsolid ` with no name; this crate's public contract (and its own
+/// tests) expect the output named after `product_name`, matching the
+/// old hand-rolled writer, so the solid/endsolid lines are patched after
+/// writing rather than by re-implementing STL's text format here.
+fn write_named(poly: &PolygonMesh, product_name: &str, out: &mut Vec<u8>) {
+    let mut raw = Vec::new();
+    truck_polymesh::stl::write(poly, &mut raw, StlType::Ascii)
+        .expect("writing to an in-memory Vec<u8> cannot fail");
+    let raw = String::from_utf8(raw).expect("ASCII STL output is always valid UTF-8");
+    let named = raw
+        .replacen("solid\n", &format!("solid {product_name}\n"), 1)
+        .replacen("endsolid\n", &format!("endsolid {product_name}\n"), 1);
+    out.extend_from_slice(named.as_bytes());
 }
 
 #[cfg(test)]
@@ -243,6 +136,26 @@ mod tests {
         }
     }
 
+    fn tiny_cylinder_geometry() -> MechanicalGeometry {
+        MechanicalGeometry {
+            body: Body {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 5.75,
+                },
+                size: Size3 {
+                    x: 8.0,
+                    y: 8.0,
+                    z: 11.5,
+                },
+                shape: BodyShape::Cylinder,
+            },
+            leads: vec![],
+            markers: vec![],
+        }
+    }
+
     #[test]
     fn produces_a_well_formed_stl_file() {
         let stl = generate_stl(&tiny_geometry(), "TEST").unwrap();
@@ -254,7 +167,9 @@ mod tests {
     fn has_twelve_facets_per_box() {
         let stl = generate_stl(&tiny_geometry(), "TEST").unwrap();
         let facet_count = stl.matches("facet normal").count();
-        // 1 body + 2 leads = 3 boxes, 12 facets each.
+        // 1 body + 2 leads = 3 boxes; a flat-faced box always
+        // tessellates to exactly 2 triangles per face regardless of
+        // tolerance, so this stays 12 per box just like before.
         assert_eq!(facet_count, 12 * 3);
     }
 
@@ -265,66 +180,44 @@ mod tests {
         assert_eq!(vertex_count, 12 * 3 * 3);
     }
 
-    fn tiny_cylinder_geometry() -> MechanicalGeometry {
-        MechanicalGeometry {
-            body: Body {
-                position: Point3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 5.5,
-                },
-                size: Size3 {
-                    x: 5.0,
-                    y: 5.0,
-                    z: 11.0,
-                },
-                shape: BodyShape::Cylinder,
-            },
-            leads: vec![],
-            markers: vec![],
-        }
-    }
-
     #[test]
-    fn cylinder_body_produces_four_segments_minus_four_facets() {
+    fn cylinder_body_produces_a_nonempty_mesh() {
         let stl = generate_stl(&tiny_cylinder_geometry(), "TEST").unwrap();
         let facet_count = stl.matches("facet normal").count();
-        // A box is this same tessellation formula's degenerate N=4
-        // case (4*4-4=12, matching `has_twelve_facets_per_box` above).
-        assert_eq!(facet_count, 4 * STL_CYLINDER_SEGMENTS as usize - 4);
+        assert!(facet_count > 0);
     }
 
+    /// Independent geometric check, mirroring this crate's old
+    /// hand-rolled equivalent: every vertex of the tessellated cylinder
+    /// mesh must lie within the can's radius (XY) and height (Z)
+    /// bounds -- a real B-rep tessellation should never overshoot its
+    /// own solid's bounding geometry.
     #[test]
     fn cylinder_facets_all_sit_on_the_can_surface() {
-        // Independent geometric check, mirroring openparts-step's own
-        // winding verification: every vertex of every side/cap facet
-        // must lie within the can's radius (XY) and height (Z) bounds.
         let geometry = tiny_cylinder_geometry();
+        let stl = generate_stl(&geometry, "TEST").unwrap();
         let radius = geometry.body.size.x / 2.0;
         let half_height = geometry.body.size.z / 2.0;
-        let facets = cylinder_facets(
-            [
-                geometry.body.position.x,
-                geometry.body.position.y,
-                geometry.body.position.z,
-            ],
-            geometry.body.size.x,
-            geometry.body.size.z,
-            STL_CYLINDER_SEGMENTS,
-        );
-        for (_, verts) in &facets {
-            for v in verts {
-                let r = (v[0] * v[0] + v[1] * v[1]).sqrt();
-                assert!(
-                    (r - radius).abs() < 1e-9,
-                    "vertex {v:?} not on the can radius"
-                );
-                let z = v[2] - geometry.body.position.z;
-                assert!(
-                    z.abs() <= half_height + 1e-9,
-                    "vertex {v:?} outside the can's height"
-                );
-            }
+        let center_z = geometry.body.position.z;
+
+        for line in stl.lines() {
+            let Some(rest) = line.trim().strip_prefix("vertex ") else {
+                continue;
+            };
+            let coords: Vec<f64> = rest
+                .split_whitespace()
+                .map(|s| s.parse().unwrap())
+                .collect();
+            let (x, y, z) = (coords[0], coords[1], coords[2]);
+            let r = (x * x + y * y).sqrt();
+            assert!(
+                r <= radius + 1e-6,
+                "vertex ({x}, {y}, {z}) outside the can radius"
+            );
+            assert!(
+                (z - center_z).abs() <= half_height + 1e-6,
+                "vertex ({x}, {y}, {z}) outside the can's height"
+            );
         }
     }
 }

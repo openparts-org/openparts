@@ -18,6 +18,7 @@ members = [
     "crates/pcbcad/openparts-librepcb",
     "crates/pcbcad/openparts-altium",
     "crates/mcad/openparts-mcad",
+    "crates/mcad/openparts-brep",
     "crates/mcad/openparts-step",
     "crates/mcad/openparts-stl",
     "crates/mcad/openparts-gltf",
@@ -34,6 +35,11 @@ serde_yaml = "0.9"
 thiserror = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
+truck-modeling = "0.6.0"
+truck-stepio = "0.3.0"
+truck-meshalgo = "0.4.0"
+truck-polymesh = "0.6.0"
+ruststep = "0.4.0"
 
 [dev-dependencies]
 openparts-core = { path = "crates/openparts-core" }

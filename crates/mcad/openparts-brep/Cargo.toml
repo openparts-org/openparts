@@ -1,0 +1,8 @@
+[package]
+name = "openparts-brep"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openparts-mcad = { path = "../openparts-mcad" }
+truck-modeling = { workspace = true }
