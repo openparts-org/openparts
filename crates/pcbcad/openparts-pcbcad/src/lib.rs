@@ -64,6 +64,20 @@ pub struct SymbolPin {
     /// across multiple units (see its docs), to hold the pins (power,
     /// ground, misc signals) shared by every numbered unit.
     pub unit: u32,
+    /// True for every member of a stacked name-group (see
+    /// `group_by_exact_name`) after the first: KiCad draws every pin's
+    /// name/number text at its own `(at ...)` coordinate with no
+    /// overlap-avoidance of its own, so multiple *visible* pins stacked
+    /// at the identical position render as garbled overlapping text --
+    /// confirmed directly against KiCad's own official RP2040 symbol
+    /// (gitlab.com/kicad/libraries/kicad-symbols
+    /// `MCU_RaspberryPi.kicad_symdir/RP2040.kicad_sym`): only the first
+    /// pin in each stack (e.g. IOVDD pin 1) is visible; the other five
+    /// IOVDD pins (10/22/33/42/49) each carry `(hide yes)`. Hidden pins
+    /// are still fully real, individually-numbered connection points --
+    /// KiCad just doesn't draw their text -- so nothing about netlist
+    /// correctness changes, only what's drawn.
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -191,131 +205,64 @@ fn group_by_exact_name<'a>(numbers: &[&'a String], device: &Device) -> Vec<Vec<&
 /// assumed). Not exact font metrics -- consistent with this project's
 /// existing "structurally representative, not pixel-perfect" approach to
 /// generated geometry.
-const CHAR_WIDTH_MM: f64 = 1.0;
-
-/// KiCad always draws each pin's electrical-type description (e.g.
-/// "Power input") *horizontally*, even for a vertically-oriented
-/// (top/bottom) pin whose own NAME text rotates to read vertically --
-/// confirmed directly in KiCad's source
-/// (eeschema/pin_layout_cache.cpp, `GetPinElectricalTypeInfo`:
-/// `info->m_Angle = ANGLE_HORIZONTAL` unconditionally, vs. the pin name
-/// info which branches on the pin's own orientation). That same source
-/// also explicitly has *no* overlap-checking logic of its own for this
-/// text, so getting it right is entirely this generator's job. Its font
-/// size is `max(pin_name_size * 0.75, 0.7mm)` in the same source.
 ///
-/// This means it's the electrical-type label, not the pin name, that
-/// actually needs char-count-based spacing along a top/bottom pin's
-/// packing (X) axis -- the pin name barely takes any X-space there once
-/// rotated. Left/right pins need no equivalent treatment: their name
-/// stays horizontal and needs no extra row spacing (confirmed: no
-/// overlap has ever been reported in that column, only in the
-/// top/bottom rows), so they keep a fixed `GRID_MM / 2.0` half-extent.
-const ELECTRICAL_TYPE_FONT_SCALE: f64 = 0.75;
-
-/// Character count of the electrical-type label KiCad shows for a pin,
-/// sized for the worst case across locales -- a generated library file
-/// may be opened by KiCad in any language, and English labels run
-/// noticeably longer than e.g. Japanese ones ("Bidirectional" vs.
-/// "双方向"), so sizing for the shown locale (whatever the maintainer's
-/// KiCad happens to be set to) would under-count for other users.
-fn electrical_type_label_chars(t: PinElectricalType) -> usize {
-    match t {
-        PinElectricalType::Input => 5,          // "Input"
-        PinElectricalType::Output => 6,         // "Output"
-        PinElectricalType::Bidirectional => 13, // "Bidirectional"
-        PinElectricalType::PowerIn => 11,       // "Power input"
-        PinElectricalType::Passive => 7,        // "Passive"
-        PinElectricalType::NoConnect => 13,     // "No connection"
-        PinElectricalType::Unspecified => 11,   // "Unspecified"
-    }
-}
-
-/// Half-extent a top/bottom pin needs along its packing axis to fit its
-/// (always-horizontal) electrical-type label -- see
-/// [`ELECTRICAL_TYPE_FONT_SCALE`]'s docs for why this, not the pin name,
-/// is what matters there.
-fn electrical_type_half_extent(t: PinElectricalType) -> f64 {
-    let chars = electrical_type_label_chars(t) as f64;
-    (chars * CHAR_WIDTH_MM * ELECTRICAL_TYPE_FONT_SCALE / 2.0).max(GRID_MM / 2.0)
-}
+/// Only the pin *name* is sized this way -- an earlier version of this
+/// file also modeled KiCad's separate "electrical type" description
+/// text (e.g. "Power input"), but that text is drawn on
+/// `LAYER_PRIVATE_NOTES` and gated by
+/// `PIN_LAYOUT_CACHE::m_showElectricalType`
+/// (eeschema/pin_layout_cache.cpp: `if( !m_showElectricalType ) return
+/// std::nullopt;`) -- confirmed by reading eeschema/sch_painter.cpp (the
+/// schematic-*sheet* canvas, as opposed to the separate Symbol/Library
+/// Editor window) directly: nothing there ever sets that flag, so this
+/// text never renders in the view a placed symbol is actually seen in.
+/// Modeling it was solving an invisible problem and inflating every
+/// symbol's size for no visible benefit; removed.
+const CHAR_WIDTH_MM: f64 = 1.0;
 
 /// A pin's required half-extent along a packing axis, plus an optional
 /// group key (used by `pack_centered` to insert extra gaps between
 /// different groups).
 type PinSpec = (f64, Option<String>);
 
-/// Minimum clearance guaranteed between a side's outermost pin and the
-/// adjacent side's outermost pin at each of the symbol's four corners
-/// (e.g. the last power pin on top vs. the first bus pin on the right).
-///
-/// Must exceed the largest natural half-extent this file computes
-/// anywhere (currently `electrical_type_half_extent`'s biggest value,
-/// ~4.9mm for "Bidirectional") -- `corner_boosted_reach` only ever takes
-/// the *max* of this and a pin's own natural half-extent, so once this
-/// margin stops being the larger of the two it silently stops doing
-/// anything at that corner. That's exactly what happened when
-/// `electrical_type_half_extent` was introduced with this constant
-/// still at its original, now-too-small value: real corner clearance
-/// quietly reverted to "whatever the natural per-side sizing gives",
-/// undoing this margin's whole purpose without any test catching it
-/// (see `corner_margin_exceeds_every_natural_half_extent` below, added
-/// specifically because this broke silently once already).
-///
-/// KiCad draws more than just the pin name next to each pin -- it also
-/// shows the pin's electrical-type description (e.g. "power input"),
-/// which this crate has no way to measure the exact rendered size of.
-/// Rather than trend the per-character text-width estimate elsewhere in
-/// this file (already an approximation) even higher across the board,
-/// this margin targets exactly the place that's actually at risk: two
-/// perpendicular sides meeting at a corner, where the estimate errors
-/// on each axis compound. See `corner_boosted_reach`.
-const CORNER_MARGIN_MM: f64 = 10.0;
+/// Every pin's half-extent along its side's packing axis: a flat
+/// `GRID_MM / 2.0` (KiCad's own 100mil pin pitch), the same rule for all
+/// four sides. A pin's NAME text is the only label that can compete for
+/// space along the packing axis (see `CHAR_WIDTH_MM`'s docs for why the
+/// electrical-type text doesn't count), and on top/bottom pins that name
+/// rotates to read vertically, so it barely uses any packing-axis space
+/// there either -- the flat grid pitch is what actually governs same-side
+/// neighbor spacing on every side.
+const PIN_PACKING_HALF_EXTENT_MM: f64 = GRID_MM / 2.0;
 
-/// Computes the same thing as `widest_reach` (in `build_symbol`), but
-/// the first/last item -- a side's outermost pin, which sits closest to
-/// the symbol's corners -- has its contribution to the reach boosted to
-/// at least [`CORNER_MARGIN_MM`], every other item using its own
-/// natural half-extent unchanged.
+/// Extra gap `pack_centered` inserts between two consecutive pins whose
+/// group differs, on top of their natural half-extent sum -- the same
+/// value for every side.
 ///
-/// This intentionally only affects the *rectangle size* this reach
-/// feeds into, not the corner pin's actual packed position:
-/// `pack_centered` was previously given the boosted half-extent
-/// directly, which genuinely fixed cross-side corner clearance but as
-/// a side effect also pushed the corner pin unnecessarily far from its
-/// own same-side neighbor (e.g. GPIO29 from GPIO28) -- a real,
-/// maintainer-reported regression. Boosting only the reach, not the
-/// packing input, keeps every same-side gap exactly as tight as
-/// `pack_centered` naturally makes it, while still growing the
-/// rectangle enough that the *other* (perpendicular) side's corner pin
-/// -- whose position is fixed relative to this rectangle's size, not
-/// to this side's packing -- ends up far enough away. Each side's
-/// outermost pin's reach contribution is `pos.abs() + half_extent`; two
-/// perpendicular corner pins end up `sqrt(a² + b²)` apart regardless of
-/// the body's overall size, so guaranteeing each clears
-/// `CORNER_MARGIN_MM` guarantees their combined distance does too.
-fn corner_boosted_reach(specs: &[PinSpec], positions: &[f64]) -> f64 {
-    let last_index = specs.len().saturating_sub(1);
-    specs
-        .iter()
-        .zip(positions.iter())
-        .enumerate()
-        .map(|(i, ((half, _), pos))| {
-            let half = if i == 0 || i == last_index {
-                half.max(CORNER_MARGIN_MM)
-            } else {
-                *half
-            };
-            pos.abs() + half
-        })
-        .fold(GRID_MM, f64::max)
-}
+/// Cross-checked directly against KiCad's own official RP2040 symbol
+/// (gitlab.com/kicad/libraries/kicad-symbols
+/// `MCU_RaspberryPi.kicad_symdir/RP2040.kicad_sym`): its left column
+/// leaves exactly 7.62mm (3x `GRID_MM`) between four of its five
+/// distinct signal-group boundaries (TESTEN | RUN | USB_DM/DP | QSPI
+/// bus | XIN | XOUT | SWCLK/SWDIO), while staying a tight 1x `GRID_MM`
+/// *within* a functionally-paired group -- exactly what
+/// [`pin_group_key`] already keeps together as one family (USB_DM/DP
+/// share the "USB" key, the QSPI bus pins share "QSPI"). Reproducing
+/// that 3x-grid boundary rule here (`GRID_MM` natural neighbor spacing +
+/// this `2 * GRID_MM` extra) lands the left column's total span within
+/// ~4% of the real symbol's (68.58mm vs. 66.04mm on that reference
+/// file) -- not just directionally right, but quantitatively close.
+/// This is exactly the "the bus side already makes the body tall, so
+/// don't cram the left column just because it has fewer pins" room a
+/// maintainer screenshot showed being wasted under a tighter boundary
+/// gap.
+const GROUP_GAP_MM: f64 = GRID_MM * 2.0;
 
 /// Packs `specs` (each pin's required half-extent along the packing
 /// axis, plus an optional group key) end to end -- consecutive pins get
-/// exactly `half_extent[i] + half_extent[i+1]` apart, plus one extra
-/// `GRID_MM` whenever the group key changes between them -- then shifts
-/// the whole run so it's centered on 0.
+/// exactly `half_extent[i] + half_extent[i+1]` apart, plus
+/// [`GROUP_GAP_MM`] whenever the group key changes between them -- then
+/// shifts the whole run so it's centered on 0.
 ///
 /// This is the closed-form solution to "space these out just enough to
 /// avoid collision, centered, with a gap between different groups": for
@@ -333,7 +280,7 @@ fn pack_centered(specs: &[PinSpec]) -> Vec<f64> {
     for (i, (half, group)) in specs.iter().enumerate() {
         if i > 0 {
             let gap = if group.is_some() && group.as_ref() != prev_group {
-                GRID_MM
+                GROUP_GAP_MM
             } else {
                 0.0
             };
@@ -350,22 +297,83 @@ fn pack_centered(specs: &[PinSpec]) -> Vec<f64> {
     positions
 }
 
+/// The corner-clearance margin used by [`corner_boosted_reach`]: the
+/// widest a single pin *name* on this device actually is (in mm, via
+/// [`CHAR_WIDTH_MM`]), computed per-device rather than a flat worst-case
+/// constant. A device with only short names doesn't pay for a cross-
+/// locale/cross-type worst case it doesn't have; a device with a
+/// genuinely long name (e.g. RP2040's own `VREG_VOUT`) still gets a
+/// margin sized to fit it. This is what actually shrinks the rectangle
+/// for typical devices versus a flat guessed margin, while still
+/// resolving the real cross-side overlap risk at each corner.
+fn corner_margin_mm(device: &Device) -> f64 {
+    device
+        .pins
+        .values()
+        .map(|p| p.name.chars().count() as f64 * CHAR_WIDTH_MM)
+        .fold(GRID_MM, f64::max)
+}
+
+/// Computes the same thing as `widest_reach` (in `build_symbol`), but
+/// the first/last item -- a side's outermost pin, which sits closest to
+/// the symbol's corners -- has its contribution to the reach boosted to
+/// at least `margin` (see [`corner_margin_mm`]), every other item using
+/// its own natural half-extent unchanged.
+///
+/// This intentionally only affects the *rectangle size* this reach
+/// feeds into, not the corner pin's actual packed position:
+/// `pack_centered` was previously given the boosted half-extent
+/// directly, which genuinely fixed cross-side corner clearance but as
+/// a side effect also pushed the corner pin unnecessarily far from its
+/// own same-side neighbor (e.g. GPIO29 from GPIO28) -- a real,
+/// maintainer-reported regression. Boosting only the reach, not the
+/// packing input, keeps every same-side gap exactly as tight as
+/// `pack_centered` naturally makes it, while still growing the
+/// rectangle enough that the *other* (perpendicular) side's corner pin
+/// -- whose position is fixed relative to this rectangle's size, not
+/// to this side's packing -- ends up far enough away. Each side's
+/// outermost pin's reach contribution is `pos.abs() + half_extent`; two
+/// perpendicular corner pins end up `sqrt(a² + b²)` apart regardless of
+/// the body's overall size, so guaranteeing each clears `margin`
+/// guarantees their combined distance does too.
+fn corner_boosted_reach(specs: &[PinSpec], positions: &[f64], margin: f64) -> f64 {
+    let last_index = specs.len().saturating_sub(1);
+    specs
+        .iter()
+        .zip(positions.iter())
+        .enumerate()
+        .map(|(i, ((half, _), pos))| {
+            let half = if i == 0 || i == last_index {
+                half.max(margin)
+            } else {
+                *half
+            };
+            pos.abs() + half
+        })
+        .fold(GRID_MM, f64::max)
+}
+
 /// Above this many pins, the bus family (e.g. a GPIO bank) is split
 /// across multiple KiCad symbol units rather than stacked on one
 /// ever-taller right edge -- see [`build_symbol`]'s docs.
 const BUS_UNIT_MAX_PINS: usize = 32;
 
-/// Builds a Symbol from a Device's pins, grouped onto sides the way a
-/// hand-authored MCU symbol is: `power`-type pins on top, the
-/// `ground`-type pin(s) on bottom, the single largest same-family signal
-/// group (e.g. a GPIO bus) on the right, and every other pin -- grouped
-/// by family via [`pin_group_key`], each family kept contiguous and
-/// separated from the next by an extra gap -- on the left. Pins on each
-/// side are packed via [`pack_centered`]: top/bottom spacing grows with
-/// label length (so long power-pin names don't collide), left/right
-/// spacing stays a fixed row height but widens between different
-/// families. Body width/height follow from the resulting extents,
-/// never forcing a square.
+/// Builds a Symbol in four stages: **group** pins onto sides the way a
+/// hand-authored MCU symbol is (`power`-type on top, `ground`-type on
+/// bottom, the single largest same-family signal group -- e.g. a GPIO
+/// bus -- on the right, everything else -- grouped by family via
+/// [`pin_group_key`], each family kept contiguous -- on the left);
+/// **stack** pins sharing the exact same name (e.g. RP2040's six IOVDD
+/// pins) onto one shared position via [`group_by_exact_name`]; **place**
+/// each side's groups with [`pack_centered`] (uniform grid-pitch row
+/// height everywhere, an extra [`GROUP_GAP_MM`] between different
+/// families); then **resolve** the one overlap risk that per-side
+/// packing alone can't see -- two perpendicular sides' outermost pins
+/// meeting at a corner -- via [`corner_boosted_reach`], which grows the
+/// rectangle (never a side's own packed spacing) by exactly this
+/// device's own longest-name margin ([`corner_margin_mm`]). Body
+/// width/height follow from the resulting extents, never forcing a
+/// square.
 ///
 /// When the bus exceeds [`BUS_UNIT_MAX_PINS`], it's split across
 /// multiple KiCad symbol units instead of making one unit taller
@@ -438,19 +446,17 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let bottom_groups = group_by_exact_name(&bottom, device);
     let left_groups = group_by_exact_name(&left, device);
 
-    // Top/bottom: spacing driven by the electrical-type label's length
-    // (not the pin name -- see electrical_type_half_extent's docs for
-    // why), same family-boundary gap treatment as left/right -- e.g.
-    // RP2040's IOVDD group packs tightly against DVDD, then gets a gap
-    // before ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the "VREG"
-    // family), and USB_VDD. Every top/bottom pin is Power/Ground (see
-    // the bucketing above), i.e. the same electrical type, so this
-    // works out to a uniform half-extent for all of them.
+    // Every side uses the same flat grid-pitch half-extent (see
+    // PIN_PACKING_HALF_EXTENT_MM's docs); the only per-side difference
+    // left is which family-boundary gaps apply, e.g. RP2040's IOVDD
+    // group packs tightly against DVDD, then gets a gap before
+    // ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the "VREG"
+    // family), and USB_VDD.
     let top_specs: Vec<PinSpec> = top_groups
         .iter()
         .map(|g| {
             (
-                electrical_type_half_extent(device.pins[g[0]].pin_type.into()),
+                PIN_PACKING_HALF_EXTENT_MM,
                 Some(pin_group_key(&device.pins[g[0]].name)),
             )
         })
@@ -459,7 +465,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         .iter()
         .map(|g| {
             (
-                electrical_type_half_extent(device.pins[g[0]].pin_type.into()),
+                PIN_PACKING_HALF_EXTENT_MM,
                 Some(pin_group_key(&device.pins[g[0]].name)),
             )
         })
@@ -468,7 +474,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // wherever the pin family changes (e.g. between QSPI_* and USB_*).
     let left_specs: Vec<PinSpec> = left_groups
         .iter()
-        .map(|g| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[g[0]].name))))
+        .map(|g| {
+            (
+                PIN_PACKING_HALF_EXTENT_MM,
+                Some(pin_group_key(&device.pins[g[0]].name)),
+            )
+        })
         .collect();
 
     let top_pos = pack_centered(&top_specs);
@@ -490,7 +501,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         .map(|chunk| {
             let specs: Vec<PinSpec> = chunk
                 .iter()
-                .map(|g| (GRID_MM / 2.0, Some(pin_group_key(&device.pins[g[0]].name))))
+                .map(|g| {
+                    (
+                        PIN_PACKING_HALF_EXTENT_MM,
+                        Some(pin_group_key(&device.pins[g[0]].name)),
+                    )
+                })
                 .collect();
             let pos = pack_centered(&specs);
             (specs, pos)
@@ -499,31 +515,52 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 
     // The body must reach past each outermost pin's own label extent
     // (otherwise the outermost label hangs off past the drawn rectangle
-    // edge) and, at the four corners specifically, past CORNER_MARGIN_MM
-    // -- see corner_boosted_reach's docs for why that's computed
-    // separately from each side's own packed positions above.
-    let half_width = corner_boosted_reach(&top_specs, &top_pos)
-        .max(corner_boosted_reach(&bottom_specs, &bottom_pos));
+    // edge) and, at the four corners specifically, past this device's
+    // own corner_margin_mm -- see corner_boosted_reach's docs for why
+    // that's computed separately from each side's own packed positions
+    // above.
+    let margin = corner_margin_mm(device);
+    let half_width = corner_boosted_reach(&top_specs, &top_pos, margin).max(corner_boosted_reach(
+        &bottom_specs,
+        &bottom_pos,
+        margin,
+    ));
     // Every unit shares one rectangle, so this must cover the largest
     // bus chunk, not just whichever chunk happens to be last.
     let half_height = chunk_specs_pos
         .iter()
-        .map(|(s, p)| corner_boosted_reach(s, p))
-        .fold(corner_boosted_reach(&left_specs, &left_pos), f64::max);
+        .map(|(s, p)| corner_boosted_reach(s, p, margin))
+        .fold(
+            corner_boosted_reach(&left_specs, &left_pos, margin),
+            f64::max,
+        );
 
     let mut pins = Vec::with_capacity(numbers.len());
-    let mut push_pin = |number: &String, position: Point2, side: PinOrientation, unit: u32| {
-        let pin = &device.pins[number];
-        pins.push(SymbolPin {
-            number: number.clone(),
-            name: pin.name.clone(),
-            electrical_type: pin.pin_type.into(),
-            position,
-            length: PIN_LENGTH_MM,
-            orientation: side,
-            unit,
-        });
-    };
+    // Only the first pin in a stacked name-group (see `SymbolPin::hidden`'s
+    // docs) is drawn with its real electrical type; every other member
+    // is hidden and downgraded to `Passive`, matching KiCad's own
+    // official RP2040 symbol exactly (its five hidden duplicate IOVDD
+    // pins are each `pin passive line ... (hide yes)`, not
+    // `pin power_in line`). Each still keeps its own correct number, so
+    // netlisting is unaffected -- only what KiCad draws changes.
+    let mut push_pin =
+        |number: &String, position: Point2, side: PinOrientation, unit: u32, is_primary: bool| {
+            let pin = &device.pins[number];
+            pins.push(SymbolPin {
+                number: number.clone(),
+                name: pin.name.clone(),
+                electrical_type: if is_primary {
+                    pin.pin_type.into()
+                } else {
+                    PinElectricalType::Passive
+                },
+                position,
+                length: PIN_LENGTH_MM,
+                orientation: side,
+                unit,
+                hidden: !is_primary,
+            });
+        };
     // Top/bottom/left are shared across every unit once splitting, so
     // they land in KiCad's unit-0 sentinel; otherwise (the common case)
     // everything is unit 1, exactly as before this feature existed.
@@ -535,7 +572,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // packed position (native KiCad pin stacking -- see
     // group_by_exact_name's docs).
     for (group, &y) in left_groups.iter().zip(left_pos.iter()) {
-        for &number in group {
+        for (i, &number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -544,11 +581,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 },
                 PinOrientation::Left,
                 shared_unit,
+                i == 0,
             );
         }
     }
     for (group, &x) in bottom_groups.iter().zip(bottom_pos.iter()) {
-        for &number in group {
+        for (i, &number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -557,11 +595,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 },
                 PinOrientation::Bottom,
                 shared_unit,
+                i == 0,
             );
         }
     }
     for (group, &x) in top_groups.iter().zip(top_pos.iter()) {
-        for &number in group {
+        for (i, &number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -570,6 +609,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                 },
                 PinOrientation::Top,
                 shared_unit,
+                i == 0,
             );
         }
     }
@@ -577,7 +617,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
         let (_, chunk_pos) = &chunk_specs_pos[chunk_index];
         let unit = if splitting { chunk_index as u32 + 1 } else { 1 };
         for (group, &y) in chunk.iter().zip(chunk_pos.iter()) {
-            for &number in group {
+            for (i, &number) in group.iter().enumerate() {
                 push_pin(
                     number,
                     Point2 {
@@ -586,6 +626,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                     },
                     PinOrientation::Right,
                     unit,
+                    i == 0,
                 );
             }
         }
@@ -730,7 +771,7 @@ mod tests {
         let within_group_gap = positions[1] - positions[0];
         let cross_group_gap = positions[2] - positions[1];
         assert!((within_group_gap - 2.0).abs() < 1e-9); // 1.0+1.0, no extra gap
-        assert!((cross_group_gap - (2.0 + GRID_MM)).abs() < 1e-9); // + GRID_MM
+        assert!((cross_group_gap - (2.0 + GROUP_GAP_MM)).abs() < 1e-9); // + GROUP_GAP_MM
     }
 
     #[test]
@@ -1096,31 +1137,35 @@ mod tests {
     }
 
     #[test]
-    fn electrical_type_half_extent_uses_the_labels_english_length() {
-        // "Power input" (11 chars) needs noticeably more room than
-        // "Input" (5 chars) -- this is what actually drives top/bottom
-        // spacing now, not the pin's own (short, rotated-to-vertical)
-        // name text.
-        let power = electrical_type_half_extent(PinElectricalType::PowerIn);
-        let input = electrical_type_half_extent(PinElectricalType::Input);
-        assert!(
-            power > input,
-            "\"Power input\" ({power}mm) should need more room than \"Input\" ({input}mm)"
-        );
-        // Every electrical type clears the same floor everything else
-        // in this file uses, even short labels like "Input"/"Output".
-        assert!(input >= GRID_MM / 2.0);
-    }
-
-    #[test]
-    fn power_pins_get_more_top_bottom_spacing_than_the_old_name_based_model_gave() {
-        // Regression guard for the real bug this fixed: KiCad renders
-        // each pin's electrical-type label ("Power input") horizontally
-        // even on a vertically-oriented pin, while the pin's own NAME
-        // rotates to vertical -- so sizing top/bottom spacing from the
-        // (short) pin name, as this crate used to, systematically
-        // under-counted the space actually needed.
-        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+    fn top_and_bottom_group_boundaries_get_the_unified_group_gap() {
+        // Every side now uses the same flat grid-pitch half-extent and
+        // the same GROUP_GAP_MM between different families -- top/bottom
+        // is no longer a special case. Uses the same fixture shape as
+        // `top_pins_dont_overlap_when_names_are_long` (distinctly-named
+        // Power pins, so each is its own family) to get more than one
+        // top-row position to compare.
+        let mut pins = BTreeMap::new();
+        for (n, name) in [("1", "USB_VDD"), ("2", "ADC_AVDD")] {
+            pins.insert(
+                n.into(),
+                Pin {
+                    name: name.into(),
+                    pin_type: PinType::Power,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        let device = Device {
+            schema_version: "0.1".into(),
+            kind: Kind::Device,
+            id: DeviceId::from("ex/TWOPOWER"),
+            manufacturer: ManufacturerId::from("ex"),
+            family: None,
+            pins,
+            revisions: BTreeMap::new(),
+            provenance: BTreeMap::new(),
+        };
+        let symbol = build_symbol("TWOPOWER", &device);
         let mut top_xs: Vec<f64> = symbol
             .pins
             .iter()
@@ -1128,30 +1173,13 @@ mod tests {
             .map(|p| p.position.x)
             .collect();
         top_xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        // This fixture's three IOVDD pins now share one stacked
-        // position (see group_by_exact_name) -- dedupe to check the
-        // gap between *distinct* schematic positions, not between
-        // same-position stacked pins (which is legitimately 0).
-        top_xs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-        for pair in top_xs.windows(2) {
-            let gap = pair[1] - pair[0];
-            // "IOVDD" is 5 characters; the old pin-name-based model
-            // would have sized this gap around 5mm. The electrical-type
-            // label ("Power input", 11 chars) needs roughly double that.
-            assert!(
-                gap > 2.0 * text_half_extent_like_the_old_model("IOVDD"),
-                "top-row gap {gap}mm no wider than the old name-based estimate"
-            );
-        }
-    }
-
-    /// Mirrors the pin-name-based formula this crate used before
-    /// discovering (from KiCad's own source) that the electrical-type
-    /// label, not the pin name, is what needs this spacing -- kept only
-    /// so the regression test above has something concrete to compare
-    /// against.
-    fn text_half_extent_like_the_old_model(name: &str) -> f64 {
-        (name.chars().count() as f64 * CHAR_WIDTH_MM / 2.0).max(GRID_MM / 2.0)
+        assert_eq!(top_xs.len(), 2);
+        let gap = top_xs[1] - top_xs[0];
+        let expected = 2.0 * PIN_PACKING_HALF_EXTENT_MM + GROUP_GAP_MM;
+        assert!(
+            (gap - expected).abs() < 1e-9,
+            "expected {expected}mm between top-row family boundaries, got {gap}mm"
+        );
     }
 
     #[test]
@@ -1165,23 +1193,25 @@ mod tests {
             (1.0, Some("A".into())),
             (1.0, Some("A".into())),
         ];
+        let margin = 5.0;
         let positions = pack_centered(&specs);
-        let reach = corner_boosted_reach(&specs, &positions);
+        let reach = corner_boosted_reach(&specs, &positions, margin);
         let outermost = positions.iter().map(|p| p.abs()).fold(0.0, f64::max);
         assert_eq!(
             reach,
-            outermost + CORNER_MARGIN_MM,
+            outermost + margin,
             "reach should use the boosted (corner-margin) half-extent for the outermost item"
         );
     }
 
     #[test]
     fn corner_boosted_reach_never_shrinks_an_already_wide_entry() {
-        let specs: Vec<PinSpec> = vec![(CORNER_MARGIN_MM + 5.0, None)];
+        let margin = 5.0;
+        let specs: Vec<PinSpec> = vec![(margin + 5.0, None)];
         let positions = pack_centered(&specs);
         assert_eq!(
-            corner_boosted_reach(&specs, &positions),
-            CORNER_MARGIN_MM + 5.0
+            corner_boosted_reach(&specs, &positions, margin),
+            margin + 5.0
         );
     }
 
@@ -1211,38 +1241,42 @@ mod tests {
         }
     }
 
-    /// `corner_boosted_reach` only ever takes `max(natural, CORNER_MARGIN_MM)`
-    /// -- so if some pin's natural half-extent ever grows to meet or
-    /// exceed CORNER_MARGIN_MM, the margin silently stops adding
-    /// anything at that corner, with no visible signal that it happened.
-    /// This is exactly what broke real corner clearance once already
-    /// (electrical_type_half_extent's own values grew past the margin
-    /// that was supposed to pad *beyond* them). Guard against a repeat:
-    /// the margin must stay strictly larger than every natural
-    /// half-extent this file computes.
     #[test]
-    fn corner_margin_exceeds_every_natural_half_extent() {
-        let largest_electrical_type_half_extent = [
-            PinElectricalType::Input,
-            PinElectricalType::Output,
-            PinElectricalType::Bidirectional,
-            PinElectricalType::PowerIn,
-            PinElectricalType::Passive,
-            PinElectricalType::NoConnect,
-            PinElectricalType::Unspecified,
-        ]
-        .into_iter()
-        .map(electrical_type_half_extent)
-        .fold(0.0, f64::max);
+    fn corner_margin_scales_with_this_devices_own_longest_name() {
+        // corner_margin_mm is computed per-device now, not a flat
+        // worst-case constant -- a device with a longer name gets a
+        // bigger margin, one with only short names gets a smaller one
+        // (and the rectangle shrinks accordingly).
+        let short = device_with_names(&["A", "B"]);
+        let long = device_with_names(&["VERY_LONG_PIN_NAME", "B"]);
+        assert!(corner_margin_mm(&long) > corner_margin_mm(&short));
+        // Never shrinks below the grid pitch, even for single-character
+        // names.
+        assert!(corner_margin_mm(&short) >= GRID_MM);
+    }
 
-        // electrical_type_half_extent's own floor is GRID_MM / 2.0, so
-        // this alone also confirms CORNER_MARGIN_MM clears that floor.
-        assert!(
-            CORNER_MARGIN_MM > largest_electrical_type_half_extent,
-            "CORNER_MARGIN_MM ({CORNER_MARGIN_MM}mm) must exceed the largest \
-             electrical-type half-extent ({largest_electrical_type_half_extent}mm), \
-             or corner_boosted_reach becomes a no-op at that corner"
-        );
+    fn device_with_names(names: &[&str]) -> Device {
+        let mut pins = BTreeMap::new();
+        for (i, name) in names.iter().enumerate() {
+            pins.insert(
+                (i + 1).to_string(),
+                Pin {
+                    name: name.to_string(),
+                    pin_type: PinType::Io,
+                    alternate_functions: vec![],
+                },
+            );
+        }
+        Device {
+            schema_version: "0.1".into(),
+            kind: Kind::Device,
+            id: DeviceId::from("ex/NAMES"),
+            manufacturer: ManufacturerId::from("ex"),
+            family: None,
+            pins,
+            revisions: BTreeMap::new(),
+            provenance: BTreeMap::new(),
+        }
     }
 
     /// Boundary-labeling sanity check (see this crate's discussion of
@@ -1257,7 +1291,9 @@ mod tests {
     /// that `corner_boosted_reach`'s own tests above cover directly.
     #[test]
     fn corner_adjacent_pins_from_different_sides_keep_a_safety_margin() {
-        let symbol = build_symbol("MCU", &device_shaped_like_an_mcu());
+        let device = device_shaped_like_an_mcu();
+        let margin = corner_margin_mm(&device);
+        let symbol = build_symbol("MCU", &device);
 
         let extreme = |side: PinOrientation, pick_max: bool, axis_x: bool| -> &SymbolPin {
             symbol
@@ -1311,10 +1347,96 @@ mod tests {
             ("bottom-left", bottom_left),
         ] {
             assert!(
-                gap >= CORNER_MARGIN_MM,
+                gap >= margin,
                 "{label} corner: adjacent-side pins only {gap:.2}mm apart \
-                 (want >= {CORNER_MARGIN_MM}mm)"
+                 (want >= {margin}mm)"
             );
+        }
+    }
+
+    #[test]
+    fn no_two_pin_labels_overlap_anywhere_in_the_symbol() {
+        // Holistic safety net, checking the actual end property rather
+        // than any one mechanism: every pin's label -- its stub tip,
+        // plus a name-length reach along the side's outward axis -- as
+        // an axis-aligned box, and no two boxes anywhere in the whole
+        // symbol may intersect. This is the single check that would
+        // have caught the real corner-margin regression from earlier in
+        // this file's history regardless of which piece of code
+        // produced the positions, and it's what any future layout
+        // change (this one included) has to keep satisfying.
+        struct Box2 {
+            min_x: f64,
+            max_x: f64,
+            min_y: f64,
+            max_y: f64,
+        }
+        let device = device_shaped_like_an_mcu();
+        let symbol = build_symbol("MCU", &device);
+        // `p.position` is already the pin's outer tip -- build_symbol
+        // bakes PIN_LENGTH_MM into it when placing each pin (e.g. left
+        // pins get `x: -half_width - PIN_LENGTH_MM`) -- so the label
+        // reach below starts from `p.position` directly, with no second
+        // length addition.
+        let boxes: Vec<Box2> = symbol
+            .pins
+            .iter()
+            .filter(|p| !p.hidden)
+            .map(|p| {
+                let reach = p.name.chars().count() as f64 * CHAR_WIDTH_MM;
+                match p.orientation {
+                    PinOrientation::Left => Box2 {
+                        min_x: p.position.x - reach,
+                        max_x: p.position.x,
+                        min_y: p.position.y - GRID_MM / 2.0,
+                        max_y: p.position.y + GRID_MM / 2.0,
+                    },
+                    PinOrientation::Right => Box2 {
+                        min_x: p.position.x,
+                        max_x: p.position.x + reach,
+                        min_y: p.position.y - GRID_MM / 2.0,
+                        max_y: p.position.y + GRID_MM / 2.0,
+                    },
+                    PinOrientation::Top => Box2 {
+                        min_x: p.position.x - GRID_MM / 2.0,
+                        max_x: p.position.x + GRID_MM / 2.0,
+                        min_y: p.position.y,
+                        max_y: p.position.y + reach,
+                    },
+                    PinOrientation::Bottom => Box2 {
+                        min_x: p.position.x - GRID_MM / 2.0,
+                        max_x: p.position.x + GRID_MM / 2.0,
+                        min_y: p.position.y - reach,
+                        max_y: p.position.y,
+                    },
+                }
+            })
+            .collect();
+
+        let named: Vec<(&str, &Box2)> = symbol
+            .pins
+            .iter()
+            .filter(|p| !p.hidden)
+            .map(|p| p.name.as_str())
+            .zip(boxes.iter())
+            .collect();
+        // Same-side neighbors are packed to touch exactly (zero gap) by
+        // design -- an epsilon absorbs the floating-point noise from
+        // `pack_centered`'s centering shift without masking a real
+        // overlap of any meaningful size.
+        const EPS: f64 = 1e-6;
+        for (i, (na, a)) in named.iter().enumerate() {
+            for (nb, b) in &named[i + 1..] {
+                let separated = a.max_x <= b.min_x + EPS
+                    || b.max_x <= a.min_x + EPS
+                    || a.max_y <= b.min_y + EPS
+                    || b.max_y <= a.min_y + EPS;
+                assert!(
+                    separated,
+                    "two pin labels overlap in the generated symbol: {na} [{:.2},{:.2}]x[{:.2},{:.2}] vs {nb} [{:.2},{:.2}]x[{:.2},{:.2}]",
+                    a.min_x, a.max_x, a.min_y, a.max_y, b.min_x, b.max_x, b.min_y, b.max_y
+                );
+            }
         }
     }
 

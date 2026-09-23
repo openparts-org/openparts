@@ -415,6 +415,7 @@ mod tests {
                     length: 2.54,
                     orientation: PinOrientation::Left,
                     unit: 1,
+                    hidden: false,
                 },
                 SymbolPin {
                     number: "2".into(),
@@ -424,6 +425,7 @@ mod tests {
                     length: 2.54,
                     orientation: PinOrientation::Right,
                     unit: 1,
+                    hidden: false,
                 },
             ],
             graphics: vec![Graphic {

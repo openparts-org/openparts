@@ -80,6 +80,9 @@ fn write_pin(out: &mut String, pin: &openparts_pcbcad::SymbolPin) {
         orientation_angle(pin.orientation),
         pin.length,
     ));
+    if pin.hidden {
+        out.push_str("        (hide yes)\n");
+    }
     out.push_str(&format!(
         "        (name \"{}\" (effects (font (size 1.27 1.27))))\n",
         pin.name
@@ -103,6 +106,7 @@ pub struct ParsedPin {
     pub x: f64,
     pub y: f64,
     pub angle: f64,
+    pub hidden: bool,
 }
 
 pub fn parse_symbol_pins(text: &str) -> Vec<ParsedPin> {
@@ -125,6 +129,16 @@ pub fn parse_symbol_pins(text: &str) -> Vec<ParsedPin> {
         let y: f64 = nums.next().unwrap().parse().unwrap();
         let angle: f64 = nums.next().unwrap().parse().unwrap();
 
+        // An optional `(hide yes)` line sits between the pin's own line
+        // and its name -- consume it here rather than mistaking it for
+        // the name line.
+        let hidden = lines
+            .peek()
+            .is_some_and(|l| l.trim_start().starts_with("(hide"));
+        if hidden {
+            lines.next();
+        }
+
         let name_line = lines.next().expect("pin must be followed by a name line");
         let name = extract_quoted(name_line).expect("name line must contain a quoted string");
 
@@ -138,6 +152,7 @@ pub fn parse_symbol_pins(text: &str) -> Vec<ParsedPin> {
             x,
             y,
             angle,
+            hidden,
         });
     }
     pins
@@ -167,6 +182,7 @@ mod tests {
                 length: 2.54,
                 orientation: PinOrientation::Left,
                 unit: 1,
+                hidden: false,
             }],
             graphics: vec![Graphic {
                 kind: GraphicKind::Rectangle {
@@ -185,6 +201,52 @@ mod tests {
         assert!((parsed[0].x - (-10.16)).abs() < 1e-6);
         assert!((parsed[0].y - 2.54).abs() < 1e-6);
         assert!((parsed[0].angle - 0.0).abs() < 1e-6);
+        assert!(!parsed[0].hidden);
+    }
+
+    #[test]
+    fn hidden_pins_render_hide_yes_and_still_round_trip() {
+        // A stacked duplicate (see openparts-pcbcad's SymbolPin::hidden
+        // docs): hidden and hidden pins must not be confused with each
+        // other by the reader when they're adjacent in the file.
+        let symbol = PcbSymbol {
+            name: "TEST".into(),
+            units: vec![SymbolUnit { index: 1 }],
+            pins: vec![
+                SymbolPin {
+                    number: "1".into(),
+                    name: "IOVDD".into(),
+                    electrical_type: PinElectricalType::PowerIn,
+                    position: Point2 { x: 0.0, y: 10.0 },
+                    length: 2.54,
+                    orientation: PinOrientation::Top,
+                    unit: 1,
+                    hidden: false,
+                },
+                SymbolPin {
+                    number: "10".into(),
+                    name: "IOVDD".into(),
+                    electrical_type: PinElectricalType::Passive,
+                    position: Point2 { x: 0.0, y: 10.0 },
+                    length: 2.54,
+                    orientation: PinOrientation::Top,
+                    unit: 1,
+                    hidden: true,
+                },
+            ],
+            graphics: vec![],
+        };
+
+        let text = render_symbol(&symbol);
+        assert!(text.contains("(hide yes)"));
+
+        let parsed = parse_symbol_pins(&text);
+        assert_eq!(parsed.len(), 2);
+        assert!(!parsed[0].hidden);
+        assert_eq!(parsed[0].number, "1");
+        assert!(parsed[1].hidden);
+        assert_eq!(parsed[1].number, "10");
+        assert_eq!(parsed[1].electrical_type, "passive");
     }
 
     fn pin(number: &str, name: &str, unit: u32) -> SymbolPin {
@@ -196,6 +258,7 @@ mod tests {
             length: 2.54,
             orientation: PinOrientation::Right,
             unit,
+            hidden: false,
         }
     }
 
