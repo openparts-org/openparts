@@ -80,8 +80,10 @@ impl StepWriter {
         self.emit(&format!("EDGE_CURVE('', #{v0}, #{v1}, #{line_id}, .T.)"))
     }
 
-    /// A planar quad face from 4 (edge_id, same_sense) pairs, in order.
-    fn face(&mut self, edges: [(u32, bool); 4], origin: [f64; 3], normal: [f64; 3]) -> u32 {
+    /// A planar face from N (edge_id, same_sense) pairs, in order --
+    /// N=4 for every box/prism-side quad, N=`segments` for a prism's
+    /// two polygonal end caps.
+    fn face(&mut self, edges: &[(u32, bool)], origin: [f64; 3], normal: [f64; 3]) -> u32 {
         let oriented: Vec<u32> = edges
             .iter()
             .map(|(edge_id, same_sense)| {
@@ -200,7 +202,7 @@ impl StepWriter {
         // importers like KiCad's silently reject as an invalid solid
         // instead of raising a parse error).
         let bottom = self.face(
-            [
+            &[
                 edge_between(&edges, 0, 3),
                 edge_between(&edges, 3, 2),
                 edge_between(&edges, 2, 1),
@@ -210,7 +212,7 @@ impl StepWriter {
             [0.0, 0.0, -1.0],
         );
         let top = self.face(
-            [
+            &[
                 edge_between(&edges, 4, 5),
                 edge_between(&edges, 5, 6),
                 edge_between(&edges, 6, 7),
@@ -220,7 +222,7 @@ impl StepWriter {
             [0.0, 0.0, 1.0],
         );
         let front = self.face(
-            [
+            &[
                 edge_between(&edges, 0, 1),
                 edge_between(&edges, 1, 5),
                 edge_between(&edges, 5, 4),
@@ -230,7 +232,7 @@ impl StepWriter {
             [0.0, -1.0, 0.0],
         );
         let back = self.face(
-            [
+            &[
                 edge_between(&edges, 2, 3),
                 edge_between(&edges, 3, 7),
                 edge_between(&edges, 7, 6),
@@ -240,7 +242,7 @@ impl StepWriter {
             [0.0, 1.0, 0.0],
         );
         let left = self.face(
-            [
+            &[
                 edge_between(&edges, 3, 0),
                 edge_between(&edges, 0, 4),
                 edge_between(&edges, 4, 7),
@@ -250,7 +252,7 @@ impl StepWriter {
             [-1.0, 0.0, 0.0],
         );
         let right = self.face(
-            [
+            &[
                 edge_between(&edges, 1, 2),
                 edge_between(&edges, 2, 6),
                 edge_between(&edges, 6, 5),
@@ -271,7 +273,158 @@ impl StepWriter {
         self.style(brep_id, color);
         brep_id
     }
+
+    /// Writes a regular `segments`-sided prism approximating a cylinder
+    /// (`openparts_mcad::BodyShape::Cylinder`) centered at `center`,
+    /// with the given `diameter`/`height` and RGB `color`, returning
+    /// the id of its MANIFOLD_SOLID_BREP entity. Geometrically the same
+    /// technique as `write_box` (N=4 is exactly `write_box`'s own
+    /// shape: N sides + 2 caps), generalized to N sides using
+    /// `openparts_mcad::cylinder_ring` for the vertex positions -- see
+    /// that function's docs for why the segment count lives here, not
+    /// in the shared geometry model.
+    fn write_prism(
+        &mut self,
+        center: [f64; 3],
+        diameter: f64,
+        height: f64,
+        segments: u32,
+        color: [f64; 3],
+    ) -> u32 {
+        let (cx, cy, cz) = (center[0], center[1], center[2]);
+        let dz = height / 2.0;
+        let n = segments as usize;
+        let ring = openparts_mcad::cylinder_ring(diameter, segments);
+
+        let bottom_coords: Vec<[f64; 3]> = ring
+            .iter()
+            .map(|&(x, y)| [cx + x, cy + y, cz - dz])
+            .collect();
+        let top_coords: Vec<[f64; 3]> = ring
+            .iter()
+            .map(|&(x, y)| [cx + x, cy + y, cz + dz])
+            .collect();
+
+        let bottom_verts: Vec<u32> = bottom_coords
+            .iter()
+            .map(|&p| {
+                let point_id = self.point(p);
+                self.vertex(point_id)
+            })
+            .collect();
+        let top_verts: Vec<u32> = top_coords
+            .iter()
+            .map(|&p| {
+                let point_id = self.point(p);
+                self.vertex(point_id)
+            })
+            .collect();
+
+        // Ring edge i goes from index i to index (i+1) % n; vertical
+        // edge i goes from bottom[i] to top[i] -- same indexing
+        // convention `write_box` uses for its 4-sided case.
+        let bottom_edges: Vec<u32> = (0..n)
+            .map(|i| {
+                let j = (i + 1) % n;
+                self.edge(
+                    bottom_verts[i],
+                    bottom_coords[i],
+                    bottom_verts[j],
+                    bottom_coords[j],
+                )
+            })
+            .collect();
+        let top_edges: Vec<u32> = (0..n)
+            .map(|i| {
+                let j = (i + 1) % n;
+                self.edge(top_verts[i], top_coords[i], top_verts[j], top_coords[j])
+            })
+            .collect();
+        let vertical_edges: Vec<u32> = (0..n)
+            .map(|i| {
+                self.edge(
+                    bottom_verts[i],
+                    bottom_coords[i],
+                    top_verts[i],
+                    top_coords[i],
+                )
+            })
+            .collect();
+
+        // Side face i: bottom[i] -> bottom[i+1] -> top[i+1] -> top[i] --
+        // this loop order (verified against the same right-hand-rule
+        // convention `every_face_winding_matches_its_declared_normal`
+        // checks) gives the correct outward radial normal, computed
+        // directly rather than approximated, since it varies per
+        // segment (unlike a box's exactly axis-aligned side normals).
+        let mut side_faces = Vec::with_capacity(n);
+        for i in 0..n {
+            let j = (i + 1) % n;
+            let normal = normalize3(cross3(
+                sub3(bottom_coords[j], bottom_coords[i]),
+                sub3(top_coords[i], bottom_coords[i]),
+            ));
+            let edges = [
+                (bottom_edges[i], true),
+                (vertical_edges[j], true),
+                (top_edges[i], false),
+                (vertical_edges[i], false),
+            ];
+            side_faces.push(self.face(&edges, bottom_coords[i], normal));
+        }
+
+        // End caps: N-gon faces, same reversed-vs-forward traversal
+        // convention `write_box` uses for its bottom/top (a -Z-normal
+        // face needs the ring traversed in reverse for its winding to
+        // agree with that downward normal; a +Z-normal face uses the
+        // ring's own forward order).
+        let bottom_loop: Vec<(u32, bool)> =
+            bottom_edges.iter().rev().map(|&e| (e, false)).collect();
+        let bottom_face = self.face(&bottom_loop, bottom_coords[0], [0.0, 0.0, -1.0]);
+        let top_loop: Vec<(u32, bool)> = top_edges.iter().map(|&e| (e, true)).collect();
+        let top_face = self.face(&top_loop, top_coords[0], [0.0, 0.0, 1.0]);
+
+        let mut faces = side_faces;
+        faces.push(bottom_face);
+        faces.push(top_face);
+        let face_list = faces
+            .iter()
+            .map(|f| format!("#{f}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let shell_id = self.emit(&format!("CLOSED_SHELL('', ({face_list}))"));
+        let brep_id = self.emit(&format!("MANIFOLD_SOLID_BREP('', #{shell_id})"));
+        self.style(brep_id, color);
+        brep_id
+    }
 }
+
+fn sub3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn cross3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn normalize3(v: [f64; 3]) -> [f64; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if len > 0.0 {
+        [v[0] / len, v[1] / len, v[2] / len]
+    } else {
+        v
+    }
+}
+
+/// Number of sides `write_prism` uses to approximate
+/// `openparts_mcad::BodyShape::Cylinder` -- see `cylinder_ring`'s docs
+/// for why this constant lives here (an output-format rendering
+/// choice) rather than in the shared geometry model.
+const STEP_CYLINDER_SEGMENTS: u32 = 24;
 
 /// Dark charcoal, matching real epoxy mold compound IC body resin.
 const BODY_COLOR: [f64; 3] = [0.15, 0.15, 0.15];
@@ -287,19 +440,29 @@ pub fn generate_step(
     let mut w = StepWriter::new();
 
     let mut brep_ids = Vec::new();
-    brep_ids.push(w.write_box(
-        [
-            geometry.body.position.x,
-            geometry.body.position.y,
-            geometry.body.position.z,
-        ],
-        [
-            geometry.body.size.x,
-            geometry.body.size.y,
-            geometry.body.size.z,
-        ],
-        BODY_COLOR,
-    ));
+    let body_center = [
+        geometry.body.position.x,
+        geometry.body.position.y,
+        geometry.body.position.z,
+    ];
+    brep_ids.push(match geometry.body.shape {
+        openparts_mcad::BodyShape::Box => w.write_box(
+            body_center,
+            [
+                geometry.body.size.x,
+                geometry.body.size.y,
+                geometry.body.size.z,
+            ],
+            BODY_COLOR,
+        ),
+        openparts_mcad::BodyShape::Cylinder => w.write_prism(
+            body_center,
+            geometry.body.size.x, // diameter (== size.y)
+            geometry.body.size.z, // height
+            STEP_CYLINDER_SEGMENTS,
+            BODY_COLOR,
+        ),
+    });
     for lead in &geometry.leads {
         brep_ids.push(w.write_box(
             [lead.position.x, lead.position.y, lead.position.z],
@@ -377,7 +540,7 @@ pub fn generate_step(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openparts_mcad::{Body, Lead, Marker, MarkerKind, Point3, Size3};
+    use openparts_mcad::{Body, BodyShape, Lead, Marker, MarkerKind, Mounting, Point3, Size3};
 
     fn tiny_geometry() -> MechanicalGeometry {
         MechanicalGeometry {
@@ -392,6 +555,7 @@ mod tests {
                     y: 3.0,
                     z: 1.0,
                 },
+                shape: BodyShape::Box,
             },
             leads: vec![
                 Lead {
@@ -406,6 +570,8 @@ mod tests {
                         y: 0.2,
                         z: 0.1,
                     },
+                    mounting: Mounting::Smd,
+                    drill: None,
                 },
                 Lead {
                     number: "2".into(),
@@ -419,6 +585,8 @@ mod tests {
                         y: 0.2,
                         z: 0.1,
                     },
+                    mounting: Mounting::Smd,
+                    drill: None,
                 },
             ],
             markers: vec![Marker {
@@ -427,6 +595,67 @@ mod tests {
                     x: -1.0,
                     y: 1.0,
                     z: 1.0,
+                },
+            }],
+        }
+    }
+
+    /// A radial-capacitor-shaped fixture: a `BodyShape::Cylinder` body
+    /// with 2 through-hole leads, exercising `write_prism` the same
+    /// way `tiny_geometry` exercises `write_box`.
+    fn tiny_cylinder_geometry() -> MechanicalGeometry {
+        MechanicalGeometry {
+            body: Body {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 5.5,
+                },
+                size: Size3 {
+                    x: 5.0,
+                    y: 5.0,
+                    z: 11.0,
+                },
+                shape: BodyShape::Cylinder,
+            },
+            leads: vec![
+                Lead {
+                    number: "1".into(),
+                    position: Point3 {
+                        x: -1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    size: Size3 {
+                        x: 1.6,
+                        y: 1.6,
+                        z: 3.0,
+                    },
+                    mounting: Mounting::ThroughHole,
+                    drill: Some(0.8),
+                },
+                Lead {
+                    number: "2".into(),
+                    position: Point3 {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    size: Size3 {
+                        x: 1.6,
+                        y: 1.6,
+                        z: 3.0,
+                    },
+                    mounting: Mounting::ThroughHole,
+                    drill: Some(0.8),
+                },
+            ],
+            markers: vec![Marker {
+                kind: MarkerKind::NegativeStripe,
+                position: Point3 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 11.0,
                 },
             }],
         }
@@ -474,6 +703,18 @@ mod tests {
         assert_eq!(face_count, 6 * 3);
     }
 
+    #[test]
+    fn cylinder_body_produces_one_brep_with_segments_plus_two_faces() {
+        let step = generate_step(&tiny_cylinder_geometry(), "TEST").unwrap();
+        let brep_count = step.matches("MANIFOLD_SOLID_BREP(").count();
+        // 1 cylinder body + 2 box leads = 3 solids.
+        assert_eq!(brep_count, 3);
+        let face_count = step.matches("ADVANCED_FACE(").count();
+        // A box is this same "N sides + 2 caps" formula's N=4 case
+        // (4+2=6, matching `has_six_faces_per_box` above exactly).
+        assert_eq!(face_count, (STEP_CYLINDER_SEGMENTS as usize + 2) + 6 * 2);
+    }
+
     /// Independent geometric consistency check: for every ADVANCED_FACE in
     /// the output, walks its EDGE_LOOP (respecting each ORIENTED_EDGE's
     /// sense) to get the polygon's vertices, computes the normal implied
@@ -493,12 +734,44 @@ mod tests {
     fn every_face_winding_matches_its_declared_normal() {
         let step = generate_step(&tiny_geometry(), "TEST").unwrap();
         let entities = parse_entities(&step);
+        let advanced_face_count = entities
+            .values()
+            .filter(|(ty, _)| ty == "ADVANCED_FACE")
+            .count();
+        assert_eq!(advanced_face_count, 6 * 3);
+        assert_winding_is_consistent(&entities);
+    }
 
+    /// Same check as `every_face_winding_matches_its_declared_normal`,
+    /// but against a `BodyShape::Cylinder` body -- `write_prism`'s side
+    /// faces compute their own normal per segment (unlike a box's
+    /// hardcoded axis-aligned ones), so this is the one case where a
+    /// declared-vs-computed-normal mismatch is a realistic risk, not
+    /// just a defensive check.
+    #[test]
+    fn cylinder_face_winding_matches_its_declared_normal() {
+        let step = generate_step(&tiny_cylinder_geometry(), "TEST").unwrap();
+        let entities = parse_entities(&step);
+        // segments side faces + 2 caps for the cylinder body, plus 6
+        // for each of the 2 box leads.
+        let advanced_face_count = entities
+            .values()
+            .filter(|(ty, _)| ty == "ADVANCED_FACE")
+            .count();
+        assert_eq!(
+            advanced_face_count,
+            (STEP_CYLINDER_SEGMENTS as usize + 2) + 6 * 2
+        );
+        assert_winding_is_consistent(&entities);
+    }
+
+    fn assert_winding_is_consistent(
+        entities: &std::collections::HashMap<u32, (String, Vec<String>)>,
+    ) {
         let advanced_faces: Vec<(&u32, &(String, Vec<String>))> = entities
             .iter()
             .filter(|(_, (ty, _))| ty == "ADVANCED_FACE")
             .collect();
-        assert_eq!(advanced_faces.len(), 6 * 3);
 
         for (face_id, (_, face_args)) in advanced_faces {
             let bound_id = parse_ref(strip_outer_parens(&face_args[1]));

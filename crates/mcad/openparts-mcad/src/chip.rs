@@ -1,4 +1,4 @@
-use crate::{Body, Lead, McadError, MechanicalGeometry, Point3, Size3};
+use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
 /// Generator default: typical end-termination length for a small
@@ -51,6 +51,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             y: body_w,
             z: body_h,
         },
+        shape: BodyShape::Box,
     };
 
     let term_len = DEFAULT_TERMINATION_LENGTH_MM.min(body_len / 2.0);
@@ -69,6 +70,8 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: body_h / 2.0,
             },
             size: term_size,
+            mounting: Mounting::Smd,
+            drill: None,
         },
         Lead {
             number: "2".to_string(),
@@ -78,6 +81,8 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: body_h / 2.0,
             },
             size: term_size,
+            mounting: Mounting::Smd,
+            drill: None,
         },
     ];
 

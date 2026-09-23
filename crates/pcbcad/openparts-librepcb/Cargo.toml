@@ -5,5 +5,6 @@ edition.workspace = true
 
 [dependencies]
 openparts-pcbcad = { path = "../openparts-pcbcad" }
+openparts-mcad = { path = "../../mcad/openparts-mcad" }
 thiserror = { workspace = true }
 uuid = { version = "1", features = ["v5"] }

@@ -172,7 +172,7 @@ fn render_package(
     out.push_str(" (deprecated false)\n");
     out.push_str(" (generated_by \"\")\n");
     out.push_str(&format!(" (category {})\n", fmt_uuid(pkgcat_uuid)));
-    out.push_str(" (assembly_type smt)\n");
+    out.push_str(&format!(" (assembly_type {})\n", assembly_type(footprint)));
     out.push_str(" (grid_interval 2.54)\n");
     out.push_str(" (min_copper_clearance 0.15)\n");
 
@@ -195,18 +195,64 @@ fn render_package(
             "  (pad {} (side top) (shape roundrect)\n",
             fmt_uuid(pad_uuid)
         ));
+        // LibrePCB has no separate "circle" pad shape -- a pad is
+        // always `roundrect`, and `radius` (a 0.0-1.0 "how rounded"
+        // scale, per LibrePCB/librepcb-parts-generator's own
+        // `ShapeRadius`) controls how round it looks: 0.0 for a sharp
+        // `PadShape::Rect` (today's behavior, unchanged), 1.0 (fully
+        // rounded) for `PadShape::Circle`.
+        let radius = match pad.shape {
+            openparts_pcbcad::PadShape::Rect => 0.0,
+            openparts_pcbcad::PadShape::Circle => 1.0,
+        };
         out.push_str(&format!(
-            "   (position {:.3} {:.3}) (rotation 0.0) (size {:.3} {:.3}) (radius 0.0)\n",
+            "   (position {:.3} {:.3}) (rotation 0.0) (size {:.3} {:.3}) (radius {radius:.1})\n",
             pad.position.x, pad.position.y, pad.size.0, pad.size.1
         ));
         out.push_str(
             "   (stop_mask auto) (solder_paste auto) (clearance 0.0) (function standard)\n",
         );
         out.push_str(&format!("   (package_pad {})\n", fmt_uuid(pad_uuid)));
+        // LibrePCB has no separate through-hole pad type either -- a
+        // pad becomes through-hole by attaching a `hole` child (a
+        // single centered vertex for a plain round drill), matching
+        // `PadHole`/`Vertex`'s own `__str__` output in
+        // LibrePCB/librepcb-parts-generator's `entities/package.py`
+        // and `entities/common.py` exactly.
+        if pad.mounting == openparts_mcad::Mounting::ThroughHole {
+            let drill = pad
+                .drill
+                .expect("through-hole pad must have a drill diameter");
+            let hole_uuid = uuid_gen::derive(&format!("pkg-pad-hole:{mpn}:{}", pad.number));
+            out.push_str(&format!(
+                "   (hole {} (diameter {drill:.3}) (vertex (position 0.0 0.0) (angle 0.0)))\n",
+                fmt_uuid(hole_uuid)
+            ));
+        }
         out.push_str("  )\n");
     }
     out.push_str(" )\n)\n");
     out
+}
+
+/// LibrePCB's real `AssemblyType` enum (`none | tht | smt | mixed |
+/// other | auto`, per LibrePCB/librepcb-parts-generator's
+/// `entities/package.py`) -- this project doesn't yet have a mixed-
+/// mounting family, so `tht`/`smt` cover every real case today and
+/// `mixed` is future-proofing, not exercised yet.
+fn assembly_type(footprint: &PcbFootprint) -> &'static str {
+    let (mut has_smd, mut has_tht) = (false, false);
+    for pad in &footprint.pads {
+        match pad.mounting {
+            openparts_mcad::Mounting::Smd => has_smd = true,
+            openparts_mcad::Mounting::ThroughHole => has_tht = true,
+        }
+    }
+    match (has_smd, has_tht) {
+        (true, true) => "mixed",
+        (false, true) => "tht",
+        _ => "smt",
+    }
 }
 
 fn render_component(
@@ -446,12 +492,16 @@ mod tests {
                     position: Point2 { x: -1.0, y: 0.0 },
                     size: (0.4, 0.25),
                     shape: PadShape::Rect,
+                    mounting: openparts_mcad::Mounting::Smd,
+                    drill: None,
                 },
                 Pad {
                     number: "2".into(),
                     position: Point2 { x: 1.0, y: 0.0 },
                     size: (0.4, 0.25),
                     shape: PadShape::Rect,
+                    mounting: openparts_mcad::Mounting::Smd,
+                    drill: None,
                 },
             ],
             graphics: vec![],
@@ -494,6 +544,69 @@ mod tests {
         // 2 abstract pads + 2 footprint pads = 4 "(pad " occurrences.
         assert_eq!(package_lp.matches("(pad ").count(), 4);
         assert_eq!(package_lp.matches("(footprint ").count(), 1);
+    }
+
+    fn synthetic_through_hole_footprint() -> PcbFootprint {
+        PcbFootprint {
+            name: "TEST".into(),
+            pads: vec![
+                Pad {
+                    number: "1".into(),
+                    position: Point2 { x: -1.0, y: 0.0 },
+                    size: (1.6, 1.6),
+                    shape: PadShape::Rect,
+                    mounting: openparts_mcad::Mounting::ThroughHole,
+                    drill: Some(0.8),
+                },
+                Pad {
+                    number: "2".into(),
+                    position: Point2 { x: 1.0, y: 0.0 },
+                    size: (1.6, 1.6),
+                    shape: PadShape::Circle,
+                    mounting: openparts_mcad::Mounting::ThroughHole,
+                    drill: Some(0.8),
+                },
+            ],
+            graphics: vec![],
+            courtyard: None,
+        }
+    }
+
+    #[test]
+    fn through_hole_package_gets_tht_assembly_type_and_a_hole_per_pad() {
+        let files = generate_library(
+            "TESTPART",
+            &synthetic_symbol(),
+            &synthetic_through_hole_footprint(),
+        );
+        let package_lp = &files
+            .iter()
+            .find(|f| f.path.ends_with("package.lp"))
+            .unwrap()
+            .content;
+        assert!(package_lp.contains("(assembly_type tht)"));
+        // One (hole ...) per footprint pad (the 2 abstract package-level
+        // pads have no hole -- only the footprint's own pad instances
+        // do), each with the expected drill diameter.
+        assert_eq!(package_lp.matches("(hole ").count(), 2);
+        assert_eq!(package_lp.matches("(diameter 0.800)").count(), 2);
+        // Pin 1 stays sharp (radius 0.0), pin 2 (Circle) is fully
+        // rounded (radius 1.0) -- matches build_footprint's own
+        // pin1-squared/rest-round convention.
+        assert!(package_lp.contains("(radius 0.0)"));
+        assert!(package_lp.contains("(radius 1.0)"));
+    }
+
+    #[test]
+    fn smd_package_still_gets_smt_assembly_type() {
+        let files = generate_library("TESTPART", &synthetic_symbol(), &synthetic_footprint());
+        let package_lp = &files
+            .iter()
+            .find(|f| f.path.ends_with("package.lp"))
+            .unwrap()
+            .content;
+        assert!(package_lp.contains("(assembly_type smt)"));
+        assert!(!package_lp.contains("(hole "));
     }
 
     #[test]

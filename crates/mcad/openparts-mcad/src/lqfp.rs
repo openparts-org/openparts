@@ -1,4 +1,7 @@
-use crate::{Body, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Point3, Size3};
+use crate::{
+    Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
+    Size3,
+};
 use openparts_core::Package;
 
 /// Engineering defaults used only when the datasheet doesn't supply a
@@ -70,6 +73,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
             y: body_l,
             z: body_h,
         },
+        shape: BodyShape::Box,
     };
 
     let span = (pins_per_side as f64 - 1.0) * pitch;
@@ -100,6 +104,8 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
             },
             size: lead_size_along,
+            mounting: Mounting::Smd,
+            drill: None,
         });
         pin_num += 1;
     }
@@ -114,6 +120,8 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
             },
             size: lead_size_perp,
+            mounting: Mounting::Smd,
+            drill: None,
         });
         pin_num += 1;
     }
@@ -128,6 +136,8 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
             },
             size: lead_size_along,
+            mounting: Mounting::Smd,
+            drill: None,
         });
         pin_num += 1;
     }
@@ -142,6 +152,8 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
                 z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
             },
             size: lead_size_perp,
+            mounting: Mounting::Smd,
+            drill: None,
         });
         pin_num += 1;
     }

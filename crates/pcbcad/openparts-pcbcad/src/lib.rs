@@ -106,6 +106,7 @@ pub struct PcbSymbol {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PadShape {
     Rect,
+    Circle,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -114,6 +115,12 @@ pub struct Pad {
     pub position: Point2,
     pub size: (f64, f64),
     pub shape: PadShape,
+    /// SMD or through-hole -- taken straight from the generating
+    /// `Lead`'s own `mounting` (already a dependency of this crate).
+    pub mounting: openparts_mcad::Mounting,
+    /// Drill diameter (mm). `Some` only when `mounting` is
+    /// `ThroughHole`.
+    pub drill: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -662,18 +669,37 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 /// Builds a Footprint by projecting Mechanical Geometry leads onto the
 /// XY plane. Lead size/position from the generator already encode the
 /// correct per-side orientation, so no rotation is needed here.
+///
+/// Pad shape: an SMD lead always gets `Rect` (unchanged from before
+/// through-hole support existed). A through-hole lead's shape marks
+/// polarity the same way a real KiCad footprint does -- confirmed
+/// directly against `KiCad/kicad-footprints`'
+/// `Capacitor_THT.pretty/CP_Radial_D5.0mm_P2.00mm.kicad_mod`: pin "1"
+/// (positive) is `rect`, every other pin is `circle`. Applied
+/// generically here (any through-hole part's pin 1, not hardcoded to
+/// radial capacitors specifically), matching how `MarkerKind::Pin1Dot`
+/// is already a generic, family-agnostic concept.
 pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprint {
     let pads = geometry
         .leads
         .iter()
-        .map(|lead| Pad {
-            number: lead.number.clone(),
-            position: Point2 {
-                x: lead.position.x,
-                y: lead.position.y,
-            },
-            size: (lead.size.x, lead.size.y),
-            shape: PadShape::Rect,
+        .map(|lead| {
+            let shape = match lead.mounting {
+                openparts_mcad::Mounting::Smd => PadShape::Rect,
+                openparts_mcad::Mounting::ThroughHole if lead.number == "1" => PadShape::Rect,
+                openparts_mcad::Mounting::ThroughHole => PadShape::Circle,
+            };
+            Pad {
+                number: lead.number.clone(),
+                position: Point2 {
+                    x: lead.position.x,
+                    y: lead.position.y,
+                },
+                size: (lead.size.x, lead.size.y),
+                shape,
+                mounting: lead.mounting,
+                drill: lead.drill,
+            }
         })
         .collect();
 
@@ -1453,7 +1479,7 @@ mod tests {
 
     #[test]
     fn footprint_pad_count_matches_lead_count() {
-        use openparts_mcad::{Body, Lead, MechanicalGeometry, Point3, Size3};
+        use openparts_mcad::{Body, BodyShape, Lead, MechanicalGeometry, Mounting, Point3, Size3};
         let geometry = MechanicalGeometry {
             body: Body {
                 position: Point3 {
@@ -1466,6 +1492,7 @@ mod tests {
                     y: 1.0,
                     z: 1.0,
                 },
+                shape: BodyShape::Box,
             },
             leads: vec![Lead {
                 number: "1".into(),
@@ -1479,6 +1506,8 @@ mod tests {
                     y: 0.2,
                     z: 0.1,
                 },
+                mounting: Mounting::Smd,
+                drill: None,
             }],
             markers: vec![],
         };
@@ -1487,5 +1516,91 @@ mod tests {
         assert_eq!(footprint.pads[0].number, "1");
         assert_eq!(footprint.pads[0].position, Point2 { x: 1.0, y: 2.0 });
         assert_eq!(footprint.pads[0].size, (0.3, 0.2));
+    }
+
+    #[test]
+    fn through_hole_pin_1_is_squared_and_the_rest_are_round() {
+        // Matches a real KiCad reference footprint's own convention
+        // (KiCad/kicad-footprints, Capacitor_THT.pretty/
+        // CP_Radial_D5.0mm_P2.00mm.kicad_mod: pin 1 "rect", pin 2
+        // "circle") -- applied generically to any through-hole part's
+        // pin 1, not hardcoded to radial capacitors.
+        use openparts_mcad::{Body, BodyShape, Lead, MechanicalGeometry, Mounting, Point3, Size3};
+        let lead = |number: &str, x: f64| Lead {
+            number: number.into(),
+            position: Point3 { x, y: 0.0, z: 0.0 },
+            size: Size3 {
+                x: 1.6,
+                y: 1.6,
+                z: 3.0,
+            },
+            mounting: Mounting::ThroughHole,
+            drill: Some(0.8),
+        };
+        let geometry = MechanicalGeometry {
+            body: Body {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                size: Size3 {
+                    x: 5.0,
+                    y: 5.0,
+                    z: 11.0,
+                },
+                shape: BodyShape::Cylinder,
+            },
+            leads: vec![lead("1", -1.0), lead("2", 1.0)],
+            markers: vec![],
+        };
+        let footprint = build_footprint("EX1", &geometry);
+        let pad1 = footprint.pads.iter().find(|p| p.number == "1").unwrap();
+        let pad2 = footprint.pads.iter().find(|p| p.number == "2").unwrap();
+        assert_eq!(pad1.shape, PadShape::Rect);
+        assert_eq!(pad2.shape, PadShape::Circle);
+        for pad in &footprint.pads {
+            assert_eq!(pad.mounting, Mounting::ThroughHole);
+            assert_eq!(pad.drill, Some(0.8));
+        }
+    }
+
+    #[test]
+    fn smd_leads_stay_rect_regardless_of_pin_number() {
+        use openparts_mcad::{Body, BodyShape, Lead, MechanicalGeometry, Mounting, Point3, Size3};
+        let lead = |number: &str, x: f64| Lead {
+            number: number.into(),
+            position: Point3 { x, y: 0.0, z: 0.0 },
+            size: Size3 {
+                x: 0.5,
+                y: 0.3,
+                z: 0.1,
+            },
+            mounting: Mounting::Smd,
+            drill: None,
+        };
+        let geometry = MechanicalGeometry {
+            body: Body {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                size: Size3 {
+                    x: 1.6,
+                    y: 0.8,
+                    z: 0.45,
+                },
+                shape: BodyShape::Box,
+            },
+            leads: vec![lead("1", -0.5), lead("2", 0.5)],
+            markers: vec![],
+        };
+        let footprint = build_footprint("EX1", &geometry);
+        for pad in &footprint.pads {
+            assert_eq!(pad.shape, PadShape::Rect);
+            assert_eq!(pad.mounting, Mounting::Smd);
+            assert_eq!(pad.drill, None);
+        }
     }
 }

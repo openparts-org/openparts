@@ -551,6 +551,7 @@ dependencies = [
 name = "openparts-kicad"
 version = "0.1.0"
 dependencies = [
+ "openparts-mcad",
  "openparts-pcbcad",
 ]
 
@@ -558,6 +559,7 @@ dependencies = [
 name = "openparts-librepcb"
 version = "0.1.0"
 dependencies = [
+ "openparts-mcad",
  "openparts-pcbcad",
  "thiserror",
  "uuid",
