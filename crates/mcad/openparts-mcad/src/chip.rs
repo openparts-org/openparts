@@ -128,6 +128,7 @@ mod tests {
                 }),
                 exposed_pad: None,
             },
+            lead_layout: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

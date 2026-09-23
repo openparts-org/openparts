@@ -229,6 +229,7 @@ mod tests {
                     },
                 }),
             },
+            lead_layout: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

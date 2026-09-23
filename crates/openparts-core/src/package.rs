@@ -56,6 +56,16 @@ pub struct Package {
     pub lead_count: u32,
     pub pitch: Dimension,
     pub dimensions: PackageDimensions,
+    /// Explicit per-side lead counts, in pin-number order starting from
+    /// the pin-1 side, for families whose physical pin-to-side
+    /// assignment isn't uniquely derivable from `lead_count` alone
+    /// (Canonical Data Specification section 20) -- e.g. SOT's
+    /// asymmetric 2-sided layout, where vendors disagree on which side
+    /// gets the lower numbers. Not needed by families with a fixed or
+    /// symmetric convention (lqfp, qfn, soic all split `lead_count`
+    /// evenly and don't use this field).
+    #[serde(default)]
+    pub lead_layout: Option<Vec<u32>>,
     #[serde(default)]
     pub geometry: Option<PackageGeometrySpec>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]

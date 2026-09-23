@@ -152,6 +152,7 @@ mod tests {
                 body_height: None,
                 exposed_pad: None,
             },
+            lead_layout: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

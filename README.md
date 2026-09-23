@@ -13,8 +13,9 @@ API/database lives in `openparts-server`.
 
 First Vertical Slice (Architecture Specification section 32):
 Canonical YAML -> Parser -> Validator -> Effective Model -> KiCad + STEP.
-Package support currently covers LQFP, QFN, and chip (2-terminal)
-families; other families (SOIC, SOT, BGA, ...) are not implemented yet.
+Package support currently covers LQFP, QFN, chip (2-terminal), SOIC,
+and SOT families; other families (TSSOP, BGA, ...) are not implemented
+yet.
 
 The CLI's `generate`/`validate`/`search`/`show` subcommands are
 implemented; `provenance`, `diff`, `install`, `update`, and `bundle`

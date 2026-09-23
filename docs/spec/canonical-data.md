@@ -514,6 +514,39 @@ dimensions:
 
 Package Parameter NameはCanonical Vocabularyとして段階的に標準化する。
 
+`lead_layout`（省略可）は、`lead_count`だけでは物理的なピン配置（どちら側に何本か）
+を一意に決められないPackage Family向けの明示フィールドである。例えばSOT-23のような
+非対称2辺配置は、物理形状自体はJEDEC標準でほぼ共通だが、どちら側から採番するかは
+ベンダーによって流儀が分かれる（統一規格ではない）。このようなFamilyでは、Geometry
+Generatorが黙って多数派の慣習を仮定することはせず、`lead_layout`が無ければ生成を
+停止する（Testing and Quality Specification: 一意に安全な生成結果を決められない
+操作は停止する）。
+
+```yaml
+schema_version: "0.1"
+kind: package
+id: standards/SOT23-3
+
+family: sot
+lead_count: 3
+lead_layout: [2, 1]   # pin 1-2側の本数, pin 3側の本数 (pin番号順)
+
+pitch:
+  nominal: 0.95
+  unit: mm
+
+dimensions:
+  body_width:
+    nominal: 1.3
+    unit: mm
+  body_length:
+    nominal: 2.9
+    unit: mm
+```
+
+`lqfp`/`qfn`/`soic`のように`lead_count`から均等に辺数で割り切れるFamilyは
+`lead_layout`を必要としない。
+
 ---
 
 # 21. Package Geometry

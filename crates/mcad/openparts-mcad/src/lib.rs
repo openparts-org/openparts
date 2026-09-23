@@ -7,10 +7,14 @@
 mod chip;
 mod lqfp;
 mod qfn;
+mod soic;
+mod sot;
 
 pub use chip::generate_chip;
 pub use lqfp::generate_lqfp;
 pub use qfn::generate_qfn;
+pub use soic::generate_soic;
+pub use sot::generate_sot;
 
 use openparts_core::Package;
 
@@ -21,6 +25,8 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "lqfp" => generate_lqfp(package),
         "qfn" => generate_qfn(package),
         "chip" => generate_chip(package),
+        "soic" => generate_soic(package),
+        "sot" => generate_sot(package),
         _ => Err(McadError::UnsupportedFamily(package.family.clone())),
     }
 }
@@ -75,7 +81,9 @@ pub struct MechanicalGeometry {
 
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
-    #[error("package family \"{0}\" has no supported generator (lqfp, qfn, chip are implemented)")]
+    #[error(
+        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot are implemented)"
+    )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]
     UnsupportedGenerator(String),
@@ -83,4 +91,15 @@ pub enum McadError {
     MissingDimension(&'static str),
     #[error("lead_count ({0}) is not valid for this package family")]
     InvalidLeadCount(u32),
+    /// SOT-family packages: the physical pin-to-side assignment isn't
+    /// derivable from `lead_count` alone (vendors disagree on which
+    /// side gets the lower numbers for asymmetric layouts like SOT-23's
+    /// 2-vs-1 split) -- see `Package::lead_layout`'s docs.
+    #[error(
+        "family \"{family}\" requires an explicit lead_layout (its physical pin-to-side \
+         assignment isn't derivable from lead_count alone)"
+    )]
+    MissingLeadLayout { family: String },
+    #[error("lead_layout {layout:?} does not sum to lead_count ({lead_count})")]
+    InvalidLeadLayout { layout: Vec<u32>, lead_count: u32 },
 }
