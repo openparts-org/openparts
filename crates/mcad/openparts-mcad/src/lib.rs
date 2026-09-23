@@ -4,19 +4,23 @@
 //! all derive their output from; STEP/STL/glTF are never themselves the
 //! canonical geometry.
 
+mod axial;
 mod chip;
 mod lqfp;
 mod qfn;
 mod radial;
 mod soic;
 mod sot;
+mod to92;
 
+pub use axial::generate_axial;
 pub use chip::generate_chip;
 pub use lqfp::generate_lqfp;
 pub use qfn::generate_qfn;
 pub use radial::generate_radial;
 pub use soic::generate_soic;
 pub use sot::generate_sot;
+pub use to92::generate_to92;
 
 use openparts_core::Package;
 
@@ -30,6 +34,8 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "soic" => generate_soic(package),
         "sot" => generate_sot(package),
         "radial" => generate_radial(package),
+        "axial" => generate_axial(package),
+        "to92" => generate_to92(package),
         _ => Err(McadError::UnsupportedFamily(package.family.clone())),
     }
 }
@@ -51,13 +57,19 @@ pub struct Size3 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BodyShape {
     Box,
-    /// An exact cylinder -- `size.x`/`size.y` (equal) are the diameter,
-    /// `size.z` is the height. Deliberately exact, not pre-tessellated:
-    /// turning this into a renderable shape (a true curved STEP surface,
-    /// or a tessellated STL mesh) is `openparts-brep`'s job, not a fact
-    /// about the part, so that choice belongs downstream, not to this
-    /// shared geometry model.
+    /// An exact cylinder, axis along Z (vertical -- "standing up" on the
+    /// board, e.g. a radial electrolytic can) -- `size.x`/`size.y`
+    /// (equal) are the diameter, `size.z` is the height. Deliberately
+    /// exact, not pre-tessellated: turning this into a renderable shape
+    /// (a true curved STEP surface, or a tessellated STL mesh) is
+    /// `openparts-brep`'s job, not a fact about the part, so that choice
+    /// belongs downstream, not to this shared geometry model.
     Cylinder,
+    /// Same as `Cylinder`, but lying on its side with its axis along X
+    /// (horizontal -- e.g. an axial-leaded diode) -- `size.x` is the
+    /// height (length along the axis), `size.y`/`size.z` (equal) are
+    /// the diameter.
+    CylinderX,
 }
 
 /// A box (or cylinder -- see `BodyShape`) centered at `position` (mm).
@@ -114,7 +126,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot, radial are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot, radial, axial, to92 are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]

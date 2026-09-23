@@ -39,6 +39,11 @@ fn build_body(body: &Body) -> Solid {
             body.size.x, // diameter (== size.y)
             body.size.z, // height
         ),
+        BodyShape::CylinderX => build_cylinder_x(
+            center,
+            body.size.y, // diameter (== size.z)
+            body.size.x, // length (along X)
+        ),
     }
 }
 
@@ -91,6 +96,26 @@ fn build_cylinder(center: [f64; 3], diameter: f64, height: f64) -> Solid {
          circular wire, so attaching a planar disk face to it cannot fail",
     );
     builder::tsweep(&disk, Vector3::new(0.0, 0.0, height))
+}
+
+/// Same construction as `build_cylinder`, but lying on its side: axis
+/// along X instead of Z (matching `BodyShape::CylinderX`, e.g. an
+/// axial-leaded diode can). The rim point is offset in Y instead of X,
+/// the revolution axis is `unit_x()` instead of `unit_z()`, and the
+/// final extrusion runs along X instead of Z -- otherwise identical.
+fn build_cylinder_x(center: [f64; 3], diameter: f64, length: f64) -> Solid {
+    let radius = diameter / 2.0;
+    let base_x = center[0] - length / 2.0;
+    let axis_origin = Point3::new(base_x, center[1], center[2]);
+    let rim_point = Point3::new(base_x, center[1] + radius, center[2]);
+
+    let vertex = builder::vertex(rim_point);
+    let circle = builder::rsweep(&vertex, axis_origin, Vector3::unit_x(), Rad(7.0));
+    let disk = builder::try_attach_plane(&[circle]).expect(
+        "rsweep of a single vertex around a distinct axis always yields a valid closed \
+         circular wire, so attaching a planar disk face to it cannot fail",
+    );
+    builder::tsweep(&disk, Vector3::new(length, 0.0, 0.0))
 }
 
 #[cfg(test)]
@@ -205,5 +230,71 @@ mod tests {
             );
         }
         assert!(saw_a_vertex, "cylinder solid has no vertices at all");
+    }
+
+    fn cylinder_x_geometry() -> MechanicalGeometry {
+        MechanicalGeometry {
+            body: Body {
+                position: McadPoint3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.35,
+                },
+                size: Size3 {
+                    x: 5.2,
+                    y: 2.7,
+                    z: 2.7,
+                },
+                shape: BodyShape::CylinderX,
+            },
+            leads: vec![],
+            markers: vec![],
+        }
+    }
+
+    /// Same check as `cylinder_vertices_sit_on_the_can_surface`, but for
+    /// the horizontal orientation: every vertex must sit on the can's
+    /// radius in the Y-Z plane (not X-Y), and within its length along X
+    /// (not height along Z) -- confirms the axis really did move, not
+    /// just get relabeled.
+    #[test]
+    fn cylinder_x_vertices_sit_on_the_can_surface_and_are_wider_in_x_than_y_or_z() {
+        let geometry = cylinder_x_geometry();
+        let brep = build(&geometry);
+        let radius = geometry.body.size.y / 2.0;
+        let half_length = geometry.body.size.x / 2.0;
+        let center_x = geometry.body.position.x;
+        let center_y = geometry.body.position.y;
+        let center_z = geometry.body.position.z;
+
+        let mut min_x = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        let mut saw_a_vertex = false;
+        for v in brep.body.vertex_iter() {
+            saw_a_vertex = true;
+            let p = v.point();
+            let r = ((p.y - center_y).powi(2) + (p.z - center_z).powi(2)).sqrt();
+            assert!(
+                (r - radius).abs() < 1e-6,
+                "vertex {p:?} not on the can radius {radius}"
+            );
+            let x = p.x - center_x;
+            assert!(
+                x.abs() <= half_length + 1e-6,
+                "vertex {p:?} outside the can's length"
+            );
+            min_x = min_x.min(p.x);
+            max_x = max_x.max(p.x);
+            min_y = min_y.min(p.y);
+            max_y = max_y.max(p.y);
+        }
+        assert!(saw_a_vertex, "cylinder solid has no vertices at all");
+        // Bounding box must be longer in X (the can's length, 5.2mm)
+        // than in Y (the can's diameter, 2.7mm) -- proves the axis is
+        // genuinely horizontal, not a vertical cylinder that happens to
+        // pass the radius/length checks above by coincidence.
+        assert!(max_x - min_x > max_y - min_y);
     }
 }
