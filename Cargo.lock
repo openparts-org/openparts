@@ -496,6 +496,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "openparts-client",
  "openparts-core",
  "openparts-data",
  "openparts-kicad",

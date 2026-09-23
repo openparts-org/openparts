@@ -8,6 +8,17 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+    /// openparts-server instance used by network-dependent subcommands
+    /// (search, show). openparts-server is optional (Architecture
+    /// Specification section 4.8) -- every other subcommand works
+    /// entirely offline against local `openparts-data` files.
+    #[arg(
+        long,
+        global = true,
+        env = "OPENPARTS_REGISTRY_URL",
+        default_value = "http://127.0.0.1:8080"
+    )]
+    registry: String,
 }
 
 #[derive(Subcommand)]
@@ -79,6 +90,8 @@ fn main() -> anyhow::Result<()> {
             package,
             sources,
         } => cmd_validate(part, device, package, sources),
+        Commands::Search { query } => cmd_search(&cli.registry, &query),
+        Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
         _ => {
             eprintln!(
                 "this subcommand is not implemented yet (Architecture Specification section 7.5)"
@@ -148,6 +161,59 @@ fn cmd_validate(
         print_diagnostics(&diags);
         anyhow::bail!("{} validation diagnostic(s)", diags.len());
     }
+}
+
+/// `openparts search <query>` (Architecture Specification section 7.5).
+/// Talks to `openparts-server` via `openparts-client`, the crate the
+/// rest of the workspace already relies on to abstract this instead of
+/// each integration reimplementing its own HTTP handling (section 7.4).
+fn cmd_search(registry: &str, query: &str) -> anyhow::Result<()> {
+    let client = openparts_client::Client::new(registry);
+    let results = client
+        .search(query)
+        .with_context(|| format!("searching {registry} for {query:?}"))?;
+    if results.is_empty() {
+        println!("no parts matched {query:?}");
+        return Ok(());
+    }
+    for part in &results {
+        println!(
+            "{}/{}  existence={:?}  lifecycle={:?}",
+            part.manufacturer, part.mpn, part.existence, part.lifecycle
+        );
+    }
+    println!("{} part(s) found", results.len());
+    Ok(())
+}
+
+/// `openparts show <manufacturer>/<mpn>` (Architecture Specification
+/// section 7.5).
+fn cmd_show(registry: &str, manufacturer: &str, mpn: &str) -> anyhow::Result<()> {
+    let client = openparts_client::Client::new(registry);
+    let part = client
+        .get_part(manufacturer, mpn)
+        .with_context(|| format!("fetching {manufacturer}/{mpn} from {registry}"))?;
+    println!("id:          {}", part.id);
+    println!("manufacturer: {}", part.manufacturer);
+    println!("mpn:         {}", part.mpn);
+    println!("device:      {}", part.device);
+    println!("package:     {}", part.package);
+    println!("existence:   {:?}", part.existence.status);
+    println!("lifecycle:   {:?}", part.lifecycle.status);
+    if !part.lifecycle.replacement.is_empty() {
+        let replacements: Vec<String> = part
+            .lifecycle
+            .replacement
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        println!("replacement: {}", replacements.join(", "));
+    }
+    if !part.sources.is_empty() {
+        let sources: Vec<String> = part.sources.iter().map(ToString::to_string).collect();
+        println!("sources:     {}", sources.join(", "));
+    }
+    Ok(())
 }
 
 fn cmd_generate(
