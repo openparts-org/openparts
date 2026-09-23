@@ -207,6 +207,19 @@ type PinSpec = (f64, Option<String>);
 /// adjacent side's outermost pin at each of the symbol's four corners
 /// (e.g. the last power pin on top vs. the first bus pin on the right).
 ///
+/// Must exceed the largest natural half-extent this file computes
+/// anywhere (currently `electrical_type_half_extent`'s biggest value,
+/// ~4.9mm for "Bidirectional") -- `widen_corner_ends` only ever takes
+/// the *max* of this and a pin's own natural half-extent, so once this
+/// margin stops being the larger of the two it silently stops doing
+/// anything at that corner. That's exactly what happened when
+/// `electrical_type_half_extent` was introduced with this constant
+/// still at its original, now-too-small value: real corner clearance
+/// quietly reverted to "whatever the natural per-side sizing gives",
+/// undoing this margin's whole purpose without any test catching it
+/// (see `corner_margin_exceeds_every_natural_half_extent` below, added
+/// specifically because this broke silently once already).
+///
 /// KiCad draws more than just the pin name next to each pin -- it also
 /// shows the pin's electrical-type description (e.g. "power input"),
 /// which this crate has no way to measure the exact rendered size of.
@@ -215,7 +228,7 @@ type PinSpec = (f64, Option<String>);
 /// this margin targets exactly the place that's actually at risk: two
 /// perpendicular sides meeting at a corner, where the estimate errors
 /// on each axis compound. See `widen_corner_ends`.
-const CORNER_MARGIN_MM: f64 = 4.0;
+const CORNER_MARGIN_MM: f64 = 10.0;
 
 /// Widens the first and last entries of `specs` (a side's outermost
 /// pins, which sit closest to the symbol's corners) to at least
@@ -1015,6 +1028,39 @@ mod tests {
         let mut specs: Vec<PinSpec> = vec![(CORNER_MARGIN_MM + 5.0, None)];
         widen_corner_ends(&mut specs);
         assert_eq!(specs[0].0, CORNER_MARGIN_MM + 5.0);
+    }
+
+    /// `widen_corner_ends` only ever takes `max(natural, CORNER_MARGIN_MM)`
+    /// -- so if some pin's natural half-extent ever grows to meet or
+    /// exceed CORNER_MARGIN_MM, the margin silently stops adding
+    /// anything at that corner, with no visible signal that it happened.
+    /// This is exactly what broke real corner clearance once already
+    /// (electrical_type_half_extent's own values grew past the margin
+    /// that was supposed to pad *beyond* them). Guard against a repeat:
+    /// the margin must stay strictly larger than every natural
+    /// half-extent this file computes.
+    #[test]
+    fn corner_margin_exceeds_every_natural_half_extent() {
+        let largest_electrical_type_half_extent = [
+            PinElectricalType::Input,
+            PinElectricalType::Output,
+            PinElectricalType::Bidirectional,
+            PinElectricalType::PowerIn,
+            PinElectricalType::Passive,
+            PinElectricalType::NoConnect,
+            PinElectricalType::Unspecified,
+        ]
+        .into_iter()
+        .map(electrical_type_half_extent)
+        .fold(0.0, f64::max);
+
+        assert!(
+            CORNER_MARGIN_MM > largest_electrical_type_half_extent,
+            "CORNER_MARGIN_MM ({CORNER_MARGIN_MM}mm) must exceed the largest \
+             electrical-type half-extent ({largest_electrical_type_half_extent}mm), \
+             or widen_corner_ends becomes a no-op at that corner"
+        );
+        assert!(CORNER_MARGIN_MM > GRID_MM / 2.0);
     }
 
     /// Boundary-labeling sanity check (see this crate's discussion of
