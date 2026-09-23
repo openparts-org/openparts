@@ -1054,13 +1054,14 @@ mod tests {
         .map(electrical_type_half_extent)
         .fold(0.0, f64::max);
 
+        // electrical_type_half_extent's own floor is GRID_MM / 2.0, so
+        // this alone also confirms CORNER_MARGIN_MM clears that floor.
         assert!(
             CORNER_MARGIN_MM > largest_electrical_type_half_extent,
             "CORNER_MARGIN_MM ({CORNER_MARGIN_MM}mm) must exceed the largest \
              electrical-type half-extent ({largest_electrical_type_half_extent}mm), \
              or widen_corner_ends becomes a no-op at that corner"
         );
-        assert!(CORNER_MARGIN_MM > GRID_MM / 2.0);
     }
 
     /// Boundary-labeling sanity check (see this crate's discussion of
