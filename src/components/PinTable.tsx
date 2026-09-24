@@ -32,26 +32,29 @@ export default function PinTable({
           このデータの問題を報告
         </a>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>ピン番号</th>
-            <th>名前</th>
-            <th>種別</th>
-            <th>代替機能</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pinEntries.map(([number, pin]) => (
-            <tr key={number}>
-              <td>{number}</td>
-              <td>{pin.name}</td>
-              <td>{pin.type}</td>
-              <td>{pin.alternate_functions.join(", ") || "-"}</td>
+      <details class="pin-table-details">
+        <summary>{pinEntries.length}ピンを表示</summary>
+        <table>
+          <thead>
+            <tr>
+              <th>ピン番号</th>
+              <th>名前</th>
+              <th>種別</th>
+              <th>代替機能</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pinEntries.map(([number, pin]) => (
+              <tr key={number}>
+                <td>{number}</td>
+                <td>{pin.name}</td>
+                <td>{pin.type}</td>
+                <td>{pin.alternate_functions.join(", ") || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   );
 }

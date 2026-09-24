@@ -99,12 +99,6 @@ export interface ProvenanceEntry {
 // JSON-pointer-ish field path -> evidence entries
 export type ProvenanceMap = Record<string, ProvenanceEntry[]>;
 
-export interface ProvenanceResponse {
-  part: ProvenanceMap;
-  device: ProvenanceMap;
-  package: ProvenanceMap;
-}
-
 export interface RevisionSummary {
   id: string;
   manufacturer_revision: string;

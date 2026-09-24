@@ -6,7 +6,6 @@ import type {
   Package,
   Part,
   PartSummary,
-  ProvenanceResponse,
   RevisionSummary,
 } from "./types";
 
@@ -42,11 +41,6 @@ export const getPart = (manufacturer: string, mpn: string) =>
     `/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}`,
   );
 
-export const getProvenance = (manufacturer: string, mpn: string) =>
-  request<ProvenanceResponse>(
-    `/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}/provenance`,
-  );
-
 export const getRevisions = (manufacturer: string, mpn: string) =>
   request<RevisionSummary[]>(
     `/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}/revisions`,
@@ -71,3 +65,18 @@ export const artifactDownloadUrl = (
   kind: ArtifactKind,
 ) =>
   `${API_BASE}/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}/artifacts/${kind}`;
+
+export async function fetchArtifact(
+  manufacturer: string,
+  mpn: string,
+  kind: ArtifactKind,
+): Promise<Uint8Array> {
+  const res = await fetch(artifactDownloadUrl(manufacturer, mpn, kind));
+  if (!res.ok) {
+    const body: ApiErrorBody = await res
+      .json()
+      .catch(() => ({ error: res.statusText }));
+    throw new ApiError(res.status, body);
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}

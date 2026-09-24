@@ -184,6 +184,21 @@ td {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  align-items: center;
+}
+
+.artifact-buttons button {
+  font-family: inherit;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.artifact-hint {
+  margin-top: var(--space-2);
+  font-size: 0.9em;
 }
 
 .pin-table-header {
@@ -192,6 +207,17 @@ td {
   justify-content: space-between;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+.pin-table-details summary {
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.pin-table-details table {
+  margin-top: var(--space-2);
 }
 
 .search-input {

@@ -4,29 +4,20 @@ import {
   getDevice,
   getPackage,
   getPart,
-  getProvenance,
   getRevisions,
   listArtifacts,
 } from "../lib/api";
-import type {
-  Device,
-  Package,
-  Part,
-  ProvenanceResponse,
-  RevisionSummary,
-} from "../lib/types";
+import type { Device, Package, Part, RevisionSummary } from "../lib/types";
 import ArtifactDownloads from "./ArtifactDownloads";
 import ModelViewer from "./ModelViewer";
 import PackageDimensions from "./PackageDimensions";
 import PinTable from "./PinTable";
-import ProvenanceList from "./ProvenanceList";
 
 interface Loaded {
   part: Part;
   device: Device;
   pkg: Package;
   revisions: RevisionSummary[];
-  provenance: ProvenanceResponse;
 }
 
 function existenceBadgeClass(status: Part["existence"]["status"]): string {
@@ -88,14 +79,13 @@ export default function PartDetail() {
     async function load() {
       try {
         const part = await getPart(manufacturer, mpn);
-        const [device, pkg, revisions, provenance] = await Promise.all([
+        const [device, pkg, revisions] = await Promise.all([
           getDevice(part.device),
           getPackage(part.package),
           getRevisions(manufacturer, mpn),
-          getProvenance(manufacturer, mpn),
         ]);
         if (cancelled) return;
-        setData({ part, device, pkg, revisions, provenance });
+        setData({ part, device, pkg, revisions });
 
         // Artifact generation can 422 independently of the rest of the
         // part data (e.g. a missing dimension) -- don't let that hide
@@ -149,7 +139,7 @@ export default function PartDetail() {
     return <p class="text-muted">{errorMessage ?? "読み込みに失敗しました。"}</p>;
   }
 
-  const { part, device, pkg, revisions, provenance } = data;
+  const { part, device, pkg, revisions } = data;
 
   return (
     <div>
@@ -164,6 +154,11 @@ export default function PartDetail() {
           {part.lifecycle.status}
         </span>
       </div>
+
+      <section class="section">
+        <ArtifactDownloads manufacturer={part.manufacturer} mpn={part.mpn} />
+        {artifactsError && <p class="text-muted">{artifactsError}</p>}
+      </section>
 
       <section class="section">
         <h3>3Dプレビュー</h3>
@@ -189,19 +184,6 @@ export default function PartDetail() {
 
       <section class="section">
         <PackageDimensions pkg={pkg} />
-      </section>
-
-      <section class="section">
-        <ArtifactDownloads manufacturer={part.manufacturer} mpn={part.mpn} />
-        {artifactsError && <p class="text-muted">{artifactsError}</p>}
-      </section>
-
-      <section class="section">
-        <ProvenanceList
-          part={provenance.part}
-          device={provenance.device}
-          pkg={provenance.package}
-        />
       </section>
     </div>
   );
