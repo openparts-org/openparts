@@ -5,19 +5,25 @@
 //! canonical geometry.
 
 mod axial;
+mod bga;
 mod chip;
+mod dip;
 mod lqfp;
 mod qfn;
 mod radial;
+mod sip;
 mod soic;
 mod sot;
 mod to92;
 
 pub use axial::generate_axial;
+pub use bga::generate_bga;
 pub use chip::generate_chip;
+pub use dip::generate_dip;
 pub use lqfp::generate_lqfp;
 pub use qfn::generate_qfn;
 pub use radial::generate_radial;
+pub use sip::generate_sip;
 pub use soic::generate_soic;
 pub use sot::generate_sot;
 pub use to92::generate_to92;
@@ -36,6 +42,9 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "radial" => generate_radial(package),
         "axial" => generate_axial(package),
         "to92" => generate_to92(package),
+        "dip" => generate_dip(package),
+        "sip" => generate_sip(package),
+        "bga" => generate_bga(package),
         _ => Err(McadError::UnsupportedFamily(package.family.clone())),
     }
 }
@@ -126,7 +135,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot, radial, axial, to92 are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot, radial, axial, to92, dip, sip, bga are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]
@@ -144,6 +153,17 @@ pub enum McadError {
          assignment isn't derivable from lead_count alone)"
     )]
     MissingLeadLayout { family: String },
-    #[error("lead_layout {layout:?} does not sum to lead_count ({lead_count})")]
+    /// Reused by both `sot` (where `layout` must sum to `lead_count`)
+    /// and `bga` (where `layout` is `[rows, cols]` and must multiply to
+    /// `lead_count`) -- the message stays generic across both meanings.
+    #[error("lead_layout {layout:?} is not valid for lead_count ({lead_count})")]
     InvalidLeadLayout { layout: Vec<u32>, lead_count: u32 },
+    /// `bga`-specific: the row count exceeds this generator's supported
+    /// single-letter row-designator range (A-Z minus I/O/Q/S, ~22 rows)
+    /// -- see `bga.rs::row_letter`'s docs.
+    #[error(
+        "bga row count ({0}) exceeds this generator's supported row-letter range (~22 rows, \
+         double-letter designators like \"AA\" are not implemented)"
+    )]
+    TooManyBgaRows(u32),
 }
