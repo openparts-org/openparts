@@ -184,6 +184,7 @@ schema_version: "0.1"
 kind: device
 id: ex/DEV1
 manufacturer: ex
+category: other
 pins:
   "1":
     name: VBAT
@@ -214,6 +215,7 @@ schema_version: "0.1"
 kind: device
 id: ex/DEV1
 manufacturer: ex
+category: other
 pins:
   "A1":
     name: VDD

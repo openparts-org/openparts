@@ -311,6 +311,7 @@ mod tests {
             kind: Kind::Device,
             id: openparts_core::DeviceId::from("ex/DEV1"),
             manufacturer: ManufacturerId::from("ex"),
+            category: openparts_core::ComponentCategory::Other,
             family: None,
             pins,
             revisions: BTreeMap::new(),

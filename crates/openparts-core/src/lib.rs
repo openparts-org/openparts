@@ -4,6 +4,7 @@
 //! YAML, HTTP, PostgreSQL, KiCad, STEP, glTF, or any server implementation.
 //! It only knows about Rust types and the format-agnostic `serde` traits.
 
+pub mod category;
 pub mod device;
 pub mod dimension;
 pub mod effective_model;
@@ -21,6 +22,7 @@ pub mod rejected;
 pub mod serde_util;
 pub mod source;
 
+pub use category::ComponentCategory;
 pub use device::{Device, DeviceOverrides, DeviceRevision, RevisionDetection};
 pub use dimension::Dimension;
 pub use effective_model::{build_effective_model, EffectiveModel, EffectiveModelError};

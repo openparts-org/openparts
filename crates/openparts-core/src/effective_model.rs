@@ -203,6 +203,7 @@ mod tests {
             kind: Kind::Device,
             id: DeviceId::from("ex/DEV1"),
             manufacturer: ManufacturerId::from("ex"),
+            category: crate::category::ComponentCategory::Other,
             family: None,
             pins,
             revisions,

@@ -1,3 +1,4 @@
+use crate::category::ComponentCategory;
 use crate::ids::{DeviceId, ManufacturerId};
 use crate::kind::Kind;
 use crate::pin::{Pin, PinOverride};
@@ -43,6 +44,7 @@ pub struct Device {
     pub kind: Kind,
     pub id: DeviceId,
     pub manufacturer: ManufacturerId,
+    pub category: ComponentCategory,
     #[serde(default)]
     pub family: Option<String>,
     /// Keyed by pin-number string (e.g. "1", "42", "A1", "EP"). Never
