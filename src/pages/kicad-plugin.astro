@@ -1,0 +1,45 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout
+  title="KiCadプラグイン"
+  description="OpenParts KiCadプラグインのインストール方法"
+>
+  <h1>KiCadプラグイン</h1>
+  <p class="text-muted">
+    KiCadのツールバーから直接OpenPartsレジストリを検索し、部品のSymbol / Footprint
+    / STEPモデルをプロジェクトのローカルライブラリにインストールできる、小さなネイティブGUIアプリです。
+    スキーマティックやボードへの配置は行いません。インストール後はKiCad標準のSymbol/Footprintピッカーからいつも通り使ってください。
+  </p>
+
+  <section class="section">
+    <h2>クイックインストール</h2>
+
+    <h3>Linux</h3>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.sh | bash</code></pre>
+
+    <h3>Windows (PowerShell)</h3>
+    <pre><code>irm https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.ps1 | iex</code></pre>
+
+    <p class="text-muted">
+      どちらのスクリプトもKiCadのプラグインディレクトリを自動検出しようとします。検出できない場合は
+      KiCadの「Tools &gt; External Plugins &gt; Open Plugin Directory」で場所を確認し、
+      <code>--plugin-dir</code>(Linux)/ <code>-PluginDir</code>(Windows)で明示的に指定して再実行してください。
+    </p>
+    <p class="text-muted">
+      インストール後はKiCadを再起動するか、「Tools &gt; External Plugins &gt; Refresh Plugins」を実行し、
+      PCBエディタのツールバーに現れる「OpenParts」ボタンを探してください。Plugin and Content Managerの
+      「Installed」一覧には表示されません。
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>知っておくとよいこと</h2>
+    <p class="text-muted">
+      あるKiCadセッションで初めて部品をインストールした直後は、Symbol Editor / Footprint Editor
+      / 3Dビューアのウィンドウを一度閉じて開き直してください。KiCadはこれらのウィンドウを開いた時点で
+      ライブラリテーブルを読み込み、開いている間はライブラリテーブルの変更をホットリロードしないためです(KiCad自体の仕様です)。
+    </p>
+  </section>
+</BaseLayout>

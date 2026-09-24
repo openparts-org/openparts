@@ -1,0 +1,70 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const features = [
+  {
+    title: "オープンな部品データ",
+    body: "電子部品のピン配置・パッケージ寸法・リビジョン情報を、誰でも閲覧・検証・修正できる正規YAMLデータとして公開しています。",
+  },
+  {
+    title: "Provenance(出典)追跡",
+    body: "すべてのフィールドがデータシート等の出典に紐づいています。「なぜそう書かれているか」を常にたどれます。",
+  },
+  {
+    title: "再現可能なCAD生成",
+    body: "既製のシンボル/フットプリント/3Dモデルを配布するのではなく、正規データから都度生成します。データを直せば、生成物も追従します。",
+  },
+];
+---
+
+<BaseLayout
+  title="OpenParts"
+  description="オープンでprovenance追跡された電子部品データプラットフォーム"
+>
+  <section class="hero">
+    <h1>オープンで、出典のたどれる電子部品データ</h1>
+    <p class="text-muted hero-lead">
+      OpenPartsは、電子部品のCADアセット(KiCadシンボル/フットプリント、STEP/STLモデル)を
+      既製ファイルとして配布するのではなく、検証可能な正規データから再現可能に生成するプラットフォームです。
+    </p>
+    <div class="hero-actions">
+      <a class="button button-primary" href="/search">部品を探す</a>
+      <a class="button" href="/kicad-plugin">KiCadプラグインを入れる</a>
+    </div>
+  </section>
+
+  <section class="section features">
+    {
+      features.map((feature) => (
+        <div class="card">
+          <h3>{feature.title}</h3>
+          <p class="text-muted">{feature.body}</p>
+        </div>
+      ))
+    }
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-4);
+    max-width: 640px;
+  }
+
+  .hero-lead {
+    font-size: 1.05rem;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-3);
+  }
+</style>

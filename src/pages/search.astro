@@ -1,0 +1,9 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SearchBox from "../components/SearchBox";
+---
+
+<BaseLayout title="部品を探す" description="OpenPartsの部品を検索する">
+  <h1>部品を探す</h1>
+  <SearchBox client:load />
+</BaseLayout>
