@@ -30,10 +30,6 @@ function chooseGridStep(footprint: number): number {
   return best;
 }
 
-function formatMm(value: number): string {
-  return `${value.toFixed(value < 10 ? 2 : 1)} mm`;
-}
-
 export default function ModelViewer({
   manufacturer,
   mpn,
@@ -44,8 +40,6 @@ export default function ModelViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [dimensions, setDimensions] = useState<THREE.Vector3 | null>(null);
-  const [gridStep, setGridStep] = useState<number | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -62,8 +56,6 @@ export default function ModelViewer({
     async function init() {
       setStatus("loading");
       setErrorMessage(null);
-      setDimensions(null);
-      setGridStep(null);
 
       const url = artifactDownloadUrl(manufacturer, mpn, "stl");
       const res = await fetch(url);
@@ -162,11 +154,7 @@ export default function ModelViewer({
       }
       animate();
 
-      if (!cancelled) {
-        setDimensions(size);
-        setGridStep(step);
-        setStatus("ready");
-      }
+      if (!cancelled) setStatus("ready");
     }
 
     init().catch((err) => {
@@ -213,13 +201,6 @@ export default function ModelViewer({
           </p>
         )}
       </div>
-      {status === "ready" && dimensions && gridStep && (
-        <p class="text-muted model-viewer-hint">
-          実測サイズ: W {formatMm(dimensions.x)} × D {formatMm(dimensions.z)} ×
-          H {formatMm(dimensions.y)}(グリッド1マス = {formatMm(gridStep)})
-          ・ドラッグで回転、スクロールでズーム
-        </p>
-      )}
     </div>
   );
 }

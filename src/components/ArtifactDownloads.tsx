@@ -78,10 +78,6 @@ export default function ArtifactDownloads({
           STLをダウンロード
         </a>
       </div>
-      <p class="text-muted artifact-hint">
-        zipにはKiCad Symbol(<code>.kicad_sym</code>)・Footprint(
-        <code>.kicad_mod</code>)・STEPモデル(<code>.step</code>)が含まれます。STLは3Dプレビュー等、KiCad以外の用途向けの個別ファイルです。
-      </p>
       {zipError && <p class="text-muted">{zipError}</p>}
     </div>
   );

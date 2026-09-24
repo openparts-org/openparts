@@ -175,11 +175,6 @@ td {
   margin: 0;
 }
 
-.model-viewer-hint {
-  margin-top: var(--space-2);
-  font-size: 0.9em;
-}
-
 .artifact-buttons {
   display: flex;
   flex-wrap: wrap;
@@ -194,11 +189,6 @@ td {
 .button:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.artifact-hint {
-  margin-top: var(--space-2);
-  font-size: 0.9em;
 }
 
 .pin-table-header {
