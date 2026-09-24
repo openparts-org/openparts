@@ -1,3 +1,4 @@
+import { CATEGORY_LABELS } from "../lib/categories";
 import type { PartSummary } from "../lib/types";
 
 function existenceBadgeClass(status: PartSummary["existence"]): string {
@@ -45,6 +46,11 @@ export default function SearchResults({ results }: { results: PartSummary[] }) {
           </a>
           <span class="text-muted"> / {part.manufacturer}</span>
           <div class="result-badges">
+            {part.category && (
+              <span class="badge badge-neutral">
+                {CATEGORY_LABELS[part.category]}
+              </span>
+            )}
             <span class={existenceBadgeClass(part.existence)}>
               {part.existence}
             </span>

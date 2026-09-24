@@ -18,11 +18,23 @@ export type LifecycleStatus =
   | "obsolete"
   | "unknown";
 
+export type ComponentCategory =
+  | "microcontroller"
+  | "capacitor"
+  | "resistor"
+  | "inductor"
+  | "diode"
+  | "transistor"
+  | "led"
+  | "crystal"
+  | "other";
+
 export interface PartSummary {
   manufacturer: string;
   mpn: string;
   existence: ExistenceStatus;
   lifecycle: LifecycleStatus;
+  category: ComponentCategory | null;
 }
 
 export interface Part {

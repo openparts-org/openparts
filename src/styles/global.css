@@ -210,6 +210,30 @@ td {
   margin-top: var(--space-2);
 }
 
+.category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.9em;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chip-active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
 .search-input {
   width: 100%;
   font-size: 1rem;

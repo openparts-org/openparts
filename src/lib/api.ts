@@ -2,6 +2,7 @@ import type {
   ApiErrorBody,
   ArtifactKind,
   ArtifactsResponse,
+  ComponentCategory,
   Device,
   Package,
   Part,
@@ -33,8 +34,12 @@ async function request<T>(path: string): Promise<T> {
   return res.json();
 }
 
-export const searchParts = (q: string) =>
-  request<PartSummary[]>(`/v1/search?q=${encodeURIComponent(q)}`);
+export const searchParts = (q: string, category?: ComponentCategory) => {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (category) params.set("category", category);
+  return request<PartSummary[]>(`/v1/search?${params.toString()}`);
+};
 
 export const getPart = (manufacturer: string, mpn: string) =>
   request<Part>(

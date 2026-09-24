@@ -1,10 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, searchParts } from "../lib/api";
-import type { PartSummary } from "../lib/types";
+import { CATEGORIES, CATEGORY_LABELS } from "../lib/categories";
+import type { ComponentCategory, PartSummary } from "../lib/types";
 import SearchResults from "./SearchResults";
 
 export default function SearchBox() {
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<ComponentCategory | null>(null);
   const [results, setResults] = useState<PartSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,7 +18,7 @@ export default function SearchBox() {
 
     // Empty query returns every part (server treats an empty needle as a
     // match-all), so this doubles as a browse view.
-    searchParts(query)
+    searchParts(query, category ?? undefined)
       .then((parts) => {
         if (!cancelled) setResults(parts);
       })
@@ -32,7 +34,7 @@ export default function SearchBox() {
     return () => {
       cancelled = true;
     };
-  }, [query]);
+  }, [query, category]);
 
   return (
     <div>
@@ -44,6 +46,26 @@ export default function SearchBox() {
         onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         autofocus
       />
+
+      <div class="category-filter">
+        <button
+          type="button"
+          class={category === null ? "chip chip-active" : "chip"}
+          onClick={() => setCategory(null)}
+        >
+          すべて
+        </button>
+        {CATEGORIES.map((c) => (
+          <button
+            type="button"
+            key={c}
+            class={category === c ? "chip chip-active" : "chip"}
+            onClick={() => setCategory(c)}
+          >
+            {CATEGORY_LABELS[c]}
+          </button>
+        ))}
+      </div>
 
       <div class="section">
         {loading && <p class="text-muted">読み込み中...</p>}
