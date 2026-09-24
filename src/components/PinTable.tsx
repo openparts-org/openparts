@@ -1,15 +1,19 @@
 import { reportDataIssueUrl } from "../lib/github";
+import { t, type Lang } from "../lib/i18n";
 import type { Device } from "../lib/types";
 
 export default function PinTable({
   device,
   manufacturer,
   mpn,
+  lang,
 }: {
   device: Device;
   manufacturer: string;
   mpn: string;
+  lang: Lang;
 }) {
+  const copy = t[lang].part;
   const pinEntries = Object.entries(device.pins);
 
   const issueUrl = reportDataIssueUrl({
@@ -22,25 +26,25 @@ export default function PinTable({
   return (
     <div>
       <div class="pin-table-header">
-        <h3>ピン配置 ({device.id})</h3>
+        <h3>{copy.pinsHeading(device.id)}</h3>
         <a
           class="button"
           href={issueUrl}
           target="_blank"
           rel="noopener noreferrer"
         >
-          このデータの問題を報告
+          {copy.reportIssue}
         </a>
       </div>
       <details class="pin-table-details">
-        <summary>{pinEntries.length}ピンを表示</summary>
+        <summary>{copy.pinsShow(pinEntries.length)}</summary>
         <table>
           <thead>
             <tr>
-              <th>ピン番号</th>
-              <th>名前</th>
-              <th>種別</th>
-              <th>代替機能</th>
+              <th>{copy.pinNumber}</th>
+              <th>{copy.pinName}</th>
+              <th>{copy.pinType}</th>
+              <th>{copy.pinAltFunctions}</th>
             </tr>
           </thead>
           <tbody>

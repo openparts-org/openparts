@@ -1,4 +1,12 @@
 ---
+import { t, type Lang } from "../lib/i18n";
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+
 const repos = [
   { href: "https://github.com/openparts-org/openparts", label: "openparts" },
   {
@@ -18,7 +26,7 @@ const repos = [
 
 <footer class="footer">
   <div class="container footer-inner">
-    <span class="text-muted">OpenParts is open source.</span>
+    <span class="text-muted">{t[lang].footer.openSource}</span>
     <ul class="footer-links">
       {
         repos.map((repo) => (

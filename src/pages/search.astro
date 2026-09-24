@@ -1,9 +1,18 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SearchBox from "../components/SearchBox";
+import { t } from "../lib/i18n";
+
+const lang = "ja" as const;
+const copy = t[lang].search;
 ---
 
-<BaseLayout title="部品を探す" description="OpenPartsの部品を検索する">
-  <h1>部品を探す</h1>
-  <SearchBox client:load />
+<BaseLayout
+  lang={lang}
+  currentPath="search"
+  title={copy.title}
+  description={copy.metaDescription}
+>
+  <h1>{copy.title}</h1>
+  <SearchBox lang={lang} client:load />
 </BaseLayout>

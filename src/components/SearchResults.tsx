@@ -1,4 +1,6 @@
-import { CATEGORY_LABELS } from "../lib/categories";
+import { categoryLabel } from "../lib/categories";
+import { localizedHref } from "../lib/base";
+import { t, type Lang } from "../lib/i18n";
 import type { PartSummary } from "../lib/types";
 
 function existenceBadgeClass(status: PartSummary["existence"]): string {
@@ -30,9 +32,15 @@ function lifecycleBadgeClass(status: PartSummary["lifecycle"]): string {
   }
 }
 
-export default function SearchResults({ results }: { results: PartSummary[] }) {
+export default function SearchResults({
+  results,
+  lang,
+}: {
+  results: PartSummary[];
+  lang: Lang;
+}) {
   if (results.length === 0) {
-    return <p class="text-muted">該当する部品が見つかりませんでした。</p>;
+    return <p class="text-muted">{t[lang].search.noResults}</p>;
   }
 
   return (
@@ -40,7 +48,10 @@ export default function SearchResults({ results }: { results: PartSummary[] }) {
       {results.map((part) => (
         <li class="card" key={`${part.manufacturer}/${part.mpn}`}>
           <a
-            href={`/parts?manufacturer=${encodeURIComponent(part.manufacturer)}&mpn=${encodeURIComponent(part.mpn)}`}
+            href={localizedHref(
+              lang,
+              `parts?manufacturer=${encodeURIComponent(part.manufacturer)}&mpn=${encodeURIComponent(part.mpn)}`,
+            )}
           >
             <strong>{part.mpn}</strong>
           </a>
@@ -48,7 +59,7 @@ export default function SearchResults({ results }: { results: PartSummary[] }) {
           <div class="result-badges">
             {part.category && (
               <span class="badge badge-neutral">
-                {CATEGORY_LABELS[part.category]}
+                {categoryLabel(lang, part.category)}
               </span>
             )}
             <span class={existenceBadgeClass(part.existence)}>

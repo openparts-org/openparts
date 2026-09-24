@@ -7,6 +7,8 @@ import {
   getRevisions,
   listArtifacts,
 } from "../lib/api";
+import { localizedHref } from "../lib/base";
+import { t, type Lang } from "../lib/i18n";
 import type { Device, Package, Part, RevisionSummary } from "../lib/types";
 import ArtifactDownloads from "./ArtifactDownloads";
 import ModelViewer from "./ModelViewer";
@@ -58,7 +60,8 @@ function getQueryParams(): { manufacturer: string; mpn: string } | null {
   return { manufacturer, mpn };
 }
 
-export default function PartDetail() {
+export default function PartDetail({ lang }: { lang: Lang }) {
+  const copy = t[lang].part;
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,9 +98,7 @@ export default function PartDetail() {
         } catch (err) {
           if (!cancelled) {
             setArtifactsError(
-              err instanceof ApiError
-                ? err.message
-                : "CAD成果物の情報を取得できませんでした。",
+              err instanceof ApiError ? err.message : copy.artifactsFailed,
             );
           }
         }
@@ -107,7 +108,7 @@ export default function PartDetail() {
           setNotFound(true);
         } else {
           setErrorMessage(
-            err instanceof ApiError ? err.message : "読み込みに失敗しました。",
+            err instanceof ApiError ? err.message : copy.loadFailed,
           );
         }
       } finally {
@@ -121,22 +122,23 @@ export default function PartDetail() {
     };
   }, []);
 
-  if (loading) return <p class="text-muted">読み込み中...</p>;
+  if (loading) return <p class="text-muted">{copy.loading}</p>;
 
   if (notFound) {
     return (
       <div>
-        <h1>部品が見つかりません</h1>
+        <h1>{copy.notFoundTitle}</h1>
         <p class="text-muted">
-          指定された部品は見つかりませんでした。<a href="/search">検索</a>
-          からお探しください。
+          {copy.notFoundBefore}
+          <a href={localizedHref(lang, "search")}>{copy.notFoundLink}</a>
+          {copy.notFoundAfter}
         </p>
       </div>
     );
   }
 
   if (errorMessage || !data) {
-    return <p class="text-muted">{errorMessage ?? "読み込みに失敗しました。"}</p>;
+    return <p class="text-muted">{errorMessage ?? copy.loadFailed}</p>;
   }
 
   const { part, device, pkg, revisions } = data;
@@ -156,22 +158,31 @@ export default function PartDetail() {
       </div>
 
       <section class="section">
-        <ArtifactDownloads manufacturer={part.manufacturer} mpn={part.mpn} />
+        <ArtifactDownloads
+          manufacturer={part.manufacturer}
+          mpn={part.mpn}
+          lang={lang}
+        />
         {artifactsError && <p class="text-muted">{artifactsError}</p>}
       </section>
 
       <section class="section">
-        <h3>3Dプレビュー</h3>
-        <ModelViewer manufacturer={part.manufacturer} mpn={part.mpn} />
+        <h3>{copy.preview3d}</h3>
+        <ModelViewer manufacturer={part.manufacturer} mpn={part.mpn} lang={lang} />
       </section>
 
       <section class="section">
-        <PinTable device={device} manufacturer={part.manufacturer} mpn={part.mpn} />
+        <PinTable
+          device={device}
+          manufacturer={part.manufacturer}
+          mpn={part.mpn}
+          lang={lang}
+        />
       </section>
 
       {revisions.length > 0 && (
         <section class="section">
-          <h3>リビジョン</h3>
+          <h3>{copy.revisions}</h3>
           <ul>
             {revisions.map((rev) => (
               <li key={rev.id}>
@@ -183,7 +194,7 @@ export default function PartDetail() {
       )}
 
       <section class="section">
-        <PackageDimensions pkg={pkg} />
+        <PackageDimensions pkg={pkg} lang={lang} />
       </section>
     </div>
   );

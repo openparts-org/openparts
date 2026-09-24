@@ -1,5 +1,10 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { localizedHref } from "../lib/base";
+import { t } from "../lib/i18n";
+
+const lang = "ja" as const;
+const copy = t[lang].contributing;
 
 const specs = [
   {
@@ -15,71 +20,65 @@ const specs = [
     label: "Testing and Quality Specification",
   },
 ];
+
+// Hrefs for the step-list links -- same URLs regardless of language.
+const stepLinks = [
+  {
+    href1: "https://github.com/openparts-org/openparts-data/fork",
+    href2: "https://github.com/openparts-org/openparts",
+  },
+  {
+    href1: "https://github.com/openparts-org/openparts/blob/main/docs/spec/canonical-data.md",
+  },
+];
 ---
 
 <BaseLayout
-  title="コントリビュート"
-  description="OpenPartsのデータを追加・修正する方法"
+  lang={lang}
+  currentPath="contributing"
+  title={copy.title}
+  description={copy.metaDescription}
 >
-  <h1>コントリビュート</h1>
-  <p class="text-muted">
-    OpenPartsの部品データは <code>openparts-data</code> リポジトリの正規YAMLとして管理されています。
-    ピン配置や寸法などの誤りに気づいた場合や、新しい部品を追加したい場合は、誰でもPull
-    Requestを送ることができます。
-  </p>
+  <h1>{copy.title}</h1>
+  <p class="text-muted">{copy.intro}</p>
 
   <section class="section">
-    <h2>個別データの問題を報告する</h2>
+    <h2>{copy.reportHeading}</h2>
     <p class="text-muted">
-      自分で直す時間が無い場合は、まず<a href="/search">部品を探し</a
-      >、詳細ページのピン表にある「このデータの問題を報告」リンクから
-      <code>openparts-data</code>へIssueを作成してください。対象の部品・デバイスIDが自動的に入力されます。
+      {copy.reportBodyBefore}<a href={localizedHref(lang, "search")}
+        >{copy.reportBodyLink}</a
+      >{copy.reportBodyAfter}
     </p>
   </section>
 
   <section class="section">
-    <h2>新規部品を追加する / 既存データを修正する(Pull Request)</h2>
+    <h2>{copy.prHeading}</h2>
     <ol>
       <li>
-        <code>openparts-data</code>を<a
-          href="https://github.com/openparts-org/openparts-data/fork"
+        {copy.steps[0].before}<a
+          href={stepLinks[0].href1}
           target="_blank"
-          rel="noopener noreferrer">フォーク</a
-        >します。検証コマンドのビルドに<code>openparts</code>(コアリポジトリ)が必要なので、
-        兄弟ディレクトリとして<a
-          href="https://github.com/openparts-org/openparts"
+          rel="noopener noreferrer">{copy.steps[0].linkLabel}</a
+        >{copy.steps[0].after}<a
+          href={stepLinks[0].href2}
           target="_blank"
-          rel="noopener noreferrer">openparts</a
-        >もcloneしてください。
+          rel="noopener noreferrer">{copy.steps[0].link2Label}</a
+        >{copy.steps[0].after2}
       </li>
       <li>
-        <a
-          href="https://github.com/openparts-org/openparts/blob/main/docs/spec/canonical-data.md"
+        {copy.steps[1].before}<a
+          href={stepLinks[1].href1}
           target="_blank"
-          rel="noopener noreferrer">Canonical Data Specification</a
-        >(特にRepository Layoutの節)に従い、<code>parts/</code>・<code
-          >devices/</code
-        >・<code>packages/</code>・<code>manufacturers/</code>・<code
-          >sources/</code
-        >配下にYAMLを追加/編集します。
+          rel="noopener noreferrer">{copy.steps[1].linkLabel}</a
+        >{copy.steps[1].after}
       </li>
-      <li>
-        <code>openparts-data</code>のリポジトリルートで <code
-          >./scripts/validate.sh</code
-        > を実行し、Part/Device/Package/Sourcesの参照整合性とバリデーションが通ることを確認します(このスクリプトは兄弟の<code
-          >../openparts</code
-        >をビルドして使います)。
-      </li>
-      <li>
-        <code>openparts-data</code>へPull
-        Requestを作成します。作成後はCI上の<code>validate</code
-        >ワークフローが同じ検証を自動実行します。
-      </li>
+      <li>{copy.steps[2].before}</li>
+      <li>{copy.steps[3].before}</li>
     </ol>
   </section>
 
   <section class="section">
-    <h2>関連する仕様書</h2>
+    <h2>{copy.specsHeading}</h2>
     <ul>
       {
         specs.map((spec) => (

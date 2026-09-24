@@ -1,0 +1,94 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { localizedHref } from "../../lib/base";
+import { t } from "../../lib/i18n";
+
+const lang = "en" as const;
+const copy = t[lang].contributing;
+
+const specs = [
+  {
+    href: "https://github.com/openparts-org/openparts/blob/main/docs/spec/architecture.md",
+    label: "Architecture Specification",
+  },
+  {
+    href: "https://github.com/openparts-org/openparts/blob/main/docs/spec/canonical-data.md",
+    label: "Canonical Data Specification",
+  },
+  {
+    href: "https://github.com/openparts-org/openparts/blob/main/docs/spec/testing-and-quality.md",
+    label: "Testing and Quality Specification",
+  },
+];
+
+// Hrefs for the step-list links -- same URLs regardless of language.
+const stepLinks = [
+  {
+    href1: "https://github.com/openparts-org/openparts-data/fork",
+    href2: "https://github.com/openparts-org/openparts",
+  },
+  {
+    href1: "https://github.com/openparts-org/openparts/blob/main/docs/spec/canonical-data.md",
+  },
+];
+---
+
+<BaseLayout
+  lang={lang}
+  currentPath="contributing"
+  title={copy.title}
+  description={copy.metaDescription}
+>
+  <h1>{copy.title}</h1>
+  <p class="text-muted">{copy.intro}</p>
+
+  <section class="section">
+    <h2>{copy.reportHeading}</h2>
+    <p class="text-muted">
+      {copy.reportBodyBefore}<a href={localizedHref(lang, "search")}
+        >{copy.reportBodyLink}</a
+      >{copy.reportBodyAfter}
+    </p>
+  </section>
+
+  <section class="section">
+    <h2>{copy.prHeading}</h2>
+    <ol>
+      <li>
+        {copy.steps[0].before}<a
+          href={stepLinks[0].href1}
+          target="_blank"
+          rel="noopener noreferrer">{copy.steps[0].linkLabel}</a
+        >{copy.steps[0].after}<a
+          href={stepLinks[0].href2}
+          target="_blank"
+          rel="noopener noreferrer">{copy.steps[0].link2Label}</a
+        >{copy.steps[0].after2}
+      </li>
+      <li>
+        {copy.steps[1].before}<a
+          href={stepLinks[1].href1}
+          target="_blank"
+          rel="noopener noreferrer">{copy.steps[1].linkLabel}</a
+        >{copy.steps[1].after}
+      </li>
+      <li>{copy.steps[2].before}</li>
+      <li>{copy.steps[3].before}</li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <h2>{copy.specsHeading}</h2>
+    <ul>
+      {
+        specs.map((spec) => (
+          <li>
+            <a href={spec.href} target="_blank" rel="noopener noreferrer">
+              {spec.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</BaseLayout>

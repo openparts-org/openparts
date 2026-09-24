@@ -1,10 +1,12 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, searchParts } from "../lib/api";
-import { CATEGORIES, CATEGORY_LABELS } from "../lib/categories";
+import { CATEGORIES, categoryLabel } from "../lib/categories";
+import { t, type Lang } from "../lib/i18n";
 import type { ComponentCategory, PartSummary } from "../lib/types";
 import SearchResults from "./SearchResults";
 
-export default function SearchBox() {
+export default function SearchBox({ lang }: { lang: Lang }) {
+  const copy = t[lang].search;
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ComponentCategory | null>(null);
   const [results, setResults] = useState<PartSummary[]>([]);
@@ -25,7 +27,7 @@ export default function SearchBox() {
       .catch((err) => {
         if (cancelled) return;
         setResults([]);
-        setError(err instanceof ApiError ? err.message : "検索に失敗しました。");
+        setError(err instanceof ApiError ? err.message : copy.searchFailed);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -41,7 +43,7 @@ export default function SearchBox() {
       <input
         type="search"
         class="search-input"
-        placeholder="MPNまたはメーカー名で検索(例: nRF52840)"
+        placeholder={copy.placeholder}
         value={query}
         onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
         autofocus
@@ -53,7 +55,7 @@ export default function SearchBox() {
           class={category === null ? "chip chip-active" : "chip"}
           onClick={() => setCategory(null)}
         >
-          すべて
+          {copy.all}
         </button>
         {CATEGORIES.map((c) => (
           <button
@@ -62,15 +64,15 @@ export default function SearchBox() {
             class={category === c ? "chip chip-active" : "chip"}
             onClick={() => setCategory(c)}
           >
-            {CATEGORY_LABELS[c]}
+            {categoryLabel(lang, c)}
           </button>
         ))}
       </div>
 
       <div class="section">
-        {loading && <p class="text-muted">読み込み中...</p>}
+        {loading && <p class="text-muted">{copy.loading}</p>}
         {error && <p class="text-muted">{error}</p>}
-        {!loading && !error && <SearchResults results={results} />}
+        {!loading && !error && <SearchResults results={results} lang={lang} />}
       </div>
     </div>
   );

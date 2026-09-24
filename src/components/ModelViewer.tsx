@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { artifactDownloadUrl } from "../lib/api";
+import { t, type Lang } from "../lib/i18n";
 import type { ApiErrorBody } from "../lib/types";
 
 type Status = "loading" | "ready" | "error";
@@ -33,10 +34,13 @@ function chooseGridStep(footprint: number): number {
 export default function ModelViewer({
   manufacturer,
   mpn,
+  lang,
 }: {
   manufacturer: string;
   mpn: string;
+  lang: Lang;
 }) {
+  const copy = t[lang].part;
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -160,7 +164,7 @@ export default function ModelViewer({
     init().catch((err) => {
       if (!cancelled) {
         setErrorMessage(
-          err instanceof Error ? err.message : "3Dモデルの表示に失敗しました。",
+          err instanceof Error ? err.message : copy.modelLoadFailed,
         );
         setStatus("error");
       }
@@ -193,11 +197,11 @@ export default function ModelViewer({
     <div>
       <div ref={containerRef} class="model-viewer-canvas">
         {status === "loading" && (
-          <p class="text-muted model-viewer-overlay">読み込み中...</p>
+          <p class="text-muted model-viewer-overlay">{copy.modelLoading}</p>
         )}
         {status === "error" && (
           <p class="text-muted model-viewer-overlay">
-            {errorMessage ?? "3Dモデルを表示できませんでした。"}
+            {errorMessage ?? copy.modelLoadFailed}
           </p>
         )}
       </div>

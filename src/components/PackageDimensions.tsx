@@ -1,3 +1,4 @@
+import { t, type Lang } from "../lib/i18n";
 import type { Dimension, Package } from "../lib/types";
 
 function formatDimension(dim?: Dimension): string {
@@ -10,19 +11,26 @@ function formatDimension(dim?: Dimension): string {
   return "-";
 }
 
-export default function PackageDimensions({ pkg }: { pkg: Package }) {
+export default function PackageDimensions({
+  pkg,
+  lang,
+}: {
+  pkg: Package;
+  lang: Lang;
+}) {
+  const copy = t[lang].part;
   const rows: Array<[string, string]> = [
-    ["ファミリー", pkg.family],
-    ["リード数", String(pkg.lead_count)],
-    ["ピッチ", formatDimension(pkg.pitch)],
-    ["本体幅", formatDimension(pkg.dimensions.body_width)],
-    ["本体長", formatDimension(pkg.dimensions.body_length)],
-    ["本体高さ", formatDimension(pkg.dimensions.body_height)],
+    [copy.family, pkg.family],
+    [copy.leadCount, String(pkg.lead_count)],
+    [copy.pitch, formatDimension(pkg.pitch)],
+    [copy.bodyWidth, formatDimension(pkg.dimensions.body_width)],
+    [copy.bodyLength, formatDimension(pkg.dimensions.body_length)],
+    [copy.bodyHeight, formatDimension(pkg.dimensions.body_height)],
   ];
 
   return (
     <div>
-      <h3>パッケージ ({pkg.id})</h3>
+      <h3>{copy.packageHeading(pkg.id)}</h3>
       <table>
         <tbody>
           {rows.map(([label, value]) => (

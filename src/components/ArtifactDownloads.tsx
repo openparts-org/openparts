@@ -1,6 +1,7 @@
 import { zipSync } from "fflate";
 import { useState } from "preact/hooks";
 import { ApiError, artifactDownloadUrl, fetchArtifact } from "../lib/api";
+import { t, type Lang } from "../lib/i18n";
 
 type ZipStatus = "idle" | "building" | "error";
 
@@ -16,10 +17,13 @@ function triggerDownload(blob: Blob, filename: string) {
 export default function ArtifactDownloads({
   manufacturer,
   mpn,
+  lang,
 }: {
   manufacturer: string;
   mpn: string;
+  lang: Lang;
 }) {
+  const copy = t[lang].part;
   const [zipStatus, setZipStatus] = useState<ZipStatus>("idle");
   const [zipError, setZipError] = useState<string | null>(null);
 
@@ -50,15 +54,13 @@ export default function ArtifactDownloads({
       setZipStatus("idle");
     } catch (err) {
       setZipStatus("error");
-      setZipError(
-        err instanceof ApiError ? err.message : "ダウンロードに失敗しました。",
-      );
+      setZipError(err instanceof ApiError ? err.message : copy.zipFailed);
     }
   }
 
   return (
     <div>
-      <h3>ダウンロード</h3>
+      <h3>{copy.download}</h3>
       <div class="artifact-buttons">
         <button
           type="button"
@@ -66,16 +68,14 @@ export default function ArtifactDownloads({
           onClick={downloadKicadBundle}
           disabled={zipStatus === "building"}
         >
-          {zipStatus === "building"
-            ? "zip作成中..."
-            : "KiCad用一式をダウンロード(.zip)"}
+          {zipStatus === "building" ? copy.zipBuilding : copy.zipButton}
         </button>
         <a
           class="button"
           href={artifactDownloadUrl(manufacturer, mpn, "stl")}
           download
         >
-          STLをダウンロード
+          {copy.stlButton}
         </a>
       </div>
       {zipError && <p class="text-muted">{zipError}</p>}
