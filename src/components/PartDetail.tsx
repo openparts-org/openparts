@@ -16,6 +16,7 @@ import type {
   RevisionSummary,
 } from "../lib/types";
 import ArtifactDownloads from "./ArtifactDownloads";
+import ModelViewer from "./ModelViewer";
 import PackageDimensions from "./PackageDimensions";
 import PinTable from "./PinTable";
 import ProvenanceList from "./ProvenanceList";
@@ -163,6 +164,11 @@ export default function PartDetail() {
           {part.lifecycle.status}
         </span>
       </div>
+
+      <section class="section">
+        <h3>3Dプレビュー</h3>
+        <ModelViewer manufacturer={part.manufacturer} mpn={part.mpn} />
+      </section>
 
       <section class="section">
         <PinTable device={device} manufacturer={part.manufacturer} mpn={part.mpn} />

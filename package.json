@@ -14,13 +14,15 @@
   "dependencies": {
     "@astrojs/preact": "^6.0.5",
     "astro": "^7.3.4",
-    "preact": "^10.29.8"
+    "preact": "^10.29.8",
+    "three": "^0.186.0"
   },
   "allowScripts": {
     "esbuild": true
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@types/three": "^0.186.0",
     "typescript": "6"
   }
 }
