@@ -27,6 +27,8 @@ export type ComponentCategory =
   | "transistor"
   | "led"
   | "crystal"
+  | "fuse"
+  | "connector"
   | "other";
 
 export interface PartSummary {

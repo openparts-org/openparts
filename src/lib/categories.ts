@@ -11,6 +11,8 @@ const CATEGORY_LABELS: Record<Lang, Record<ComponentCategory, string>> = {
     transistor: "トランジスタ",
     led: "LED",
     crystal: "水晶発振子",
+    fuse: "ヒューズ",
+    connector: "コネクタ",
     other: "その他",
   },
   en: {
@@ -22,6 +24,8 @@ const CATEGORY_LABELS: Record<Lang, Record<ComponentCategory, string>> = {
     transistor: "Transistor",
     led: "LED",
     crystal: "Crystal",
+    fuse: "Fuse",
+    connector: "Connector",
     other: "Other",
   },
 };
