@@ -18,5 +18,7 @@ pub enum ComponentCategory {
     Transistor,
     Led,
     Crystal,
+    Fuse,
+    Connector,
     Other,
 }
