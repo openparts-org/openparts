@@ -7,150 +7,226 @@ description: Add electronic parts (Part + Device + Package + Source) to openpart
 
 Every value you write is a **candidate change** for human review (Agent
 Ingestion Specification): it must come from a primary source you actually
-read, with a page and locator. Read these first, once:
-`docs/spec/canonical-data.md` (sections 3-27, 34-35) and
-`docs/spec/agent-ingestion.md`.
+read, with a page and locator. Read once: `docs/spec/canonical-data.md`
+(sections 3-27, 34-35) and `docs/spec/agent-ingestion.md` (sections 5, 14,
+28, 30).
 
 ## 0. Rules that are never bent
 
-- **Unknown is better than invented.** If the datasheet doesn't state a
-  value, leave the field out. Never estimate, average, or copy from a
-  "similar" part. Ranges given only as min/max are recorded as min/max --
-  never invent a nominal.
-- **Cite what you read.** The `source` in provenance is the exact
-  document *and revision* you opened. If the manufacturer now serves a
-  newer revision than an existing Source file, add a new Source
-  (`id: <mfr>/<doc>@rev<N>`, file `sources/<mfr>/<doc>-rev<N>.yaml`)
-  instead of citing the old one with new page numbers.
-- **Never get around access controls.** If a site returns 403/"Access
-  Denied", a bot check, a login wall or a TLS error, do not spoof user
-  agents, use mirrors of dubious origin, disable certificate checks or
-  retry tricks. Try the manufacturer's other official URL (product page,
-  alternate PDF link, regional official site you are sure is
-  first-party); otherwise record the part as unverified in your report
-  and move on.
-- **Package `construction`** (molded, tantalum_molded, glass, ceramic,
-  metal_can) only when the source text says it -- not from the package
-  name or a photo.
-- Don't edit Rust code or other agents' files. Data only, in your
-  assigned manufacturers/folders.
+- **Unknown is better than invented.** Leave out what the source doesn't
+  state. Never estimate, average, or copy from a "similar" part. A range
+  given only as min/max is recorded as min/max -- never add a nominal (the
+  generators draw such a dimension at its midpoint without storing it). A
+  lone "1.80 max" is recorded as `max: 1.80` only.
+- **Cite what you read.** The provenance `source` is the exact document
+  *and revision* you opened. A newer revision than an existing Source gets
+  its own Source (`id: <mfr>/<doc>@rev<N>`, file
+  `sources/<mfr>/<doc>-rev<N>.yaml`).
+- **Never get around access controls.** On 403/"Access Denied", a bot check
+  (Cloudflare "Just a moment", an empty 202), a login wall or a TLS
+  certificate error: do not spoof a user agent, disable certificate checks,
+  use unofficial mirrors, or retry the same URL with a different client
+  after a refusal. Use another *first-party* URL if you know one (product
+  page, alternate official PDF link); otherwise record the part as
+  unverified and move on. Distributor-hosted copies (DigiKey/Mouser) of a
+  manufacturer PDF are acceptable only when the existing dataset already
+  relies on them for that manufacturer -- say so in the Source comment.
+- **`construction`** (molded, tantalum_molded, glass, ceramic, metal_can)
+  only when the source text says it -- never from the name, size or a photo.
+- Data only, in your assignment. Don't edit code, the skill, or another
+  agent's files; create files exclusively (never overwrite).
 
-## 1. Repository layout (openparts-data)
+## 1. Layout, ids and names
 
 ```
-manufacturers/<mfr>.yaml                 one per manufacturer (shared!)
-sources/<mfr>/<doc>.yaml                 one per document revision
-devices/<mfr>/<DEVICE>.yaml              logical device: pins, category
-packages/standards/<family>/<ID>.yaml    physical package, reusable
-parts/<mfr>/<series>/<MPN>.yaml          orderable MPN -> device + package
+manufacturers/<mfr>.yaml                   one per manufacturer (shared)
+sources/<mfr>/<doc>.yaml                   one per document revision
+devices/<mfr>/<DEVICE>.yaml                logical device: pins, category
+packages/standards/<family>/<ID>.yaml      generic outline, reusable
+packages/manufacturers/<mfr>/<ID>.yaml     a vendor's own drawing
+parts/<mfr>/<series>/<MPN>.yaml            orderable MPN -> device + package
 ```
 
-Copy the shape of an existing file of the same kind (e.g.
-`parts/onsemi/2n7002et1g/2N7002ET1G.yaml`, `devices/onsemi/2N7002E.yaml`,
-`sources/onsemi/2N7002E-D.yaml`, `packages/standards/lqfp/LQFP48-7x7-P0.5.yaml`).
-Put a short comment header on every new file saying what you verified
-where (existing files show the style). Files are UTF-8, LF, simple YAML.
+Copy the shape of an existing file (`parts/onsemi/2n7002et1g/2N7002ET1G.yaml`,
+`devices/onsemi/2N7002E.yaml`, `sources/onsemi/2N7002E-D.yaml`,
+`packages/standards/lqfp/LQFP48-7x7-P0.5.yaml`) and give every new file a
+comment header saying what you verified where.
 
-- **Manufacturer files are shared.** Before creating one, check
-  `manufacturers/`. Create only manufacturers assigned to you.
-- **Device vs Part.** Several MPNs (reel size, grade, temperature) share
-  one Device and one Package. Prefer adding the device once and one or
-  more MPNs from the ordering table.
-- `category` is one of: microcontroller, capacitor, resistor, inductor,
-  diode, transistor, led, crystal, fuse, connector, other (it changes how
-  the 3D model is drawn).
-- `existence.status: verified` needs the ordering table (page/locator).
-  `lifecycle` only if a first-party page states it; say where.
+- **Ids share one namespace across kinds**: a Source id equal to a Device
+  id (`aos/AO3400A`) breaks resolution. Suffix datasheet sources
+  (`aos/AO3400A-DS`) or use the document number.
+- **Ids and file names**: no spaces, `/`, `(`, `,` in the id path or file
+  name -- replace with `-`/`_`. The `mpn:` field keeps the exact string
+  (`TLP785(GB-LF6,F`, `LS Q976.01-N1Q2-1`, `24LC256-I/SN`).
+- **Package names** carry what distinguishes them: body x length, pitch,
+  EP size for QFN (`QFN48-7x7-P0.5-EP5.15`), the vendor drawing code
+  (`SOT96-1`, `C04-052C`, `PW0020A`), a thickness or tab code where it
+  varies (`C0805-DH`, `SOT223-...-TabPin4`).
+- `category`: microcontroller, capacitor, resistor, inductor, diode,
+  transistor, led, crystal, fuse, connector, other (it changes how the 3D
+  model is drawn). `document_type` also accepts `product_page`, `pcn`,
+  `eol_notice`, `other`.
 
-## 2. Packages: reuse first
+## 2. Parts: existence and lifecycle
 
-Search before creating: `grep -rl "family: soic" packages/` and compare
-`pitch`, `lead_count`, body size. Reuse a package only if its dimensions
-match the new datasheet's outline drawing (same JEDEC outline / same
-numbers). A package created for one part should still be named
-generically (`standards/SOIC8-3.9x4.9-P1.27`) if it is a standard outline.
+- `existence: verified` only when the MPN is printed verbatim in an
+  ordering table or a product page's orderable list (cite it). An MPN
+  assembled from a part-numbering legend ("not all combinations are
+  valid") or an ordering *example* is `probable`; say which in the header.
+- Value-specific passives need **two** citations under `/existence`: the
+  ordering-code legend and the availability table (resistance range/E
+  series, the MLCC voltage/value cell).
+- `lifecycle` is required: `{status: unknown}` unless a first-party source
+  states it. TI's "PACKAGE OPTION ADDENDUM" Status column (inside the
+  datasheet, usually newer than the datasheet revision) and product pages
+  ("Full production", "Mass Production", "Active") are first-party; cite
+  the page.
+- Several MPNs (reel, grade, temperature) share one Device and Package.
 
-Supported `family` values and what the generators assume:
+## 3. Devices and pins
 
-| family | geometry convention | notes |
+- **Pinouts are per package.** A part in SOIC and DIP (TL431, ATmega328P,
+  W25Q128JV, MCP2515) often numbers pins differently: one Device per pin
+  map (`ti/TL431-D`, `microchip/ATmega328P-SPDIP28`), header says which
+  packages it covers.
+- Take pin names from the pin table, check numbers against the pinout
+  figure (and the outline's "STYLE" list for discretes). Prose can be
+  wrong ("numbered clockwise"); figures can carry typos -- trust the table
+  and note the conflict.
+- **Polarity is read from pin names**, never assumed from numbers: name an
+  LED's/diode's terminals `Cathode`/`Anode`, a polarised capacitor's
+  `+`/`-`. The 3D model puts the cathode band, the LED flat and the
+  tantalum band from these names (Kingbright numbers the cathode 1,
+  Everlight the anode 1). When a datasheet names terminals but doesn't
+  number them (OSRAM, many SOT-23 pinouts), number them in the generator's
+  position convention (section 4) or, for LEDs, cathode = 1, and say so
+  in the device header.
+- **Exposed pad**: add an `EP` pin only if the datasheet says what it
+  connects to; "recommended to VSS" -> type `passive`, never `ground`.
+  Otherwise omit the pin (the footprint still gets the pad).
+- `pin.duplicate_name` is exempt only for power/ground/nc/reserved: a
+  repeated name needs a type the datasheet justifies (a regulator's tab
+  repeating VOUT is `power`).
+
+## 4. Packages
+
+### Reuse only on identical numbers
+Search before creating (`grep -rl "family: soic" packages/`). Reuse only if
+every dimension in your drawing matches -- the same "LQFP48" or "SOT-23"
+differs by vendor (body 1.30 vs 1.60, pitch 1.90 vs 1.83, tolerances,
+A2 1.0 TQFP vs 1.4 LQFP). Compare numbers, not drawing revision letters. A
+reused package cites its own Source: pass it with `--source` when
+validating a single part. Different vendors' packages that happen to
+match number-for-number stay separate (each cites its own drawing).
+
+### Family conventions (what the generators assume)
+
+| family | convention | notes |
 |---|---|---|
-| `lqfp` (also TQFP) | 4 sides, pin 1 top of the left edge, counter-clockwise | body_width = E1 (X), body_length = D1 (Y) |
-| `qfn` | 4 sides flush terminals, optional `exposed_pad` | EP becomes a pad named "EP" |
-| `soic` | left/right rows, pin 1 top-left | body_width = E1 (across the rows) |
-| `sot` | needs `lead_layout: [bottom, top]` (SOT-23-3: `[2, 1]`, SOT-23-5: `[3, 2]`) | leads exit across `body_length` |
-| `chip` | 2 terminals along X; `body_length` is the long axis | resistor/MLCC/LED/diode/crystal/fuse by category |
-| `radial` | can of diameter `body_width`, pin 1 at -X | electrolytic: pin 1 = +; LED: pin 1 = cathode |
-| `axial` | horizontal can, pin 1 = cathode at -X | `body_height` = body length |
+| `lqfp` (TQFP too) | 4 equal sides, pin 1 top of left edge, CCW | body_width = E1 (X), body_length = D1 |
+| `qfn` | 4 equal sides, flush terminals, optional `exposed_pad` | unequal sides/DFN not supported |
+| `soic`, `tssop`, `ssop`, `msop` (VSSOP) | left/right rows, pin 1 top-left | body_width = E1, overall_width = E; MO-012/153/150/187 defaults |
+| `sot` | `lead_layout: [bottom, top]`; bottom left->right, top right->left (CCW) on the bottom grid | SOT-23-3 `[2, 1]`, SOT-23-5 `[3, 2]`, SOT-23-6 `[3, 3]`; leads exit across `body_length` |
+| `sot223` | 3 leads left edge from the top, tab right | `tab: {number}` from the source, `tab_width` (b2) |
+| `dpak` / `to252` | leads + trimmed centre lead + tab | `tab.trimmed_leads`, `tab_length` (L3) |
+| `chip` | 2 end terminals along X; `body_length` is the long axis | style by category; 4-pad parts not supported |
+| `radial` | can of diameter `body_width`, 2 leads | electrolytic stripe on the `-` lead |
+| `axial` | horizontal can, 2 leads | band at the cathode; axial resistors not supported |
 | `to92` | 3 leads, middle staggered | |
-| `dip` | `body_width` is the **row spacing** (7.62 for 300 mil) | the molding is drawn inside the rows |
-| `sip` | single row | |
-| `bga` | `lead_layout: [rows, cols]`, full grid, A1 top-left | |
+| `dip` | `body_width` is the **row spacing** eA (7.62/15.24) | E (shoulder width) is not the row spacing |
+| `sip`, `bga` | single row / `lead_layout: [rows, cols]`, A1 top-left | |
 
-Anything else (TSSOP, SOT-223, DPAK, 4-pad crystals, WS2812, axial
-resistors ...) is **not supported yet** -- don't force it into another
-family; report it.
+Not supported (report, don't force): DFN with leads on 2 sides only,
+SOIC-EP, 4-pad crystals, multi-die/RGB LEDs, round drum inductors, HC-49
+ovals, connectors.
 
-Dimensions (`docs/spec/canonical-data.md` 20.1), all `{nominal?, min?,
-max?, unit: mm}` with their own provenance pointer
-(`/dimensions/lead_width` ...):
-`body_width`, `body_length`, `body_height` (A2 body thickness),
-`overall_width`/`overall_length` (lead span E/D, HE), `overall_height`
-(A), `standoff` (A1), `lead_width` (b), `lead_length` (L),
-`lead_thickness` (c, A3 on QFN), `exposed_pad`. The validator rejects a
-span not larger than the body and a body/standoff not smaller than the
-overall height -- if `body_height` already holds A, don't also add
-`overall_height`.
+### Dimensions (canonical-data.md 20.1)
+`body_width`, `body_length`, `body_height` (A2, else A when no A2 is
+given -- then don't also add `overall_height`), `overall_width`/
+`overall_length` (lead span E/D, HE), `overall_height` (A), `standoff`
+(A1), `lead_width` (b), `lead_length` (L: the gull-wing **foot** -- NXP's
+`Lp`, not its `L`; on QFN the terminal length; DIP lead length to the
+seating plane is *not* `lead_length`), `lead_thickness` (c, A3 on QFN),
+`exposed_pad`, `tab_width`, `tab_length`. Each has its own provenance
+pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
 
-## 3. Reading datasheets
+- Parenthesised values ("(0.2)") are reference values: record only if the
+  table marks them as such and say so; "BSC" values are nominal.
+- Vendor letter codes differ from JEDEC: Diodes uses A=b, B=E1, C=E, H=D,
+  J=A1, M=c and orders columns Min/Max/Typ; Renesas uses D/E for the body
+  and HD/HE for the span; older Diodes DS swap L/L1. Read the drawing's
+  arrows, not just the letters (a "standoff"-looking value may not be A1).
+- Inch drawings: convert x25.4 and keep the inch text in the locator.
+- MLCC thickness depends on value and voltage (KEMET waterfall thickness
+  codes, Murata's 4th MPN character); footnotes can widen L/W for some
+  values. The package must match that cell. Bourns series have height
+  groups by value range (SRN4018 1.88 vs 1.80 max).
 
-- Open the PDF (WebFetch). For tables and drawings that text extraction
-  garbles, render the page (e.g. `python3 -c` with pypdfium2/pypdf if
-  available) and read the image; cross-check pinout diagrams against the
-  package outline's "STYLE" list or pin table.
-- Package outline pages often carry several variants (5x5 vs 6x6 QFN,
-  different lead counts). Confirm the drawing's title matches *your*
-  package before copying numbers.
-- Page numbers are the PDF page index you read, not the printed page if
-  they differ -- say which in the locator when ambiguous.
+## 5. Reading sources
 
-## 4. Verify
+- **Check what you downloaded**: `file x.pdf` -- error pages come back as
+  HTTP 200 (Espressif ESP32-C2 is `esp8684_datasheet_en.pdf`), and some
+  URLs serve another part's document (Diodes `BAT54.pdf` -> B0540W). Check
+  the title page.
+- Tools available here: poppler (`pdftotext -layout`, `pdftotext -bbox`
+  for multi-column pin tables, `pdftoppm -r 110..400 [-x -y -W -H]` to
+  render and crop). pypdf/pypdfium2 may be missing. Render tables whose
+  text extraction drops empty cells (MLCC waterfalls) or uses an encoded
+  font (Atmel-era Microchip pages extract as gibberish).
+- **Page numbers**: cite the PDF page index; when the printed number
+  differs (RP2350, ESP8684, Winbond: printed = PDF - 1), say which in the
+  Source comment.
+- Package outlines on one page can show several variants (QFN48 5x5 vs
+  6x6): confirm the drawing title. Old datasheets carry new outline
+  drawings (TI): cite the drawing number and revision. Many TI datasheets
+  omit some package drawings (PDIP N/P, D0016A): check the drawing exists
+  before choosing an MPN; TI's old MECHANICAL DATA sheets
+  (`ti.com/lit/pdf/mpdi001`) are image-only.
+- Dates: Raspberry Pi colophons are MM/DD/YYYY; Bourns footers carry
+  "REV. MM/YY"; Toshiba datasheets have no document number (cite the
+  footer date); Renesas document numbers embed the revision.
+- Shell: use a quoted heredoc (`<<'EOF'`) for YAML -- an unquoted one runs
+  backticks in comments.
+
+### Manufacturer access notes (as of 2026-11)
+
+| reachable directly | blocked / unavailable (don't work around) |
+|---|---|
+| ti.com/lit/ds/symlink/<part>.pdf; nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | onsemi.com (403; newer datasheets also drop the outline), st.com (timeouts), KEMET content site (expired TLS), TDK, Lite-On, Würth (Akamai 403), Coilcraft (Cloudflare), Nordic and Silicon Labs (403), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
+
+## 6. Verify
 
 From `openparts/`:
 
 ```sh
-# one part
-cargo run -q -p openparts-cli -- validate --part <part> --device <device> \
+# one part (add --source for a reused package's own source)
+./target/debug/openparts validate --part <part> --device <device> \
   --package <package> --source <source.yaml> [--source ...]
-# whole dataset (all parts, all references)
+# whole dataset
 ../openparts-data/scripts/validate.sh
-# footprint/pad sanity across every package (no overlaps, toe at span/2)
+# every package must generate; SMD pads must not overlap; toes at the span
 cargo test -q -p openparts --test vertical_slice
-# 3D model + PNG of your parts (filter = part of the MPN)
+# 3D model + PNG (one model per *package*: filter by the first MPN using it)
 cargo run -q -p openparts-solidcraft --example gallery -- ../openparts-data <out-dir> <filter>
 ```
 
-Look at the PNG of every new package (Read tool): leads on the right
-sides, pin-1 mark where pin 1 is, body proportions plausible. A part is
-done only when validate, the vertical_slice test and its gallery build
-all pass.
+Look at the PNG of every new **package**: leads on the right sides, pin-1
+mark at pin 1, plausible proportions. For `sot` layouts with 4+ leads,
+also check the generated pad x-positions against the datasheet's top view.
 
-## 5. Report
+## 7. Working in parallel
 
-List per part: files added, values verified (source/page/locator),
-values left out and why, anything unusual. Keep notes of what slowed you
-down or surprised you -- they go into the Learnings below.
+- Each agent owns its manufacturers, its package families or folders
+  (`packages/manufacturers/<mfr>/`), and the manufacturer files it may
+  create. Check before creating anything; never overwrite.
+- One malformed file from anyone breaks everyone's `validate.sh` and
+  gallery run: write files in one go (generate, then move into place), and
+  if a failure points at someone else's file, wait and re-run.
+- If `cargo run --example gallery` doesn't compile because code is being
+  edited, the prebuilt `target/debug/examples/gallery` still works.
 
-## Learnings
+## 8. Report
 
-(Collected from past ingestion runs; newest last.)
-
-- onsemi.com may refuse automated downloads; do not work around it.
-  KEMET's content site has served an expired TLS certificate -- treat as
-  unavailable, don't bypass.
-- ST serves only the latest datasheet revision; table and page numbers
-  move between revisions (DS5319 Rev 18 Table 61 p101 -> Rev 20 Table 62
-  p99).
-- Espressif datasheets show several QFN variants in one chapter (QFN48
-  5x5 vs 6x6); the wrong figure is an easy mistake.
-- A datasheet that never says "glass" (1N4148, Vishay 81857) does not
-  justify `construction: glass`, however obvious it looks.
+Per part: files added, values verified (source/page/locator), values left
+out and why, anything unusual. End with Learnings: concrete, reusable
+lessons for this skill (they get merged into the sections above).

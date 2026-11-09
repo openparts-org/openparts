@@ -108,6 +108,10 @@ Agentは以下を行ってはならない。
 - Manufacturer Logo等を無断で保存する
 - Canonical Main BranchへReviewなしで直接commitする
 - 未確認のPartを`verified`へ昇格させる
+- Access制御を回避する（User-Agent偽装、TLS証明書検証の無効化、Bot判定の回避、非公式Mirrorの利用、拒否されたURLを別Clientで再試行すること）
+- min/maxのみのDimensionへnominalを書き込む（Generatorは描画時のみ中間値を使い、Canonical Dataへ書き戻さない）
+
+拒否・到達不能なSourceは未確認として記録し、Candidate Reportへ理由を残す。
 
 ---
 
@@ -627,6 +631,8 @@ AgentはResearchに必要な外部Accessを利用できるが、
 
 等を適切に制限できる設計を推奨する。
 
+HTTP 200でもError Pageや別文書が返る場合がある。Download後はFile Type（PDFであること）と文書Title・対象Partを確認してからEvidenceとして扱う。
+
 ---
 
 # 29. Reproducibility
@@ -663,6 +669,13 @@ Broken source URL detection
 等の定期Taskを実行できる。
 
 ただし、CrawlerとCanonical Acceptanceは別Stageとする。
+
+複数Agentを並列実行する場合：
+
+- AgentごとにManufacturer・Package Family・作成可能なFile範囲を割り当て、同一Fileを複数Agentが作成しないようにする
+- Fileは排他的に作成し、既存Fileを上書きしない
+- 1つの不正なFileがDataset全体のValidationを止めるため、Fileは完成形で一度に配置する
+- 各AgentのCandidate Reportから得た知見はSkill（`skills/`）へ統合する
 
 ---
 
