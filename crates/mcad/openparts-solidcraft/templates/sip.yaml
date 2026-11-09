@@ -1,0 +1,16 @@
+# SIP: an upright molding on a single row of shouldered legs, the first
+# leg at (x, y), repeated at the pitch. Vars: pitch, count, x, y.
+- params:
+    pitch: ["{{pitch}}", lead pitch (datasheet)]
+    lead_count: ["{{count}}", leads, ""]
+    shoulder_w: [1.2 mm, lead width above the board]
+    pin_w: [0.5 mm, lead width in the hole]
+    pin_t: [0.3 mm, lead thickness]
+    lead_below: [3.5 mm, lead length under the board top]
+- solid.box:
+    {length: shoulder_w, width: pin_t, height: standoff, center: ["{{x}}", "{{y}}", standoff / 2],
+     operation: new, body_name: Leg, name: Leg}
+- solid.box:
+    {length: pin_w, width: pin_t, height: lead_below, center: ["{{x}}", "{{y}}", -lead_below / 2],
+     operation: join, targets: [Leg], name: LegPin}
+- solid.pattern.rectangular: {bodies: [Leg], dir1: [1, 0, 0], count1: lead_count, spacing1: pitch, name: LegRow}

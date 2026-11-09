@@ -1,0 +1,5 @@
+# The body's bounding size, from the canonical geometry.
+- params:
+    body_w: ["{{w}}", body size along X (datasheet)]
+    body_l: ["{{l}}", body size along Y (datasheet)]
+    body_h: ["{{h}}", "body thickness (datasheet, else generator default)"]

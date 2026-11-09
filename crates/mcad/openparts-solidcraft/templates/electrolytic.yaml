@@ -1,0 +1,27 @@
+# Aluminium electrolytic: rubber bung, PVC sleeve with the crimp groove,
+# a light polarity stripe over the negative lead, an aluminium top with a
+# pressure vent, recessed inside the sleeve's rolled lip.
+# Vars: can_d, can_h, sleeve_neg / stripe_neg ("-" draws that part on -X:
+# the stripe faces the negative lead).
+- params:
+    can_d: ["{{can_d}}", can diameter (datasheet)]
+    can_h: ["{{can_h}}", can height (datasheet)]
+    bung_h: [0.5 mm, rubber bung below the sleeve]
+    groove_z: [bung_h + 1.2 mm, crimp groove height]
+    lip: [0.6 mm, sleeve lip over the top edge]
+    top_t: [0.15 mm, recess of the aluminium top below the lip]
+    stripe_angle: [70 deg, polarity stripe width around the can]
+- include: tht_lead_params
+- include: {fragment: can_sleeve_section, name: Sleeve, id: sleeves, neg: "{{sleeve_neg}}", angle: 360 deg - stripe_angle}
+- include: {fragment: can_sleeve_section, name: Stripe, id: stripes, neg: "{{stripe_neg}}", angle: stripe_angle}
+- solid.cylinder:
+    {diameter: can_d - 2 * lip, height: top_t * 0.6, base: [0, 0, can_h - top_t],
+     operation: new, body_name: Top, name: Top}
+- solid.box:
+    {length: (can_d - 2 * lip) * 0.6, width: 0.12 mm, height: top_t * 0.6, center: [0, 0, can_h - top_t * 0.4],
+     operation: cut, targets: [Top], name: Vent1}
+- solid.box:
+    {length: 0.12 mm, width: (can_d - 2 * lip) * 0.6, height: top_t * 0.6, center: [0, 0, can_h - top_t * 0.4],
+     operation: cut, targets: [Top], name: Vent2}
+- solid.cylinder:
+    {diameter: can_d - 0.6 mm, height: bung_h, base: [0, 0, 0], operation: new, body_name: Bung, name: Bung}

@@ -1,0 +1,42 @@
+# BGA: solder balls on a laminate substrate under a drafted mold cap. The
+# grid is parametric: ball A1 at the top-left (-X, +Y), ball_rows x
+# ball_cols at the pitch. Vars: pitch, rows, cols, ball_d.
+- params:
+    pitch: ["{{pitch}}", ball pitch (datasheet)]
+    ball_rows: ["{{rows}}", "ball rows (A, B, ...)", ""]
+    ball_cols: ["{{cols}}", "ball columns (1, 2, ...)", ""]
+    ball_d: ["{{ball_d}}", solder ball diameter before reflow]
+    ball_h: [ball_d * 0.8, ball height (the collapsed top meets the pad)]
+    substrate_t: [0.36 mm, laminate substrate thickness]
+    cap_inset: [0.4 mm, mold cap inset from the substrate edge]
+    mold_draft: [15 deg, mold cap side draft]
+- solid.box:
+    {length: body_w, width: body_l, height: substrate_t, center: [0 mm, 0 mm, ball_h + substrate_t / 2],
+     operation: new, body_name: Substrate, name: Substrate}
+- sketch.create: {plane: XY, offset: ball_h + substrate_t, name: CapOutline}
+- sketch.rectangle.center: {center: [0, 0], corner: [body_w / 2 - cap_inset, body_l / 2 - cap_inset]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: CapOutline, distance: "max(body_h - ball_h - substrate_t, 0.3 mm)", taper: -mold_draft,
+     operation: new, body_name: MoldCap, name: MoldCap}
+# Ball A1, cut flat where it meets its pad, then the whole grid.
+- solid.sphere:
+    {diameter: ball_d, center: [-(ball_cols - 1) * pitch / 2, (ball_rows - 1) * pitch / 2, ball_d / 2],
+     operation: new, body_name: Ball, name: Ball}
+- solid.box:
+    {length: ball_d, width: ball_d, height: ball_h,
+     center: [-(ball_cols - 1) * pitch / 2, (ball_rows - 1) * pitch / 2, ball_h / 2],
+     operation: intersect, targets: [Ball], name: BallSeat}
+- solid.pattern.rectangular:
+    {bodies: [Ball], dir1: [1, 0, 0], count1: ball_cols, spacing1: pitch,
+     dir2: [0, -1, 0], count2: ball_rows, spacing2: pitch, name: BallGrid}
+# A1 mark: a dimple in the mold cap's corner over ball A1.
+- params:
+    dimple_d: [0.5 mm, A1 dimple diameter]
+- solid.cylinder:
+    diameter: dimple_d
+    height: 0.1 mm
+    base: [-body_w / 2 + cap_inset + 1 mm, body_l / 2 - cap_inset - 1 mm, "max(body_h, ball_h + substrate_t + 0.3 mm) - 0.05 mm"]
+    operation: cut
+    targets: [MoldCap]
+    name: A1Dimple

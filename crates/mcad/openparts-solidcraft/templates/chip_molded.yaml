@@ -1,0 +1,15 @@
+# Molded chip (diode, solid tantalum): lead-frame tabs folded under each
+# end of a drafted molding. Vars: tab_w, tab_embed.
+- params:
+    tab_t: [0.12 mm, lead frame thickness]
+    tab_w: ["{{tab_w}}", lead width]
+    tab_embed: ["{{tab_embed}}", lead length under the body]
+- include: molded_body
+- solid.box:
+    {length: term_len + tab_embed, width: tab_w, height: tab_t,
+     center: [-(body_w / 2 - (term_len + tab_embed) / 2), 0 mm, tab_t / 2],
+     operation: new, body_name: Lead1, name: Lead1}
+- solid.box:
+    {length: term_len + tab_embed, width: tab_w, height: tab_t,
+     center: [body_w / 2 - (term_len + tab_embed) / 2, 0 mm, tab_t / 2],
+     operation: new, body_name: Lead2, name: Lead2}

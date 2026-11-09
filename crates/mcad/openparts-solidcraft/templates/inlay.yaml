@@ -1,0 +1,3 @@
+# Cuts the tools' shapes out of the target, keeping the tools (terminals
+# inlaid in a body, a die under a lens). Vars: target, tools.
+- solid.combine: {target: "{{target}}", tools: "{{tools}}", operation: cut, keep_tools: true}

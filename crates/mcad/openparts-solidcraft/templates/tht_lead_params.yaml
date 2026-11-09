@@ -1,0 +1,4 @@
+# Through-hole leads: the board top is z = 0. Vars: pin_d.
+- params:
+    lead_below: [3.5 mm, lead length under the board top]
+    pin_d: ["{{pin_d}}", lead wire diameter]

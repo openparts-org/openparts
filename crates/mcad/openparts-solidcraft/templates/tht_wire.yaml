@@ -1,0 +1,5 @@
+# A straight round lead from `top` down through the board.
+# Needs pin_d, lead_below. Vars: name, x, y, top.
+- solid.cylinder:
+    {diameter: pin_d, height: "({{top}}) - (-lead_below)", base: ["{{x}}", "{{y}}", -lead_below],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

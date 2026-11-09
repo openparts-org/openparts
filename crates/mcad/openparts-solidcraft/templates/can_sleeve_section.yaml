@@ -1,0 +1,23 @@
+# Half section of the electrolytic sleeve (sketch x = radius, y = height),
+# revolved `angle` about Z, centred on +X (or -X with neg = "-").
+# Vars: name, id, neg, angle.
+- sketch.create: {plane: XZ, flip: x, offset: 0 mm, name: "{{name}}Section"}
+- sketch.line:
+    closed: true
+    ids: ["{{id}}0", "{{id}}1", "{{id}}2", "{{id}}3", "{{id}}4", "{{id}}5", "{{id}}6", "{{id}}7", "{{id}}8"]
+    points:
+      - ["{{neg}}(0 mm)", bung_h]
+      - ["{{neg}}(can_d / 2)", bung_h]
+      - ["{{neg}}(can_d / 2)", groove_z - 0.35 mm]
+      - ["{{neg}}(can_d / 2 - 0.3 mm)", groove_z]
+      - ["{{neg}}(can_d / 2)", groove_z + 0.35 mm]
+      - ["{{neg}}(can_d / 2)", can_h]
+      - ["{{neg}}(can_d / 2 - lip)", can_h]
+      - ["{{neg}}(can_d / 2 - lip)", can_h - top_t]
+      - ["{{neg}}(0 mm)", can_h - top_t]
+- sketch.fillet: {a: "{{id}}0", b: "{{id}}1", radius: 0.25 mm}
+- sketch.fillet: {a: "{{id}}4", b: "{{id}}5", radius: 0.45 mm}
+- sketch.finish: {}
+- solid.revolve:
+    {sketch: "{{name}}Section", axis: Z, angle: "{{angle}}", direction: symmetric,
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

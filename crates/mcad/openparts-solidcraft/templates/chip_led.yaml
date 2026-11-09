@@ -1,0 +1,19 @@
+# Chip LED: white base between gold terminals, a die under a clear lens.
+- params:
+    base_h: [body_h * 0.4, white base thickness]
+- solid.box:
+    {length: body_w - 2 * term_len, width: body_l, height: base_h,
+     center: [0 mm, 0 mm, base_h / 2], operation: new, body_name: Base, name: Base}
+- solid.box:
+    {length: term_len, width: body_l, height: base_h, center: [-(body_w / 2 - term_len / 2), 0 mm, base_h / 2],
+     operation: new, body_name: Terminal1, name: Terminal1}
+- solid.box:
+    {length: term_len, width: body_l, height: base_h, center: [body_w / 2 - term_len / 2, 0 mm, base_h / 2],
+     operation: new, body_name: Terminal2, name: Terminal2}
+- solid.box:
+    {length: body_w - 2 * term_len, width: body_l, height: body_h - base_h,
+     center: [0 mm, 0 mm, base_h + (body_h - base_h) / 2], operation: new, body_name: Lens, name: Lens}
+- solid.box:
+    {length: body_l * 0.35, width: body_l * 0.35, height: (body_h - base_h) * 0.3,
+     center: [0 mm, 0 mm, base_h + (body_h - base_h) * 0.15], operation: new, body_name: Die, name: Die}
+- solid.combine: {target: Lens, tools: [Die], operation: cut, keep_tools: true}

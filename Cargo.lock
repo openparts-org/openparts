@@ -961,6 +961,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "openparts-solidcraft"
+version = "0.1.0"
+dependencies = [
+ "openparts-core",
+ "openparts-data",
+ "openparts-mcad",
+ "serde_json",
+ "serde_yaml",
+ "thiserror",
+]
+
+[[package]]
 name = "openparts-step"
 version = "0.1.0"
 dependencies = [

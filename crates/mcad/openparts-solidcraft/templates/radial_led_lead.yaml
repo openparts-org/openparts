@@ -1,0 +1,5 @@
+# One square LED lead, up into the lens. Vars: name, x, y, top.
+- solid.box:
+    {length: pin_w, width: pin_w, height: "{{top}} + lead_below",
+     center: ["{{x}}", "{{y}}", "({{top}} - lead_below) / 2"],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

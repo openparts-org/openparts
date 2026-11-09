@@ -1,0 +1,20 @@
+# Axial diode: a can lying on the board with the cathode band at one end,
+# both ends rounded. Leads come from axial_lead.
+# Vars: can_len, can_d, pin_d, band_x, body_x (start of each part along X),
+# band_edge, body_edge (a point on each part's outer end edge), end_r.
+- params:
+    can_len: ["{{can_len}}", body length (datasheet)]
+    can_d: ["{{can_d}}", body diameter (datasheet)]
+    axis_z: [can_d / 2, lead axis height (body resting on the board)]
+    band_w: [can_len * 0.18, cathode band width]
+- include: tht_lead_params
+- params:
+    bend_r: [pin_d * 1.5, lead bend radius]
+- solid.cylinder:
+    {diameter: can_d, height: band_w, axis: X, base: ["{{band_x}}", 0, axis_z],
+     operation: new, body_name: Band, name: Band}
+- solid.cylinder:
+    {diameter: can_d, height: can_len - band_w, axis: X, base: ["{{body_x}}", 0, axis_z],
+     operation: new, body_name: Body, name: Body}
+- solid.fillet: {body: Band, edges: ["{{band_edge}}"], radius: "{{end_r}}", fit: reduce}
+- solid.fillet: {body: Body, edges: ["{{body_edge}}"], radius: "{{end_r}}", fit: reduce}

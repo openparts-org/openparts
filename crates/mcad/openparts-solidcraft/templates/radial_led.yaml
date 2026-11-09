@@ -1,0 +1,26 @@
+# T-1 / T-1 3/4 LED: an epoxy dome on a flanged base. The lead frame
+# (radial_led_lead) and the cathode flat (radial_led_flat) come after.
+# Vars: led_d, led_h, dome_r.
+- params:
+    led_d: ["{{led_d}}", lens diameter (datasheet)]
+    led_h: ["{{led_h}}", lens height above the flange bottom (datasheet)]
+    flange_d: [led_d + 0.8 mm, base flange diameter]
+    flange_h: [1 mm, base flange height]
+    pin_w: [0.5 mm, square lead size]
+    lead_below: [3.5 mm, lead length under the board top]
+- sketch.create: {plane: XZ, flip: x, offset: 0 mm, name: LensSection}
+- sketch.line:
+    closed: true
+    ids: [lenss0, lenss1, lenss2, lenss3, lenss4, lenss5]
+    points:
+      - [0 mm, 0 mm]
+      - [flange_d / 2, 0 mm]
+      - [flange_d / 2, flange_h]
+      - [led_d / 2, flange_h]
+      - [led_d / 2, led_h]
+      - [0 mm, led_h]
+- sketch.fillet: {a: lenss4, b: lenss5, radius: "{{dome_r}}"}
+- sketch.finish: {}
+- solid.revolve:
+    {sketch: LensSection, axis: Z, angle: 360 deg, direction: symmetric,
+     operation: new, body_name: Lens, name: Lens}

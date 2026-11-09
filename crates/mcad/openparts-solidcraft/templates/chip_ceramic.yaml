@@ -1,0 +1,12 @@
+# MLCC / chip fuse / multilayer inductor: a tumbled ceramic core between
+# end caps, every long edge rounded and the caps' outer ends too.
+# Vars: edge_r, core_edges, cap1_edges, cap2_edges (points on the edges).
+- solid.box:
+    {length: body_w - 2 * term_len, width: body_l, height: body_h,
+     center: [0 mm, 0 mm, body_h / 2], operation: new, body_name: Core, name: Core}
+- include: chip_end_caps
+- params:
+    edge_r: ["{{edge_r}}", tumbled edge radius]
+- solid.fillet: {body: Core, edges: "{{core_edges}}", radius: edge_r, fit: reduce}
+- solid.fillet: {body: Terminal1, edges: "{{cap1_edges}}", radius: edge_r, fit: reduce}
+- solid.fillet: {body: Terminal2, edges: "{{cap2_edges}}", radius: edge_r, fit: reduce}

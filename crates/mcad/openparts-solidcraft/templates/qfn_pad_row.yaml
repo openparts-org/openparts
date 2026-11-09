@@ -1,0 +1,8 @@
+# One QFN terminal at the row's first lead, flush with the body edge.
+# Vars: tag, plane, flip, first, neg, half (as gullwing_row).
+- sketch.create: {plane: "{{plane}}", flip: "{{flip}}", offset: "{{first}}", name: "PadProfile{{tag}}"}
+- sketch.rectangle.two_point: {p0: ["{{neg}}({{half}} - pad_len)", 0 mm], p1: ["{{neg}}({{half}})", term_t]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: "PadProfile{{tag}}", distance: pad_w, direction: symmetric,
+     operation: new, body_name: "Pad{{tag}}", name: "Pad{{tag}}"}

@@ -1,0 +1,13 @@
+# Tuning-fork crystal in a small round can with a rounded top edge.
+# Vars: can_d, can_h.
+- params:
+    can_d: ["{{can_d}}", can diameter (datasheet)]
+    can_h: ["{{can_h}}", can height (datasheet)]
+- sketch.create: {plane: XZ, flip: x, offset: 0 mm, name: CanSection}
+- sketch.line:
+    closed: true
+    ids: [cans0, cans1, cans2, cans3]
+    points: [[0 mm, 0 mm], [can_d / 2, 0 mm], [can_d / 2, can_h], [0 mm, can_h]]
+- sketch.fillet: {a: cans1, b: cans2, radius: 0.3 mm}
+- sketch.finish: {}
+- solid.revolve: {sketch: CanSection, axis: Z, angle: 360 deg, direction: symmetric, operation: new, body_name: Can, name: Can}

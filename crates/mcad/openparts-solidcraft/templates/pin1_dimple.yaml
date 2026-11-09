@@ -1,0 +1,12 @@
+# Pin-1 dimple on the top face, placed from the body's top-left corner so
+# it follows body_w / body_l. Vars: d, inset_x, inset_y, top, body.
+- params:
+    dimple_d: ["{{d}}", pin-1 dimple diameter]
+    dimple_depth: [0.05 mm, pin-1 dimple depth]
+- solid.cylinder:
+    diameter: dimple_d
+    height: dimple_depth * 2
+    base: ["-body_w / 2 + {{inset_x}}", "body_l / 2 - {{inset_y}}", "{{top}} - dimple_depth"]
+    operation: cut
+    targets: ["{{body}}"]
+    name: Pin1Dimple

@@ -1,0 +1,16 @@
+# HC-49/U crystal: a stadium-shaped metal can on a wider rim. The dataset
+# gives the can's width and height; its thickness is a generator default
+# in proportion (4.65 mm on an 11 mm can). Slot outlines take plain
+# numbers only. Vars: can_w, can_h, half_w, thickness.
+- params:
+    can_w: ["{{can_w}}", can width (datasheet)]
+    can_h: ["{{can_h}}", can height (datasheet)]
+    rim_h: [0.6 mm, base rim height]
+- sketch.create: {plane: XY, offset: rim_h, name: CanOutline}
+- sketch.slot.overall: {p0: ["{{neg_half_w}}", 0], p1: ["{{half_w}}", 0], width: "{{thickness}}"}
+- sketch.finish: {}
+- solid.extrude: {sketch: CanOutline, distance: can_h - rim_h, operation: new, body_name: Can, name: Can}
+- sketch.create: {plane: XY, name: RimOutline}
+- sketch.slot.overall: {p0: ["{{neg_rim_half_w}}", 0], p1: ["{{rim_half_w}}", 0], width: "{{rim_thickness}}"}
+- sketch.finish: {}
+- solid.extrude: {sketch: RimOutline, distance: rim_h, operation: new, body_name: Rim, name: Rim}

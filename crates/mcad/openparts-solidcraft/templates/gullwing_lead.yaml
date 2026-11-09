@@ -1,0 +1,10 @@
+# Gull-wing lead dimensions shared by every row. The width and reach come
+# from the footprint geometry; the rest are generator defaults.
+- params:
+    lead_w: ["{{lead_w}}", lead width (from the footprint geometry)]
+    lead_t: ["{{lead_t}}", lead frame thickness]
+    lead_reach: ["{{reach}}", body edge to lead toe (from the footprint geometry)]
+    lead_foot: ["{{foot}}", flat foot length on the board]
+    lead_exit: ["{{exit}}", straight run out of the body before the bend]
+    lead_embed: ["{{embed}}", lead length kept inside the body]
+    bend_r: [lead_t * 0.75, inner bend radius]

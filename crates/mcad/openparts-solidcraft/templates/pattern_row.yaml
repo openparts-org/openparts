@@ -1,0 +1,3 @@
+# Repeats a seed body along a lead row. Vars: seed, dir, count, spacing.
+- solid.pattern.rectangular:
+    {bodies: ["{{seed}}"], dir1: "{{dir}}", count1: "{{count}}", spacing1: "{{spacing}}", name: "{{seed}}Row"}

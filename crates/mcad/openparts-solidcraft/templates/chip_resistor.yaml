@@ -1,0 +1,11 @@
+# Thick-film chip resistor: alumina core, plated end caps, and the black
+# overcoat over the resistive layer between them. Vars: overcoat_t.
+- params:
+    overcoat_t: ["{{overcoat_t}}", resistive layer overcoat]
+- solid.box:
+    {length: body_w - 2 * term_len, width: body_l, height: body_h - overcoat_t,
+     center: [0 mm, 0 mm, (body_h - overcoat_t) / 2], operation: new, body_name: Core, name: Core}
+- include: chip_end_caps
+- solid.box:
+    {length: body_w - 2 * term_len, width: body_l * 0.9, height: overcoat_t,
+     center: [0 mm, 0 mm, body_h - overcoat_t / 2], operation: new, body_name: Overcoat, name: Overcoat}

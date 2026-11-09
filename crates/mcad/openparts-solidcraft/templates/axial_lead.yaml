@@ -1,0 +1,10 @@
+# An axial lead: out of the can end along the axis, bent down into its
+# hole. A round wire along a two-segment path with one bend.
+# Vars: name, y (path plane offset), start_x, x (hole position).
+- sketch.create: {plane: XZ, flip: x, offset: "{{y}}", name: "{{name}}Path"}
+- sketch.line: {points: [["{{start_x}}", axis_z], ["{{x}}", axis_z], ["{{x}}", -lead_below]], ids: [w0, w1]}
+- sketch.fillet: {a: w0, b: w1, radius: bend_r}
+- sketch.finish: {}
+- solid.pipe:
+    {path_sketch: "{{name}}Path", path: [w0, a1, w1], diameter: pin_d,
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

@@ -1,0 +1,8 @@
+# QFN/DFN: a sawn, straight-sided mold body whose lead-frame terminals sit
+# flush in its underside and show on the sawn edges.
+# Vars: pad_len, pad_w (from the footprint geometry).
+- params:
+    pad_len: ["{{pad_len}}", terminal length (from the footprint geometry)]
+    pad_w: ["{{pad_w}}", terminal width (from the footprint geometry)]
+    term_t: [0.2 mm, lead-frame thickness visible on the sawn edge]
+- solid.box: {length: body_w, width: body_l, height: body_h, center: [0, 0, body_h / 2], body_name: Body, name: Body}

@@ -1,0 +1,10 @@
+# DIP pin-1 end notch, and the lead dimensions.
+- solid.cylinder:
+    {diameter: 1 mm, height: 0.6 mm, base: [0, body_l / 2, standoff + body_h - 0.3 mm],
+     operation: cut, targets: [Body], name: Pin1Notch}
+- params:
+    lead_t: [0.25 mm, lead thickness]
+    shoulder_w: [1.4 mm, lead width above the board]
+    pin_w: [0.5 mm, lead width in the hole]
+    lead_below: [3.5 mm, lead length under the board top]
+    bend_r: [lead_t, inner bend radius]

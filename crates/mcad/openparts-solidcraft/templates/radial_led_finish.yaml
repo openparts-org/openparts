@@ -1,0 +1,11 @@
+# The cathode lead's reflector anvil, the lead frame inlaid in the lens,
+# and the flange flat on the cathode side. (The flat is cut after the
+# inlay: the kernel refuses the inlay on a dome that already has it.)
+# Vars: anvil_len, anvil_x, y, cathode, leads, flat_x.
+- solid.box:
+    {length: "{{anvil_len}}", width: pin_w * 1.6, height: 0.6 mm,
+     center: ["{{anvil_x}}", "{{y}}", led_h * 0.45 + 0.3 mm], operation: join, targets: ["{{cathode}}"], name: Anvil}
+- solid.combine: {target: Lens, tools: "{{leads}}", operation: cut, keep_tools: true}
+- solid.box:
+    {length: 1 mm, width: flange_d + 1 mm, height: flange_h * 2, center: ["{{flat_x}}", 0, 0],
+     operation: cut, targets: [Lens], name: CathodeFlat}

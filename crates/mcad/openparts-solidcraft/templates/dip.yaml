@@ -1,0 +1,6 @@
+# DIP: the geometry drills the rows at +-body_width/2 (a DIP's "body
+# width" is the row spacing); the molding sits inside the rows, on a
+# seating standoff, with a pin-1 end notch. Vars: row_span, mold_w.
+- params:
+    row_span: ["{{row_span}}", row-to-row spacing (footprint geometry)]
+    body_w: ["{{mold_w}}", molding width inside the rows]

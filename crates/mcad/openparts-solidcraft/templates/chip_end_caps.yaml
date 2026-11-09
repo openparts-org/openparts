@@ -1,0 +1,7 @@
+# The two end caps of a chip (pin 1 at -X), full body cross-section.
+- solid.box:
+    {length: term_len, width: body_l, height: body_h, center: [-(body_w / 2 - term_len / 2), 0 mm, body_h / 2],
+     operation: new, body_name: Terminal1, name: Terminal1}
+- solid.box:
+    {length: term_len, width: body_l, height: body_h, center: [body_w / 2 - term_len / 2, 0 mm, body_h / 2],
+     operation: new, body_name: Terminal2, name: Terminal2}

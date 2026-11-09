@@ -1,0 +1,17 @@
+# Transfer-molded body: an outline at the mold parting line, drafted up to
+# the top face and down to the seating standoff, the way real mold
+# cavities release. Needs body_w, body_l, body_h.
+# Vars: half_x, half_y (outline half sizes), standoff, parting_ratio, draft.
+- params:
+    standoff: ["{{standoff}}", seating plane to body underside (A1)]
+    parting: ["standoff + body_h * {{parting_ratio}}", mold parting line; leads leave the body here]
+    mold_draft: ["{{draft}}", mold release draft of the body sides]
+- sketch.create: {plane: XY, offset: parting, name: BodyOutline}
+- sketch.rectangle.center: {center: [0, 0], corner: ["{{half_x}}", "{{half_y}}"]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: BodyOutline, distance: standoff + body_h - parting, taper: -mold_draft,
+     body_name: Body, name: BodyTop}
+- solid.extrude:
+    {sketch: BodyOutline, distance: parting - standoff, direction: negative, taper: -mold_draft,
+     operation: join, targets: [Body], name: BodyBottom}

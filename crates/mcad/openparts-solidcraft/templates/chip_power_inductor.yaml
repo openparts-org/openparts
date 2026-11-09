@@ -1,0 +1,22 @@
+# Shielded power inductor: a ferrite block with rounded corners, the wound
+# drum showing as a ring on top, tin terminals under each end.
+# Vars: corner_r, corner_edges (points on the four vertical edges).
+- params:
+    tab_t: [0.1 mm, terminal thickness]
+    corner_r: ["{{corner_r}}", block corner radius]
+    drum_d: ["min(body_w, body_l) * 0.72", drum diameter seen on top]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h - tab_t,
+     center: [0 mm, 0 mm, tab_t + (body_h - tab_t) / 2], operation: new, body_name: Core, name: Core}
+- solid.fillet: {body: Core, edges: "{{corner_edges}}", radius: corner_r, fit: reduce}
+# A ring groove: cut the drum outline, then fill its centre back in.
+- solid.cylinder:
+    {diameter: drum_d, height: 0.4 mm, base: [0, 0, body_h - 0.2 mm], operation: cut, targets: [Core], name: DrumGroove}
+- solid.cylinder:
+    {diameter: drum_d * 0.86, height: 0.2 mm, base: [0, 0, body_h - 0.2 mm], operation: join, targets: [Core], name: DrumTop}
+- solid.box:
+    {length: term_len, width: body_l * 0.5, height: tab_t, center: [-(body_w / 2 - term_len / 2), 0 mm, tab_t / 2],
+     operation: new, body_name: Terminal1, name: Terminal1}
+- solid.box:
+    {length: term_len, width: body_l * 0.5, height: tab_t, center: [body_w / 2 - term_len / 2, 0 mm, tab_t / 2],
+     operation: new, body_name: Terminal2, name: Terminal2}

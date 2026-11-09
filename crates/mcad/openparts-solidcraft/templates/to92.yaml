@@ -1,0 +1,16 @@
+# TO-92: the D-shaped molding (flat face toward +Y) raised on its legs,
+# the top back edge rounded. Legs come from to92_leg / to92_formed_leg.
+# Vars: x, y (body centre), top_back_edge (a point on the rounded edge).
+- params:
+    seat_h: [2 mm, body underside above the board (formed legs)]
+    pin_w: [0.45 mm, leg width]
+    pin_t: [0.38 mm, leg thickness]
+    lead_below: [3.5 mm, lead length under the board top]
+- solid.cylinder:
+    {diameter: body_w, height: body_h, base: ["{{x}}", "{{y}} - body_l / 2 + body_w / 2", seat_h],
+     operation: new, body_name: Body, name: Body}
+- solid.box:
+    {length: body_w + 2 mm, width: body_w, height: body_h + 2 mm,
+     center: ["{{x}}", "{{y}} + body_l / 2 + body_w / 2", seat_h + body_h / 2],
+     operation: cut, targets: [Body], name: FlatFace}
+- solid.fillet: {body: Body, edges: ["{{top_back_edge}}"], radius: 0.4 mm, fit: reduce}

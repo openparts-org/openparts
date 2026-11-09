@@ -1,0 +1,17 @@
+# SMD crystal: ceramic base, seam-welded metal lid, pads under the ends.
+- params:
+    pad_t: [0.03 mm, terminal pad thickness]
+    base_h: [body_h * 0.55, ceramic base thickness]
+    lid_inset: [body_l * 0.08, lid inset from the base edge]
+- solid.box:
+    {length: body_w, width: body_l, height: base_h - pad_t,
+     center: [0 mm, 0 mm, pad_t + (base_h - pad_t) / 2], operation: new, body_name: Base, name: Base}
+- solid.box:
+    {length: body_w - 2 * lid_inset, width: body_l - 2 * lid_inset, height: body_h - base_h,
+     center: [0 mm, 0 mm, base_h + (body_h - base_h) / 2], operation: new, body_name: Lid, name: Lid}
+- solid.box:
+    {length: term_len, width: body_l * 0.8, height: pad_t, center: [-(body_w / 2 - term_len / 2), 0 mm, pad_t / 2],
+     operation: new, body_name: Terminal1, name: Terminal1}
+- solid.box:
+    {length: term_len, width: body_l * 0.8, height: pad_t, center: [body_w / 2 - term_len / 2, 0 mm, pad_t / 2],
+     operation: new, body_name: Terminal2, name: Terminal2}
