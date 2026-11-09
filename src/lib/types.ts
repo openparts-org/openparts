@@ -123,9 +123,15 @@ export interface ArtifactsResponse {
   "kicad-footprint": string;
   step: string;
   stl: string;
+  "3mf": string;
 }
 
-export type ArtifactKind = "kicad-symbol" | "kicad-footprint" | "step" | "stl";
+export type ArtifactKind =
+  | "kicad-symbol"
+  | "kicad-footprint"
+  | "step"
+  | "stl"
+  | "3mf";
 
 export interface DiagnosticBody {
   rule_id: string;

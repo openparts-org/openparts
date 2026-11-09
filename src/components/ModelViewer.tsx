@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
 import { artifactDownloadUrl } from "../lib/api";
 import { t, type Lang } from "../lib/i18n";
 import type { ApiErrorBody } from "../lib/types";
@@ -31,6 +32,52 @@ function chooseGridStep(footprint: number): number {
   return best;
 }
 
+type Loaded = { object: THREE.Object3D } | ApiErrorBody;
+
+async function errorBody(res: Response): Promise<ApiErrorBody> {
+  return res.json().catch(() => ({ error: res.statusText }));
+}
+
+// Prefers the 3MF artifact, which keeps SolidCraft's colour per body
+// (mold compound, plated leads, polarity marks, ...); falls back to the
+// uncoloured STL, drawn in a neutral grey, when there is no 3MF or it
+// doesn't parse.
+async function loadModel(manufacturer: string, mpn: string): Promise<Loaded> {
+  const threeMf = await fetch(artifactDownloadUrl(manufacturer, mpn, "3mf"));
+  if (threeMf.ok) {
+    try {
+      const group = new ThreeMFLoader().parse(await threeMf.arrayBuffer());
+      if (group.children.length > 0) return { object: group };
+    } catch {
+      // fall through to the STL
+    }
+  }
+
+  const stl = await fetch(artifactDownloadUrl(manufacturer, mpn, "stl"));
+  if (!stl.ok) return errorBody(stl);
+  const geometry = new STLLoader().parse(await stl.arrayBuffer());
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x8f97a3,
+    metalness: 0.2,
+    roughness: 0.6,
+  });
+  return { object: new THREE.Mesh(geometry, material) };
+}
+
+function disposeObject(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.geometry.dispose();
+    const materials = Array.isArray(child.material)
+      ? child.material
+      : [child.material];
+    for (const material of materials) {
+      (material as THREE.Material & { map?: THREE.Texture | null }).map?.dispose();
+      material.dispose();
+    }
+  });
+}
+
 export default function ModelViewer({
   manufacturer,
   mpn,
@@ -52,7 +99,7 @@ export default function ModelViewer({
     let cancelled = false;
     let renderer: THREE.WebGLRenderer | null = null;
     let controls: OrbitControls | null = null;
-    let mesh: THREE.Mesh | null = null;
+    let model: THREE.Group | null = null;
     let grid: THREE.GridHelper | null = null;
     let frameId = 0;
     let resizeObserver: ResizeObserver | null = null;
@@ -61,36 +108,37 @@ export default function ModelViewer({
       setStatus("loading");
       setErrorMessage(null);
 
-      const url = artifactDownloadUrl(manufacturer, mpn, "stl");
-      const res = await fetch(url);
-      if (!res.ok) {
-        const body: ApiErrorBody = await res
-          .json()
-          .catch(() => ({ error: res.statusText }));
-        if (!cancelled) {
-          setErrorMessage(body.error);
-          setStatus("error");
-        }
+      const loaded = await loadModel(manufacturer, mpn);
+      if (cancelled || !container) {
+        if ("object" in loaded) disposeObject(loaded.object);
         return;
       }
-      const buffer = await res.arrayBuffer();
-      if (cancelled || !container) return;
+      if ("error" in loaded) {
+        setErrorMessage(loaded.error);
+        setStatus("error");
+        return;
+      }
 
-      const geometry = new STLLoader().parse(buffer);
-      // STL/STEP artifacts use OpenParts' mechanical-CAD "Z is up"
-      // convention (see openparts-brep), while three.js is Y-up -- rotate
-      // so the model sits flat on the floor grid the way it physically
-      // would on a bench, instead of appearing on its side.
-      geometry.center();
-      geometry.rotateX(-Math.PI / 2);
-      geometry.computeBoundingBox();
-      geometry.computeBoundingSphere();
+      // 3MF/STL artifacts use OpenParts' mechanical-CAD "Z is up"
+      // convention, while three.js is Y-up -- rotate so the model sits
+      // flat on the floor grid the way it physically would on a bench,
+      // instead of appearing on its side, then centre it on the origin.
+      model = new THREE.Group();
+      model.add(loaded.object);
+      model.rotation.x = -Math.PI / 2;
+      model.updateMatrixWorld(true);
+      const center = new THREE.Box3()
+        .setFromObject(model)
+        .getCenter(new THREE.Vector3());
+      model.position.sub(center);
+      model.updateMatrixWorld(true);
 
-      const box = geometry.boundingBox ?? new THREE.Box3();
+      const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());
-      const radius =
-        geometry.boundingSphere?.radius ??
-        Math.max(size.x, size.y, size.z, 1) / 2;
+      const radius = box.isEmpty()
+        ? 1
+        : box.getBoundingSphere(new THREE.Sphere()).radius ||
+          Math.max(size.x, size.y, size.z, 1) / 2;
 
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0xffffff);
@@ -109,13 +157,7 @@ export default function ModelViewer({
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x8f97a3,
-        metalness: 0.2,
-        roughness: 0.6,
-      });
-      mesh = new THREE.Mesh(geometry, material);
-      scene.add(mesh);
+      scene.add(model);
 
       // Real-world-scale (mm) floor grid, sized off the model's actual
       // footprint, positioned flush with the model's bottom face.
@@ -175,10 +217,7 @@ export default function ModelViewer({
       cancelAnimationFrame(frameId);
       resizeObserver?.disconnect();
       controls?.dispose();
-      if (mesh) {
-        mesh.geometry.dispose();
-        (mesh.material as THREE.Material).dispose();
-      }
+      if (model) disposeObject(model);
       grid?.geometry.dispose();
       if (grid?.material) {
         const gridMaterial = grid.material as THREE.Material | THREE.Material[];
