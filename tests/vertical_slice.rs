@@ -192,3 +192,99 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
     // A thick-film resistor: alumina core, black overcoat, 2 end caps.
     assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 4);
 }
+
+/// Every package in the dataset: its SMD footprint pads (the geometry's
+/// lead outlines) never overlap each other, and where a package states
+/// its lead-tip span (`overall_width`/`overall_length`) the outermost pad
+/// edge -- the gull-wing toe -- lands exactly on half of it. Guards the
+/// switch from generator defaults to datasheet lead dimensions, which
+/// moved real footprint pads.
+#[test]
+fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
+    let mut files = Vec::new();
+    let mut dirs = vec![data_dir().join("packages")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "yaml") {
+                files.push(path);
+            }
+        }
+    }
+    assert!(!files.is_empty());
+    for file in files {
+        let package = openparts_data::load_package(&file).unwrap();
+        let Ok(geometry) = openparts_mcad::generate(&package) else {
+            continue; // e.g. a package missing a required dimension
+        };
+        let rect = |l: &openparts_mcad::Lead| {
+            let (hx, hy) = (l.size.x / 2.0, l.size.y / 2.0);
+            (
+                l.position.x - hx,
+                l.position.x + hx,
+                l.position.y - hy,
+                l.position.y + hy,
+            )
+        };
+        // Through-hole pads are KiCad reference-footprint copper sizes,
+        // not lead outlines, and aren't checked here.
+        let smd: Vec<_> = geometry
+            .leads
+            .iter()
+            .filter(|l| l.mounting == openparts_mcad::Mounting::Smd)
+            .collect();
+        for (i, a) in smd.iter().enumerate() {
+            for b in &smd[i + 1..] {
+                let (ra, rb) = (rect(a), rect(b));
+                let overlap = ra.0 < rb.1 - 1e-9
+                    && rb.0 < ra.1 - 1e-9
+                    && ra.2 < rb.3 - 1e-9
+                    && rb.2 < ra.3 - 1e-9;
+                assert!(
+                    !overlap,
+                    "{}: pads {} and {} overlap",
+                    package.id, a.number, b.number
+                );
+            }
+        }
+        if !matches!(
+            geometry.lead_form,
+            Some(openparts_mcad::LeadForm::GullWing { .. })
+        ) {
+            continue;
+        }
+        let dims = &package.dimensions;
+        for (span, outer) in [
+            (
+                &dims.overall_width,
+                geometry
+                    .leads
+                    .iter()
+                    .map(|l| rect(l).1)
+                    .fold(f64::MIN, f64::max),
+            ),
+            (
+                &dims.overall_length,
+                geometry
+                    .leads
+                    .iter()
+                    .map(|l| rect(l).3)
+                    .fold(f64::MIN, f64::max),
+            ),
+        ] {
+            let Some(span) = span.as_ref() else { continue };
+            let expected = span
+                .nominal
+                .or(span.min.zip(span.max).map(|(a, b)| (a + b) / 2.0));
+            if let Some(expected) = expected {
+                assert!(
+                    (outer - expected / 2.0).abs() < 1e-9,
+                    "{}: toe at {outer}, lead span {expected}",
+                    package.id
+                );
+            }
+        }
+    }
+}

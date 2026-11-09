@@ -5,6 +5,7 @@ use crate::common;
 use crate::script::{looks, mm};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
+use openparts_mcad::LeadForm;
 
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
@@ -12,11 +13,21 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     if rows.is_empty() {
         return Err(ModelError::NoLeads(input.package.family.clone()));
     }
+    let Some(LeadForm::Flush { thickness }) = g.lead_form else {
+        return Err(ModelError::UnsupportedFamily(format!(
+            "{} (geometry has no flush-terminal lead form)",
+            input.package.family
+        )));
+    };
     common::body_params(s, g)?;
     let (pad_len, pad_w) = rows[0].lead_size();
     s.fragment(
         fragment!("qfn"),
-        &vars!(pad_len = mm(pad_len), pad_w = mm(pad_w)),
+        &vars!(
+            pad_len = mm(pad_len),
+            pad_w = mm(pad_w),
+            term_t = mm(thickness.min(g.body.size.z * 0.5))
+        ),
     )?;
     common::pin1_dimple(s, g, "Body", "body_h")?;
     let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);

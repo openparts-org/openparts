@@ -168,6 +168,7 @@ pub fn generate_bga(package: &Package) -> Result<MechanicalGeometry, McadError> 
         body,
         leads,
         markers,
+        lead_form: None,
     })
 }
 
@@ -205,8 +206,16 @@ mod tests {
                 },
                 body_height: None,
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: Some(vec![6, 8]),
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

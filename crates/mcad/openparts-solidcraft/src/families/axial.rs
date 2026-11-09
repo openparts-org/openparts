@@ -1,11 +1,14 @@
 //! Axial diodes: a can lying on the board, the cathode band at pin 1
-//! (KiCad D_DO-*), leads bent down into their holes. DO-35 is glass.
+//! (KiCad D_DO-*), leads bent down into their holes. A package whose
+//! source states a glass body (`construction: glass`, e.g. DO-35) is
+//! drawn as tinted glass with a dark band; anything else as a molding.
 
 use super::wire_d;
 use crate::common::edge_point;
 use crate::script::{looks, mm, Look};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
+use openparts_core::PackageConstruction;
 
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let leads = &input.geometry.leads;
@@ -13,12 +16,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         return Err(ModelError::NoLeads(input.package.family.clone()));
     };
     let body = &input.geometry.body;
-    let glass = input
-        .package
-        .id
-        .to_string()
-        .to_ascii_uppercase()
-        .contains("DO35");
+    let glass = input.package.construction == Some(PackageConstruction::Glass);
     let (hl, d) = (body.size.x / 2.0, body.size.y);
     let cathode_left = pin1.position.x <= 0.0;
     let top = d; // the top of the can's end circles (it rests on z = 0)

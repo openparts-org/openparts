@@ -16,14 +16,103 @@ pub struct ExposedPadDimensions {
 }
 
 /// Canonical Data Specification section 20.
+///
+/// `body_width` runs along X and `body_length` along Y of the package's
+/// own frame (the frame the Geometry Generator lays leads out in), and
+/// every `overall_*` span below is measured along the same axis as the
+/// body dimension of the same name. The lead dimensions are the
+/// datasheet's package-outline symbols (JEDEC naming in brackets); a
+/// field the datasheet doesn't state stays `None` -- the generator then
+/// falls back to its own documented family default, which is never
+/// written back here (section 7).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PackageDimensions {
     pub body_width: Dimension,
     pub body_length: Dimension,
+    /// Molded body thickness, seating-plane independent (JEDEC A2 for
+    /// leaded packages; A for leadless packages that state no A2).
     #[serde(default)]
     pub body_height: Option<Dimension>,
     #[serde(default)]
     pub exposed_pad: Option<ExposedPadDimensions>,
+    /// Lead-tip-to-lead-tip span along X, including the leads (JEDEC E
+    /// for QFP/SOIC when `body_width` is E1; HE on SOT drawings).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overall_width: Option<Dimension>,
+    /// Lead-tip-to-lead-tip span along Y, including the leads (JEDEC D
+    /// for QFP when `body_length` is D1; HD/HE on SOT drawings).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overall_length: Option<Dimension>,
+    /// Seating plane to the top of the package (JEDEC A).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overall_height: Option<Dimension>,
+    /// Seating plane to the underside of the body (JEDEC A1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standoff: Option<Dimension>,
+    /// Lead / terminal width, across the lead (JEDEC b).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_width: Option<Dimension>,
+    /// Length of the lead's flat foot on the seating plane for gull-wing
+    /// leads, or of the terminal for leadless packages (JEDEC L); for
+    /// chip parts, the end-termination band length.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_length: Option<Dimension>,
+    /// Lead-frame thickness (JEDEC c; A3 terminal thickness on QFN/DFN).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_thickness: Option<Dimension>,
+}
+
+impl PackageDimensions {
+    /// Every present dimension with its JSON Pointer path under the
+    /// Package document (for validation and provenance checks).
+    pub fn entries(&self) -> Vec<(&'static str, &Dimension)> {
+        let mut out = vec![
+            ("/dimensions/body_width", &self.body_width),
+            ("/dimensions/body_length", &self.body_length),
+        ];
+        let optional = [
+            ("/dimensions/body_height", &self.body_height),
+            ("/dimensions/overall_width", &self.overall_width),
+            ("/dimensions/overall_length", &self.overall_length),
+            ("/dimensions/overall_height", &self.overall_height),
+            ("/dimensions/standoff", &self.standoff),
+            ("/dimensions/lead_width", &self.lead_width),
+            ("/dimensions/lead_length", &self.lead_length),
+            ("/dimensions/lead_thickness", &self.lead_thickness),
+        ];
+        out.extend(
+            optional
+                .into_iter()
+                .filter_map(|(path, dim)| dim.as_ref().map(|d| (path, d))),
+        );
+        if let Some(ep) = &self.exposed_pad {
+            out.push(("/dimensions/exposed_pad/width", &ep.width));
+            out.push(("/dimensions/exposed_pad/length", &ep.length));
+        }
+        out
+    }
+}
+
+/// Canonical Data Specification section 20: the package's physical
+/// construction, as the source document states it -- a closed vocabulary
+/// of facts that change how the part looks (and is handled), never a
+/// guess from its size or name. Absent when the source doesn't say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageConstruction {
+    /// Transfer-molded plastic/epoxy body (most ICs, SOD/SMA diodes,
+    /// DO-41 "molded plastic" axial diodes).
+    Molded,
+    /// Molded case around a solid-tantalum capacitor element (KEMET
+    /// T49x and similar), anode-marked.
+    TantalumMolded,
+    /// Hermetically sealed glass body (e.g. DO-35 small-signal diodes).
+    Glass,
+    /// Fired ceramic body with plated end terminations (MLCC, ceramic
+    /// chip inductors/fuses).
+    Ceramic,
+    /// Metal can (crystals, aluminium electrolytics).
+    MetalCan,
 }
 
 /// Canonical Data Specification section 21.
@@ -66,6 +155,10 @@ pub struct Package {
     /// evenly and don't use this field).
     #[serde(default)]
     pub lead_layout: Option<Vec<u32>>,
+    /// Physical construction as the source states it (section 20);
+    /// `None` when not recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub construction: Option<PackageConstruction>,
     #[serde(default)]
     pub geometry: Option<PackageGeometrySpec>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]

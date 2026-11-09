@@ -1,9 +1,11 @@
+use crate::defaults;
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
 /// Generator default: typical end-termination length for a small
-/// 2-terminal chip component. Not a datasheet fact -- an approximation,
-/// same policy as the LQFP/QFN generators' lead-shape defaults.
+/// 2-terminal chip component, used when the package states no
+/// `lead_length`. Not a datasheet fact -- an approximation, same policy
+/// as `defaults.rs`.
 const DEFAULT_TERMINATION_LENGTH_MM: f64 = 0.3;
 const DEFAULT_BODY_HEIGHT_MM: f64 = 0.45;
 
@@ -54,7 +56,9 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
         shape: BodyShape::Box,
     };
 
-    let term_len = DEFAULT_TERMINATION_LENGTH_MM.min(body_len / 2.0);
+    let term_len = defaults::value(&package.dimensions.lead_length)
+        .unwrap_or(DEFAULT_TERMINATION_LENGTH_MM)
+        .min(body_len / 2.0);
     let term_size = Size3 {
         x: term_len,
         y: body_w,
@@ -90,6 +94,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
         body,
         leads,
         markers: vec![],
+        lead_form: None,
     })
 }
 
@@ -132,8 +137,16 @@ mod tests {
                     unit: "mm".into(),
                 }),
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: None,
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

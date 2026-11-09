@@ -33,7 +33,8 @@ pub use kind::Kind;
 pub use lifecycle::{Lifecycle, LifecycleStatus};
 pub use manufacturer::{Manufacturer, Website};
 pub use package::{
-    ExposedPadDimensions, GeometryType, Package, PackageDimensions, PackageGeometrySpec,
+    ExposedPadDimensions, GeometryType, Package, PackageConstruction, PackageDimensions,
+    PackageGeometrySpec,
 };
 pub use part::Part;
 pub use pin::{Pin, PinOverride, PinType};

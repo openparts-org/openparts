@@ -1516,6 +1516,7 @@ mod tests {
                 drill: None,
             }],
             markers: vec![],
+            lead_form: None,
         };
         let footprint = build_footprint("EX1", &geometry);
         assert_eq!(footprint.pads.len(), 1);
@@ -1559,6 +1560,7 @@ mod tests {
             },
             leads: vec![lead("1", -1.0), lead("2", 1.0)],
             markers: vec![],
+            lead_form: None,
         };
         let footprint = build_footprint("EX1", &geometry);
         let pad1 = footprint.pads.iter().find(|p| p.number == "1").unwrap();
@@ -1601,6 +1603,7 @@ mod tests {
             },
             leads: vec![lead("1", -0.5), lead("2", 0.5)],
             markers: vec![],
+            lead_form: None,
         };
         let footprint = build_footprint("EX1", &geometry);
         for pad in &footprint.pads {

@@ -132,6 +132,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
         body,
         leads,
         markers: vec![],
+        lead_form: None,
     })
 }
 
@@ -174,8 +175,16 @@ mod tests {
                     unit: "mm".into(),
                 }),
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: None,
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

@@ -5,39 +5,37 @@ use crate::common;
 use crate::script::{looks, mm};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
+use openparts_mcad::LeadForm;
 
-/// Generator defaults per family (JEDEC-typical; not datasheet facts).
+/// Modelling choices per family -- how the molding and the bend are
+/// drawn, not package dimensions: lead thickness, foot length and
+/// standoff come from the geometry's `LeadForm` (datasheet value, else
+/// openparts-mcad's family default), the same source as the footprint.
 pub struct Family {
     /// Whether the top carries a pin-1 dimple (SOT-23 class parts don't).
     pub dimple: bool,
-    pub standoff: f64,
     pub parting_ratio: f64,
     pub draft_deg: f64,
-    pub lead_t: f64,
     /// Straight run out of the body before the bend.
     pub lead_exit: f64,
     /// Lead length kept inside the body.
     pub lead_embed: f64,
 }
 
-/// LQFP/TQFP (JEDEC MS-026): 0.15 mm lead frame, 0.1 mm standoff.
+/// LQFP/TQFP (JEDEC MS-026).
 pub const QFP: Family = Family {
     dimple: true,
-    standoff: 0.1,
     parting_ratio: 0.45,
     draft_deg: 12.0,
-    lead_t: 0.15,
     lead_exit: 0.25,
     lead_embed: 0.2,
 };
 
-/// SOIC/SOP (JEDEC MS-012): thicker 0.2 mm leads.
+/// SOIC/SOP (JEDEC MS-012).
 pub const SOIC: Family = Family {
     dimple: true,
-    standoff: 0.15,
     parting_ratio: 0.4,
     draft_deg: 10.0,
-    lead_t: 0.2,
     lead_exit: 0.2,
     lead_embed: 0.2,
 };
@@ -45,10 +43,8 @@ pub const SOIC: Family = Family {
 /// SOT-23 class: small body, leads leave low on the body.
 pub const SOT: Family = Family {
     dimple: false,
-    standoff: 0.05,
     parting_ratio: 0.35,
     draft_deg: 8.0,
-    lead_t: 0.12,
     lead_exit: 0.1,
     lead_embed: 0.15,
 };
@@ -59,16 +55,28 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
     if rows.is_empty() {
         return Err(ModelError::NoLeads(input.package.family.clone()));
     }
+    let Some(LeadForm::GullWing {
+        thickness,
+        foot_length,
+        standoff,
+    }) = g.lead_form
+    else {
+        return Err(ModelError::UnsupportedFamily(format!(
+            "{} (geometry has no gull-wing lead form)",
+            input.package.family
+        )));
+    };
     common::body_params(s, g)?;
-    common::molded_body(s, family.standoff, family.parting_ratio, family.draft_deg)?;
+    common::molded_body(s, standoff, family.parting_ratio, family.draft_deg)?;
     if family.dimple {
         common::pin1_dimple(s, g, "Body", "standoff + body_h")?;
     }
     let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
 
-    // The footprint fixes the lead width and where the toe lands; the
-    // foot and the bend share what is left of the reach.
-    let (out, width) = rows[0].lead_size();
+    // The geometry fixes the lead width, where the toe lands and the
+    // foot length; the bend takes what is left of the reach (the foot is
+    // shortened only if the reach can't fit both).
+    let (_, width) = rows[0].lead_size();
     let half = if rows[0].side.across_x() {
         g.body.size.x
     } else {
@@ -76,12 +84,12 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
     } / 2.0;
     let reach = rows[0].outer_extent() - half;
     let exit = family.lead_exit.min(reach * 0.3);
-    let foot = (out * 0.75).min(reach - exit - 0.1).max(0.1);
+    let foot = foot_length.min(reach - exit - 0.1).max(0.1);
     s.fragment(
         fragment!("gullwing_lead"),
         &vars!(
             lead_w = mm(width),
-            lead_t = mm(family.lead_t),
+            lead_t = mm(thickness),
             reach = mm(reach),
             foot = mm(foot),
             exit = mm(exit),

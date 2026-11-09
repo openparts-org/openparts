@@ -1,12 +1,13 @@
 //! openparts-mcad: Package -> Geometry Generator -> Mechanical Geometry
 //! (Architecture Specification section 15). `MechanicalGeometry` is the
-//! common representation that openparts-step/openparts-stl/openparts-gltf
-//! all derive their output from; STEP/STL/glTF are never themselves the
-//! canonical geometry.
+//! common representation that openparts-solidcraft (and through it
+//! openparts-step/openparts-stl) derives its output from; STEP/STL/3MF are
+//! never themselves the canonical geometry.
 
 mod axial;
 mod bga;
 mod chip;
+mod defaults;
 mod dip;
 mod lqfp;
 mod qfn;
@@ -125,11 +126,41 @@ pub struct Marker {
     pub position: Point3,
 }
 
+/// How a package's leads are formed, with the dimensions a detailed 3D
+/// model needs beyond each `Lead`'s board-plane outline. Each value is
+/// the package's datasheet dimension when it states one, else this
+/// crate's family default (see `defaults.rs`) -- this crate owns those
+/// defaults so the footprint pads and the 3D leads come from the same
+/// numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LeadForm {
+    /// Gull-wing leads (QFP, SOIC/SOP, SOT): out of the body side, bent
+    /// down to a flat foot on the seating plane. Each perimeter `Lead`'s
+    /// outline runs from the body edge to the lead toe.
+    GullWing {
+        /// Lead-frame thickness (JEDEC c).
+        thickness: f64,
+        /// Flat foot length on the seating plane, ending at the toe (L).
+        foot_length: f64,
+        /// Seating plane to the body underside (A1).
+        standoff: f64,
+    },
+    /// Leadless terminals flush with the body underside and edge (QFN,
+    /// DFN). Each perimeter `Lead`'s outline is the terminal.
+    Flush {
+        /// Terminal thickness visible on the sawn edge (A3).
+        thickness: f64,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MechanicalGeometry {
     pub body: Body,
     pub leads: Vec<Lead>,
     pub markers: Vec<Marker>,
+    /// `None` for families whose leads aren't described by a `LeadForm`
+    /// (chip terminations, through-hole wires, BGA balls).
+    pub lead_form: Option<LeadForm>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -142,6 +173,10 @@ pub enum McadError {
     UnsupportedGenerator(String),
     #[error("missing required dimension: {0}")]
     MissingDimension(&'static str),
+    /// The package's dimensions contradict each other (e.g. a lead span
+    /// no larger than the body), so no geometry can satisfy them.
+    #[error("inconsistent package dimensions: {0}")]
+    InconsistentDimensions(String),
     #[error("lead_count ({0}) is not valid for this package family")]
     InvalidLeadCount(u32),
     /// SOT-family packages: the physical pin-to-side assignment isn't

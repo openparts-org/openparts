@@ -12,8 +12,10 @@
 //! The scripts are parametric: shared dimensions are design parameters
 //! (`body_w`, `pitch`, `leads_per_side`, `lead_t`, ...) referenced by
 //! expressions, so a generated `.sc` design can be edited in SolidCraft
-//! and rebuilds consistently. Details no datasheet in the dataset gives
-//! (lead thickness, draft, bend radii, ...) are generator defaults,
+//! and rebuilds consistently. Lead dimensions come from the geometry
+//! (datasheet values where the package records them, else
+//! openparts-mcad's defaults); purely presentational details (mold draft,
+//! bend radii, plating colours, ...) are generator defaults,
 //! never written back into Canonical Data.
 
 mod common;

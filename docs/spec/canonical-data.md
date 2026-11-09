@@ -547,6 +547,81 @@ dimensions:
 `lqfp`/`qfn`/`soic`のように`lead_count`から均等に辺数で割り切れるFamilyは
 `lead_layout`を必要としない。
 
+## 20.1 Package Dimensions
+
+`dimensions`の各値はDatasheetのPackage Outline（Mechanical Data表）の記号に対応する
+`Dimension`（`nominal`/`min`/`max`/`unit`）である。`body_width`はPackage座標系のX方向、
+`body_length`はY方向を表し、`overall_*`は同名のbody寸法と同じ軸で測る。
+
+| Field | 意味 | JEDEC記号（例） | 必須 |
+|---|---|---|---|
+| `body_width` | Body幅（X） | E1（QFP/SOIC）、D（SOT-23の長辺） | 必須 |
+| `body_length` | Body長（Y） | D1（QFP）、D（SOIC） | 必須 |
+| `body_height` | Moldの厚み | A2（leadless packageでA2が無い場合はA） | 省略可 |
+| `exposed_pad` | 裏面Exposed Padの`width`/`length` | E2 / D2 | 省略可 |
+| `overall_width` | X方向のLead先端間距離（Leadを含む全幅） | E（QFP/SOIC）、HE（SOT） | 省略可 |
+| `overall_length` | Y方向のLead先端間距離 | D（QFP）、HE（SOT-23ではY方向） | 省略可 |
+| `overall_height` | Seating planeからPackage上面まで | A | 省略可 |
+| `standoff` | Seating planeからBody下面まで | A1 | 省略可 |
+| `lead_width` | Lead／Terminal幅 | b | 省略可 |
+| `lead_length` | Gull-wing LeadのFoot長、Leadless packageのTerminal長、Chip部品の端子電極長 | L | 省略可 |
+| `lead_thickness` | Lead frame厚 | c（QFN/DFNではA3） | 省略可 |
+
+省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
+（Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
+近似であり、Canonical Dataへ書き戻さない（section 7）。表に`nominal`が無く`min`/`max`
+だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
+（Generatorは描画のためにのみ範囲の中央を使う）。
+
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`）と`construction`には、Fieldごとの
+Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
+`provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
+`overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
+
+```yaml
+dimensions:
+  body_width:            # E1
+    nominal: 7.0
+    min: 6.8
+    max: 7.2
+    unit: mm
+  overall_width:         # E
+    nominal: 9.0
+    min: 8.8
+    max: 9.2
+    unit: mm
+  lead_thickness:        # c -- nominal無記載
+    min: 0.09
+    max: 0.20
+    unit: mm
+```
+
+## 20.2 Package Construction
+
+`construction`（省略可）は、一次資料が明記しているPackageの物理的な構造であり、外観
+（3D Modelの材質表現）や取り扱いに影響する事実を表す。寸法やPackage IDの文字列からの
+推測で設定してはならない。記載が無ければ省略する。
+
+閉じた語彙（初期値）：
+
+```text
+molded           Transfer mold（樹脂/epoxy）Body。IC、SOD/SMA diode、"molded plastic" DO-41など
+tantalum_molded  固体タンタルコンデンサ素子をMoldしたCase（KEMET T49xなど）
+glass            ガラス封止Body（一次資料がglassと明記するDO-35小信号diodeなど。"DO-35"というCase名だけでは設定しない）
+ceramic          焼成セラミックBody＋端子電極（MLCC、セラミックChip inductor/fuse）
+metal_can        金属Can（水晶振動子、アルミ電解コンデンサ）
+```
+
+```yaml
+construction: molded
+
+provenance:
+  "/construction":
+    - source: vishay/88503
+      page: 1
+      locator: "MECHANICAL DATA: \"Case: DO-41 (DO-204AL), molded epoxy body\""
+```
+
 ---
 
 # 21. Package Geometry

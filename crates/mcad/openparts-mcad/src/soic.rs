@@ -1,26 +1,18 @@
+use crate::defaults::{self, Axis, GullWing};
 use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
 };
 use openparts_core::Package;
 
-/// Engineering defaults used only when the datasheet doesn't supply a
-/// value -- generator implementation details for a geometric
-/// approximation, never written back into Canonical Data as a fact
-/// (same policy as `lqfp.rs`/`qfn.rs`'s own defaults). SOIC leads are
-/// smaller than LQFP's (e.g. JEDEC MS-012 vs. MS-026), so these are
-/// distinct constants, not shared with `lqfp.rs`.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 1.75;
-const DEFAULT_LEAD_WIDTH_MM: f64 = 0.4;
-const DEFAULT_LEAD_PROTRUSION_MM: f64 = 0.5;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 0.2;
-
 /// Generates Mechanical Geometry for a SOIC/SOP-style package: a
 /// rectangular body with `lead_count / 2` gull-wing leads evenly spaced
 /// at `pitch` on each of the 2 long sides (left/right) -- structurally
 /// [`crate::generate_lqfp`]'s left-edge/right-edge pattern with the
 /// top/bottom edges dropped, since SOIC's physical layout (unlike
-/// SOT's) is unambiguous and fully determined by `lead_count`.
+/// SOT's) is unambiguous and fully determined by `lead_count`. Lead
+/// toes land at `overall_width / 2`; unstated dimensions fall back to
+/// `defaults::SOIC` (JEDEC MS-012).
 ///
 /// Numbering convention (matches common SOIC/JEDEC MS-012 datasheets):
 /// pin 1 at the top of the LEFT edge, proceeding down the left edge,
@@ -59,12 +51,10 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
         .ok_or(McadError::MissingDimension(
             "dimensions.body_length.nominal",
         ))?;
-    let body_h = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let shape = GullWing::resolve(package, &defaults::SOIC);
+    let body_h = shape.body_height;
+    let reach = shape.protrusion(package, Axis::X)?;
+    let lead_t = shape.thickness;
 
     let body = Body {
         position: Point3 {
@@ -84,9 +74,9 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
     let half_span = span / 2.0;
 
     let lead_size = Size3 {
-        x: DEFAULT_LEAD_PROTRUSION_MM,
-        y: DEFAULT_LEAD_WIDTH_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: reach,
+        y: shape.lead_width,
+        z: lead_t,
     };
 
     let mut leads = Vec::with_capacity(lead_count as usize);
@@ -98,9 +88,9 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
         leads.push(Lead {
             number: pin_num.to_string(),
             position: Point3 {
-                x: -(body_w / 2.0 + DEFAULT_LEAD_PROTRUSION_MM / 2.0),
+                x: -(body_w / 2.0 + reach / 2.0),
                 y,
-                z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
+                z: lead_t / 2.0,
             },
             size: lead_size,
             mounting: Mounting::Smd,
@@ -116,9 +106,9 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
         leads.push(Lead {
             number: pin_num.to_string(),
             position: Point3 {
-                x: body_w / 2.0 + DEFAULT_LEAD_PROTRUSION_MM / 2.0,
+                x: body_w / 2.0 + reach / 2.0,
                 y,
-                z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
+                z: lead_t / 2.0,
             },
             size: lead_size,
             mounting: Mounting::Smd,
@@ -140,6 +130,7 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
         body,
         leads,
         markers,
+        lead_form: Some(shape.lead_form()),
     })
 }
 
@@ -177,8 +168,16 @@ mod tests {
                 },
                 body_height: None,
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: None,
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }
@@ -196,8 +195,11 @@ mod tests {
     fn pin_1_is_on_the_left_edge_top() {
         let geometry = generate_soic(&soic8()).unwrap();
         let pin1 = geometry.leads.iter().find(|l| l.number == "1").unwrap();
-        // 4 pins/side, pitch 1.27 -> half_span = 1.905.
-        assert!((pin1.position.x - (-(3.9 / 2.0 + 0.25))).abs() < 1e-9);
+        // 4 pins/side, pitch 1.27 -> half_span = 1.905. No overall_width
+        // stated: the toe is at the JEDEC MS-012 default reach of 1.05 mm
+        // ((E 6.0 - E1 3.9) / 2; was 0.5 mm, which left the toe ~0.5 mm
+        // short of a real SOIC's), lead outline centred half way out.
+        assert!((pin1.position.x - (-(3.9 / 2.0 + 0.525))).abs() < 1e-9);
         assert!((pin1.position.y - 1.905).abs() < 1e-9);
     }
 

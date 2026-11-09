@@ -1,19 +1,10 @@
+use crate::defaults::{self, Axis, GullWing};
 use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
 };
 use openparts_core::Package;
 
-/// Engineering defaults used only when the datasheet doesn't supply a
-/// value -- generator implementation details for a geometric
-/// approximation, never written back into Canonical Data as a fact
-/// (same policy as this crate's other generators' defaults). SOT bodies
-/// and leads are much smaller than LQFP/SOIC's, so these are distinct,
-/// smaller constants.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 1.0;
-const DEFAULT_LEAD_WIDTH_MM: f64 = 0.4;
-const DEFAULT_LEAD_PROTRUSION_MM: f64 = 0.45;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 0.1;
 /// Kept well inside even a small SOT-23-class body (~1.3 x 2.9mm) --
 /// unlike `lqfp.rs`/`soic.rs`'s 0.5mm marker offset, which can exceed
 /// half of a SOT body's own dimensions.
@@ -77,12 +68,12 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
         .ok_or(McadError::MissingDimension(
             "dimensions.body_length.nominal",
         ))?;
-    let body_h = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let shape = GullWing::resolve(package, &defaults::SOT);
+    let body_h = shape.body_height;
+    // Both rows leave across `body_length`, so their toes land at
+    // `overall_length / 2` (HE / 2 on SOT-23 drawings).
+    let reach = shape.protrusion(package, Axis::Y)?;
+    let lead_t = shape.thickness;
 
     let body = Body {
         position: Point3 {
@@ -99,9 +90,9 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
     };
 
     let lead_size = Size3 {
-        x: DEFAULT_LEAD_WIDTH_MM,
-        y: DEFAULT_LEAD_PROTRUSION_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: shape.lead_width,
+        y: reach,
+        z: lead_t,
     };
     let mut leads = Vec::with_capacity(package.lead_count as usize);
     let mut pin_num = 1u32;
@@ -115,8 +106,8 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
             number: pin_num.to_string(),
             position: Point3 {
                 x,
-                y: -(body_l / 2.0 + DEFAULT_LEAD_PROTRUSION_MM / 2.0),
-                z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
+                y: -(body_l / 2.0 + reach / 2.0),
+                z: lead_t / 2.0,
             },
             size: lead_size,
             mounting: Mounting::Smd,
@@ -134,8 +125,8 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
             number: pin_num.to_string(),
             position: Point3 {
                 x,
-                y: body_l / 2.0 + DEFAULT_LEAD_PROTRUSION_MM / 2.0,
-                z: DEFAULT_LEAD_HEIGHT_MM / 2.0,
+                y: body_l / 2.0 + reach / 2.0,
+                z: lead_t / 2.0,
             },
             size: lead_size,
             mounting: Mounting::Smd,
@@ -157,6 +148,7 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
         body,
         leads,
         markers,
+        lead_form: Some(shape.lead_form()),
     })
 }
 
@@ -194,8 +186,16 @@ mod tests {
                 },
                 body_height: None,
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: Some(vec![2, 1]),
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

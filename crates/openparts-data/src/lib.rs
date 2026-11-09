@@ -232,4 +232,59 @@ pins:
 
         std::fs::remove_dir_all(&dir).ok();
     }
+
+    #[test]
+    fn package_lead_dimensions_and_construction_are_optional_and_round_trip() {
+        let dir = std::env::temp_dir().join(format!(
+            "openparts-data-test-pkgdims-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = dir.join("old.yaml");
+        let new = dir.join("new.yaml");
+
+        let body = r#"
+schema_version: "0.1"
+kind: package
+id: standards/PKG1
+family: lqfp
+lead_count: 48
+pitch:
+  nominal: 0.5
+  unit: mm
+dimensions:
+  body_width:
+    nominal: 7.0
+    unit: mm
+  body_length:
+    nominal: 7.0
+    unit: mm
+"#;
+        std::fs::write(&old, body).unwrap();
+        let package = load_package(&old).unwrap();
+        assert!(package.dimensions.overall_width.is_none());
+        assert!(package.construction.is_none());
+
+        let extended = body.replace(
+            "dimensions:\n",
+            "construction: molded\ndimensions:\n  overall_width:\n    nominal: 9.0\n    unit: mm\n  lead_thickness:\n    min: 0.09\n    max: 0.2\n    unit: mm\n",
+        );
+        std::fs::write(&new, extended).unwrap();
+        let package = load_package(&new).unwrap();
+        assert_eq!(
+            package.construction,
+            Some(openparts_core::PackageConstruction::Molded)
+        );
+        assert_eq!(
+            package.dimensions.overall_width.as_ref().unwrap().nominal,
+            Some(9.0)
+        );
+        let thickness = package.dimensions.lead_thickness.as_ref().unwrap();
+        assert_eq!((thickness.nominal, thickness.max), (None, Some(0.2)));
+
+        save_package(&package, &new).unwrap();
+        assert_eq!(load_package(&new).unwrap(), package);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

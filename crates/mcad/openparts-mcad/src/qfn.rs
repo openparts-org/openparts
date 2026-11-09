@@ -1,21 +1,13 @@
+use crate::defaults::{self, Flush};
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
-
-/// Engineering defaults used only when the datasheet doesn't supply a
-/// value -- generator implementation details for a geometric
-/// approximation, never written back into Canonical Data as a fact.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 0.9;
-/// Contact length in the direction perpendicular to the package edge.
-/// QFN leads are flush/near-flush with the body edge, unlike LQFP's
-/// outward gull-wing.
-const DEFAULT_LEAD_LENGTH_MM: f64 = 0.4;
-const DEFAULT_LEAD_WIDTH_MM: f64 = 0.25;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 0.05;
 
 /// Generates Mechanical Geometry for a QFN/DFN-style leadframe package:
 /// a rectangular body with `lead_count / 4` bottom-side contact pads
 /// evenly spaced at `pitch` on each of the 4 sides, flush with the body
 /// edge, plus an optional center Exposed Pad (`dimensions.exposed_pad`).
+/// Terminals are `lead_length` x `lead_width` x `lead_thickness`;
+/// unstated dimensions fall back to `defaults::QFN`.
 ///
 /// Numbering convention matches [`crate::generate_lqfp`]: pin 1 at the
 /// top of the LEFT edge, proceeding down the left edge, then
@@ -57,12 +49,9 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         .ok_or(McadError::MissingDimension(
             "dimensions.body_length.nominal",
         ))?;
-    let body_h = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let shape = Flush::resolve(package, &defaults::QFN);
+    let body_h = shape.body_height;
+    let (lead_len, lead_w, lead_t) = (shape.lead_length, shape.lead_width, shape.thickness);
 
     let body = Body {
         position: Point3 {
@@ -82,16 +71,16 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
     let half_span = span / 2.0;
 
     let lead_size_along = Size3 {
-        x: DEFAULT_LEAD_LENGTH_MM,
-        y: DEFAULT_LEAD_WIDTH_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: lead_len,
+        y: lead_w,
+        z: lead_t,
     };
     let lead_size_perp = Size3 {
-        x: DEFAULT_LEAD_WIDTH_MM,
-        y: DEFAULT_LEAD_LENGTH_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: lead_w,
+        y: lead_len,
+        z: lead_t,
     };
-    let lead_z = DEFAULT_LEAD_HEIGHT_MM / 2.0;
+    let lead_z = lead_t / 2.0;
 
     let mut leads = Vec::with_capacity(lead_count as usize + 1);
     let mut pin_num = 1u32;
@@ -102,7 +91,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         leads.push(Lead {
             number: pin_num.to_string(),
             position: Point3 {
-                x: -(body_w / 2.0 - DEFAULT_LEAD_LENGTH_MM / 2.0),
+                x: -(body_w / 2.0 - lead_len / 2.0),
                 y,
                 z: lead_z,
             },
@@ -119,7 +108,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             number: pin_num.to_string(),
             position: Point3 {
                 x,
-                y: -(body_l / 2.0 - DEFAULT_LEAD_LENGTH_MM / 2.0),
+                y: -(body_l / 2.0 - lead_len / 2.0),
                 z: lead_z,
             },
             size: lead_size_perp,
@@ -134,7 +123,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         leads.push(Lead {
             number: pin_num.to_string(),
             position: Point3 {
-                x: body_w / 2.0 - DEFAULT_LEAD_LENGTH_MM / 2.0,
+                x: body_w / 2.0 - lead_len / 2.0,
                 y,
                 z: lead_z,
             },
@@ -151,7 +140,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             number: pin_num.to_string(),
             position: Point3 {
                 x,
-                y: body_l / 2.0 - DEFAULT_LEAD_LENGTH_MM / 2.0,
+                y: body_l / 2.0 - lead_len / 2.0,
                 z: lead_z,
             },
             size: lead_size_perp,
@@ -178,7 +167,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             size: Size3 {
                 x: ep_w,
                 y: ep_l,
-                z: DEFAULT_LEAD_HEIGHT_MM,
+                z: lead_t,
             },
             mounting: Mounting::Smd,
             drill: None,
@@ -189,6 +178,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         body,
         leads,
         markers: vec![],
+        lead_form: Some(shape.lead_form()),
     })
 }
 
@@ -239,8 +229,16 @@ mod tests {
                         unit: "mm".into(),
                     },
                 }),
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: None,
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }

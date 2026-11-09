@@ -19,7 +19,9 @@
 //! | `ref.unknown_source` | a `sources` or `provenance` entry references a Source that was not supplied |
 //! | `pin.duplicate_name` | two different pin numbers on one Device share the same *signal* pin name (power/ground/nc/reserved pins are exempt -- repeating `VDD`/`VSS`/`NC` across many pins is normal) |
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
+//! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`) or `construction` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
 //! | `mpn.empty` | `part.mpn` is empty |
 
 use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
@@ -153,24 +155,114 @@ pub fn validate_part(
 
     let package_entity = format!("package:{}", package.id);
     out.extend(check_dimension(&package_entity, "/pitch", &package.pitch));
-    out.extend(check_dimension(
-        &package_entity,
-        "/dimensions/body_width",
-        &package.dimensions.body_width,
-    ));
-    out.extend(check_dimension(
-        &package_entity,
-        "/dimensions/body_length",
-        &package.dimensions.body_length,
-    ));
-    if let Some(height) = &package.dimensions.body_height {
-        out.extend(check_dimension(
-            &package_entity,
-            "/dimensions/body_height",
-            height,
-        ));
+    for (path, dim) in package.dimensions.entries() {
+        out.extend(check_dimension(&package_entity, path, dim));
     }
+    out.extend(check_package_consistency(&package_entity, package));
+    out.extend(check_package_provenance(&package_entity, package));
 
+    out
+}
+
+/// Paths of the package fields that must carry their own provenance.
+const PROVENANCE_REQUIRED: [&str; 7] = [
+    "/dimensions/overall_width",
+    "/dimensions/overall_length",
+    "/dimensions/overall_height",
+    "/dimensions/standoff",
+    "/dimensions/lead_width",
+    "/dimensions/lead_length",
+    "/dimensions/lead_thickness",
+];
+
+fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let mut present: Vec<&str> = package
+        .dimensions
+        .entries()
+        .into_iter()
+        .map(|(path, _)| path)
+        .filter(|path| PROVENANCE_REQUIRED.contains(path))
+        .collect();
+    if package.construction.is_some() {
+        present.push("/construction");
+    }
+    present
+        .into_iter()
+        .filter(|path| {
+            // An entry for the field itself or for one of its parents
+            // (e.g. "/dimensions") covers it.
+            !package.provenance.keys().any(|key| {
+                path.strip_prefix(key.as_str())
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+            })
+        })
+        .map(|path| {
+            Diagnostic::error(
+                "provenance.missing",
+                entity,
+                Some(path),
+                format!("\"{path}\" has no provenance entry"),
+            )
+        })
+        .collect()
+}
+
+/// The largest / smallest value a dimension states (nominal, min or
+/// max) -- comparisons use only stated numbers, never a synthesized one.
+fn largest(dim: &openparts_core::Dimension) -> Option<f64> {
+    [dim.nominal, dim.min, dim.max]
+        .into_iter()
+        .flatten()
+        .reduce(f64::max)
+}
+fn smallest(dim: &openparts_core::Dimension) -> Option<f64> {
+    [dim.nominal, dim.min, dim.max]
+        .into_iter()
+        .flatten()
+        .reduce(f64::min)
+}
+
+fn check_package_consistency(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let d = &package.dimensions;
+    let mut out = Vec::new();
+    // (larger, smaller): `larger` must exceed `smaller` even comparing
+    // the most pessimistic stated values.
+    let pairs = [
+        (
+            ("/dimensions/overall_width", d.overall_width.as_ref()),
+            ("/dimensions/body_width", Some(&d.body_width)),
+        ),
+        (
+            ("/dimensions/overall_length", d.overall_length.as_ref()),
+            ("/dimensions/body_length", Some(&d.body_length)),
+        ),
+        (
+            ("/dimensions/overall_height", d.overall_height.as_ref()),
+            ("/dimensions/standoff", d.standoff.as_ref()),
+        ),
+        (
+            ("/dimensions/overall_height", d.overall_height.as_ref()),
+            ("/dimensions/body_height", d.body_height.as_ref()),
+        ),
+    ];
+    for ((big_path, big), (small_path, small)) in pairs {
+        let (Some(big), Some(small)) = (big, small) else {
+            continue;
+        };
+        let (Some(big_v), Some(small_v)) = (largest(big), smallest(small)) else {
+            continue;
+        };
+        if big_v <= small_v {
+            out.push(Diagnostic::error(
+                "dimension.inconsistent",
+                entity,
+                Some(big_path),
+                format!(
+                    "{big_path} (at most {big_v}) must be larger than {small_path} (at least {small_v})"
+                ),
+            ));
+        }
+    }
     out
 }
 
@@ -347,8 +439,16 @@ mod tests {
                 },
                 body_height: None,
                 exposed_pad: None,
+                overall_width: None,
+                overall_length: None,
+                overall_height: None,
+                standoff: None,
+                lead_width: None,
+                lead_length: None,
+                lead_thickness: None,
             },
             lead_layout: None,
+            construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
         }
@@ -483,5 +583,52 @@ mod tests {
         known_sources.insert(known);
         let diags = validate_part(&part, &base_device(), &base_package(), &known_sources);
         assert!(!diags.iter().any(|d| d.rule_id == "ref.unknown_source"));
+    }
+
+    fn mm(nominal: f64) -> Option<Dimension> {
+        Some(Dimension {
+            nominal: Some(nominal),
+            min: None,
+            max: None,
+            unit: "mm".into(),
+        })
+    }
+
+    fn cite(package: &mut Package, path: &str) {
+        package.provenance.insert(
+            path.into(),
+            vec![openparts_core::ProvenanceEntry {
+                source: SourceId::from("ex/DS1"),
+                page: Some(1),
+                locator: Some("Table 1".into()),
+            }],
+        );
+    }
+
+    #[test]
+    fn rejects_lead_span_not_larger_than_body() {
+        let mut package = base_package();
+        package.dimensions.overall_width = mm(4.9);
+        cite(&mut package, "/dimensions/overall_width");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(diags.iter().any(|d| d.rule_id == "dimension.inconsistent"
+            && d.field_path.as_deref() == Some("/dimensions/overall_width")));
+    }
+
+    #[test]
+    fn new_package_fields_require_provenance() {
+        let mut package = base_package();
+        package.dimensions.overall_width = mm(7.0);
+        package.dimensions.lead_width = mm(0.22);
+        package.construction = Some(openparts_core::PackageConstruction::Molded);
+        cite(&mut package, "/dimensions/lead_width");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        let missing: Vec<_> = diags
+            .iter()
+            .filter(|d| d.rule_id == "provenance.missing")
+            .filter_map(|d| d.field_path.as_deref())
+            .collect();
+        assert_eq!(missing, vec!["/dimensions/overall_width", "/construction"]);
+        assert!(!diags.iter().any(|d| d.rule_id == "dimension.inconsistent"));
     }
 }

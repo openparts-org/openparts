@@ -1,6 +1,7 @@
 //! Two-terminal chip parts. The `chip` family spans very different real
-//! constructions, so the device category (and, where the dimensions are
-//! ambiguous, the package id) picks the template:
+//! constructions, so the device category -- refined by the package's
+//! stated `construction` where the category alone is ambiguous (a molded
+//! tantalum and an MLCC share EIA case sizes) -- picks the template:
 //!
 //! - thick-film resistor (`chip_resistor`): alumina core, overcoat, end caps
 //! - MLCC / chip fuse / multilayer inductor (`chip_ceramic`)
@@ -14,7 +15,7 @@ use crate::common::{self, edge_points};
 use crate::script::{looks, mm, Look};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
-use openparts_core::ComponentCategory;
+use openparts_core::{ComponentCategory, PackageConstruction};
 
 enum Style {
     Resistor,
@@ -27,16 +28,16 @@ enum Style {
 
 fn style(input: &ModelInput<'_>) -> Style {
     let b = &input.geometry.body.size;
-    let id = input.package.id.to_string().to_ascii_uppercase();
-    match input.category {
-        Some(ComponentCategory::Resistor) => Style::Resistor,
-        // KEMET T49x series: molded solid-tantalum cases. Their sizes
-        // coincide with MLCC sizes (T495A = 1206 = 3.2 x 1.6 x 1.6), so
-        // only the package id can tell them apart.
-        Some(ComponentCategory::Capacitor) if id.contains("T49") => Style::Molded {
+    let construction = input.package.construction;
+    if construction == Some(PackageConstruction::TantalumMolded) {
+        return Style::Molded {
             body: looks::TANTALUM,
             band: Some(looks::TANTALUM_BAND),
-        },
+        };
+    }
+    match input.category {
+        Some(ComponentCategory::Resistor) => Style::Resistor,
+        // Unless stated otherwise (above), a chip capacitor is an MLCC.
         Some(ComponentCategory::Capacitor) => Style::Ceramic(looks::CERAMIC_TAN),
         Some(ComponentCategory::Inductor) if b.x.min(b.y) >= 3.0 => Style::PowerInductor,
         Some(ComponentCategory::Inductor) => Style::Ceramic(looks::CHIP_INDUCTOR),

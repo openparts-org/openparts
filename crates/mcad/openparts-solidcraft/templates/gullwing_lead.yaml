@@ -1,10 +1,12 @@
-# Gull-wing lead dimensions shared by every row. The width and reach come
-# from the footprint geometry; the rest are generator defaults.
+# Gull-wing lead dimensions shared by every row. Width, reach, thickness
+# and foot come from the geometry (datasheet value, else the openparts-mcad
+# family default -- the same numbers as the footprint); exit, embed and
+# the bend radius are modelling choices.
 - params:
-    lead_w: ["{{lead_w}}", lead width (from the footprint geometry)]
-    lead_t: ["{{lead_t}}", lead frame thickness]
-    lead_reach: ["{{reach}}", body edge to lead toe (from the footprint geometry)]
-    lead_foot: ["{{foot}}", flat foot length on the board]
+    lead_w: ["{{lead_w}}", lead width (b)]
+    lead_t: ["{{lead_t}}", lead frame thickness (c)]
+    lead_reach: ["{{reach}}", body edge to lead toe ((E - E1) / 2)]
+    lead_foot: ["{{foot}}", flat foot length on the board (L)]
     lead_exit: ["{{exit}}", straight run out of the body before the bend]
     lead_embed: ["{{embed}}", lead length kept inside the body]
     bend_r: [lead_t * 0.75, inner bend radius]
