@@ -7,10 +7,9 @@
 //! KiCad output is checked by reading it back with the same parsers
 //! openparts-kicad's own unit tests use (Testing and Quality
 //! Specification section 9, "Independent read-back" / "Semantic
-//! checks") -- not just a substring match. STEP output only gets
-//! structural checks, since no independent STEP reader exists yet; see
-//! the NOTE in openparts-step for why that's recorded honestly rather
-//! than claimed as verified.
+//! checks") -- not just a substring match. STEP/STL output (built by
+//! SolidCraft) only gets structural checks here -- solid and colour
+//! counts, STL framing -- and is skipped when SolidCraft isn't installed.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -95,15 +94,23 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
         assert!((pad.y - lead.position.y).abs() < 1e-9);
     }
 
-    let step_text = openparts_step::generate_step(&geometry, &part.mpn).expect("step");
-    assert!(step_text.starts_with("ISO-10303-21;\n"));
-    // 1 body + 56 leads = 57 boxes.
+    if !openparts_solidcraft::available() {
+        eprintln!("SolidCraft is not installed; skipping the 3D model checks");
+        return;
+    }
+    let input = openparts_step::ModelInput {
+        package: &model.package,
+        geometry: &geometry,
+        category: Some(model.device.category),
+    };
+    let step_text = openparts_step::generate_step(&input, &part.mpn).expect("step");
+    assert!(step_text.starts_with("ISO-10303-21;"));
+    // The body plus 56 terminals inlaid in it, each its own coloured solid.
     assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 57);
+    assert_eq!(step_text.matches("STYLED_ITEM(").count(), 57);
 
-    let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).expect("stl");
-    assert!(stl_text.starts_with("solid RP2040\n"));
-    // 57 boxes * 12 facets each.
-    assert_eq!(stl_text.matches("facet normal").count(), 57 * 12);
+    let stl = openparts_stl::generate_stl(&input, &part.mpn).expect("stl");
+    assert!(openparts_stl::triangle_count(&stl).unwrap() >= 57 * 12);
 }
 
 #[test]
@@ -172,7 +179,16 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
     let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
     assert_eq!(parsed_pads.len(), 2);
 
-    let step_text = openparts_step::generate_step(&geometry, &part.mpn).unwrap();
-    // 1 body + 2 terminals = 3 boxes.
-    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 3);
+    if !openparts_solidcraft::available() {
+        eprintln!("SolidCraft is not installed; skipping the 3D model checks");
+        return;
+    }
+    let input = openparts_step::ModelInput {
+        package: &model.package,
+        geometry: &geometry,
+        category: Some(model.device.category),
+    };
+    let step_text = openparts_step::generate_step(&input, &part.mpn).unwrap();
+    // A thick-film resistor: alumina core, black overcoat, 2 end caps.
+    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 4);
 }

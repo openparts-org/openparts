@@ -271,12 +271,27 @@ fn cmd_generate(
         footprint_text,
     )?;
 
-    let step_text =
-        openparts_step::generate_step(&geometry, &part.mpn).context("generating STEP")?;
-    std::fs::write(out_dir.join(format!("{mpn_file}.step")), step_text)?;
-
-    let stl_text = openparts_stl::generate_stl(&geometry, &part.mpn).context("generating STL")?;
-    std::fs::write(out_dir.join(format!("{mpn_file}.stl")), stl_text)?;
+    // The detailed 3D model, built and exported by SolidCraft in one run:
+    // STEP (coloured), binary STL, and the parametric SolidCraft design
+    // itself (`.sc`, editable in SolidCraft).
+    let input = openparts_solidcraft::ModelInput {
+        package: &model.package,
+        geometry: &geometry,
+        category: Some(model.device.category),
+    };
+    let models = openparts_solidcraft::generate(
+        &input,
+        &part.mpn,
+        &[
+            openparts_solidcraft::Format::Step,
+            openparts_solidcraft::Format::Stl,
+            openparts_solidcraft::Format::Design,
+        ],
+    )
+    .context("generating the 3D model with SolidCraft")?;
+    for (bytes, ext) in models.iter().zip(["step", "stl", "sc"]) {
+        std::fs::write(out_dir.join(format!("{mpn_file}.{ext}")), bytes)?;
+    }
 
     // LibrePCB library element (a directory tree, not a single file --
     // written under <out>/<mpn>.lplib/).
@@ -292,7 +307,7 @@ fn cmd_generate(
     // Reproducibility record (Testing and Quality Specification section
     // 10): the conditions this specific output was generated under.
     let report = format!(
-        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\n  openparts_librepcb: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n",
+        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\n  openparts_librepcb: \"{}\"\n  openparts_solidcraft: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n  solidcraft: \"{}\"\n",
         part.schema_version,
         part.id,
         model.applied_revision.as_deref().map(|r| format!("\"{r}\"")).unwrap_or_else(|| "null".to_string()),
@@ -301,7 +316,9 @@ fn cmd_generate(
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_VERSION"),
+        env!("CARGO_PKG_VERSION"),
         rustc_version(),
+        openparts_solidcraft::runner::version().unwrap_or_else(|_| "unknown".to_string()),
     );
     std::fs::write(
         out_dir.join(format!("{mpn_file}.generation-report.yaml")),
@@ -309,7 +326,7 @@ fn cmd_generate(
     )?;
 
     println!(
-        "Generated KiCad symbol/footprint, STEP/STL models, a LibrePCB library, and a generation report into {}",
+        "Generated KiCad symbol/footprint, STEP/STL models and a SolidCraft design, a LibrePCB library, and a generation report into {}",
         out_dir.display()
     );
     Ok(())

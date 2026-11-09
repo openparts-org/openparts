@@ -13,9 +13,12 @@ API/database lives in `openparts-server`.
 
 First Vertical Slice (Architecture Specification section 32):
 Canonical YAML -> Parser -> Validator -> Effective Model -> KiCad + STEP.
-Package support currently covers LQFP, QFN, chip (2-terminal), SOIC,
-and SOT families; other families (TSSOP, BGA, ...) are not implemented
-yet.
+Package support covers the LQFP/TQFP, QFN, SOIC, SOT, chip (2-terminal),
+radial, axial, TO-92, DIP, SIP and BGA families.
+
+3D models (STEP, STL, and an editable SolidCraft design) are built by
+`openparts-solidcraft` and exported by a locally installed
+[SolidCraft](https://solidcraft.io) -- see "3D models" below.
 
 The CLI's `generate`/`validate`/`search`/`show` subcommands are
 implemented; `provenance`, `diff`, `install`, `update`, and `bundle`
@@ -41,11 +44,12 @@ crates/
 │                             against; see the crate's doc comment for
 │                             the planned DelphiScript-emission approach)
 └── mcad/
-    ├── openparts-mcad      Mechanical Geometry generators
-    ├── openparts-step       STEP exporter
-    ├── openparts-stl        STL exporter
-    └── openparts-gltf       (not implemented for the first vertical
-                              slice -- see the crate's doc comment)
+    ├── openparts-mcad       Mechanical Geometry generators
+    ├── openparts-solidcraft Mechanical Geometry -> detailed parametric
+    │                        SolidCraft model, run through SolidCraft
+    ├── openparts-step       STEP exporter (via openparts-solidcraft)
+    ├── openparts-stl        binary STL exporter (via openparts-solidcraft)
+    └── openparts-gltf       (not implemented -- see the crate's doc comment)
 ```
 
 ## Usage
@@ -66,6 +70,39 @@ cargo run -p openparts-cli -- generate \
   --package ../openparts-data/packages/standards/lqfp/LQFP48-7x7-P0.5.yaml \
   --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml \
   --out /tmp/openparts-out
+```
+
+## 3D models
+
+`openparts-mcad` stays the canonical geometry (where the body and each
+lead are; the footprints read the same data). `openparts-solidcraft`
+turns it -- per package family and device category -- into a SolidCraft
+command script with what the real part looks like: drafted mold bodies,
+formed gull-wing and through-hole leads, plated end caps, inlaid QFN
+terminals, polarity bands and stripes, can sleeves, LED lenses, ...
+Shared dimensions are SolidCraft design parameters (`body_w`, `pitch`,
+`leads_per_side`, `lead_t`, ...) referenced by expressions, so the `.sc`
+design `generate` writes can be edited in SolidCraft and rebuilds
+consistently.
+
+The shapes are YAML templates in
+`crates/mcad/openparts-solidcraft/templates/` -- SolidCraft command
+lists with `{{var}}` placeholders, one per building block (a gull-wing
+lead row, a molded body, an MLCC, an electrolytic can, ...). The Rust
+side only decides which templates to use and fills their variables from
+the geometry; runs use SolidCraft's `--param-check strict`, so a
+misspelt command parameter fails loudly.
+
+SolidCraft must be installed: the Flatpak `io.tangencylabs.solidcraft`,
+or `solidcraft-cli` on `PATH`; `OPENPARTS_SOLIDCRAFT_CLI` (a binary
+path) or `OPENPARTS_SOLIDCRAFT_FLATPAK` (an app id) override the choice.
+Tests that need it skip themselves when it is missing.
+
+To review every model in the dataset (writes a script, STEP and PNG per
+package):
+
+```sh
+cargo run -p openparts-solidcraft --example gallery -- ../openparts-data /tmp/gallery [filter]
 ```
 
 `search`/`show` talk to an `openparts-server` instance (optional --
