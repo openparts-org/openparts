@@ -438,6 +438,7 @@ async fn render_3d(
             package: &model.package,
             geometry: &geometry,
             category: Some(model.device.category),
+            marked_pin: openparts_solidcraft::polarity_pin(&model.device),
         };
         let mut files = openparts_solidcraft::generate(&input, &model.part.mpn, &[model3d.format])
             .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
