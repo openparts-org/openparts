@@ -39,6 +39,9 @@ pub enum Format {
     Step,
     /// Binary STL.
     Stl,
+    /// 3MF with a colour per body (a zip of XML; viewable in browsers
+    /// through three.js' `ThreeMFLoader`, unlike the uncoloured STL).
+    ThreeMf,
     /// The SolidCraft design itself (`.sc`): the parametric model, for
     /// editing in SolidCraft.
     Design,
@@ -47,10 +50,12 @@ pub enum Format {
 }
 
 impl Format {
-    fn extension(self) -> &'static str {
+    /// The file extension SolidCraft picks the exporter by.
+    pub fn extension(self) -> &'static str {
         match self {
             Format::Step => "step",
             Format::Stl => "stl",
+            Format::ThreeMf => "3mf",
             Format::Design => "sc",
             Format::Png => "png",
         }
@@ -247,5 +252,50 @@ mod tests {
     fn file_stems_are_safe() {
         assert_eq!(file_stem("LPC1114FBD48/302"), "LPC1114FBD48_302");
         assert_eq!(file_stem(""), "part");
+    }
+
+    /// Every 3D format comes out of one SolidCraft run, the 3MF a zip
+    /// whose model part carries the per-body colours.
+    #[test]
+    fn exports_every_3d_format_in_one_run() {
+        if !available() {
+            eprintln!("SolidCraft is not installed; skipping");
+            return;
+        }
+        // From YAML, so fields the Package gains later default.
+        let package: openparts_core::Package = serde_yaml::from_str(
+            "schema_version: '0.1'\n\
+             kind: package\n\
+             id: standards/SOIC8-TEST\n\
+             family: soic\n\
+             lead_count: 8\n\
+             pitch: {nominal: 1.27, unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {nominal: 3.9, unit: mm}\n\
+             \x20 body_length: {nominal: 4.9, unit: mm}\n\
+             \x20 body_height: {nominal: 1.5, unit: mm}\n",
+        )
+        .unwrap();
+        let geometry = openparts_mcad::generate(&package).unwrap();
+        let script = crate::build_script(&crate::ModelInput {
+            package: &package,
+            geometry: &geometry,
+            category: Some(openparts_core::ComponentCategory::Microcontroller),
+        })
+        .unwrap();
+        let files = run(
+            &script,
+            "TEST",
+            &[Format::Step, Format::Stl, Format::ThreeMf, Format::Design],
+        )
+        .unwrap();
+        assert!(files[0].starts_with(b"ISO-10303-21;"));
+        let stl = &files[1];
+        let triangles = u32::from_le_bytes(stl[80..84].try_into().unwrap());
+        assert_eq!(stl.len(), 84 + 50 * triangles as usize);
+        let three_mf = &files[2];
+        assert!(three_mf.starts_with(b"PK\x03\x04"), "3MF is a zip");
+        assert!(three_mf.windows(16).any(|w| w == b"3D/3dmodel.model"));
+        assert!(!files[3].is_empty());
     }
 }

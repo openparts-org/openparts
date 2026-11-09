@@ -24,7 +24,7 @@ pub mod runner;
 mod script;
 mod template;
 
-pub use runner::{available, run, Format, RunError};
+pub use runner::{available, run, version, Format, RunError};
 pub use script::{looks, mm, Look, Script};
 
 use openparts_core::{ComponentCategory, Package};

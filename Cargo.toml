@@ -16,11 +16,9 @@ members = [
     "crates/pcbcad/openparts-pcbcad",
     "crates/pcbcad/openparts-kicad",
     "crates/pcbcad/openparts-librepcb",
-    "crates/pcbcad/openparts-altium",
     "crates/mcad/openparts-mcad",
     "crates/mcad/openparts-step",
     "crates/mcad/openparts-stl",
-    "crates/mcad/openparts-gltf",
     "crates/mcad/openparts-solidcraft",
 ]
 

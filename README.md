@@ -16,15 +16,12 @@ Canonical YAML -> Parser -> Validator -> Effective Model -> KiCad + STEP.
 Package support covers the LQFP/TQFP, QFN, SOIC, SOT, chip (2-terminal),
 radial, axial, TO-92, DIP, SIP and BGA families.
 
-3D models (STEP, STL, and an editable SolidCraft design) are built by
-`openparts-solidcraft` and exported by a locally installed
+3D models (STEP, STL, coloured 3MF, and an editable SolidCraft design)
+are built by `openparts-solidcraft` and exported by a locally installed
 [SolidCraft](https://solidcraft.io) -- see "3D models" below.
 
-The CLI's `generate`/`validate`/`search`/`show` subcommands are
-implemented; `provenance`, `diff`, `install`, `update`, and `bundle`
-are still stubs (Architecture Specification section 7.5 defers their
-exact semantics to implementation time, and none has been designed
-yet).
+The CLI has `generate`, `validate`, `search`, `show` and `bundle` --
+see "Prebuilt artifacts" below for `bundle`.
 
 ## Layout
 
@@ -38,18 +35,13 @@ crates/
 ├── pcbcad/
 │   ├── openparts-pcbcad    PCB CAD-independent Symbol/Footprint IR
 │   ├── openparts-kicad      KiCad adapter
-│   ├── openparts-librepcb   LibrePCB adapter
-│   └── openparts-altium     (not implemented -- proprietary binary
-│                             format, no Altium install to verify
-│                             against; see the crate's doc comment for
-│                             the planned DelphiScript-emission approach)
+│   └── openparts-librepcb   LibrePCB adapter
 └── mcad/
     ├── openparts-mcad       Mechanical Geometry generators
     ├── openparts-solidcraft Mechanical Geometry -> detailed parametric
     │                        SolidCraft model, run through SolidCraft
     ├── openparts-step       STEP exporter (via openparts-solidcraft)
-    ├── openparts-stl        binary STL exporter (via openparts-solidcraft)
-    └── openparts-gltf       (not implemented -- see the crate's doc comment)
+    └── openparts-stl        binary STL exporter (via openparts-solidcraft)
 ```
 
 ## Usage
@@ -71,6 +63,56 @@ cargo run -p openparts-cli -- generate \
   --source ../openparts-data/sources/exemplar/EX-DS-0001.yaml \
   --out /tmp/openparts-out
 ```
+
+`generate` writes the KiCad symbol/footprint, STEP, STL, 3MF, the
+SolidCraft design (`.sc`), a LibrePCB library and a generation report
+for one part.
+
+## Prebuilt artifacts
+
+`bundle` builds every part of an `openparts-data` checkout at once, for
+shipping to `openparts-server` (which then needs no SolidCraft):
+
+```sh
+cargo run --release -p openparts-cli -- bundle \
+  --data ../openparts-data --out /tmp/openparts-bundle [--jobs N] [--strict]
+```
+
+Each part is validated, its Effective Model built for the base silicon
+revision, and its artifacts written content-addressed (Architecture
+Specification section 24) -- SolidCraft runs once per part for all 3D
+formats, parts in parallel (`--jobs`, default: CPU count):
+
+```text
+<out>/
+├── manifest.json
+└── artifacts/sha256/<hex>     STEP, binary STL, 3MF, .sc design,
+                               .kicad_sym, .kicad_mod
+```
+
+`manifest.json` (`"format": "openparts-bundle"`, `"format_version": 1`):
+
+- `artifact_path`: `"artifacts/sha256/{sha256}"`.
+- `reproducibility`: dataset git commit (and whether it was dirty),
+  `schema_versions`, generator crate versions and the openparts source
+  commit, `toolchain` (SolidCraft and rustc versions),
+  `silicon_revision` (`null`: base), and `not_byte_reproducible`
+  (`["solidcraft"]`: SolidCraft's saved design keeps build timings;
+  every other kind is byte-identical across rebuilds).
+- `summary`: part counts (`ok`/`partial`/`failed`), distinct artifacts,
+  total bytes.
+- `parts`: sorted by (manufacturer, mpn), each with `part_id`,
+  `device`, `package`, `status` (`ok`, `partial`, `failed`),
+  `artifacts` (kind -> `{sha256, size, content_type, filename}`; kinds
+  `step`, `stl`, `3mf`, `solidcraft`, `kicad-symbol`, `kicad-footprint`)
+  and `errors` (`{stage, message}`, stage one of `resolve`,
+  `validation`, `effective-model`, `geometry`, `3d-model`). A part that
+  fails is listed with its reason, never dropped.
+- `load_errors`: dataset files that could not be parsed at all.
+
+The manifest has no time stamp, so rebuilding from the same dataset and
+toolchain reproduces it. `--strict` exits non-zero unless every part was
+bundled.
 
 ## 3D models
 
@@ -111,8 +153,10 @@ every other subcommand works entirely offline against local
 `OPENPARTS_REGISTRY_URL` env var (default `http://127.0.0.1:8080`):
 
 ```sh
-# in a separate terminal, from openparts-server/:
-OPENPARTS_DATA_DIR=../openparts-data cargo run --release
+# in a separate terminal, from openparts-server/ (OPENPARTS_ARTIFACT_DIR
+# is optional: a `bundle` output to serve 3D models from):
+OPENPARTS_DATA_DIR=../openparts-data OPENPARTS_ARTIFACT_DIR=/tmp/openparts-bundle \
+  cargo run --release
 
 # then:
 cargo run -p openparts-cli -- search RP2040

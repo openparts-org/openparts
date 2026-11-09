@@ -75,8 +75,8 @@ impl Client {
     }
 
     /// When `true`, every method reads only from the local cache and
-    /// never touches the network -- `openparts install --offline`
-    /// (Architecture Specification section 27).
+    /// never touches the network (offline use, Architecture
+    /// Specification section 27).
     pub fn offline(mut self, offline: bool) -> Self {
         self.offline = offline;
         self

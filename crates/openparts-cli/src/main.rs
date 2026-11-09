@@ -1,3 +1,5 @@
+mod bundle;
+
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use std::collections::BTreeSet;
@@ -60,17 +62,26 @@ enum Commands {
         manufacturer: String,
         mpn: String,
     },
-    Provenance {
-        manufacturer: String,
-        mpn: String,
+    /// Prebuild every part of an openparts-data checkout for
+    /// distribution: validate, build the Effective Model (base revision)
+    /// and write content-addressed STEP, binary STL, 3MF, SolidCraft
+    /// design and KiCad symbol/footprint artifacts plus a manifest.json
+    /// (see `openparts-server`'s OPENPARTS_ARTIFACT_DIR). Needs
+    /// SolidCraft.
+    Bundle {
+        /// The openparts-data checkout.
+        #[arg(long, default_value = "../openparts-data")]
+        data: PathBuf,
+        /// Output directory (`manifest.json`, `artifacts/sha256/<hex>`).
+        #[arg(long)]
+        out: PathBuf,
+        /// Parts built at once (default: the number of CPUs).
+        #[arg(long)]
+        jobs: Option<usize>,
+        /// Exit with an error unless every part was bundled.
+        #[arg(long)]
+        strict: bool,
     },
-    Diff {
-        from: String,
-        to: String,
-    },
-    Install,
-    Update,
-    Bundle,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -92,12 +103,18 @@ fn main() -> anyhow::Result<()> {
         } => cmd_validate(part, device, package, sources),
         Commands::Search { query } => cmd_search(&cli.registry, &query),
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
-        _ => {
-            eprintln!(
-                "this subcommand is not implemented yet (Architecture Specification section 7.5)"
-            );
-            Ok(())
-        }
+        Commands::Bundle {
+            data,
+            out,
+            jobs,
+            strict,
+        } => bundle::run(bundle::Options {
+            data,
+            out,
+            jobs: jobs
+                .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get())),
+            strict,
+        }),
     }
 }
 
@@ -223,8 +240,11 @@ fn cmd_show(registry: &str, manufacturer: &str, mpn: &str) -> anyhow::Result<()>
 /// a typo). Used only for filesystem paths below; `part.mpn` itself
 /// (used for symbol/footprint/STEP/STL content, which has no such
 /// constraint) is passed through unsanitized everywhere else.
+/// Shared with the footprint's 3D model reference
+/// (`openparts_pcbcad::default_model_path`), so the `.step` written here is
+/// the file the `.kicad_mod` points at.
 fn safe_filename(mpn: &str) -> String {
-    mpn.replace(['/', '\\'], "-")
+    openparts_pcbcad::safe_filename(mpn)
 }
 
 fn cmd_generate(
@@ -272,8 +292,8 @@ fn cmd_generate(
     )?;
 
     // The detailed 3D model, built and exported by SolidCraft in one run:
-    // STEP (coloured), binary STL, and the parametric SolidCraft design
-    // itself (`.sc`, editable in SolidCraft).
+    // STEP (coloured), binary STL, 3MF (coloured), and the parametric
+    // SolidCraft design itself (`.sc`, editable in SolidCraft).
     let input = openparts_solidcraft::ModelInput {
         package: &model.package,
         geometry: &geometry,
@@ -285,18 +305,26 @@ fn cmd_generate(
         &[
             openparts_solidcraft::Format::Step,
             openparts_solidcraft::Format::Stl,
+            openparts_solidcraft::Format::ThreeMf,
             openparts_solidcraft::Format::Design,
         ],
     )
     .context("generating the 3D model with SolidCraft")?;
-    for (bytes, ext) in models.iter().zip(["step", "stl", "sc"]) {
+    for (bytes, ext) in models.iter().zip(["step", "stl", "3mf", "sc"]) {
         std::fs::write(out_dir.join(format!("{mpn_file}.{ext}")), bytes)?;
     }
 
     // LibrePCB library element (a directory tree, not a single file --
     // written under <out>/<mpn>.lplib/).
     let librepcb_dir = out_dir.join(format!("{mpn_file}.lplib"));
-    for file in openparts_librepcb::generate_library(&part.mpn, &symbol, &footprint) {
+    // The LibrePCB package embeds the same STEP as its 3D model.
+    let step_text = std::str::from_utf8(&models[0]).context("SolidCraft STEP is not UTF-8")?;
+    for file in openparts_librepcb::generate_library_with_step(
+        &part.mpn,
+        &symbol,
+        &footprint,
+        Some(step_text),
+    ) {
         let path = librepcb_dir.join(&file.path);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -326,7 +354,7 @@ fn cmd_generate(
     )?;
 
     println!(
-        "Generated KiCad symbol/footprint, STEP/STL models and a SolidCraft design, a LibrePCB library, and a generation report into {}",
+        "Generated KiCad symbol/footprint, STEP/STL/3MF models and a SolidCraft design, a LibrePCB library, and a generation report into {}",
         out_dir.display()
     );
     Ok(())

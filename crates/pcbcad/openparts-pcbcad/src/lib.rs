@@ -1,7 +1,7 @@
 //! openparts-pcbcad: the CAD-independent PCB Symbol/Footprint
 //! Intermediate Representation (Architecture Specification section 12).
 //! EDA-specific concepts stay in the adapter crates (openparts-kicad,
-//! openparts-librepcb, openparts-altium); this crate only knows about
+//! openparts-librepcb); this crate only knows about
 //! Device pins and Mechanical Geometry leads.
 
 use openparts_core::{Device, PinType};

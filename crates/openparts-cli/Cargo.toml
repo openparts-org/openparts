@@ -19,3 +19,7 @@ openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
 openparts-client = { path = "../openparts-client" }
 clap = { workspace = true }
 anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+serde_yaml = { workspace = true }
+sha2 = "0.10"

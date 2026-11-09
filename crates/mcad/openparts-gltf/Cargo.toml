@@ -1,8 +1,0 @@
-[package]
-name = "openparts-gltf"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-openparts-mcad = { path = "../openparts-mcad" }
-thiserror = { workspace = true }

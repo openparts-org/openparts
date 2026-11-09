@@ -484,14 +484,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openparts-altium"
-version = "0.1.0"
-dependencies = [
- "openparts-pcbcad",
- "thiserror",
-]
-
-[[package]]
 name = "openparts-cli"
 version = "0.1.0"
 dependencies = [
@@ -506,6 +498,10 @@ dependencies = [
  "openparts-pcbcad",
  "openparts-solidcraft",
  "openparts-validator",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
 ]
 
 [[package]]
@@ -536,14 +532,6 @@ dependencies = [
  "openparts-core",
  "serde",
  "serde_yaml",
- "thiserror",
-]
-
-[[package]]
-name = "openparts-gltf"
-version = "0.1.0"
-dependencies = [
- "openparts-mcad",
  "thiserror",
 ]
 
