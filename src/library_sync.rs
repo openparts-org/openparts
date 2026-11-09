@@ -77,19 +77,39 @@ pub fn merge_symbol_library(existing: Option<&str>, mpn: &str, symbol_block: &st
     }
 }
 
+/// File-name sanitisation for a part's local files: an MPN may contain
+/// path separators (e.g. `LPC1114FBD48/302`), which are replaced by
+/// `-`. Must stay identical to `openparts_pcbcad::safe_filename` (the
+/// convention `openparts-cli`/`openparts-kicad` use to name
+/// `<name>.kicad_mod` / `<name>.step`); duplicated rather than imported
+/// so this plugin doesn't pull the whole pcbcad/mcad stack in for a
+/// one-liner.
+pub fn safe_filename(name: &str) -> String {
+    name.replace(['/', '\\'], "-")
+}
+
 /// Inserts a `(model "path" ...)` block into a footprint (as returned by
 /// `openparts-server`'s kicad-footprint artifact) pointing at the
-/// downloaded STEP file, so the 3D viewer works immediately. If the
-/// footprint already has a `(model ...)` block, it's replaced.
+/// downloaded STEP file, so the 3D viewer works immediately.
+///
+/// Footprints rendered by `openparts-kicad` already carry a default
+/// model block (`(model "<name>.step" ...)`, a path relative to the
+/// footprint library / project, which is where `openparts-cli` puts the
+/// STEP). The plugin installs the STEP somewhere else
+/// (`${KIPRJMOD}/openparts_3d/`), so that existing block is *replaced*
+/// with this one -- never duplicated. The identity transform is kept:
+/// the STEP is generated in the footprint's own frame.
 pub fn patch_footprint_3d_model(footprint_text: &str, step_relative_path: &str) -> String {
     let model_block = format!(
         "  (model \"{step_relative_path}\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n"
     );
     if let Some((start, end)) = find_balanced_block(footprint_text, "(model ") {
+        // `start` points at `(model`, after the existing indentation, so
+        // the replacement must not bring its own leading indentation.
         format!(
             "{}{}{}",
             &footprint_text[..start],
-            model_block.trim_end(),
+            model_block.trim(),
             &footprint_text[end..]
         )
     } else {
@@ -191,6 +211,32 @@ mod tests {
         assert_eq!(twice.matches("(model ").count(), 1);
         assert!(twice.contains("path/b.step"));
         assert!(!twice.contains("path/a.step"));
+    }
+
+    /// Exactly what `openparts-kicad`'s `render_footprint` now emits:
+    /// a default, library-relative model block after the pads.
+    const FETCHED_FOOTPRINT_WITH_MODEL: &str = "(footprint \"A/B\" (version 20221018) (generator openparts)\n  (layer \"F.Cu\")\n  (pad \"1\" smd rect (at 0.000 -1.000) (size 0.400 0.250) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"))\n  (model \"A-B.step\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n)\n";
+
+    #[test]
+    fn overrides_the_generators_default_model_block_with_the_local_path() {
+        let patched = patch_footprint_3d_model(
+            FETCHED_FOOTPRINT_WITH_MODEL,
+            "${KIPRJMOD}/openparts_3d/A-B.step",
+        );
+        assert_eq!(patched.matches("(model ").count(), 1);
+        assert!(patched.contains("  (model \"${KIPRJMOD}/openparts_3d/A-B.step\"\n"));
+        assert!(!patched.contains("(model \"A-B.step\""));
+        // Pads untouched, output still balanced and still a footprint.
+        assert!(patched.contains("(pad \"1\" smd rect (at 0.000 -1.000)"));
+        assert_eq!(patched.matches('(').count(), patched.matches(')').count());
+        assert!(patched.trim_end().ends_with(')'));
+    }
+
+    #[test]
+    fn safe_filename_matches_the_generator_convention() {
+        assert_eq!(safe_filename("LPC1114FBD48/302"), "LPC1114FBD48-302");
+        assert_eq!(safe_filename("A\\B"), "A-B");
+        assert_eq!(safe_filename("RP2040"), "RP2040");
     }
 
     #[test]

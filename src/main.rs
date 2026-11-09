@@ -286,18 +286,28 @@ fn install_part(
         .get_artifact(manufacturer, mpn, ArtifactKind::Step, revision)
         .map_err(|e| e.to_string())?;
 
+    // Same `/` -> `-` sanitisation the generator uses for its own file
+    // names: an MPN like `LPC1114FBD48/302` must not become a
+    // subdirectory.
+    let file_stem = library_sync::safe_filename(mpn);
+
     let step_dir = project_dir.join("openparts_3d");
     std::fs::create_dir_all(&step_dir).map_err(|e| e.to_string())?;
-    std::fs::write(step_dir.join(format!("{mpn}.step")), &step_artifact.content)
-        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        step_dir.join(format!("{file_stem}.step")),
+        &step_artifact.content,
+    )
+    .map_err(|e| e.to_string())?;
 
-    let step_rel = format!("${{KIPRJMOD}}/openparts_3d/{mpn}.step");
+    // The fetched footprint already references `<file_stem>.step`
+    // relative to its library; point it at where we actually put it.
+    let step_rel = format!("${{KIPRJMOD}}/openparts_3d/{file_stem}.step");
     let patched_footprint =
         library_sync::patch_footprint_3d_model(&footprint_artifact.content, &step_rel);
     let pretty_dir = project_dir.join("openparts.pretty");
     std::fs::create_dir_all(&pretty_dir).map_err(|e| e.to_string())?;
     std::fs::write(
-        pretty_dir.join(format!("{mpn}.kicad_mod")),
+        pretty_dir.join(format!("{file_stem}.kicad_mod")),
         patched_footprint,
     )
     .map_err(|e| e.to_string())?;
@@ -414,7 +424,9 @@ mod tests {
         // Pre-populate the client cache exactly like openparts-client's
         // own cache layout (metadata/artifact-pointers + artifacts/sha256).
         let symbol_text = "(kicad_symbol_lib\n  (version 20211014)\n  (generator openparts)\n  (symbol \"TESTPART\"\n    (in_bom yes)\n  )\n)\n";
-        let footprint_text = "(footprint \"TESTPART\" (version 20221018) (generator openparts)\n  (layer \"F.Cu\")\n  (pad \"1\" smd rect (at 0 0) (size 0.4 0.25) (layers \"F.Cu\"))\n)\n";
+        // As `openparts-kicad` renders it today: with its default,
+        // library-relative model block.
+        let footprint_text = "(footprint \"TESTPART\" (version 20221018) (generator openparts)\n  (layer \"F.Cu\")\n  (pad \"1\" smd rect (at 0 0) (size 0.4 0.25) (layers \"F.Cu\"))\n  (model \"TESTPART.step\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n)\n";
         let step_text = "ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n";
 
         write_cached_artifact(
@@ -456,12 +468,52 @@ mod tests {
                 .join("openparts.pretty/TESTPART.kicad_mod"),
         )
         .unwrap();
-        assert!(footprint_out.contains("openparts_3d/TESTPART.step"));
+        assert!(footprint_out.contains("(model \"${KIPRJMOD}/openparts_3d/TESTPART.step\""));
+        assert_eq!(footprint_out.matches("(model ").count(), 1);
+        assert_eq!(
+            std::fs::read_to_string(project_dir.path().join("openparts_3d/TESTPART.step")).unwrap(),
+            step_text
+        );
 
         let sym_table = std::fs::read_to_string(project_dir.path().join("sym-lib-table")).unwrap();
         assert!(sym_table.contains("(name \"openparts\")"));
         let fp_table = std::fs::read_to_string(project_dir.path().join("fp-lib-table")).unwrap();
         assert!(fp_table.contains("(name \"openparts\")"));
+    }
+
+    #[test]
+    fn install_part_sanitises_an_mpn_containing_a_slash() {
+        let cache_dir = tempfile::tempdir().unwrap();
+        let project_dir = tempfile::tempdir().unwrap();
+        let mpn = "LPC1114FBD48/302";
+        let symbol_text = "(kicad_symbol_lib\n  (version 20211014)\n  (generator openparts)\n  (symbol \"LPC1114FBD48/302\"\n    (in_bom yes)\n  )\n)\n";
+        let footprint_text = "(footprint \"LPC1114FBD48/302\" (version 20221018) (generator openparts)\n  (layer \"F.Cu\")\n  (pad \"1\" smd rect (at 0 0) (size 0.4 0.25) (layers \"F.Cu\"))\n  (model \"LPC1114FBD48-302.step\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n)\n";
+        let step_text = "ISO-10303-21;\nEND-ISO-10303-21;\n";
+        write_cached_artifact(cache_dir.path(), "nxp", mpn, "kicad-symbol", symbol_text);
+        write_cached_artifact(
+            cache_dir.path(),
+            "nxp",
+            mpn,
+            "kicad-footprint",
+            footprint_text,
+        );
+        write_cached_artifact(cache_dir.path(), "nxp", mpn, "step", step_text);
+
+        let client = Client::new("http://127.0.0.1:1")
+            .with_cache_dir(cache_dir.path().to_path_buf())
+            .offline(true);
+        install_part(&client, "nxp", mpn, None, project_dir.path()).unwrap();
+
+        let step = project_dir
+            .path()
+            .join("openparts_3d/LPC1114FBD48-302.step");
+        let fp = project_dir
+            .path()
+            .join("openparts.pretty/LPC1114FBD48-302.kicad_mod");
+        assert!(step.exists());
+        let footprint_out = std::fs::read_to_string(fp).unwrap();
+        assert!(footprint_out.contains("(model \"${KIPRJMOD}/openparts_3d/LPC1114FBD48-302.step\""));
+        assert_eq!(footprint_out.matches("(model ").count(), 1);
     }
 
     fn write_cached_artifact(
