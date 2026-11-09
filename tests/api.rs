@@ -211,3 +211,248 @@ async fn get_device_resolves_slash_containing_id() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+// --- Prebuilt artifacts (OPENPARTS_ARTIFACT_DIR) ---------------------
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// A tiny bundle, laid out as `openparts bundle` writes one, holding
+/// RP2040's STEP, 3MF and KiCad symbol/footprint (stand-in bytes, so the
+/// tests can tell bundled from live output) and an entry whose file is
+/// missing.
+fn tiny_bundle(name: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!(
+        "openparts-server-bundle-{name}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    let store = root.join("artifacts/sha256");
+    std::fs::create_dir_all(&store).unwrap();
+    let mut artifacts = serde_json::Map::new();
+    for (kind, bytes, content_type, write) in [
+        ("step", &b"ISO-10303-21; bundled"[..], "model/step", true),
+        ("3mf", &b"PK\x03\x04 bundled"[..], "model/3mf", true),
+        (
+            "kicad-symbol",
+            &b"(kicad_symbol_lib bundled)"[..],
+            "text/plain; charset=utf-8",
+            true,
+        ),
+        (
+            "kicad-footprint",
+            &b"(footprint bundled)"[..],
+            "text/plain; charset=utf-8",
+            true,
+        ),
+        ("stl", &b"never written"[..], "model/stl", false),
+    ] {
+        let hex = sha256_hex(bytes);
+        if write {
+            std::fs::write(store.join(&hex), bytes).unwrap();
+        }
+        artifacts.insert(
+            kind.into(),
+            serde_json::json!({"sha256": hex, "size": bytes.len(), "content_type": content_type}),
+        );
+    }
+    let manifest = serde_json::json!({
+        "format": "openparts-bundle",
+        "format_version": 1,
+        "artifact_path": "artifacts/sha256/{sha256}",
+        "reproducibility": {"toolchain": {"solidcraft": "solidcraft-cli test"}},
+        "parts": [{
+            "manufacturer": "raspberrypi",
+            "mpn": "RP2040",
+            "status": "ok",
+            "artifacts": artifacts,
+            "errors": [],
+        }],
+        "load_errors": [],
+    });
+    std::fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
+    root
+}
+
+fn app_with_bundle(root: &std::path::Path) -> axum::Router {
+    let mut store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+    store.bundle = Some(openparts_server::bundle::Bundle::load(root).unwrap());
+    openparts_server::routes::build_router(Arc::new(store))
+}
+
+async fn get(app: axum::Router, uri: &str) -> axum::response::Response {
+    app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+}
+
+async fn body_bytes(response: axum::response::Response) -> Vec<u8> {
+    response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec()
+}
+
+#[tokio::test]
+async fn bundled_3d_models_are_served_with_their_hash_for_every_revision() {
+    let root = tiny_bundle("3d");
+    for (uri, expected, content_type) in [
+        (
+            "/v1/parts/raspberrypi/RP2040/artifacts/step",
+            &b"ISO-10303-21; bundled"[..],
+            "model/step",
+        ),
+        (
+            "/v1/parts/raspberrypi/RP2040/artifacts/3mf",
+            &b"PK\x03\x04 bundled"[..],
+            "model/3mf",
+        ),
+        // 3D models depend on the package only.
+        (
+            "/v1/parts/raspberrypi/RP2040/artifacts/3mf?silicon_revision=rev-b2",
+            &b"PK\x03\x04 bundled"[..],
+            "model/3mf",
+        ),
+    ] {
+        let response = get(app_with_bundle(&root), uri).await;
+        assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        assert_eq!(response.headers()["content-type"], content_type);
+        assert_eq!(
+            response.headers()["x-content-hash"],
+            format!("sha256:{}", sha256_hex(expected)).as_str()
+        );
+        assert_eq!(body_bytes(response).await, expected, "{uri}");
+    }
+    // An unknown revision is still rejected, bundle or not.
+    let response = get(
+        app_with_bundle(&root),
+        "/v1/parts/raspberrypi/RP2040/artifacts/step?silicon_revision=does-not-exist",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[tokio::test]
+async fn a_revision_specific_symbol_is_generated_live_not_bundled() {
+    let root = tiny_bundle("symbol");
+    let base = get(
+        app_with_bundle(&root),
+        "/v1/parts/raspberrypi/RP2040/artifacts/kicad-symbol",
+    )
+    .await;
+    assert_eq!(body_bytes(base).await, b"(kicad_symbol_lib bundled)");
+    let revised = get(
+        app_with_bundle(&root),
+        "/v1/parts/raspberrypi/RP2040/artifacts/kicad-symbol?silicon_revision=rev-b2",
+    )
+    .await;
+    assert_eq!(revised.status(), StatusCode::OK);
+    let body = String::from_utf8(body_bytes(revised).await).unwrap();
+    assert_eq!(body.matches("(number \"").count(), 57);
+    // The footprint depends on the package only.
+    let footprint = get(
+        app_with_bundle(&root),
+        "/v1/parts/raspberrypi/RP2040/artifacts/kicad-footprint?silicon_revision=rev-b2",
+    )
+    .await;
+    assert_eq!(body_bytes(footprint).await, b"(footprint bundled)");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[tokio::test]
+async fn a_corrupted_bundled_artifact_is_not_served() {
+    let root = tiny_bundle("corrupt");
+    let hex = sha256_hex(b"ISO-10303-21; bundled");
+    std::fs::write(root.join("artifacts/sha256").join(hex), b"tampered").unwrap();
+    let response = get(
+        app_with_bundle(&root),
+        "/v1/parts/raspberrypi/RP2040/artifacts/step",
+    )
+    .await;
+    // Falls back to live generation: built with SolidCraft, else 503.
+    if openparts_solidcraft::available() {
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(body_bytes(response).await.starts_with(b"ISO-10303-21;"));
+    } else {
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[tokio::test]
+async fn a_model_missing_from_the_bundle_needs_solidcraft() {
+    // The tiny bundle lists RP2040's STL but its file is missing, and has
+    // no ESP32-C6 entry at all.
+    let root = tiny_bundle("missing");
+    for uri in [
+        "/v1/parts/raspberrypi/RP2040/artifacts/stl",
+        "/v1/parts/espressif/ESP32-C6/artifacts/3mf",
+    ] {
+        let response = get(app_with_bundle(&root), uri).await;
+        if openparts_solidcraft::available() {
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        } else {
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{uri}");
+            let body = body_string(response).await;
+            assert!(body.contains("SolidCraft is not installed"), "{body}");
+        }
+    }
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[tokio::test]
+async fn live_3mf_is_a_coloured_zip() {
+    if !openparts_solidcraft::available() {
+        eprintln!("SolidCraft is not installed; skipping");
+        return;
+    }
+    let response = app()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/parts/raspberrypi/RP2040/artifacts/3mf")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "model/3mf");
+    let body = body_bytes(response).await;
+    assert!(body.starts_with(b"PK\x03\x04"));
+}
+
+#[tokio::test]
+async fn artifact_index_lists_3mf() {
+    let response = app()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/parts/raspberrypi/RP2040/artifacts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_string(response).await;
+    assert!(body.contains("\"3mf\":\"/v1/parts/raspberrypi/RP2040/artifacts/3mf\""));
+}
+
+#[test]
+fn a_manifest_of_another_format_is_refused() {
+    let root = tiny_bundle("format");
+    std::fs::write(
+        root.join("manifest.json"),
+        r#"{"format":"something-else","format_version":1,"artifact_path":"{sha256}","parts":[]}"#,
+    )
+    .unwrap();
+    assert!(openparts_server::bundle::Bundle::load(&root).is_err());
+    std::fs::remove_dir_all(&root).unwrap();
+}

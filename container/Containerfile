@@ -10,6 +10,17 @@
 #   podman build -f openparts-server/container/Containerfile \
 #     -t openparts-server:local .
 #
+# The image has no SolidCraft: 3D models (STEP/STL/3MF) are served from
+# an artifact bundle built at dataset release, where SolidCraft is
+# installed, and mounted at run time:
+#
+#   cd openparts && cargo run --release -p openparts-cli -- bundle \
+#     --data ../openparts-data --out /srv/openparts-bundle
+#
+# then run with OPENPARTS_DATA_DIR and OPENPARTS_ARTIFACT_DIR pointing at
+# the mounted dataset and bundle (see deploy/quadlet/). Without a
+# bundle, KiCad artifacts still work but 3D model routes return 503.
+#
 # NOTE: this Containerfile has not been exercised in this environment
 # (no container runtime available here) -- it is written to the same
 # layout the CI workflows and `cargo build` commands already verified

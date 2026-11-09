@@ -11,6 +11,12 @@
 # Specification describes, but treat a first real deployment as
 # unverified until run once.
 
+# The dataset and the artifact bundle built from it (`openparts bundle`,
+# run at dataset release where SolidCraft is installed -- see
+# openparts-server/README.md, "Prebuilt artifacts") are mounted
+# read-only; the server serves 3D models from the bundle and needs no
+# SolidCraft. Replace both together on a new release.
+
 [Unit]
 Description=OpenParts distribution API server
 After=network-online.target
@@ -20,8 +26,10 @@ Image=openparts-server:local
 ContainerName=openparts-server
 PublishPort=8080:8080
 Environment=OPENPARTS_DATA_DIR=/data/openparts-data
+Environment=OPENPARTS_ARTIFACT_DIR=/data/openparts-bundle
 Environment=PORT=8080
 Volume=%h/openparts-data:/data/openparts-data:ro,Z
+Volume=%h/openparts-bundle:/data/openparts-bundle:ro,Z
 
 [Service]
 Restart=on-failure

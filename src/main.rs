@@ -1,4 +1,4 @@
-use openparts_server::{routes, store};
+use openparts_server::{bundle, routes, store};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,7 +11,21 @@ async fn main() -> anyhow::Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("../openparts-data"));
     tracing::info!(data_dir = %data_dir.display(), "loading openparts-data");
-    let loaded_store = Arc::new(store::discover_and_load(&data_dir)?);
+    let mut loaded_store = store::discover_and_load(&data_dir)?;
+    // A bundle from `openparts bundle`: artifacts are served from it, so
+    // this server needs no SolidCraft. Without one (or for anything it
+    // lacks) 3D models are built live, which needs SolidCraft.
+    if let Some(dir) = std::env::var_os("OPENPARTS_ARTIFACT_DIR") {
+        let dir = PathBuf::from(dir);
+        loaded_store.bundle = Some(bundle::Bundle::load(&dir)?);
+    }
+    let solidcraft = tokio::task::spawn_blocking(openparts_solidcraft::available).await?;
+    tracing::info!(
+        bundle = loaded_store.bundle.is_some(),
+        solidcraft,
+        "3D models: served from the bundle when present, built live only with SolidCraft"
+    );
+    let loaded_store = Arc::new(loaded_store);
 
     let port: u16 = std::env::var("PORT")
         .ok()

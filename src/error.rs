@@ -11,6 +11,9 @@ pub enum ApiError {
     /// failed (e.g. unknown revision, missing dimension -- Testing and
     /// Quality Specification section 7: stop rather than guess).
     GenerationFailed(String),
+    /// The artifact is neither prebuilt nor buildable here (no
+    /// SolidCraft on this server).
+    Unavailable(String),
 }
 
 #[derive(Serialize)]
@@ -60,6 +63,13 @@ impl IntoResponse for ApiError {
             ),
             ApiError::GenerationFailed(msg) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorBody {
+                    error: msg,
+                    diagnostics: vec![],
+                },
+            ),
+            ApiError::Unavailable(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
                 ErrorBody {
                     error: msg,
                     diagnostics: vec![],

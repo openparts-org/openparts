@@ -18,6 +18,9 @@ pub struct Store {
     pub devices: HashMap<String, Device>,
     pub packages: HashMap<String, Package>,
     pub sources: HashMap<String, Source>,
+    /// Prebuilt artifacts (`OPENPARTS_ARTIFACT_DIR`), served in place of
+    /// generating them per request.
+    pub bundle: Option<crate::bundle::Bundle>,
 }
 
 #[derive(Debug, thiserror::Error)]

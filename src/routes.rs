@@ -46,6 +46,10 @@ pub fn build_router(store: Arc<Store>) -> Router {
             "/v1/parts/:manufacturer/:mpn/artifacts/stl",
             get(artifact_stl),
         )
+        .route(
+            "/v1/parts/:manufacturer/:mpn/artifacts/3mf",
+            get(artifact_3mf),
+        )
         .route("/v1/devices/*id", get(get_device))
         .route("/v1/packages/*id", get(get_package))
         .with_state(store)
@@ -207,6 +211,8 @@ struct ArtifactsResponse {
     kicad_footprint: String,
     step: String,
     stl: String,
+    #[serde(rename = "3mf")]
+    three_mf: String,
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts`
@@ -221,6 +227,7 @@ async fn list_artifacts(
         kicad_footprint: format!("{base}/kicad-footprint"),
         step: format!("{base}/step"),
         stl: format!("{base}/stl"),
+        three_mf: format!("{base}/3mf"),
     }))
 }
 
@@ -258,65 +265,84 @@ fn build_model(
         .map_err(|e| ApiError::GenerationFailed(e.to_string()))
 }
 
-fn artifact_response(content: impl Into<Vec<u8>>, content_type: &'static str) -> Response {
-    let content: Vec<u8> = content.into();
-    let mut hasher = Sha256::new();
-    hasher.update(&content);
-    let hash = hex_encode(&hasher.finalize());
-
+fn artifact_response(content: Vec<u8>, content_type: &str) -> Response {
+    let hash = sha256_hex(&content);
     let mut response = (StatusCode::OK, content).into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(content_type),
-    );
+    if let Ok(value) = header::HeaderValue::from_str(content_type) {
+        response.headers_mut().insert(header::CONTENT_TYPE, value);
+    }
     if let Ok(value) = header::HeaderValue::from_str(&format!("sha256:{hash}")) {
         response.headers_mut().insert("x-content-hash", value);
     }
     response
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
+/// The prebuilt `kind` artifact from the bundle (`OPENPARTS_ARTIFACT_DIR`),
+/// if there is one and it reads back intact.
+async fn bundled(store: &Store, manufacturer: &str, mpn: &str, kind: &str) -> Option<Response> {
+    let bundle = store.bundle.as_ref()?;
+    let artifact = bundle.get(manufacturer, mpn, kind)?;
+    let bytes = bundle.read(artifact).await?;
+    Some(artifact_response(bytes, &artifact.content_type))
+}
+
+const KICAD_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
+
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-symbol?silicon_revision=...`
+///
+/// The bundle holds the base revision's symbol; a `silicon_revision`
+/// changes pins, so that is always generated live (no SolidCraft needed).
 async fn artifact_kicad_symbol(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
     let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
+    if q.silicon_revision.is_none() {
+        if let Some(response) = bundled(&store, &manufacturer, &mpn, "kicad-symbol").await {
+            return Ok(response);
+        }
+    }
     let symbol = openparts_pcbcad::build_symbol(&model.part.mpn, &model.device);
     let text = openparts_kicad::render_symbol(&symbol);
-    Ok(artifact_response(text, "text/plain; charset=utf-8"))
+    Ok(artifact_response(text.into_bytes(), KICAD_CONTENT_TYPE))
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-footprint?silicon_revision=...`
+///
+/// A footprint depends on the package only, so the bundled one serves
+/// every revision.
 async fn artifact_kicad_footprint(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
     let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
+    if let Some(response) = bundled(&store, &manufacturer, &mpn, "kicad-footprint").await {
+        return Ok(response);
+    }
     let geometry = openparts_mcad::generate(&model.package)
         .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
     let footprint = openparts_pcbcad::build_footprint(&model.part.mpn, &geometry);
     let text = openparts_kicad::render_footprint(&footprint);
-    Ok(artifact_response(text, "text/plain; charset=utf-8"))
+    Ok(artifact_response(text.into_bytes(), KICAD_CONTENT_TYPE))
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/step?silicon_revision=...`
+/// (coloured AP242)
 async fn artifact_step(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
-    let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
-    let text = render_3d(model, |input, mpn| {
-        openparts_step::generate_step(input, mpn).map_err(|e| e.to_string())
-    })
-    .await?;
-    Ok(artifact_response(text.into_bytes(), "model/step"))
+    serve_3d(&store, &manufacturer, &mpn, &q, Model3d::STEP).await
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/stl?silicon_revision=...`
@@ -326,31 +352,97 @@ async fn artifact_stl(
     Path((manufacturer, mpn)): Path<(String, String)>,
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
-    let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
-    let bytes = render_3d(model, |input, mpn| {
-        openparts_stl::generate_stl(input, mpn).map_err(|e| e.to_string())
-    })
-    .await?;
-    Ok(artifact_response(bytes, "model/stl"))
+    serve_3d(&store, &manufacturer, &mpn, &q, Model3d::STL).await
 }
 
-/// Builds the detailed 3D model of `model` with `export`. The model is
-/// built by an external SolidCraft process, so it runs on the blocking
-/// pool instead of holding up an async worker.
-async fn render_3d<T: Send + 'static>(
+/// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/3mf?silicon_revision=...`
+/// (3MF with a colour per body)
+async fn artifact_3mf(
+    State(store): State<Arc<Store>>,
+    Path((manufacturer, mpn)): Path<(String, String)>,
+    Query(q): Query<RevisionQuery>,
+) -> Result<Response, ApiError> {
+    serve_3d(&store, &manufacturer, &mpn, &q, Model3d::THREE_MF).await
+}
+
+/// A 3D artifact kind: its bundle key, SolidCraft export and media type.
+#[derive(Clone, Copy)]
+struct Model3d {
+    kind: &'static str,
+    format: openparts_solidcraft::Format,
+    content_type: &'static str,
+}
+
+impl Model3d {
+    const STEP: Model3d = Model3d {
+        kind: "step",
+        format: openparts_solidcraft::Format::Step,
+        content_type: "model/step",
+    };
+    const STL: Model3d = Model3d {
+        kind: "stl",
+        format: openparts_solidcraft::Format::Stl,
+        content_type: "model/stl",
+    };
+    const THREE_MF: Model3d = Model3d {
+        kind: "3mf",
+        format: openparts_solidcraft::Format::ThreeMf,
+        content_type: "model/3mf",
+    };
+}
+
+/// Serves a 3D model: from the bundle when it has one, else built live
+/// by SolidCraft when this server has it, else `503`.
+///
+/// 3D models depend on the package only, so the bundled (base revision)
+/// model serves every `silicon_revision`; the revision is still checked,
+/// so an unknown one is `422` either way.
+async fn serve_3d(
+    store: &Store,
+    manufacturer: &str,
+    mpn: &str,
+    q: &RevisionQuery,
+    model3d: Model3d,
+) -> Result<Response, ApiError> {
+    let model = build_model(store, manufacturer, mpn, q.silicon_revision.as_deref())?;
+    if let Some(response) = bundled(store, manufacturer, mpn, model3d.kind).await {
+        return Ok(response);
+    }
+    let bytes = render_3d(model, model3d, store.bundle.is_some()).await?;
+    Ok(artifact_response(bytes, model3d.content_type))
+}
+
+/// Builds the detailed 3D model of `model` live. The model is built by
+/// an external SolidCraft process, so it runs on the blocking pool
+/// instead of holding up an async worker.
+async fn render_3d(
     model: openparts_core::EffectiveModel,
-    export: impl FnOnce(&openparts_step::ModelInput<'_>, &str) -> Result<T, String> + Send + 'static,
-) -> Result<T, ApiError> {
+    model3d: Model3d,
+    have_bundle: bool,
+) -> Result<Vec<u8>, ApiError> {
     tokio::task::spawn_blocking(move || {
-        let geometry = openparts_mcad::generate(&model.package).map_err(|e| e.to_string())?;
-        let input = openparts_step::ModelInput {
+        if !openparts_solidcraft::available() {
+            let why = if have_bundle {
+                "the artifact bundle has no"
+            } else {
+                "no artifact bundle is configured (OPENPARTS_ARTIFACT_DIR) with a"
+            };
+            return Err(ApiError::Unavailable(format!(
+                "{why} {} model for {}/{}, and SolidCraft is not installed on this server to build one",
+                model3d.kind, model.part.manufacturer, model.part.mpn
+            )));
+        }
+        let geometry = openparts_mcad::generate(&model.package)
+            .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
+        let input = openparts_solidcraft::ModelInput {
             package: &model.package,
             geometry: &geometry,
             category: Some(model.device.category),
         };
-        export(&input, &model.part.mpn)
+        let mut files = openparts_solidcraft::generate(&input, &model.part.mpn, &[model3d.format])
+            .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
+        Ok(files.remove(0))
     })
     .await
     .map_err(|e| ApiError::GenerationFailed(e.to_string()))?
-    .map_err(ApiError::GenerationFailed)
 }
