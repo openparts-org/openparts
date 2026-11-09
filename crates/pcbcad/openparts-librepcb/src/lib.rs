@@ -160,6 +160,7 @@ fn render_package(
     pkg_uuid: Uuid,
     fp_uuid: Uuid,
     pkgcat_uuid: Uuid,
+    model_uuid: Option<Uuid>,
 ) -> String {
     let mut out = String::new();
     out.push_str(&format!("(librepcb_package {}\n", fmt_uuid(pkg_uuid)));
@@ -185,10 +186,28 @@ fn render_package(
         ));
     }
 
+    // Package-level 3D model declaration, between pads and footprints
+    // (order per librepcb-parts-generator's `Package.__str__`,
+    // `Package3DModel` = `(3d_model <uuid> (name "..."))`).
+    if let Some(model_uuid) = model_uuid {
+        out.push_str(&format!(
+            " (3d_model {} (name \"{mpn}\"))\n",
+            fmt_uuid(model_uuid)
+        ));
+    }
+
     out.push_str(&format!(" (footprint {}\n", fmt_uuid(fp_uuid)));
     out.push_str("  (name \"default\")\n");
     out.push_str("  (description \"\")\n");
+    // Identity transform: the STEP is generated from the same
+    // MechanicalGeometry as the pads, and LibrePCB (like the IR and the
+    // STEP) is Y-up, so no offset/rotation/flip is needed.
     out.push_str("  (3d_position 0.0 0.0 0.0) (3d_rotation 0.0 0.0 0.0)\n");
+    // Footprint-level reference (`Footprint3DModel` = `(3d_model
+    // <uuid>)`), right after 3d_position/3d_rotation and before pads.
+    if let Some(model_uuid) = model_uuid {
+        out.push_str(&format!("  (3d_model {})\n", fmt_uuid(model_uuid)));
+    }
     for pad in &footprint.pads {
         let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{}", pad.number));
         out.push_str(&format!(
@@ -374,6 +393,29 @@ fn render_library(lib_uuid: Uuid) -> String {
 /// part's files -- both outputs can be merged into the same `.lplib`
 /// directory on disk.
 pub fn generate_library(mpn: &str, symbol: &PcbSymbol, footprint: &PcbFootprint) -> Vec<LpFile> {
+    generate_library_with_step(mpn, symbol, footprint, None)
+}
+
+/// Same as [`generate_library`], additionally embedding a STEP 3D
+/// model into the package when `step` is `Some`.
+///
+/// LibrePCB (file format 1+, i.e. LibrePCB 1.0 and later) stores a
+/// package's 3D models *inside* the package directory as
+/// `pkg/<package-uuid>/<model-uuid>.step`, declared in `package.lp` as
+/// `(3d_model <model-uuid> (name "..."))` and referenced from each
+/// footprint that uses it as `(3d_model <model-uuid>)` -- exactly what
+/// LibrePCB/librepcb-parts-generator emits (`entities/package.py`
+/// `Package3DModel`/`Footprint3DModel`, and `generate_chip.py` writing
+/// `out/<lib>/pkg/<uuid_pkg>/<uuid_3d>.step`). There is no external
+/// path reference, so the IR's `PcbFootprint::model` path is not used
+/// here; the STEP content itself must be passed in. The model UUID is
+/// derived deterministically from `mpn`, like every other UUID.
+pub fn generate_library_with_step(
+    mpn: &str,
+    symbol: &PcbSymbol,
+    footprint: &PcbFootprint,
+    step: Option<&str>,
+) -> Vec<LpFile> {
     let lib_uuid = uuid_gen::derive("library");
     let pkgcat_uuid = uuid_gen::derive("pkgcat:openparts-generated");
     let cmpcat_uuid = uuid_gen::derive("cmpcat:openparts-generated");
@@ -382,8 +424,9 @@ pub fn generate_library(mpn: &str, symbol: &PcbSymbol, footprint: &PcbFootprint)
     let fp_uuid = uuid_gen::derive(&format!("footprint:{mpn}"));
     let cmp_uuid = uuid_gen::derive(&format!("cmp:{mpn}"));
     let dev_uuid = uuid_gen::derive(&format!("dev:{mpn}"));
+    let model_uuid = step.map(|_| uuid_gen::derive(&format!("pkg-3d:{mpn}")));
 
-    vec![
+    let mut files = vec![
         LpFile {
             path: ".librepcb-lib".to_string(),
             content: "2\n".to_string(),
@@ -422,7 +465,7 @@ pub fn generate_library(mpn: &str, symbol: &PcbSymbol, footprint: &PcbFootprint)
         },
         LpFile {
             path: format!("pkg/{}/package.lp", fmt_uuid(pkg_uuid)),
-            content: render_package(mpn, footprint, pkg_uuid, fp_uuid, pkgcat_uuid),
+            content: render_package(mpn, footprint, pkg_uuid, fp_uuid, pkgcat_uuid, model_uuid),
         },
         LpFile {
             path: format!("cmp/{}/.librepcb-cmp", fmt_uuid(cmp_uuid)),
@@ -440,7 +483,14 @@ pub fn generate_library(mpn: &str, symbol: &PcbSymbol, footprint: &PcbFootprint)
             path: format!("dev/{}/device.lp", fmt_uuid(dev_uuid)),
             content: render_device(mpn, footprint, dev_uuid, cmp_uuid, pkg_uuid, cmpcat_uuid),
         },
-    ]
+    ];
+    if let (Some(step), Some(model_uuid)) = (step, model_uuid) {
+        files.push(LpFile {
+            path: format!("pkg/{}/{}.step", fmt_uuid(pkg_uuid), fmt_uuid(model_uuid)),
+            content: step.to_string(),
+        });
+    }
+    files
 }
 
 #[cfg(test)]
@@ -506,6 +556,7 @@ mod tests {
             ],
             graphics: vec![],
             courtyard: None,
+            model: None,
         }
     }
 
@@ -569,6 +620,7 @@ mod tests {
             ],
             graphics: vec![],
             courtyard: None,
+            model: None,
         }
     }
 
@@ -654,5 +706,53 @@ mod tests {
             .unwrap()
             .content;
         assert_eq!(device_lp.matches("(pad ").count(), 2);
+    }
+
+    #[test]
+    fn no_3d_model_without_step() {
+        let files = generate_library("TESTPART", &synthetic_symbol(), &synthetic_footprint());
+        assert!(!files.iter().any(|f| f.path.ends_with(".step")));
+        let package_lp = &files
+            .iter()
+            .find(|f| f.path.ends_with("package.lp"))
+            .unwrap()
+            .content;
+        assert!(!package_lp.contains("(3d_model "));
+    }
+
+    #[test]
+    fn step_is_embedded_in_the_package_directory_and_referenced() {
+        let step = "ISO-10303-21;\nEND-ISO-10303-21;\n";
+        let files = generate_library_with_step(
+            "TESTPART",
+            &synthetic_symbol(),
+            &synthetic_footprint(),
+            Some(step),
+        );
+        let package = files
+            .iter()
+            .find(|f| f.path.ends_with("package.lp"))
+            .unwrap();
+        let pkg_dir = package.path.trim_end_matches("package.lp");
+        let model_uuid = uuid_gen::derive("pkg-3d:TESTPART").to_string();
+
+        let step_file = files.iter().find(|f| f.path.ends_with(".step")).unwrap();
+        assert_eq!(step_file.path, format!("{pkg_dir}{model_uuid}.step"));
+        assert_eq!(step_file.content, step);
+
+        let lp = &package.content;
+        let decl = format!(" (3d_model {model_uuid} (name \"TESTPART\"))\n");
+        let fp_ref = format!("  (3d_model {model_uuid})\n");
+        assert!(lp.contains(&decl));
+        assert!(lp.contains(&fp_ref));
+        // Declaration sits after package pads and before the footprint;
+        // the footprint reference sits before the footprint's pads.
+        assert!(lp.find(&decl).unwrap() < lp.find(" (footprint ").unwrap());
+        assert!(lp.find(&fp_ref).unwrap() < lp.find("  (pad ").unwrap());
+        assert_eq!(lp.matches('(').count(), lp.matches(')').count());
+
+        // Same files as without a STEP, apart from the extra .step file.
+        let plain = generate_library("TESTPART", &synthetic_symbol(), &synthetic_footprint());
+        assert_eq!(files.len(), plain.len() + 1);
     }
 }

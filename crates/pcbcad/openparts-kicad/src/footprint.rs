@@ -1,7 +1,21 @@
 use openparts_mcad::Mounting;
-use openparts_pcbcad::{Pad, PadShape, PcbFootprint};
+use openparts_pcbcad::{Model3d, Pad, PadShape, PcbFootprint};
 
 /// Renders a KiCad 6+ `.kicad_mod` footprint file.
+///
+/// Coordinate frame: the IR (like `MechanicalGeometry` and the
+/// generated STEP) is Y-up -- pin 1 of a SOIC/DIP is at `+y`. KiCad's
+/// footprint coordinates are Y-down (pin 1 of the reference
+/// `DIP-8_W7.62mm` is at `(0 0)`, pin 4 at `(0 7.62)`), and KiCad maps a
+/// 3D model's own (Y-up) frame onto the footprint by flipping Y. So
+/// pad Y is negated here: that both keeps the footprint's pin order
+/// un-mirrored when viewed from the top, and puts each STEP lead
+/// (identity model transform) exactly on its pad.
+/// [`parse_footprint_pads`] negates it back, so it returns IR
+/// coordinates.
+///
+/// If the footprint carries a [`Model3d`], a `(model ...)` block is
+/// emitted as the last child, matching where KiCad itself writes it.
 pub fn render_footprint(footprint: &PcbFootprint) -> String {
     let mut out = String::new();
     out.push_str(&format!(
@@ -37,6 +51,10 @@ pub fn render_footprint(footprint: &PcbFootprint) -> String {
         out.push_str(&render_pad(pad));
     }
 
+    if let Some(model) = &footprint.model {
+        out.push_str(&render_model(model));
+    }
+
     out.push(')');
     out.push('\n');
     out
@@ -53,19 +71,117 @@ fn render_pad(pad: &Pad) -> String {
         PadShape::Rect => "rect",
         PadShape::Circle => "circle",
     };
+    // IR is Y-up, KiCad footprints are Y-down (see `render_footprint`).
+    let y = flip_y(pad.position.y);
     match pad.mounting {
         Mounting::Smd => format!(
             "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"))\n",
-            pad.number, pad.position.x, pad.position.y, pad.size.0, pad.size.1
+            pad.number, pad.position.x, y, pad.size.0, pad.size.1
         ),
         Mounting::ThroughHole => {
             let drill = pad.drill.expect("through-hole pad must have a drill diameter");
             format!(
                 "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {:.3}) (layers \"*.Cu\" \"*.Mask\"))\n",
-                pad.number, pad.position.x, pad.position.y, pad.size.0, pad.size.1, drill
+                pad.number, pad.position.x, y, pad.size.0, pad.size.1, drill
             )
         }
     }
+}
+
+/// Negates a Y coordinate between the IR's Y-up frame and KiCad's
+/// Y-down footprint frame (an involution, used both ways). `+ 0.0`
+/// turns `-0.0` into `0.0` so a pad on the X axis prints `0.000`, not
+/// `-0.000`.
+fn flip_y(y: f64) -> f64 {
+    -y + 0.0
+}
+
+/// The KiCad 6+ footprint `(model ...)` block, in the exact layout
+/// KiCad itself writes:
+///
+/// ```text
+///   (model "path"
+///     (offset (xyz 0 0 0))
+///     (scale (xyz 1 1 1))
+///     (rotate (xyz 0 0 0))
+///   )
+/// ```
+///
+/// `offset` is in mm (KiCad 6+; the pre-6 `(at ...)` in inches is not
+/// emitted), `rotate` in degrees.
+fn render_model(model: &Model3d) -> String {
+    format!(
+        "  (model \"{}\"\n    (offset (xyz {}))\n    (scale (xyz {}))\n    (rotate (xyz {}))\n  )\n",
+        escape_string(&model.path),
+        fmt_xyz(model.offset),
+        fmt_xyz(model.scale),
+        fmt_xyz(model.rotate)
+    )
+}
+
+fn fmt_xyz(v: [f64; 3]) -> String {
+    // `{}` prints the shortest round-tripping form (`0`, `1`, `0.25`).
+    v.iter()
+        .map(|c| format!("{}", c + 0.0))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// KiCad S-expression string escaping: backslash and double quote.
+fn escape_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Read-back of the `(model ...)` block, used by tests.
+#[derive(Debug, PartialEq)]
+pub struct ParsedModel {
+    pub path: String,
+    pub offset: [f64; 3],
+    pub scale: [f64; 3],
+    pub rotate: [f64; 3],
+}
+
+/// Parses the first `(model ...)` block of a rendered footprint, or
+/// `None` if there is none. Same "our own generator's output is
+/// well-formed" scanning approach as [`parse_footprint_pads`].
+pub fn parse_footprint_model(text: &str) -> Option<ParsedModel> {
+    let start = text.find("(model \"")?;
+    let rest = &text[start + "(model \"".len()..];
+    let mut path = String::new();
+    let mut chars = rest.char_indices();
+    let mut end = None;
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' => {
+                if let Some((_, escaped)) = chars.next() {
+                    path.push(escaped);
+                }
+            }
+            '"' => {
+                end = Some(i + 1);
+                break;
+            }
+            other => path.push(other),
+        }
+    }
+    let body = &rest[end?..];
+    let xyz = |tag: &str| -> Option<[f64; 3]> {
+        let marker = format!("({tag} (xyz ");
+        let idx = body.find(&marker)?;
+        let after = &body[idx + marker.len()..];
+        let close = after.find(')')?;
+        let nums: Vec<f64> = after[..close]
+            .split_whitespace()
+            .map(|n| n.parse().ok())
+            .collect::<Option<_>>()?;
+        nums.try_into().ok()
+    };
+    Some(ParsedModel {
+        path,
+        offset: xyz("offset")?,
+        scale: xyz("scale")?,
+        rotate: xyz("rotate")?,
+    })
 }
 
 /// Minimal read-back check used by tests -- see symbol.rs's
@@ -110,7 +226,8 @@ pub fn parse_footprint_pads(text: &str) -> Vec<ParsedPad> {
         let at_close = after_at.find(')').unwrap();
         let mut at_nums = after_at[..at_close].split_whitespace();
         let x: f64 = at_nums.next().unwrap().parse().unwrap();
-        let y: f64 = at_nums.next().unwrap().parse().unwrap();
+        // Back from KiCad's Y-down frame to the IR's Y-up frame.
+        let y: f64 = flip_y(at_nums.next().unwrap().parse().unwrap());
 
         let size_idx = trimmed
             .find("(size ")
@@ -150,7 +267,7 @@ fn extract_quoted(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openparts_pcbcad::{Pad, PadShape, Point2};
+    use openparts_pcbcad::{Model3d, Pad, PadShape, Point2};
 
     #[test]
     fn round_trips_pad_number_position_and_size() {
@@ -166,6 +283,7 @@ mod tests {
             }],
             graphics: vec![],
             courtyard: None,
+            model: None,
         };
 
         let text = render_footprint(&footprint);
@@ -180,6 +298,113 @@ mod tests {
         assert_eq!(parsed[0].mounting, Mounting::Smd);
         assert_eq!(parsed[0].shape, PadShape::Rect);
         assert_eq!(parsed[0].drill, None);
+    }
+
+    #[test]
+    fn pad_y_is_flipped_into_kicads_y_down_frame() {
+        let footprint = PcbFootprint {
+            name: "TEST".into(),
+            pads: vec![
+                Pad {
+                    number: "1".into(),
+                    position: Point2 { x: -1.5, y: 2.75 },
+                    size: (0.6, 0.22),
+                    shape: PadShape::Rect,
+                    mounting: Mounting::Smd,
+                    drill: None,
+                },
+                Pad {
+                    number: "2".into(),
+                    position: Point2 { x: 1.5, y: 0.0 },
+                    size: (0.6, 0.22),
+                    shape: PadShape::Rect,
+                    mounting: Mounting::Smd,
+                    drill: None,
+                },
+            ],
+            graphics: vec![],
+            courtyard: None,
+            model: None,
+        };
+        let text = render_footprint(&footprint);
+        // IR pin 1 at +y (top) -> KiCad -y (top, since KiCad is Y-down).
+        assert!(text.contains("(pad \"1\" smd rect (at -1.500 -2.750)"));
+        assert!(text.contains("(pad \"2\" smd rect (at 1.500 0.000)"));
+        assert!(!text.contains("-0.000"));
+    }
+
+    #[test]
+    fn no_model_block_without_a_model() {
+        let footprint = PcbFootprint {
+            name: "TEST".into(),
+            pads: vec![],
+            graphics: vec![],
+            courtyard: None,
+            model: None,
+        };
+        let text = render_footprint(&footprint);
+        assert!(!text.contains("(model "));
+        assert_eq!(parse_footprint_model(&text), None);
+    }
+
+    #[test]
+    fn renders_model_block_after_pads_and_keeps_pads_parseable() {
+        let footprint = PcbFootprint {
+            name: "LPC1114FBD48/302".into(),
+            pads: vec![Pad {
+                number: "1".into(),
+                position: Point2 { x: -1.0, y: 0.5 },
+                size: (0.6, 0.3),
+                shape: PadShape::Rect,
+                mounting: Mounting::Smd,
+                drill: None,
+            }],
+            graphics: vec![],
+            courtyard: None,
+            model: Some(Model3d::new("LPC1114FBD48-302.step")),
+        };
+        let text = render_footprint(&footprint);
+        assert!(text.ends_with(
+            "  (model \"LPC1114FBD48-302.step\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n)\n"
+        ));
+        assert!(text.find("(pad ").unwrap() < text.find("(model ").unwrap());
+        assert_eq!(text.matches('(').count(), text.matches(')').count());
+
+        let parsed = parse_footprint_pads(&text);
+        assert_eq!(parsed.len(), 1);
+        assert!((parsed[0].x - (-1.0)).abs() < 1e-9);
+        assert!((parsed[0].y - 0.5).abs() < 1e-9);
+
+        let model = parse_footprint_model(&text).unwrap();
+        assert_eq!(model.path, "LPC1114FBD48-302.step");
+        assert_eq!(model.offset, [0.0; 3]);
+        assert_eq!(model.scale, [1.0; 3]);
+        assert_eq!(model.rotate, [0.0; 3]);
+    }
+
+    #[test]
+    fn model_path_and_transform_are_escaped_and_formatted() {
+        let footprint = PcbFootprint {
+            name: "TEST".into(),
+            pads: vec![],
+            graphics: vec![],
+            courtyard: None,
+            model: Some(Model3d {
+                path: "${KIPRJMOD}/odd \"name\".step".into(),
+                offset: [0.25, -1.0, 0.0],
+                scale: [1.0, 1.0, 2.0],
+                rotate: [-90.0, 0.0, 180.0],
+            }),
+        };
+        let text = render_footprint(&footprint);
+        assert!(text.contains("(model \"${KIPRJMOD}/odd \\\"name\\\".step\""));
+        assert!(text.contains("(offset (xyz 0.25 -1 0))"));
+        assert!(text.contains("(rotate (xyz -90 0 180))"));
+        let model = parse_footprint_model(&text).unwrap();
+        assert_eq!(model.path, "${KIPRJMOD}/odd \"name\".step");
+        assert_eq!(model.offset, [0.25, -1.0, 0.0]);
+        assert_eq!(model.scale, [1.0, 1.0, 2.0]);
+        assert_eq!(model.rotate, [-90.0, 0.0, 180.0]);
     }
 
     #[test]
@@ -206,6 +431,7 @@ mod tests {
             ],
             graphics: vec![],
             courtyard: None,
+            model: None,
         };
 
         let text = render_footprint(&footprint);

@@ -134,6 +134,105 @@ pub struct PcbFootprint {
     pub pads: Vec<Pad>,
     pub graphics: Vec<Graphic>,
     pub courtyard: Option<Courtyard>,
+    /// Optional 3D model attached to the footprint. [`build_footprint`]
+    /// fills this in by default (see [`default_model_path`]); `None`
+    /// means "no 3D model reference is emitted".
+    pub model: Option<Model3d>,
+}
+
+impl PcbFootprint {
+    /// Replaces (or sets) the footprint's 3D model reference.
+    pub fn with_model(mut self, model: Model3d) -> Self {
+        self.model = Some(model);
+        self
+    }
+
+    /// Drops the footprint's 3D model reference.
+    pub fn without_model(mut self) -> Self {
+        self.model = None;
+        self
+    }
+}
+
+/// A 3D model reference attached to a footprint (CAD-independent).
+///
+/// `path` is passed through to the EDA adapter verbatim (it may contain
+/// tool-specific variables such as KiCad's `${KIPRJMOD}`); the adapter
+/// is responsible only for quoting/escaping it. The transform is the
+/// one applied to the model relative to the footprint origin:
+/// `offset` in mm, `scale` as a unitless factor, `rotate` in degrees
+/// around X/Y/Z.
+///
+/// OpenParts' 3D models are generated from the same
+/// `MechanicalGeometry` as the footprint pads, in the same coordinate
+/// frame, so the identity transform ([`Model3d::new`]) is correct for
+/// every generated model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Model3d {
+    pub path: String,
+    pub offset: [f64; 3],
+    pub scale: [f64; 3],
+    pub rotate: [f64; 3],
+}
+
+impl Model3d {
+    /// A model at `path` with the identity transform (offset 0, scale 1,
+    /// rotation 0).
+    pub fn new(path: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            offset: [0.0; 3],
+            scale: [1.0; 3],
+            rotate: [0.0; 3],
+        }
+    }
+}
+
+/// File-name sanitisation for generated artifacts: an MPN may contain
+/// path separators (e.g. `LPC1114FBD48/302`), which are replaced by
+/// `-`. This is the single definition shared by every place that names
+/// a file after a part -- it must stay byte-identical to the
+/// `safe_filename` used by `openparts-cli` when it writes
+/// `<name>.kicad_mod` / `<name>.step` (which the CLI can switch to
+/// calling directly).
+pub fn safe_filename(name: &str) -> String {
+    name.replace(['/', '\\'], "-")
+}
+
+/// Default 3D model path for a footprint named `footprint_name`:
+/// the bare, relative file name `<safe_filename(name)>.step`.
+///
+/// Why a bare relative path (and not `${KIPRJMOD}/...`, an absolute
+/// path, or a custom `${OPENPARTS_3DMODEL_DIR}` variable):
+///
+/// * `openparts-cli generate` writes `<name>.kicad_mod` and
+///   `<name>.step` into the same directory. KiCad's 3D path resolver
+///   (`FILENAME_RESOLVER::ResolvePath`) expands env vars, then tries a
+///   relative name against (1) the current project directory
+///   (`${KIPRJMOD}`), then (2) the "working path", which since KiCad 7
+///   ("3D model paths can now be resolved relative to a footprint")
+///   is the footprint's own library directory, then (3) the legacy
+///   `${KICADn_3DMODEL_DIR}`, then (4) user aliases. So on KiCad 7-9+
+///   a bare name finds the STEP sitting next to the `.kicad_mod` as
+///   soon as that directory is added as a footprint library -- with
+///   no user configuration -- and on every version (including 6) it
+///   also finds it if the STEP is dropped into the project directory.
+/// * `${KIPRJMOD}/...` only works when the model lives inside the
+///   project, which is not where the CLI writes it (the KiCad plugin
+///   does install into the project, and it rewrites the path to its
+///   own `${KIPRJMOD}/openparts_3d/...` location).
+/// * A custom variable such as `${OPENPARTS_3DMODEL_DIR}` requires the
+///   user to define it in Preferences > Configure Paths first;
+///   unresolved, KiCad shows nothing. Absolute paths are not portable
+///   and would make output depend on the machine (breaking
+///   reproducibility).
+///
+/// Known KiCad caveat: some versions' *Footprint Editor* 3D preview
+/// does not resolve library-relative paths (KiCad issue #21844), while
+/// the board 3D viewer does. Callers that want a different convention
+/// can override it with [`PcbFootprint::with_model`].
+pub fn default_model_path(footprint_name: &str) -> String {
+    format!("{}.step", safe_filename(footprint_name))
 }
 
 const GRID_MM: f64 = 2.54;
@@ -679,6 +778,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 /// generically here (any through-hole part's pin 1, not hardcoded to
 /// radial capacitors specifically), matching how `MarkerKind::Pin1Dot`
 /// is already a generic, family-agnostic concept.
+///
+/// The footprint carries a 3D model reference by default:
+/// [`default_model_path`]`(name)` with the identity transform, i.e. the
+/// STEP file that `openparts-cli generate` writes next to the
+/// footprint. Use [`PcbFootprint::with_model`] / `without_model` to
+/// change that.
 pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprint {
     let pads = geometry
         .leads
@@ -708,6 +813,7 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
         pads,
         graphics: vec![],
         courtyard: None,
+        model: Some(Model3d::new(default_model_path(name))),
     }
 }
 
@@ -1611,5 +1717,47 @@ mod tests {
             assert_eq!(pad.mounting, Mounting::Smd);
             assert_eq!(pad.drill, None);
         }
+    }
+
+    #[test]
+    fn safe_filename_matches_cli_convention() {
+        assert_eq!(safe_filename("LPC1114FBD48/302"), "LPC1114FBD48-302");
+        assert_eq!(safe_filename("A\\B"), "A-B");
+        assert_eq!(safe_filename("2N7002ET1G"), "2N7002ET1G");
+    }
+
+    #[test]
+    fn build_footprint_references_the_sibling_step_by_default() {
+        use openparts_mcad::{Body, BodyShape, MechanicalGeometry, Point3, Size3};
+        let geometry = MechanicalGeometry {
+            body: Body {
+                position: Point3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                size: Size3 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                },
+                shape: BodyShape::Box,
+            },
+            leads: vec![],
+            markers: vec![],
+            lead_form: None,
+        };
+        let footprint = build_footprint("LPC1114FBD48/302", &geometry);
+        let model = footprint.model.clone().expect("default model reference");
+        assert_eq!(model.path, "LPC1114FBD48-302.step");
+        assert_eq!(model.offset, [0.0; 3]);
+        assert_eq!(model.scale, [1.0; 3]);
+        assert_eq!(model.rotate, [0.0; 3]);
+
+        let custom = footprint
+            .clone()
+            .with_model(Model3d::new("${KIPRJMOD}/x.step"));
+        assert_eq!(custom.model.unwrap().path, "${KIPRJMOD}/x.step");
+        assert_eq!(footprint.without_model().model, None);
     }
 }

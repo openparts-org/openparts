@@ -6,5 +6,7 @@
 mod footprint;
 mod symbol;
 
-pub use footprint::{parse_footprint_pads, render_footprint, ParsedPad};
+pub use footprint::{
+    parse_footprint_model, parse_footprint_pads, render_footprint, ParsedModel, ParsedPad,
+};
 pub use symbol::{parse_symbol_pins, render_symbol, ParsedPin};
