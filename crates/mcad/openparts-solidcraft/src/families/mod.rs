@@ -8,6 +8,7 @@ mod dip;
 mod gullwing;
 mod qfn;
 mod radial;
+mod tabbed;
 mod to92;
 
 use crate::{ModelError, ModelInput, Script};
@@ -18,6 +19,10 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
     match input.package.family.to_ascii_lowercase().as_str() {
         "lqfp" | "tqfp" => gullwing::build(&mut s, input, &gullwing::QFP)?,
         "soic" => gullwing::build(&mut s, input, &gullwing::SOIC)?,
+        "tssop" | "msop" => gullwing::build(&mut s, input, &gullwing::THIN_SOP)?,
+        "ssop" => gullwing::build(&mut s, input, &gullwing::SSOP)?,
+        "sot223" => tabbed::sot223(&mut s, input)?,
+        "dpak" | "to252" => tabbed::dpak(&mut s, input)?,
         "sot" => gullwing::build(&mut s, input, &gullwing::SOT)?,
         "qfn" => qfn::build(&mut s, input)?,
         "chip" => chip::build(&mut s, input)?,

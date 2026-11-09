@@ -312,9 +312,22 @@ pub fn lead_rows(
     seed_fragment: crate::template::Fragment,
     prefix: &str,
 ) -> Result<Vec<String>, TemplateError> {
+    lead_rows_with(s, rows, layouts, seed_fragment, prefix, &Vars::new())
+}
+
+/// [`lead_rows`] with `extra` variables for the seed fragment (e.g. which
+/// width parameter a gull-wing row extrudes).
+pub fn lead_rows_with(
+    s: &mut Script,
+    rows: &[Row<'_>],
+    layouts: &[RowLayout],
+    seed_fragment: crate::template::Fragment,
+    prefix: &str,
+    extra: &Vars,
+) -> Result<Vec<String>, TemplateError> {
     let mut bodies = Vec::new();
     for (row, layout) in rows.iter().zip(layouts) {
-        s.fragment(seed_fragment, &row.side.row_vars(&layout.first))?;
+        s.fragment(seed_fragment, &row.side.row_vars(&layout.first).with(extra))?;
         let seed = format!("{prefix}{}", row.side.tag());
         if layout.n > 1 {
             s.fragment(
@@ -353,4 +366,14 @@ pub fn edge_point(p: [f64; 3]) -> Value {
 
 pub fn edge_points(points: &[[f64; 3]]) -> Value {
     Value::Array(points.iter().copied().map(edge_point).collect())
+}
+
+/// The lead the polarity mark belongs to ([`crate::ModelInput::marked_pin`],
+/// else pin 1), falling back to the first lead.
+pub fn marked_lead<'a>(input: &crate::ModelInput<'a>) -> Option<&'a Lead> {
+    let leads = &input.geometry.leads;
+    leads
+        .iter()
+        .find(|l| l.number == input.mark())
+        .or(leads.first())
 }

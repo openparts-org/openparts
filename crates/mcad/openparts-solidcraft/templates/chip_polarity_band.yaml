@@ -1,5 +1,6 @@
-# Printed polarity band over pin 1 (a diode's cathode, a tantalum's
-# anode), kept inside the drafted top face.
+# Printed polarity band over the marked terminal (a diode's cathode, a
+# tantalum's anode), kept inside the drafted top face. Vars: neg ("-"
+# when that terminal is at -X).
 - params:
     band_w: [(body_w - 2 * term_len) * 0.18, polarity band width]
 - solid.box:
@@ -7,7 +8,7 @@
     width: body_l - 2 * ((body_h - parting + standoff) * 0.12 + 0.05 mm)
     height: 0.02 mm
     center:
-      - -(body_w / 2 - term_len) + (body_h - parting + standoff) * 0.12 + 0.05 mm + band_w / 2
+      - "{{neg}}(body_w / 2 - term_len - ((body_h - parting + standoff) * 0.12 + 0.05 mm) - band_w / 2)"
       - 0 mm
       - standoff + body_h + 0.01 mm
     operation: new

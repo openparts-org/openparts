@@ -21,7 +21,8 @@
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
 //! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`) or `construction` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`), `construction` or `tab` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
 //! | `mpn.empty` | `part.mpn` is empty |
 
 use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
@@ -160,12 +161,13 @@ pub fn validate_part(
     }
     out.extend(check_package_consistency(&package_entity, package));
     out.extend(check_package_provenance(&package_entity, package));
+    out.extend(check_package_tab(&package_entity, package));
 
     out
 }
 
 /// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 7] = [
+const PROVENANCE_REQUIRED: [&str; 9] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -173,6 +175,8 @@ const PROVENANCE_REQUIRED: [&str; 7] = [
     "/dimensions/lead_width",
     "/dimensions/lead_length",
     "/dimensions/lead_thickness",
+    "/dimensions/tab_width",
+    "/dimensions/tab_length",
 ];
 
 fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -185,6 +189,9 @@ fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> 
         .collect();
     if package.construction.is_some() {
         present.push("/construction");
+    }
+    if package.tab.is_some() {
+        present.push("/tab");
     }
     present
         .into_iter()
@@ -205,6 +212,48 @@ fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> 
             )
         })
         .collect()
+}
+
+/// A tab's trimmed leads must be lead positions of the package, and a
+/// tab needs its width (the generators can't draw a tab without it).
+fn check_package_tab(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let Some(tab) = &package.tab else {
+        return vec![];
+    };
+    let mut out = Vec::new();
+    if tab.number.trim().is_empty() {
+        out.push(Diagnostic::error(
+            "tab.invalid",
+            entity,
+            Some("/tab/number"),
+            "tab.number is empty".to_string(),
+        ));
+    }
+    for lead in &tab.trimmed_leads {
+        let valid = lead
+            .parse::<u32>()
+            .is_ok_and(|n| (1..=package.lead_count).contains(&n));
+        if !valid {
+            out.push(Diagnostic::error(
+                "tab.invalid",
+                entity,
+                Some("/tab/trimmed_leads"),
+                format!(
+                    "trimmed lead \"{lead}\" is not a lead position (1..={})",
+                    package.lead_count
+                ),
+            ));
+        }
+    }
+    if package.dimensions.tab_width.is_none() {
+        out.push(Diagnostic::error(
+            "tab.invalid",
+            entity,
+            Some("/dimensions/tab_width"),
+            "a package with a tab must state dimensions.tab_width".to_string(),
+        ));
+    }
+    out
 }
 
 /// The largest / smallest value a dimension states (nominal, min or
@@ -446,8 +495,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
@@ -630,5 +682,41 @@ mod tests {
             .collect();
         assert_eq!(missing, vec!["/dimensions/overall_width", "/construction"]);
         assert!(!diags.iter().any(|d| d.rule_id == "dimension.inconsistent"));
+    }
+
+    #[test]
+    fn tab_needs_provenance_width_and_real_trimmed_leads() {
+        let mut package = base_package();
+        package.family = "dpak".into();
+        package.lead_count = 3;
+        package.tab = Some(openparts_core::PackageTab {
+            number: "2".into(),
+            trimmed_leads: vec!["2".into(), "7".into()],
+        });
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        let paths = |rule: &str| -> Vec<String> {
+            diags
+                .iter()
+                .filter(|d| d.rule_id == rule)
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        assert_eq!(paths("provenance.missing"), vec!["/tab"]);
+        assert_eq!(
+            paths("tab.invalid"),
+            vec!["/tab/trimmed_leads", "/dimensions/tab_width"]
+        );
+
+        package.tab.as_mut().unwrap().trimmed_leads = vec!["2".into()];
+        package.dimensions.tab_width = mm(5.2);
+        cite(&mut package, "/tab");
+        cite(&mut package, "/dimensions/tab_width");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.rule_id == "tab.invalid" || d.rule_id == "provenance.missing"),
+            "{diags:?}"
+        );
     }
 }

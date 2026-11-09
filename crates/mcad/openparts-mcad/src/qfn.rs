@@ -33,22 +33,15 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
     }
     let pins_per_side = lead_count / 4;
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
-    let body_w = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_l = package
-        .dimensions
-        .body_length
-        .nominal
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_length.nominal",
-        ))?;
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let body_w = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
+    let body_l = defaults::dim(
+        &package.dimensions.body_length,
+        "dimensions.body_length.nominal",
+    )?;
     let shape = Flush::resolve(package, &defaults::QFN);
     let body_h = shape.body_height;
     let (lead_len, lead_w, lead_t) = (shape.lead_length, shape.lead_width, shape.thickness);
@@ -151,12 +144,8 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
     }
 
     if let Some(ep) = &package.dimensions.exposed_pad {
-        let ep_w = ep.width.nominal.ok_or(McadError::MissingDimension(
-            "dimensions.exposed_pad.width.nominal",
-        ))?;
-        let ep_l = ep.length.nominal.ok_or(McadError::MissingDimension(
-            "dimensions.exposed_pad.length.nominal",
-        ))?;
+        let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.nominal")?;
+        let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.nominal")?;
         leads.push(Lead {
             number: "EP".to_string(),
             position: Point3 {
@@ -236,8 +225,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

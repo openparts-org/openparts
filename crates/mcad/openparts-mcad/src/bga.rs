@@ -1,3 +1,4 @@
+use crate::defaults;
 use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
@@ -93,28 +94,17 @@ pub fn generate_bga(package: &Package) -> Result<MechanicalGeometry, McadError> 
         return Err(invalid());
     }
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
-    let body_w = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_l = package
-        .dimensions
-        .body_length
-        .nominal
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_length.nominal",
-        ))?;
-    let body_h = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let body_w = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
+    let body_l = defaults::dim(
+        &package.dimensions.body_length,
+        "dimensions.body_length.nominal",
+    )?;
+    let body_h =
+        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
 
     let body = Body {
         position: Point3 {
@@ -213,8 +203,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: Some(vec![6, 8]),
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

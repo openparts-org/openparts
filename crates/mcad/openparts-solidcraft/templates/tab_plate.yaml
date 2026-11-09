@@ -1,0 +1,12 @@
+# TO-252 / DPAK tab: the flat lead-frame plate on the board under the
+# body's tab side, reaching tab_reach past the body edge (L3). Its outline
+# is the geometry's tab pad. Vars: tab_w, tab_len, tab_t, tab_reach.
+- params:
+    tab_w: ["{{tab_w}}", tab width (E1 / b3)]
+    tab_reach: ["{{tab_reach}}", body edge to tab end (L3)]
+    tab_len: ["{{tab_len}}", soldered tab length from the tab end back under the body]
+    tab_t: ["{{tab_t}}", tab plate thickness (c2)]
+- solid.box:
+    {length: tab_len, width: tab_w, height: tab_t,
+     center: [body_w / 2 + tab_reach - tab_len / 2, 0 mm, tab_t / 2],
+     operation: new, body_name: Tab, name: Tab}

@@ -61,8 +61,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: Default::default(),
@@ -79,6 +82,7 @@ mod tests {
             package,
             geometry: &geometry,
             category: Some(ComponentCategory::Microcontroller),
+            marked_pin: None,
         };
         Some(generate_step(&input, "TEST").unwrap())
     }

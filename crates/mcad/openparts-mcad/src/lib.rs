@@ -15,6 +15,7 @@ mod radial;
 mod sip;
 mod soic;
 mod sot;
+mod tab;
 mod to92;
 
 pub use axial::generate_axial;
@@ -27,6 +28,7 @@ pub use radial::generate_radial;
 pub use sip::generate_sip;
 pub use soic::generate_soic;
 pub use sot::generate_sot;
+pub use tab::{generate_dpak, generate_sot223};
 pub use to92::generate_to92;
 
 use openparts_core::Package;
@@ -38,7 +40,9 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "lqfp" => generate_lqfp(package),
         "qfn" => generate_qfn(package),
         "chip" => generate_chip(package),
-        "soic" => generate_soic(package),
+        "soic" | "tssop" | "ssop" | "msop" => generate_soic(package),
+        "sot223" => generate_sot223(package),
+        "dpak" | "to252" => generate_dpak(package),
         "sot" => generate_sot(package),
         "radial" => generate_radial(package),
         "axial" => generate_axial(package),
@@ -134,7 +138,8 @@ pub struct Marker {
 /// numbers.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LeadForm {
-    /// Gull-wing leads (QFP, SOIC/SOP, SOT): out of the body side, bent
+    /// Gull-wing leads (QFP, SOIC/SOP/TSSOP/SSOP/MSOP, SOT, SOT-223,
+    /// TO-252): out of the body side, bent
     /// down to a flat foot on the seating plane. Each perimeter `Lead`'s
     /// outline runs from the body edge to the lead toe.
     GullWing {
@@ -166,7 +171,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, sot, radial, axial, to92, dip, sip, bga are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, tssop, ssop, msop, sot, sot223, dpak, radial, axial, to92, dip, sip, bga are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]
@@ -177,6 +182,12 @@ pub enum McadError {
     /// no larger than the body), so no geometry can satisfy them.
     #[error("inconsistent package dimensions: {0}")]
     InconsistentDimensions(String),
+    /// `sot223`/`dpak`: the package has no `tab`, so the tab's pad number
+    /// (which vendors assign differently) is unknown.
+    #[error("family \"{family}\" requires a tab (its pad number as the source gives it)")]
+    MissingTab { family: String },
+    #[error("invalid package tab: {0}")]
+    InvalidTab(String),
     #[error("lead_count ({0}) is not valid for this package family")]
     InvalidLeadCount(u32),
     /// SOT-family packages: the physical pin-to-side assignment isn't

@@ -566,6 +566,8 @@ dimensions:
 | `lead_width` | Lead／Terminal幅 | b | 省略可 |
 | `lead_length` | Gull-wing LeadのFoot長、Leadless packageのTerminal長、Chip部品の端子電極長 | L | 省略可 |
 | `lead_thickness` | Lead frame厚 | c（QFN/DFNではA3） | 省略可 |
+| `tab_width` | Tab（SOT-223/TO-252の放熱Tab）の辺方向の幅 | b2（SOT-223）、E1/b3（TO-252） | Tabを持つPackageでは必須 |
+| `tab_length` | Body端からTab先端まで（TO-252のみ） | L3 | 省略可 |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -573,7 +575,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`）と`construction`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`）と`construction`、`tab`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -594,6 +596,18 @@ dimensions:
     min: 0.09
     max: 0.20
     unit: mm
+```
+
+SOT-223やTO-252のようにTabを持つPackageは、Tabの番号をPackage直下の`tab`に記録する。
+番号はVendorによって異なる（"4"、"TAB"、あるいはpin 2と同一）ため推測せず、一次資料の
+Pin表や外形図の記載に従う。TO-252の中央Leadのように、Body端で切断されて基板に届かない
+Lead位置は`trimmed_leads`に列挙する。`tab`にもProvenance（`/tab`）を必須とする。
+
+```yaml
+lead_count: 3            # Tabを除くLead位置の数（切断されたLeadを含む）
+tab:
+  number: "2"
+  trimmed_leads: ["2"]
 ```
 
 ## 20.2 Package Construction

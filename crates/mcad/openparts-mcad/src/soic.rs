@@ -5,7 +5,8 @@ use crate::{
 };
 use openparts_core::Package;
 
-/// Generates Mechanical Geometry for a SOIC/SOP-style package: a
+/// Generates Mechanical Geometry for a SOIC/SOP-style package (and
+/// TSSOP/SSOP/MSOP, see below): a
 /// rectangular body with `lead_count / 2` gull-wing leads evenly spaced
 /// at `pitch` on each of the 2 long sides (left/right) -- structurally
 /// [`crate::generate_lqfp`]'s left-edge/right-edge pattern with the
@@ -17,13 +18,23 @@ use openparts_core::Package;
 /// Numbering convention (matches common SOIC/JEDEC MS-012 datasheets):
 /// pin 1 at the top of the LEFT edge, proceeding down the left edge,
 /// then up the right edge from its bottom to its top.
+///
+/// The same two-row layout serves TSSOP (JEDEC MO-153), SSOP (MO-150) and
+/// MSOP/VSSOP (MO-187): `family` picks only the defaults used for
+/// dimensions the package doesn't state. Their `geometry.generator` may
+/// name the family itself or `soic`.
 pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("soic") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
+    let family = package.family.to_ascii_lowercase();
+    let family_defaults = match family.as_str() {
+        "soic" => &defaults::SOIC,
+        "tssop" => &defaults::TSSOP,
+        "ssop" => &defaults::SSOP,
+        "msop" => &defaults::MSOP,
+        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    };
     if let Some(geometry) = &package.geometry {
         if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("soic") {
+            if !generator.eq_ignore_ascii_case("soic") && !generator.eq_ignore_ascii_case(&family) {
                 return Err(McadError::UnsupportedGenerator(generator.clone()));
             }
         }
@@ -35,23 +46,14 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
     }
     let pins_per_side = lead_count / 2;
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
-    let body_w = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_l = package
-        .dimensions
-        .body_length
-        .nominal
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_length.nominal",
-        ))?;
-    let shape = GullWing::resolve(package, &defaults::SOIC);
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    // Body size: nominal, else the stated min..max midpoint (TI and JEDEC
+    // tables often give only limits).
+    let body_w = defaults::required(&package.dimensions.body_width)
+        .ok_or(McadError::MissingDimension("dimensions.body_width"))?;
+    let body_l = defaults::required(&package.dimensions.body_length)
+        .ok_or(McadError::MissingDimension("dimensions.body_length"))?;
+    let shape = GullWing::resolve(package, family_defaults);
     let body_h = shape.body_height;
     let reach = shape.protrusion(package, Axis::X)?;
     let lead_t = shape.thickness;
@@ -175,8 +177,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
@@ -242,5 +247,125 @@ mod tests {
         package.lead_count = 7;
         let err = generate_soic(&package).unwrap_err();
         assert!(matches!(err, McadError::InvalidLeadCount(7)));
+    }
+
+    fn mm(v: f64) -> Option<Dimension> {
+        Some(Dimension {
+            nominal: Some(v),
+            min: None,
+            max: None,
+            unit: "mm".into(),
+        })
+    }
+
+    fn tssop20() -> Package {
+        let mut package = soic8();
+        package.family = "tssop".into();
+        package.lead_count = 20;
+        package.pitch.nominal = Some(0.65);
+        package.dimensions.body_width.nominal = Some(4.4);
+        package.dimensions.body_length.nominal = Some(6.5);
+        package
+    }
+
+    #[test]
+    fn tssop_uses_mo153_defaults_when_the_package_states_nothing() {
+        let geometry = generate_soic(&tssop20()).unwrap();
+        assert_eq!(geometry.leads.len(), 20);
+        let pin1 = &geometry.leads[0];
+        // 10 per side at 0.65 -> pin 1 at y = 4.5 * 0.65; MO-153 toe at
+        // E/2 = 3.2 (protrusion 1.0 past the 4.4 body), b 0.25.
+        assert!((pin1.position.y - 2.925).abs() < 1e-9);
+        assert!((pin1.position.x - pin1.size.x / 2.0 + 3.2).abs() < 1e-9);
+        assert!((pin1.size.y - 0.25).abs() < 1e-9);
+        // Pin 11 starts the right row at its bottom.
+        let pin11 = &geometry.leads[10];
+        assert_eq!(pin11.number, "11");
+        assert!(pin11.position.x > 0.0 && (pin11.position.y + 2.925).abs() < 1e-9);
+        let Some(crate::LeadForm::GullWing {
+            thickness,
+            foot_length,
+            standoff,
+        }) = geometry.lead_form
+        else {
+            panic!("expected a gull-wing lead form");
+        };
+        assert_eq!((thickness, foot_length, standoff), (0.15, 0.6, 0.1));
+        assert!((geometry.body.size.z - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn datasheet_lead_dimensions_override_the_family_defaults() {
+        let mut package = tssop20();
+        package.dimensions.overall_width = Some(Dimension {
+            nominal: None,
+            min: Some(6.2),
+            max: Some(6.6),
+            unit: "mm".into(),
+        });
+        package.dimensions.lead_width = mm(0.22);
+        package.dimensions.lead_length = mm(0.5);
+        package.dimensions.lead_thickness = mm(0.12);
+        package.dimensions.standoff = mm(0.08);
+        package.dimensions.body_height = mm(0.95);
+        let geometry = generate_soic(&package).unwrap();
+        let right_toe = geometry
+            .leads
+            .iter()
+            .map(|l| l.position.x + l.size.x / 2.0)
+            .fold(f64::MIN, f64::max);
+        assert!(
+            (right_toe - 3.2).abs() < 1e-9,
+            "toe at the 6.2..6.6 midpoint / 2"
+        );
+        assert!(geometry
+            .leads
+            .iter()
+            .all(|l| (l.size.y - 0.22).abs() < 1e-9));
+        assert_eq!(
+            geometry.lead_form,
+            Some(crate::LeadForm::GullWing {
+                thickness: 0.12,
+                foot_length: 0.5,
+                standoff: 0.08
+            })
+        );
+        assert!((geometry.body.size.z - 0.95).abs() < 1e-9);
+    }
+
+    #[test]
+    fn ssop_and_msop_have_their_own_defaults() {
+        let mut ssop = tssop20();
+        ssop.family = "ssop".into();
+        ssop.dimensions.body_width.nominal = Some(5.3);
+        let toe = |p: &Package| {
+            let g = generate_soic(p).unwrap();
+            g.leads[0].position.x - g.leads[0].size.x / 2.0
+        };
+        assert!((toe(&ssop) + 7.8 / 2.0).abs() < 1e-9);
+        let mut msop = soic8();
+        msop.family = "msop".into();
+        msop.pitch.nominal = Some(0.65);
+        msop.dimensions.body_width.nominal = Some(3.0);
+        msop.dimensions.body_length.nominal = Some(3.0);
+        assert!((toe(&msop) + 4.9 / 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn generator_may_name_the_family_or_soic_but_nothing_else() {
+        let mut package = tssop20();
+        for (generator, ok) in [("tssop", true), ("soic", true), ("lqfp", false)] {
+            package.geometry = Some(openparts_core::PackageGeometrySpec {
+                geometry_type: openparts_core::GeometryType::Parametric,
+                generator: Some(generator.into()),
+            });
+            assert_eq!(generate_soic(&package).is_ok(), ok, "{generator}");
+        }
+        package.geometry = None;
+        package.pitch.nominal = None;
+        assert!(matches!(
+            generate_soic(&package),
+            Err(McadError::MissingDimension("pitch.nominal"))
+        ));
     }
 }

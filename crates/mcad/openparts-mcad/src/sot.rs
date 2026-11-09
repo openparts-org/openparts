@@ -21,6 +21,8 @@ const MARKER_OFFSET_MM: f64 = 0.2;
 /// vendor convention is universal -- see `lead_layout`'s docs): pin 1 at
 /// the bottom-left, `lead_layout[0]` pins along the bottom edge
 /// left-to-right, then `lead_layout[1]` pins along the top edge
+/// right-to-left (counter-clockwise, as SOT-23-5/6 datasheets number
+/// them), on the bottom row's position grid
 /// left-to-right, continuing the numbering.
 pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> {
     if !package.family.eq_ignore_ascii_case("sot") {
@@ -52,22 +54,15 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
         return Err(invalid());
     }
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
-    let body_w = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_l = package
-        .dimensions
-        .body_length
-        .nominal
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_length.nominal",
-        ))?;
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let body_w = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
+    let body_l = defaults::dim(
+        &package.dimensions.body_length,
+        "dimensions.body_length.nominal",
+    )?;
     let shape = GullWing::resolve(package, &defaults::SOT);
     let body_h = shape.body_height;
     // Both rows leave across `body_length`, so their toes land at
@@ -115,12 +110,28 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
         });
         pin_num += 1;
     }
-    // Top edge: y = +body_l/2 + protrusion/2, x centered, left to right --
-    // numbering continues directly from the bottom edge.
-    let top_span = (top_count as f64 - 1.0) * pitch;
-    let top_half_span = top_span / 2.0;
-    for i in 0..top_count {
-        let x = -top_half_span + i as f64 * pitch;
+    // Top edge: y = +body_l/2 + protrusion/2. Numbering continues
+    // counter-clockwise (right to left), and the top leads sit on the
+    // bottom row's position grid, as on real SOT-23-5/6 outlines (pin 4
+    // above pin 3, pin 5 above pin 1; e1 apart, not e):
+    // - one top lead (SOT-23-3 [2, 1]): centred;
+    // - as many as the bottom row (SOT-23-6 [3, 3]): every position;
+    // - [3, 2] (SOT-23-5): the two outer positions.
+    let bottom_xs: Vec<f64> = (0..bottom_count)
+        .map(|i| -bottom_half_span + i as f64 * pitch)
+        .collect();
+    let top_xs: Vec<f64> = match (bottom_count, top_count) {
+        (_, 1) => vec![0.0],
+        (b, t) if b == t => bottom_xs.iter().rev().copied().collect(),
+        (3, 2) => vec![bottom_xs[2], bottom_xs[0]],
+        _ => {
+            return Err(McadError::InvalidLeadLayout {
+                layout: layout.clone(),
+                lead_count: package.lead_count,
+            })
+        }
+    };
+    for x in top_xs {
         leads.push(Lead {
             number: pin_num.to_string(),
             position: Point3 {
@@ -193,8 +204,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: Some(vec![2, 1]),
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
@@ -231,6 +245,49 @@ mod tests {
         assert_eq!(bottom[0].number, "1");
         assert_eq!(bottom[1].number, "2");
         assert_eq!(top[0].number, "3");
+    }
+
+    fn sot_with(layout: Vec<u32>, pitch: f64) -> Package {
+        let mut p = sot23_3();
+        p.lead_count = layout.iter().sum();
+        p.lead_layout = Some(layout);
+        p.pitch.nominal = Some(pitch);
+        p
+    }
+
+    fn x_of(g: &MechanicalGeometry, n: &str) -> f64 {
+        g.leads.iter().find(|l| l.number == n).unwrap().position.x
+    }
+
+    /// SOT-23-5 (e.g. Microchip C04-091-OT, Diodes AP2112K): pins 1-3
+    /// along the bottom at e = 0.95, pin 4 above pin 3 and pin 5 above
+    /// pin 1 -- the top pair is e1 = 1.90 apart, numbered right to left.
+    #[test]
+    fn sot23_5_numbers_counter_clockwise_with_the_top_pair_over_pins_3_and_1() {
+        let g = generate_sot(&sot_with(vec![3, 2], 0.95)).unwrap();
+        assert!((x_of(&g, "4") - x_of(&g, "3")).abs() < 1e-9);
+        assert!((x_of(&g, "5") - x_of(&g, "1")).abs() < 1e-9);
+        assert!((x_of(&g, "4") - x_of(&g, "5") - 1.90).abs() < 1e-9);
+    }
+
+    /// SOT-23-6: pin 4 above 3, 5 above 2, 6 above 1.
+    #[test]
+    fn sot23_6_top_row_mirrors_the_bottom_row() {
+        let g = generate_sot(&sot_with(vec![3, 3], 0.95)).unwrap();
+        for (top, bottom) in [("4", "3"), ("5", "2"), ("6", "1")] {
+            assert!(
+                (x_of(&g, top) - x_of(&g, bottom)).abs() < 1e-9,
+                "pin {top} over {bottom}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_top_row_split_is_rejected_not_guessed() {
+        assert!(matches!(
+            generate_sot(&sot_with(vec![4, 2], 0.65)),
+            Err(McadError::InvalidLeadLayout { .. })
+        ));
     }
 
     #[test]

@@ -34,22 +34,15 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
     }
     let pins_per_side = lead_count / 4;
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
-    let body_w = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_l = package
-        .dimensions
-        .body_length
-        .nominal
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_length.nominal",
-        ))?;
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let body_w = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
+    let body_l = defaults::dim(
+        &package.dimensions.body_length,
+        "dimensions.body_length.nominal",
+    )?;
     let shape = GullWing::resolve(package, &defaults::QFP);
     let body_h = shape.body_height;
     let reach_x = shape.protrusion(package, Axis::X)?;
@@ -211,8 +204,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

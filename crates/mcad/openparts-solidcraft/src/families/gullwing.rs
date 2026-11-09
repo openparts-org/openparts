@@ -1,4 +1,4 @@
-//! Gull-wing leaded packages (QFP, SOIC/SOP, SOT): a drafted mold body
+//! Gull-wing leaded packages (QFP, SOIC/SOP/TSSOP/SSOP/MSOP, SOT): a drafted mold body
 //! with bent leads on two or four edges, sharing every lead parameter.
 
 use crate::common;
@@ -49,30 +49,98 @@ pub const SOT: Family = Family {
     lead_embed: 0.15,
 };
 
+/// TSSOP (MO-153), MSOP/VSSOP (MO-187): thin bodies, leads mid-height.
+pub const THIN_SOP: Family = Family {
+    dimple: true,
+    parting_ratio: 0.45,
+    draft_deg: 8.0,
+    lead_exit: 0.15,
+    lead_embed: 0.15,
+};
+
+/// SSOP (MO-150).
+pub const SSOP: Family = Family {
+    dimple: true,
+    parting_ratio: 0.4,
+    draft_deg: 10.0,
+    lead_exit: 0.2,
+    lead_embed: 0.2,
+};
+
+/// SOT-223: leads and tab leave low on a thick body, no pin-1 dimple.
+pub const SOT223: Family = Family {
+    dimple: false,
+    parting_ratio: 0.35,
+    draft_deg: 8.0,
+    lead_exit: 0.25,
+    lead_embed: 0.3,
+};
+
+/// TO-252 / DPAK: leads leave just above the tab plate, no dimple.
+pub const DPAK: Family = Family {
+    dimple: false,
+    parting_ratio: 0.3,
+    draft_deg: 6.0,
+    lead_exit: 0.4,
+    lead_embed: 0.4,
+};
+
 pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<(), ModelError> {
     let g = input.geometry;
     let rows = common::perimeter_rows(g);
     if rows.is_empty() {
         return Err(ModelError::NoLeads(input.package.family.clone()));
     }
-    let Some(LeadForm::GullWing {
-        thickness,
-        foot_length,
-        standoff,
-    }) = g.lead_form
-    else {
-        return Err(ModelError::UnsupportedFamily(format!(
+    let form = lead_form(input)?;
+    body(s, input, family, form)?;
+    lead_params(s, input, &rows, family, form)?;
+    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let leads = rows_of(s, &rows, &layouts, "lead_w")?;
+    s.paint(&["Body".into()], looks::MOLD);
+    s.paint(&leads, looks::TIN);
+    Ok(())
+}
+
+/// The geometry's gull-wing lead form: (thickness, foot length, standoff).
+pub fn lead_form(input: &ModelInput<'_>) -> Result<(f64, f64, f64), ModelError> {
+    match input.geometry.lead_form {
+        Some(LeadForm::GullWing {
+            thickness,
+            foot_length,
+            standoff,
+        }) => Ok((thickness, foot_length, standoff)),
+        _ => Err(ModelError::UnsupportedFamily(format!(
             "{} (geometry has no gull-wing lead form)",
             input.package.family
-        )));
-    };
+        ))),
+    }
+}
+
+/// The drafted mold `Body` (and its pin-1 dimple if the family has one).
+pub fn body(
+    s: &mut Script,
+    input: &ModelInput<'_>,
+    family: &Family,
+    (_, _, standoff): (f64, f64, f64),
+) -> Result<(), ModelError> {
+    let g = input.geometry;
     common::body_params(s, g)?;
     common::molded_body(s, standoff, family.parting_ratio, family.draft_deg)?;
     if family.dimple {
         common::pin1_dimple(s, g, "Body", "standoff + body_h")?;
     }
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    Ok(())
+}
 
+/// Declares the lead parameters shared by every row, from `rows[0]`.
+pub fn lead_params(
+    s: &mut Script,
+    input: &ModelInput<'_>,
+    rows: &[common::Row<'_>],
+    family: &Family,
+    (thickness, foot_length, _): (f64, f64, f64),
+) -> Result<(), ModelError> {
+    let g = input.geometry;
     // The geometry fixes the lead width, where the toe lands and the
     // foot length; the bend takes what is left of the reach (the foot is
     // shortened only if the reach can't fit both).
@@ -96,8 +164,22 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
             embed = mm(family.lead_embed),
         ),
     )?;
-    let leads = common::lead_rows(s, &rows, &layouts, fragment!("gullwing_row"), "Lead")?;
-    s.paint(&["Body".into()], looks::MOLD);
-    s.paint(&leads, looks::TIN);
     Ok(())
+}
+
+/// Gull-wing lead rows extruded to the parameter `width`; returns the bodies.
+pub fn rows_of(
+    s: &mut Script,
+    rows: &[common::Row<'_>],
+    layouts: &[common::RowLayout],
+    width: &str,
+) -> Result<Vec<String>, ModelError> {
+    Ok(common::lead_rows_with(
+        s,
+        rows,
+        layouts,
+        fragment!("gullwing_row"),
+        "Lead",
+        &vars!(w = width),
+    )?)
 }

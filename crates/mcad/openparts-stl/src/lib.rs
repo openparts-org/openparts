@@ -76,8 +76,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: Default::default(),
@@ -87,6 +90,7 @@ mod tests {
             package: &package,
             geometry: &geometry,
             category: Some(ComponentCategory::Resistor),
+            marked_pin: None,
         };
         let stl = generate_stl(&input, "TEST").unwrap();
         // Core, overcoat and two end caps: at least 12 triangles each.

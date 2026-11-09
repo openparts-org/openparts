@@ -1,0 +1,9 @@
+# A lead cut short at the body edge, so it never reaches the board
+# (TO-252's centre lead, part of the tab's lead frame). Needs the gull-wing
+# lead parameters. Vars: n (lead number), y (position along the edge).
+- params:
+    stub_len: [lead_exit + lead_t, trimmed lead stub length out of the body]
+- solid.box:
+    {length: stub_len + lead_embed, width: lead_w, height: lead_t,
+     center: ["-(body_w / 2 + (stub_len - lead_embed) / 2)", "{{y}}", parting],
+     operation: new, body_name: "Stub{{n}}", name: "Stub{{n}}"}

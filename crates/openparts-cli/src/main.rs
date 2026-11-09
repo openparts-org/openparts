@@ -298,6 +298,7 @@ fn cmd_generate(
         package: &model.package,
         geometry: &geometry,
         category: Some(model.device.category),
+        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
     };
     let models = openparts_solidcraft::generate(
         &input,

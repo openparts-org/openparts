@@ -34,7 +34,7 @@ pub use lifecycle::{Lifecycle, LifecycleStatus};
 pub use manufacturer::{Manufacturer, Website};
 pub use package::{
     ExposedPadDimensions, GeometryType, Package, PackageConstruction, PackageDimensions,
-    PackageGeometrySpec,
+    PackageGeometrySpec, PackageTab,
 };
 pub use part::Part;
 pub use pin::{Pin, PinOverride, PinType};

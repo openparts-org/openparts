@@ -1,3 +1,4 @@
+use crate::defaults;
 use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
@@ -51,25 +52,17 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     // Both represent the can's diameter -- a true radial can has no
     // separate width/length, but the schema has no dedicated
     // "diameter" field, so this generator expects (without enforcing)
     // that the two agree.
-    let diameter = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
-    let body_h = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let diameter = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
+    let body_h =
+        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
 
     let body = Body {
         position: Point3 {
@@ -178,8 +171,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

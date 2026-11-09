@@ -2,7 +2,8 @@
 # line, bent down, foot flat on the board. Drawn on the vertical plane
 # through the row's first lead and extruded to the lead width.
 # Vars: tag (L/B/R/T), plane, flip, first (row position), neg ("-" on
-# the left/bottom edges), half (body half size outward).
+# the left/bottom edges), half (body half size outward), w (the width
+# parameter to extrude: lead_w, or tab_w for a SOT-223 tab).
 - sketch.create: {plane: "{{plane}}", flip: "{{flip}}", offset: "{{first}}", name: "LeadProfile{{tag}}"}
 - sketch.line:
     closed: true
@@ -23,5 +24,5 @@
 - sketch.fillet: {a: "g{{tag}}4", b: "g{{tag}}5", radius: bend_r + lead_t}
 - sketch.finish: {}
 - solid.extrude:
-    {sketch: "LeadProfile{{tag}}", distance: lead_w, direction: symmetric,
+    {sketch: "LeadProfile{{tag}}", distance: "{{w}}", direction: symmetric,
      operation: new, body_name: "Lead{{tag}}", name: "Lead{{tag}}"}

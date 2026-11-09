@@ -112,7 +112,11 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             s.paint(&["Body".into()], body);
             s.paint(&["Lead1".into(), "Lead2".into()], looks::TIN);
             if let Some(band) = band {
-                s.fragment(fragment!("chip_polarity_band"), &vars!())?;
+                let at_minus_x = common::marked_lead(input).is_none_or(|l| l.position.x <= 0.0);
+                s.fragment(
+                    fragment!("chip_polarity_band"),
+                    &vars!(neg = if at_minus_x { "-" } else { "" }),
+                )?;
                 s.paint(&["PolarityBand".into()], band);
             }
         }

@@ -113,8 +113,8 @@ fn electrolytic(s: &mut Script, input: &ModelInput<'_>, leads: &[&Lead]) -> Resu
     Ok(())
 }
 
-/// Pin 1 is the cathode (KiCad LED_D*.kicad_mod): it carries the
-/// reflector anvil, and the flange is flattened on its side.
+/// The cathode (from the device's pin names; vendors number it 1 or 2)
+/// carries the reflector anvil, and the flange is flattened on its side.
 fn led(s: &mut Script, input: &ModelInput<'_>, leads: &[&Lead]) -> Result<(), ModelError> {
     let b = input.geometry.body.size;
     s.fragment(
@@ -125,10 +125,12 @@ fn led(s: &mut Script, input: &ModelInput<'_>, leads: &[&Lead]) -> Result<(), Mo
             dome_r = mm(b.x / 2.0 * 0.97)
         ),
     )?;
+    // The cathode carries the reflector anvil and the flange flat.
+    let cathode = crate::common::marked_lead(input).unwrap_or(leads[0]);
     let mut frame = Vec::new();
-    for (i, l) in leads.iter().enumerate() {
+    for l in leads.iter() {
         let name = format!("Lead{}", l.number);
-        let top = if i == 0 {
+        let top = if l.number == cathode.number {
             "led_h * 0.45"
         } else {
             "led_h * 0.4"
@@ -144,7 +146,6 @@ fn led(s: &mut Script, input: &ModelInput<'_>, leads: &[&Lead]) -> Result<(), Mo
         )?;
         frame.push(name);
     }
-    let cathode = leads[0];
     let flat_x = "led_d / 2 + 0.5 mm";
     s.fragment(
         fragment!("radial_led_finish"),
@@ -152,7 +153,7 @@ fn led(s: &mut Script, input: &ModelInput<'_>, leads: &[&Lead]) -> Result<(), Mo
             anvil_len = mm(cathode.position.x.abs() + 0.5),
             anvil_x = mm(cathode.position.x / 2.0),
             y = mm(cathode.position.y),
-            cathode = frame[0].clone(),
+            cathode = format!("Lead{}", cathode.number),
             leads = frame.clone(),
             flat_x = if cathode.position.x <= 0.0 {
                 format!("-({flat_x})")

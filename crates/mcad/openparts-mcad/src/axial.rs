@@ -1,3 +1,4 @@
+use crate::defaults;
 use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
@@ -46,30 +47,21 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
 
-    let pitch = package
-        .pitch
-        .nominal
-        .ok_or(McadError::MissingDimension("pitch.nominal"))?;
+    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     // `body_width`/`body_length` both represent the can's diameter, same
     // convention `radial.rs` uses -- a true cylinder has no separate
     // width/length, but the schema has no dedicated "diameter" field.
-    let diameter = package
-        .dimensions
-        .body_width
-        .nominal
-        .ok_or(McadError::MissingDimension("dimensions.body_width.nominal"))?;
+    let diameter = defaults::dim(
+        &package.dimensions.body_width,
+        "dimensions.body_width.nominal",
+    )?;
     // `body_height` is reused here as the can's axial length (the
     // dimension along X, not a vertical height) -- same schema field,
     // different physical meaning depending on family, matching how
     // `radial.rs` already reuses `body_height` for its can's length.
-    let length = package
-        .dimensions
-        .body_height
-        .as_ref()
-        .and_then(|d| d.nominal)
-        .ok_or(McadError::MissingDimension(
-            "dimensions.body_height.nominal",
-        ))?;
+    let length = defaults::stated(&package.dimensions.body_height).ok_or(
+        McadError::MissingDimension("dimensions.body_height.nominal"),
+    )?;
 
     let body = Body {
         position: Point3 {
@@ -179,8 +171,11 @@ mod tests {
                 lead_width: None,
                 lead_length: None,
                 lead_thickness: None,
+                tab_width: None,
+                tab_length: None,
             },
             lead_layout: None,
+            tab: None,
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

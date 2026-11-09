@@ -64,18 +64,23 @@ fn main() {
         picks.entry(part.package.to_string()).or_insert(part);
     }
 
-    let mut jobs: Vec<(Package, Option<ComponentCategory>, String)> = picks
+    // (package, category, polarity pin, mpn)
+    let mut jobs: Vec<(Package, Option<ComponentCategory>, Option<String>, String)> = picks
         .into_iter()
         .filter_map(|(package_id, part)| {
             let package = packages.get(&package_id)?.clone();
-            let category = devices.get(&part.device.to_string()).map(|d| d.category);
-            Some((package, category, part.mpn))
+            let device = devices.get(&part.device.to_string());
+            let category = device.map(|d| d.category);
+            let marked = device
+                .and_then(openparts_solidcraft::polarity_pin)
+                .map(str::to_string);
+            Some((package, category, marked, part.mpn))
         })
         .collect();
     // Families the dataset has no parts for yet.
-    jobs.extend(synthetic());
+    jobs.extend(synthetic().into_iter().map(|(p, c, m)| (p, c, None, m)));
 
-    for (package, category, mpn) in &jobs {
+    for (package, category, marked, mpn) in &jobs {
         let (package, category) = (package, *category);
         let label = format!("{}_{:?}_{}", package.family, category, mpn).replace('/', "_");
         if !label.to_lowercase().contains(&filter.to_lowercase()) {
@@ -92,6 +97,7 @@ fn main() {
             package,
             geometry: &geometry,
             category,
+            marked_pin: marked.as_deref(),
         };
         let script = match build_script(&input) {
             Ok(s) => s,
@@ -152,16 +158,44 @@ fn package(
             lead_width: None,
             lead_length: None,
             lead_thickness: None,
+            tab_width: None,
+            tab_length: None,
         },
         lead_layout: layout,
+        tab: None,
         construction: None,
         geometry: None,
         provenance: Default::default(),
     }
 }
 
+/// A tabbed power package (SOT-223 / TO-252) with JEDEC-typical tabs.
+fn tabbed(id: &str, family: &str, pitch: f64, w: f64, l: f64, h: f64, tab_w: f64) -> Package {
+    let mut p = package(id, family, 3, pitch, w, l, h, None);
+    p.dimensions.tab_width = Some(dim(tab_w));
+    p.tab = Some(openparts_core::PackageTab {
+        number: if family == "dpak" { "2" } else { "4" }.into(),
+        trimmed_leads: if family == "dpak" {
+            vec!["2".into()]
+        } else {
+            vec![]
+        },
+    });
+    p
+}
+
 fn synthetic() -> Vec<(Package, Option<ComponentCategory>, String)> {
     vec![
+        (
+            tabbed("synthetic/SOT223", "sot223", 2.3, 3.5, 6.5, 1.6, 3.0),
+            Some(ComponentCategory::Other),
+            "SYNTH-SOT223".into(),
+        ),
+        (
+            tabbed("synthetic/DPAK", "dpak", 2.285, 6.1, 6.54, 2.25, 5.21),
+            Some(ComponentCategory::Transistor),
+            "SYNTH-DPAK".into(),
+        ),
         (
             package("synthetic/DIP8", "dip", 8, 2.54, 7.62, 9.27, 3.3, None),
             Some(ComponentCategory::Microcontroller),

@@ -281,6 +281,7 @@ mod tests {
             package: &package,
             geometry: &geometry,
             category: Some(openparts_core::ComponentCategory::Microcontroller),
+            marked_pin: None,
         })
         .unwrap();
         let files = run(

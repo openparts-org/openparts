@@ -60,6 +60,16 @@ pub struct PackageDimensions {
     /// Lead-frame thickness (JEDEC c; A3 terminal thickness on QFN/DFN).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead_thickness: Option<Dimension>,
+    /// Width of a package's wide tab, measured along the body edge it
+    /// leaves (SOT-223 b2/b1, TO-252 E1/b3) -- only for families with a
+    /// tab (`sot223`, `dpak`); see [`Package::tab`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_width: Option<Dimension>,
+    /// How far a TO-252/DPAK tab reaches past the body edge (JEDEC L3).
+    /// Not used by `sot223`, whose tab is a gull-wing lead reaching the
+    /// same lead span as the leads opposite it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_length: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -79,6 +89,8 @@ impl PackageDimensions {
             ("/dimensions/lead_width", &self.lead_width),
             ("/dimensions/lead_length", &self.lead_length),
             ("/dimensions/lead_thickness", &self.lead_thickness),
+            ("/dimensions/tab_width", &self.tab_width),
+            ("/dimensions/tab_length", &self.tab_length),
         ];
         out.extend(
             optional
@@ -113,6 +125,25 @@ pub enum PackageConstruction {
     Ceramic,
     /// Metal can (crystals, aluminium electrolytics).
     MetalCan,
+}
+
+/// The wide tab of a power package (SOT-223, TO-252/DPAK) -- soldered
+/// to the board and electrically one of the device's terminals. How the
+/// datasheet numbers it varies by vendor ("4", "TAB", or simply tied to
+/// pin 2), which is why it is recorded here rather than derived; packages
+/// whose outline is identical but whose tab is numbered differently are
+/// separate Packages (as KiCad's `SOT-223-3_TabPin2` / `_TabPin4`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PackageTab {
+    /// Pad number of the tab as the source numbers it. It may repeat a
+    /// lead's number when the source says the tab is that pin (a
+    /// footprint then has two pads with that number).
+    pub number: String,
+    /// Lead positions cut short at the body, so they never reach the
+    /// board and get no pad (TO-252's centre lead, which is the tab's own
+    /// lead-frame finger). Numbers out of `1..=lead_count`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trimmed_leads: Vec<String>,
 }
 
 /// Canonical Data Specification section 21.
@@ -155,6 +186,10 @@ pub struct Package {
     /// evenly and don't use this field).
     #[serde(default)]
     pub lead_layout: Option<Vec<u32>>,
+    /// The package's wide tab, for families that have one (`sot223`,
+    /// `dpak`); `None` otherwise. Its size is in `dimensions.tab_*`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab: Option<PackageTab>,
     /// Physical construction as the source states it (section 20);
     /// `None` when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]

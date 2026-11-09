@@ -1,10 +1,11 @@
-//! Axial diodes: a can lying on the board, the cathode band at pin 1
+//! Axial diodes: a can lying on the board, the cathode band at the
+//! cathode (from the device's pin names, else pin 1)
 //! (KiCad D_DO-*), leads bent down into their holes. A package whose
 //! source states a glass body (`construction: glass`, e.g. DO-35) is
 //! drawn as tinted glass with a dark band; anything else as a molding.
 
 use super::wire_d;
-use crate::common::edge_point;
+use crate::common::{self, edge_point};
 use crate::script::{looks, mm, Look};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
@@ -18,7 +19,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let body = &input.geometry.body;
     let glass = input.package.construction == Some(PackageConstruction::Glass);
     let (hl, d) = (body.size.x / 2.0, body.size.y);
-    let cathode_left = pin1.position.x <= 0.0;
+    let cathode_left = common::marked_lead(input).is_none_or(|l| l.position.x <= 0.0);
     let top = d; // the top of the can's end circles (it rests on z = 0)
     let (band_x, body_x, band_end, body_end) = if cathode_left {
         ("-(can_len / 2)", "-(can_len / 2) + band_w", -hl, hl)

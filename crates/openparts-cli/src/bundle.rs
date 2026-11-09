@@ -373,6 +373,7 @@ fn bundle_part(dataset: &Dataset, part: &Part, out: &Path) -> anyhow::Result<Par
         package: &model.package,
         geometry: &geometry,
         category: Some(model.device.category),
+        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
     };
     let formats: Vec<Format> = MODEL_FORMATS.iter().map(|(f, _, _)| *f).collect();
     let models = match openparts_solidcraft::generate(&input, &part.mpn, &formats) {

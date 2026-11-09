@@ -50,6 +50,81 @@ pub(crate) const SOIC: GullWingDefaults = GullWingDefaults {
     standoff: 0.15,
 };
 
+/// TSSOP (JEDEC MO-153, 4.4 mm body): E 6.4 BSC over E1 4.4, A2 0.80..1.05,
+/// b 0.19..0.30, c 0.09..0.20, L 0.45..0.75, A1 0.05..0.15.
+pub(crate) const TSSOP: GullWingDefaults = GullWingDefaults {
+    body_height: 1.0,
+    lead_width: 0.25,
+    protrusion: 1.0,
+    thickness: 0.15,
+    foot_length: 0.6,
+    standoff: 0.1,
+};
+
+/// SSOP (JEDEC MO-150, 5.3 mm body): E 7.4..8.2 over E1 5.3, A2 1.65..1.85,
+/// b 0.22..0.38, c 0.09..0.25, L 0.55..0.95, A1 0.05 min.
+pub(crate) const SSOP: GullWingDefaults = GullWingDefaults {
+    body_height: 1.75,
+    lead_width: 0.3,
+    protrusion: 1.25,
+    thickness: 0.15,
+    foot_length: 0.75,
+    standoff: 0.1,
+};
+
+/// MSOP (JEDEC MO-187, 3.0 mm body): E 4.9 BSC over E1 3.0, A2 0.75..0.95,
+/// b 0.22..0.38 (0.65 pitch), c 0.08..0.23, L 0.40..0.80, A1 0.00..0.15.
+pub(crate) const MSOP: GullWingDefaults = GullWingDefaults {
+    body_height: 0.85,
+    lead_width: 0.3,
+    protrusion: 0.95,
+    thickness: 0.15,
+    foot_length: 0.6,
+    standoff: 0.08,
+};
+
+/// SOT-223 (JEDEC TO-261AA): HE 6.7..7.3 over E 3.3..3.7, A2 ~1.6,
+/// b 0.66..0.84, c 0.23..0.35, L 0.75 min, A1 0.02..0.10.
+pub(crate) const SOT223: GullWingDefaults = GullWingDefaults {
+    body_height: 1.6,
+    lead_width: 0.75,
+    protrusion: 1.75,
+    thickness: 0.3,
+    foot_length: 0.9,
+    standoff: 0.06,
+};
+
+/// TO-252 / DPAK (JEDEC TO-252AA): H 9.40..10.42 over a 5.97..6.22 body
+/// with the tab reaching L3 0.88..1.27 past it, A 2.18..2.39, b 0.64..0.89,
+/// c 0.46..0.61, A1 0.00..0.13. `protrusion` is the lead side only
+/// (H - D - L3 ~ 10.1 - 6.1 - 1.0).
+pub(crate) const DPAK: GullWingDefaults = GullWingDefaults {
+    body_height: 2.25,
+    lead_width: 0.76,
+    protrusion: 3.0,
+    thickness: 0.5,
+    foot_length: 1.0,
+    standoff: 0.05,
+};
+
+/// TO-252 / DPAK tab defaults beyond `DPAK`.
+pub(crate) struct TabDefaults {
+    /// Body edge to tab end (L3).
+    pub length: f64,
+    /// Tab metal thickness (c2).
+    pub thickness: f64,
+    /// Soldered tab length under the body, as a fraction of the body
+    /// size across the leads (TO-252 drawings give only a minimum, e.g.
+    /// 4.32 min under a ~6.1 body).
+    pub under_body_ratio: f64,
+}
+
+pub(crate) const DPAK_TAB: TabDefaults = TabDefaults {
+    length: 1.0,
+    thickness: 0.5,
+    under_body_ratio: 0.7,
+};
+
 /// SOT-23 class (JEDEC TO-236): HE 2.4 over E 1.3, b 0.3..0.5,
 /// c 0.08..0.20, L ~0.4, A1 0.01..0.10.
 pub(crate) const SOT: GullWingDefaults = GullWingDefaults {
@@ -87,6 +162,29 @@ pub(crate) fn value(dim: &Option<Dimension>) -> Option<f64> {
         (Some(min), Some(max)) => Some((min + max) / 2.0),
         _ => None,
     })
+}
+
+/// The value a generator draws a body/pitch dimension at -- the one
+/// rule every generator uses: the stated nominal, else the middle of a
+/// stated min..max range, else the single stated limit (outline tables
+/// often give a height only as "1.80 max"). Drawing only: the derived
+/// value is never written back into Canonical Data, so packages record
+/// exactly what the datasheet prints (Canonical Data Specification 20.1).
+pub(crate) fn required(dim: &Dimension) -> Option<f64> {
+    dim.nominal.or(match (dim.min, dim.max) {
+        (Some(min), Some(max)) => Some((min + max) / 2.0),
+        (min, max) => min.or(max),
+    })
+}
+
+/// [`required`], or `MissingDimension(what)` when nothing is stated.
+pub(crate) fn dim(dim: &Dimension, what: &'static str) -> Result<f64, crate::McadError> {
+    required(dim).ok_or(crate::McadError::MissingDimension(what))
+}
+
+/// [`required`] for an optional dimension (e.g. body height).
+pub(crate) fn stated(dim: &Option<Dimension>) -> Option<f64> {
+    dim.as_ref().and_then(required)
 }
 
 /// Which body axis a row of leads exits across.
@@ -134,7 +232,7 @@ impl GullWing {
                 "dimensions.overall_length",
             ),
         };
-        let (Some(span), Some(body)) = (value(span), body.nominal) else {
+        let (Some(span), Some(body)) = (value(span), required(body)) else {
             return Ok(self.defaults.protrusion);
         };
         let protrusion = (span - body) / 2.0;

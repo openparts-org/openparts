@@ -102,6 +102,7 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
         package: &model.package,
         geometry: &geometry,
         category: Some(model.device.category),
+        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
     };
     let step_text = openparts_step::generate_step(&input, &part.mpn).expect("step");
     assert!(step_text.starts_with("ISO-10303-21;"));
@@ -187,6 +188,7 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
         package: &model.package,
         geometry: &geometry,
         category: Some(model.device.category),
+        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
     };
     let step_text = openparts_step::generate_step(&input, &part.mpn).unwrap();
     // A thick-film resistor: alumina core, black overcoat, 2 end caps.
@@ -195,8 +197,8 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
 
 /// Every package in the dataset: its SMD footprint pads (the geometry's
 /// lead outlines) never overlap each other, and where a package states
-/// its lead-tip span (`overall_width`/`overall_length`) the outermost pad
-/// edge -- the gull-wing toe -- lands exactly on half of it. Guards the
+/// its lead-tip span (`overall_width`/`overall_length`) the pads reach
+/// exactly across it -- toe to toe, or lead toe to tab end on TO-252. Guards the
 /// switch from generator defaults to datasheet lead dimensions, which
 /// moved real footprint pads.
 #[test]
@@ -214,10 +216,25 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         }
     }
     assert!(!files.is_empty());
+    // Every package must generate: a package the generators can't draw
+    // is a data or generator bug, not something to skip silently. The
+    // only exceptions are listed here, each with its reason.
+    const KNOWN_UNDRAWABLE: &[(&str, &str)] =
+        &[("standards/RADIAL-ECS-200-9X", "source states no lead pitch")];
+    let mut failures = Vec::new();
     for file in files {
         let package = openparts_data::load_package(&file).unwrap();
-        let Ok(geometry) = openparts_mcad::generate(&package) else {
-            continue; // e.g. a package missing a required dimension
+        let geometry = match openparts_mcad::generate(&package) {
+            Ok(g) => g,
+            Err(e) => {
+                if !KNOWN_UNDRAWABLE
+                    .iter()
+                    .any(|(id, _)| *id == package.id.to_string())
+                {
+                    failures.push(format!("{}: {e}", package.id));
+                }
+                continue;
+            }
         };
         let rect = |l: &openparts_mcad::Lead| {
             let (hx, hy) = (l.size.x / 2.0, l.size.y / 2.0);
@@ -255,23 +272,29 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         ) {
             continue;
         }
+        // Toe to toe (or, on a TO-252, lead toe to tab end) across each
+        // axis equals the stated span; for symmetric packages that puts
+        // each toe at half of it.
         let dims = &package.dimensions;
+        let extent = |lo: fn(&openparts_mcad::Lead) -> f64,
+                      hi: fn(&openparts_mcad::Lead) -> f64| {
+            geometry.leads.iter().map(hi).fold(f64::MIN, f64::max)
+                - geometry.leads.iter().map(lo).fold(f64::MAX, f64::min)
+        };
         for (span, outer) in [
             (
                 &dims.overall_width,
-                geometry
-                    .leads
-                    .iter()
-                    .map(|l| rect(l).1)
-                    .fold(f64::MIN, f64::max),
+                extent(
+                    |l| l.position.x - l.size.x / 2.0,
+                    |l| l.position.x + l.size.x / 2.0,
+                ),
             ),
             (
                 &dims.overall_length,
-                geometry
-                    .leads
-                    .iter()
-                    .map(|l| rect(l).3)
-                    .fold(f64::MIN, f64::max),
+                extent(
+                    |l| l.position.y - l.size.y / 2.0,
+                    |l| l.position.y + l.size.y / 2.0,
+                ),
             ),
         ] {
             let Some(span) = span.as_ref() else { continue };
@@ -280,11 +303,16 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
                 .or(span.min.zip(span.max).map(|(a, b)| (a + b) / 2.0));
             if let Some(expected) = expected {
                 assert!(
-                    (outer - expected / 2.0).abs() < 1e-9,
-                    "{}: toe at {outer}, lead span {expected}",
+                    (outer - expected).abs() < 1e-9,
+                    "{}: toe-to-toe {outer}, lead span {expected}",
                     package.id
                 );
             }
         }
     }
+    assert!(
+        failures.is_empty(),
+        "packages that fail to generate:\n{}",
+        failures.join("\n")
+    );
 }

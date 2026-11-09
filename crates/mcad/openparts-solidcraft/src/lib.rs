@@ -27,7 +27,7 @@ mod template;
 pub use runner::{available, run, version, Format, RunError};
 pub use script::{looks, mm, Look, Script};
 
-use openparts_core::{ComponentCategory, Package};
+use openparts_core::{ComponentCategory, Device, Package};
 use openparts_mcad::MechanicalGeometry;
 
 /// Everything a detailed model is built from.
@@ -38,6 +38,53 @@ pub struct ModelInput<'a> {
     /// The device's category, when known: a `chip` package is drawn as a
     /// resistor, a capacitor, an LED, ... accordingly.
     pub category: Option<ComponentCategory>,
+    /// The pin a polarity mark belongs to (an LED's or diode's cathode,
+    /// a polarised capacitor's + terminal), from the device's pin names
+    /// -- see [`polarity_pin`]. `None` falls back to pin "1".
+    pub marked_pin: Option<&'a str>,
+}
+
+impl<'a> ModelInput<'a> {
+    /// The input for `device` in `package`: its category and its
+    /// polarity pin.
+    pub fn for_device(
+        package: &'a Package,
+        geometry: &'a MechanicalGeometry,
+        device: &'a Device,
+    ) -> Self {
+        ModelInput {
+            package,
+            geometry,
+            category: Some(device.category),
+            marked_pin: polarity_pin(device),
+        }
+    }
+
+    /// The pin the polarity mark sits at: [`Self::marked_pin`], else "1".
+    pub(crate) fn mark(&self) -> &str {
+        self.marked_pin.unwrap_or("1")
+    }
+}
+
+/// The pin a part's polarity mark belongs to, read from the datasheet's
+/// pin names (never assumed from pin numbers: Kingbright LEDs number the
+/// cathode 1, Everlight the anode): the cathode of an LED or diode, the
+/// positive (`+`, anode) terminal of a polarised capacitor. `None` when
+/// the device has no single such pin.
+pub fn polarity_pin(device: &Device) -> Option<&str> {
+    let wanted: &[&str] = match device.category {
+        ComponentCategory::Led | ComponentCategory::Diode => &["cathode", "k", "kathode"],
+        ComponentCategory::Capacitor => &["+", "anode", "positive"],
+        _ => return None,
+    };
+    let mut hits = device
+        .pins
+        .iter()
+        .filter(|(_, pin)| wanted.contains(&pin.name.trim().to_ascii_lowercase().as_str()));
+    match (hits.next(), hits.next()) {
+        (Some((number, _)), None) => Some(number.as_str()),
+        _ => None,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -71,4 +118,43 @@ pub fn generate(
 ) -> Result<Vec<Vec<u8>>, Error> {
     let script = build_script(input)?;
     Ok(run(&script, product_name, formats)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device(category: &str, pins: &str) -> Device {
+        serde_yaml::from_str(&format!(
+            "schema_version: \"0.1\"\nkind: device\nid: t/T\nmanufacturer: t\ncategory: {category}\npins:\n{pins}"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_polarity_pin_comes_from_pin_names_not_numbers() {
+        // Kingbright numbers the cathode 1, Everlight the anode.
+        let kingbright = device(
+            "led",
+            "  \"1\": { name: Cathode, type: passive }\n  \"2\": { name: Anode, type: passive }\n",
+        );
+        let everlight = device(
+            "led",
+            "  \"1\": { name: Anode, type: passive }\n  \"2\": { name: Cathode, type: passive }\n",
+        );
+        assert_eq!(polarity_pin(&kingbright), Some("1"));
+        assert_eq!(polarity_pin(&everlight), Some("2"));
+        // A polarised capacitor is marked at its + terminal.
+        let tantalum = device(
+            "capacitor",
+            "  \"1\": { name: \"+\", type: passive }\n  \"2\": { name: \"-\", type: passive }\n",
+        );
+        assert_eq!(polarity_pin(&tantalum), Some("1"));
+        // No single matching pin (an MLCC, a dual diode): no mark pin.
+        let mlcc = device(
+            "capacitor",
+            "  \"1\": { name: \"1\", type: passive }\n  \"2\": { name: \"2\", type: passive }\n",
+        );
+        assert_eq!(polarity_pin(&mlcc), None);
+    }
 }
