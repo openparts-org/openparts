@@ -258,9 +258,10 @@ fn build_model(
         .map_err(|e| ApiError::GenerationFailed(e.to_string()))
 }
 
-fn artifact_response(content: String, content_type: &'static str) -> Response {
+fn artifact_response(content: impl Into<Vec<u8>>, content_type: &'static str) -> Response {
+    let content: Vec<u8> = content.into();
     let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
+    hasher.update(&content);
     let hash = hex_encode(&hasher.finalize());
 
     let mut response = (StatusCode::OK, content).into_response();
@@ -311,23 +312,45 @@ async fn artifact_step(
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
     let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
-    let geometry = openparts_mcad::generate(&model.package)
-        .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
-    let text = openparts_step::generate_step(&geometry, &model.part.mpn)
-        .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
-    Ok(artifact_response(text, "model/step"))
+    let text = render_3d(model, |input, mpn| {
+        openparts_step::generate_step(input, mpn).map_err(|e| e.to_string())
+    })
+    .await?;
+    Ok(artifact_response(text.into_bytes(), "model/step"))
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/stl?silicon_revision=...`
+/// (binary STL)
 async fn artifact_stl(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
     Query(q): Query<RevisionQuery>,
 ) -> Result<Response, ApiError> {
     let model = build_model(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
-    let geometry = openparts_mcad::generate(&model.package)
-        .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
-    let text = openparts_stl::generate_stl(&geometry, &model.part.mpn)
-        .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
-    Ok(artifact_response(text, "model/stl"))
+    let bytes = render_3d(model, |input, mpn| {
+        openparts_stl::generate_stl(input, mpn).map_err(|e| e.to_string())
+    })
+    .await?;
+    Ok(artifact_response(bytes, "model/stl"))
+}
+
+/// Builds the detailed 3D model of `model` with `export`. The model is
+/// built by an external SolidCraft process, so it runs on the blocking
+/// pool instead of holding up an async worker.
+async fn render_3d<T: Send + 'static>(
+    model: openparts_core::EffectiveModel,
+    export: impl FnOnce(&openparts_step::ModelInput<'_>, &str) -> Result<T, String> + Send + 'static,
+) -> Result<T, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        let geometry = openparts_mcad::generate(&model.package).map_err(|e| e.to_string())?;
+        let input = openparts_step::ModelInput {
+            package: &model.package,
+            geometry: &geometry,
+            category: Some(model.device.category),
+        };
+        export(&input, &model.part.mpn)
+    })
+    .await
+    .map_err(|e| ApiError::GenerationFailed(e.to_string()))?
+    .map_err(ApiError::GenerationFailed)
 }

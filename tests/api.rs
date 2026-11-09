@@ -103,6 +103,10 @@ async fn kicad_symbol_artifact_matches_device_pin_count() {
 
 #[tokio::test]
 async fn stl_artifact_has_one_solid_per_part() {
+    if !openparts_solidcraft::available() {
+        eprintln!("SolidCraft is not installed; skipping");
+        return;
+    }
     let response = app()
         .oneshot(
             Request::builder()
@@ -114,10 +118,10 @@ async fn stl_artifact_has_one_solid_per_part() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().contains_key("x-content-hash"));
-    let body = body_string(response).await;
-    assert!(body.starts_with("solid RP2040\n"));
-    // 1 body + 56 leads = 57 boxes, 12 facets each.
-    assert_eq!(body.matches("facet normal").count(), 57 * 12);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    // Binary STL: the body and 56 terminals, at least 12 triangles each.
+    let triangles = openparts_stl::triangle_count(&body).expect("well-formed binary STL");
+    assert!(triangles >= 57 * 12);
 }
 
 #[tokio::test]

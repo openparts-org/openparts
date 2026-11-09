@@ -14,6 +14,10 @@ First slice: loads `openparts-data` into an in-memory index at startup
 written so that swap doesn't require route changes later. No
 authentication, rate limiting, caching, or object storage yet.
 
+The STEP/STL routes build the 3D model with a locally installed
+SolidCraft (see `openparts/README.md`, "3D models"); without it they
+return `422`. The container image does not include SolidCraft yet.
+
 ## Running
 
 ```sh
@@ -35,7 +39,8 @@ OPENPARTS_DATA_DIR=/path/to/openparts-data PORT=8080 cargo run
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts` | links to available artifact kinds |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-symbol?silicon_revision=...` | generated `.kicad_sym` text |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-footprint?silicon_revision=...` | generated `.kicad_mod` text |
-| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/step?silicon_revision=...` | generated STEP text |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/step?silicon_revision=...` | generated STEP text (coloured AP242) |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/stl?silicon_revision=...` | generated binary STL |
 | `GET /v1/devices/{id}` | Device (`id` may contain `/`, e.g. `raspberrypi/RP2040`) |
 | `GET /v1/packages/{id}` | Package |
 
