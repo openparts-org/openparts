@@ -22,12 +22,13 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   *and revision* you opened. A newer revision than an existing Source gets
   its own Source (`id: <mfr>/<doc>@rev<N>`, file
   `sources/<mfr>/<doc>-rev<N>.yaml`).
-- **Never get around access controls.** On 403/"Access Denied", a bot check
-  (Cloudflare "Just a moment", an empty 202), a login wall or a TLS
-  certificate error: do not spoof a user agent, disable certificate checks,
-  use unofficial mirrors, or retry the same URL with a different client
-  after a refusal. Use another *first-party* URL if you know one (product
-  page, alternate official PDF link); otherwise record the part as
+- **Never get around access controls.** On 403/"Access Denied" you may
+  retry **once with another standard tool** (e.g. WebFetch after curl) --
+  that is not a workaround. What is: spoofing a user agent or other
+  headers, solving or evading a bot challenge (Cloudflare "Just a moment",
+  an empty 202), disabling TLS certificate checks, login walls, unofficial
+  mirrors. If the second try also fails, use another *first-party* URL
+  (product page, alternate official PDF link) or record the part as
   unverified and move on. Distributor-hosted copies (DigiKey/Mouser) of a
   manufacturer PDF are acceptable only when the existing dataset already
   relies on them for that manufacturer -- say so in the Source comment.
@@ -190,9 +191,9 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
 
 ### Manufacturer access notes (as of 2026-11)
 
-| reachable directly | blocked / unavailable (don't work around) |
+| reachable directly | blocked with curl (retry once with WebFetch) / unavailable (don't work around) |
 |---|---|
-| ti.com/lit/ds/symlink/<part>.pdf; nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | onsemi.com (403; newer datasheets also drop the outline), st.com (timeouts), KEMET content site (expired TLS), TDK, Lite-On, Würth (Akamai 403), Coilcraft (Cloudflare), Nordic and Silicon Labs (403), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
+| ti.com/lit/ds/symlink/<part>.pdf; nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | onsemi.com (403; newer datasheets also drop the outline), st.com (timeouts), KEMET content site (expired TLS), TDK, Lite-On, Würth (Akamai 403 to curl; WebFetch has worked for Würth), Coilcraft (Cloudflare challenge: unavailable), Nordic and Silicon Labs (403), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
 
 ## 6. Verify
 

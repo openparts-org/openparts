@@ -108,7 +108,7 @@ Agentは以下を行ってはならない。
 - Manufacturer Logo等を無断で保存する
 - Canonical Main BranchへReviewなしで直接commitする
 - 未確認のPartを`verified`へ昇格させる
-- Access制御を回避する（User-Agent偽装、TLS証明書検証の無効化、Bot判定の回避、非公式Mirrorの利用、拒否されたURLを別Clientで再試行すること）
+- Access制御を回避する（User-Agent等のHeader偽装、TLS証明書検証の無効化、Bot判定（Challenge）の突破・回避、Login壁の回避、非公式Mirrorの利用）。拒否時に別の標準的なToolで1回再試行することは回避に当たらない
 - min/maxのみのDimensionへnominalを書き込む（Generatorは描画時のみ中間値を使い、Canonical Dataへ書き戻さない）
 
 拒否・到達不能なSourceは未確認として記録し、Candidate Reportへ理由を残す。
