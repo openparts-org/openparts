@@ -217,6 +217,7 @@ mod tests {
                 mating_length: None,
                 tail_length: None,
                 pad_diameter: None,
+                body_offset: None,
             },
             lead_layout: Some(vec![6, 8]),
             tab: None,

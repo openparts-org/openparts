@@ -1,0 +1,11 @@
+# Shrouded header (openparts-mcad `shrouded_header`): hollows the housing
+# into an open-top box, walls wall_t thick, the floor floor_h above the
+# housing underside. Vars: wall_t, floor_h, post_recess.
+- params:
+    wall_t: ["{{wall_t}}", "shroud wall thickness (generator default: not dimensioned)"]
+    floor_h: ["{{floor_h}}", "cavity floor above the housing underside (generator default)"]
+    post_recess: ["{{post_recess}}", "post tips below the shroud rim (generator default)"]
+- solid.box:
+    {length: body_w - 2 * wall_t, width: body_l - 2 * wall_t, height: body_h - floor_h + 0.1 mm,
+     center: [body_x, 0 mm, standoff + floor_h + (body_h - floor_h + 0.1 mm) / 2],
+     operation: cut, targets: [Housing], name: Cavity}

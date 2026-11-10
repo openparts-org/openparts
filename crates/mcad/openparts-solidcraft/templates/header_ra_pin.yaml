@@ -1,0 +1,26 @@
+# Right-angle header (openparts-mcad `right_angle_header`): pin 1's
+# square pin seen along the row -- the tail from tail_l below the board
+# up to the bend, then the post along X towards the housing through it
+# to mating_l beyond its front face. Vars: bend_h; dir/inv: "+"/"-" when
+# the housing lies towards +X, "-"/"+" towards -X.
+- params:
+    bend_h: ["{{bend_h}}", "bent post's centre line above the board (housing mid-height)"]
+    bend_r: [pin_w * 0.5, inner bend radius]
+    tip_x: ["body_x {{dir}} (body_w / 2 + mating_l)", the post tip along X]
+- sketch.create: {plane: XZ, flip: x, offset: pin_y0, name: PinProfile}
+- sketch.line:
+    closed: true
+    ids: [ra0, ra1, ra2, ra3, ra4, ra5]
+    points:
+      - ["pin_x0 {{inv}} pin_w / 2", -tail_l]
+      - ["pin_x0 {{inv}} pin_w / 2", bend_h + pin_w / 2]
+      - [tip_x, bend_h + pin_w / 2]
+      - [tip_x, bend_h - pin_w / 2]
+      - ["pin_x0 {{dir}} pin_w / 2", bend_h - pin_w / 2]
+      - ["pin_x0 {{dir}} pin_w / 2", -tail_l]
+- sketch.fillet: {a: ra0, b: ra1, radius: bend_r + pin_w}
+- sketch.fillet: {a: ra3, b: ra4, radius: bend_r}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: PinProfile, distance: pin_w, direction: symmetric,
+     operation: new, body_name: Pin, name: Pin}

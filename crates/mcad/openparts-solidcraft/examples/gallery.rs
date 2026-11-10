@@ -172,6 +172,7 @@ fn package(
             mating_length: None,
             tail_length: None,
             pad_diameter: None,
+            body_offset: None,
         },
         lead_layout: layout,
         tab: None,

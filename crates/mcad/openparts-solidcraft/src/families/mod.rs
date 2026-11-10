@@ -35,7 +35,9 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         "sip" => dip::sip(&mut s, input)?,
         "bga" => bga::build(&mut s, input)?,
         "module" => module::build(&mut s, input)?,
-        "header" | "socket" => header::build(&mut s, input)?,
+        "header" | "socket" | "shrouded_header" | "right_angle_header" => {
+            header::build(&mut s, input)?
+        }
         other => return Err(ModelError::UnsupportedFamily(other.to_string())),
     }
     Ok(s)

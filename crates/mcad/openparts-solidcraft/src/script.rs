@@ -190,6 +190,8 @@ pub mod looks {
     pub const RUBBER: Look = Look::dielectric("#2a2a2a", 0.9);
     /// BGA laminate substrate.
     pub const LAMINATE: Look = Look::dielectric("#3d5a3a", 0.6);
+    /// Natural (unpigmented, white) polyamide connector housing.
+    pub const NYLON_NATURAL: Look = Look::dielectric("#ebe5d3", 0.55);
     /// White LED housing.
     pub const LED_HOUSING: Look = Look::dielectric("#f4f4f2", 0.5);
     /// Water-clear epoxy lens.

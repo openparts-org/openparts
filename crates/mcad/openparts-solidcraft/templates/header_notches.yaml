@@ -8,16 +8,16 @@
     closed: true
     ids: [notchl0, notchl1, notchl2]
     points:
-      - [-body_w / 2 - 0.01 mm, notch_y - notch_d]
-      - [-body_w / 2 + notch_d, notch_y]
-      - [-body_w / 2 - 0.01 mm, notch_y + notch_d]
+      - [body_x - body_w / 2 - 0.01 mm, notch_y - notch_d]
+      - [body_x - body_w / 2 + notch_d, notch_y]
+      - [body_x - body_w / 2 - 0.01 mm, notch_y + notch_d]
 - sketch.line:
     closed: true
     ids: [notchr0, notchr1, notchr2]
     points:
-      - [body_w / 2 + 0.01 mm, notch_y - notch_d]
-      - [body_w / 2 + 0.01 mm, notch_y + notch_d]
-      - [body_w / 2 - notch_d, notch_y]
+      - [body_x + body_w / 2 + 0.01 mm, notch_y - notch_d]
+      - [body_x + body_w / 2 + 0.01 mm, notch_y + notch_d]
+      - [body_x + body_w / 2 - notch_d, notch_y]
 - sketch.finish: {}
 - solid.extrude:
     {sketch: NotchOutline, distance: body_h + 0.02 mm,

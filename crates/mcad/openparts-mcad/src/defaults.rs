@@ -165,7 +165,8 @@ pub(crate) const MODULE: ModuleDefaults = ModuleDefaults {
     pad_thickness: 0.035,
 };
 
-/// Pin header / socket (`header`, `socket`) defaults.
+/// Pin header / socket defaults (`header`, `socket`, `shrouded_header`,
+/// `right_angle_header`).
 pub(crate) struct HeaderDefaults {
     /// Annular ring around the recommended hole when the source gives no
     /// land: 0.35 mm, KiCad's 2.54 mm pin-header footprints' 1.7 mm pad
@@ -189,6 +190,16 @@ pub(crate) struct HeaderDefaults {
     pub tail_length: f64,
     pub header_height: f64,
     pub socket_height: f64,
+    /// `shrouded_header` drawing values when the source states none,
+    /// for a 2.54 mm grid (scaled like the above): a 7.0 mm housing
+    /// (JST XH's printed height), 0.6 mm shroud walls, a cavity floor at
+    /// 35 % of the housing height and post tips 0.8 mm below the rim.
+    /// Wire-to-board drawings dimension the housing outline but not its
+    /// walls, floor or post height: these only shape the 3D model.
+    pub shroud_height: f64,
+    pub shroud_wall: f64,
+    pub shroud_floor_ratio: f64,
+    pub shroud_post_recess: f64,
 }
 
 pub(crate) const HEADER: HeaderDefaults = HeaderDefaults {
@@ -200,6 +211,10 @@ pub(crate) const HEADER: HeaderDefaults = HeaderDefaults {
     tail_length: 3.0,
     header_height: 2.54,
     socket_height: 8.5,
+    shroud_height: 7.0,
+    shroud_wall: 0.6,
+    shroud_floor_ratio: 0.35,
+    shroud_post_recess: 0.8,
 };
 
 /// The value a generator uses for an optional dimension: the stated

@@ -22,10 +22,10 @@
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
 //! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; `header`/`socket`'s `mating_length`, `tail_length`, `pad_diameter`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
 //! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
 //! | `aux_pads.invalid` | a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y` |
-//! | `header.invalid` | a `header`/`socket` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), or two rows without `dimensions.row_spacing` |
+//! | `header.invalid` | a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies) |
 //! | `mpn.empty` | `part.mpn` is empty |
 
 use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
@@ -172,7 +172,7 @@ pub fn validate_part(
 }
 
 /// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 21] = [
+const PROVENANCE_REQUIRED: [&str; 22] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -194,6 +194,7 @@ const PROVENANCE_REQUIRED: [&str; 21] = [
     "/dimensions/mating_length",
     "/dimensions/tail_length",
     "/dimensions/pad_diameter",
+    "/dimensions/body_offset",
 ];
 
 fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -330,23 +331,33 @@ fn check_package_aux_pads(entity: &str, package: &Package) -> Vec<Diagnostic> {
 }
 
 /// Pin headers and sockets: the grid and the drill must be stated (the
-/// generator never guesses either).
+/// generator never guesses either), and a right-angle header's housing
+/// position.
 fn check_package_header(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    if !["header", "socket"].contains(&package.family.to_ascii_lowercase().as_str()) {
+    let family = package.family.to_ascii_lowercase();
+    if !["header", "socket", "shrouded_header", "right_angle_header"].contains(&family.as_str()) {
         return vec![];
     }
+    let right_angle = family == "right_angle_header";
+    let max_rows = if right_angle { 1 } else { 2 };
     let mut out = Vec::new();
     let rows = match package.lead_layout.as_deref() {
-        Some(&[rows @ (1 | 2), per_row]) if rows * per_row == package.lead_count => Some(rows),
+        Some(&[rows, per_row])
+            if (1..=max_rows).contains(&rows) && rows * per_row == package.lead_count =>
+        {
+            Some(rows)
+        }
         _ => {
             out.push(Diagnostic::error(
                 "header.invalid",
                 entity,
                 Some("/lead_layout"),
                 format!(
-                    "a {} needs lead_layout [rows, pins_per_row] with 1 or 2 rows and \
+                    "a {} needs lead_layout [rows, pins_per_row] with {} and \
                      rows x pins_per_row = lead_count ({})",
-                    package.family, package.lead_count
+                    package.family,
+                    if right_angle { "1 row" } else { "1 or 2 rows" },
+                    package.lead_count
                 ),
             ));
             None
@@ -367,6 +378,16 @@ fn check_package_header(entity: &str, package: &Package) -> Vec<Diagnostic> {
             entity,
             Some("/dimensions/row_spacing"),
             "a 2-row header must state dimensions.row_spacing".to_string(),
+        ));
+    }
+    if right_angle && d.body_offset.is_none() {
+        out.push(Diagnostic::error(
+            "header.invalid",
+            entity,
+            Some("/dimensions/body_offset"),
+            "a right-angle header must state dimensions.body_offset (where its housing lies \
+             beside the holes)"
+                .to_string(),
         ));
     }
     out
@@ -648,6 +669,7 @@ mod tests {
                 mating_length: None,
                 tail_length: None,
                 pad_diameter: None,
+                body_offset: None,
             },
             lead_layout: None,
             tab: None,
@@ -1002,6 +1024,29 @@ mod tests {
         assert!(paths(&diags, "header.invalid").is_empty());
         package.family = "lqfp".into();
         package.lead_layout = None;
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(paths(&diags, "header.invalid").is_empty());
+
+        // A right-angle header: one row, and where its housing lies.
+        package.family = "right_angle_header".into();
+        package.lead_layout = Some(vec![2, 2]);
+        package.dimensions.row_spacing = mm(2.54);
+        package.dimensions.body_offset = mm(2.77);
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert_eq!(paths(&diags, "header.invalid"), vec!["/lead_layout"]);
+        assert_eq!(
+            paths(&diags, "provenance.missing"),
+            vec!["/dimensions/body_offset"]
+        );
+        package.lead_layout = Some(vec![1, 4]);
+        package.dimensions.body_offset = None;
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert_eq!(
+            paths(&diags, "header.invalid"),
+            vec!["/dimensions/body_offset"]
+        );
+        // A shrouded header may be centred (no offset stated).
+        package.family = "shrouded_header".into();
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
         assert!(paths(&diags, "header.invalid").is_empty());
     }

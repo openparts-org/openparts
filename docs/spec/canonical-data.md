@@ -553,8 +553,9 @@ dimensions:
 ```
 
 `lqfp`/`qfn`/`soic`のように`lead_count`から均等に辺数で割り切れるFamilyは
-`lead_layout`を必要としない。`bga`、`header`、`socket`では`lead_layout`を
-`[行数, 列数]`（Pin headerでは`[列数, 1列あたりのピン数]`）として使う。
+`lead_layout`を必要としない。`bga`とHeader系Family（`header`、`socket`、`shrouded_header`、
+`right_angle_header`）では`lead_layout`を`[行数, 列数]`（Pin headerでは`[列数, 1列あたりのピン数]`）
+として使う。
 
 ## 20.1 Package Dimensions
 
@@ -586,9 +587,10 @@ dimensions:
 | `mounting_hole_diameter` | 取付穴の径（`module`のみ） | Pico: 2.1 ±0.05 | 省略可 |
 | `mounting_hole_spacing` | 各端の取付穴2個のX方向中心間距離 | Pico: 11.4 | 省略可 |
 | `mounting_hole_inset` | Boardの短辺から取付穴中心までのY距離（両端で対称に描く） | Pico: 2 | 省略可 |
-| `mating_length` | Housing上面からピン先端まで（嵌合部、`header`のみ） | WR-PHD 2.54: 6.0 ±0.20 | 省略可 |
-| `tail_length` | Housing下面からはんだ付けTail先端まで（`header`/`socket`） | WR-PHD 2.54: 3.0 ±0.20 | 省略可 |
-| `pad_diameter` | 一次資料の推奨Land（丸Pad）径（`header`/`socket`） | — | 省略可 |
+| `mating_length` | `header`: Housing上面からピン先端まで（嵌合部）。`right_angle_header`: Housing前面（+X側）からピン先端まで | WR-PHD 2.54: 6.0 ±0.20 | 省略可 |
+| `tail_length` | Housing下面からはんだ付けTail先端まで（Header系Family） | WR-PHD 2.54: 3.0 ±0.20 | 省略可 |
+| `pad_diameter` | 一次資料の推奨Land（丸Pad）径（Header系Family） | — | 省略可 |
+| `body_offset` | ピングリッド中心からHousing中心までのX方向の符号付き距離（pin 1を左上にした上面視で+X向きが正。`shrouded_header`/`right_angle_header`） | JST XH: 5.75/2 − (2.35) = 0.525（−X向き）、WR-PHD Angled: 1.5 + 2.54/2 = 2.77 | 省略可（`right_angle_header`では必須） |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -596,7 +598,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -663,6 +665,36 @@ Pin header（`family: header`）とSocket strip（Female header、`family: socke
 グリッドの中心に置く。`lead_width`は角ピンの太さ、`mating_length`はHousing上面から
 ピン先端まで（`header`のみ）、`tail_length`はHousing下面からTail先端まで。Validator rule
 `header.invalid`が`lead_layout`、`hole_diameter`、2列の`row_spacing`を検査する。
+
+Shrouded header（`family: shrouded_header`、JST XH/PHのような箱形Wire-to-board header）と
+Right-angle pin header（`family: right_angle_header`）は、`header`と同じ座標系・採番・
+Footprint規則に従う（一次資料の推奨穴パターンを部品面から見て、pin 1が上、番号が下へ進む
+向きに回して読む）。`shrouded_header`はHousingが上面の開いた箱で、ピンはその中に立つ。
+外形（`body_*`）は一次資料の寸法だが、壁厚・底面高さ・ピン先端の高さは外形図に寸法が
+無いのが普通なので、Generatorの既定値で3D Modelだけを描き、記録しない。図に描かれていても
+寸法の無いLock窓や極性Slotは描かない。`right_angle_header`は1列のみで、Housingが基板上に
+寝て穴の横にあり、ピンはTailから90°曲がってHousingを貫き+X（または−X）へ伸びる。
+`body_width`はピン方向のHousing奥行き、`body_height`は基板からの高さ、`mating_length`は
+Housing前面からピン先端まで、曲げたピンの高さは記載が無ければHousing高さの中央に描く。
+
+`body_offset`は、Housingがピン列に対して中心からずれている量（Housing中心のX座標、
+ピングリッド中心基準）である。一次資料が直接印刷するのは通常「ピン列からHousing端面まで」
+の距離なので、その値とHousing奥行きから算出し、locatorに計算式を書く（例：JST XHは
+ピン列から端面まで(2.35)、奥行き5.75 → 5.75/2 − 2.35 = 0.525、端面がpin 1を上にした
+上面視で+X側なので`-0.525`）。どちら側の端面かは推奨穴パターン上のNo. 1 circuitとBoss、
+Connector outline、Housingの位置から決め、記載が無ければ記録しない（`shrouded_header`は
+中心に描き、`right_angle_header`は生成を停止する）。Validator rule `header.invalid`は
+`right_angle_header`の1列と`body_offset`も検査する。
+
+```yaml
+family: shrouded_header
+lead_count: 4
+lead_layout: [1, 4]
+dimensions:
+  body_width: {nominal: 5.75, unit: mm}       # Housing奥行き（X）
+  body_offset: {nominal: -0.525, unit: mm}    # 5.75/2 - (2.35)、-X向き
+  hole_diameter: {nominal: 0.9, min: 0.9, max: 1.0, unit: mm}
+```
 
 ```yaml
 family: header

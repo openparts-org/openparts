@@ -1,13 +1,24 @@
-//! Pin headers and socket strips (openparts-mcad's `header`, `socket`):
-//! a black insulator housing on a grid of square gold pins. A pin
-//! header's pins stand `mating_length` above the housing, with breakaway
-//! notches across the housing top between neighbouring pins; a socket's
-//! contacts sit in funnelled entries in the housing top. Both have their
-//! solder tails `tail_length` below the housing. The grid is parametric
-//! (`pitch`, `pin_rows`, `pins_per_row`, `row_pitch`).
+//! The header families (openparts-mcad's `header`, `socket`,
+//! `shrouded_header`, `right_angle_header`): an insulator housing on a
+//! grid of square pins. A pin header's pins stand `mating_length` above
+//! the housing, with breakaway notches across the housing top between
+//! neighbouring pins; a socket's contacts sit in funnelled entries in the
+//! housing top; a shrouded header's posts stand inside an open-top box
+//! (walls and floor are generator defaults: wire-to-board drawings
+//! dimension only the outline); a right-angle header's pins bend 90°
+//! from the tails into posts running along X through a housing lying on
+//! the board. All have their solder tails `tail_length` below the
+//! housing (the board, for a right-angle header). The grid is
+//! parametric (`pitch`, `pin_rows`, `pins_per_row`, `row_pitch`), the
+//! housing sits `body_x` off it.
 //!
-//! No pin-1 mark: the housings this family was built from carry none
-//! (the footprint's square pad marks pin 1).
+//! Finishes: black housing and gold pins (the Würth WR-PHD parts the
+//! straight and right-angle families were built from); a shrouded
+//! header is natural (white) polyamide with tin-plated posts, as JST
+//! XH/PH state -- other colours aren't modelled.
+//!
+//! No pin-1 mark: the housings this family was built from carry none, or
+//! an undimensioned one (the footprint's square pad marks pin 1).
 
 use crate::common::{self};
 use crate::script::{looks, mm};
@@ -40,6 +51,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             pin_w = mm(f.pin_width),
             tail_l = mm(f.tail_length),
             standoff = mm(f.standoff),
+            body_x = mm(g.body.position.x),
         ),
     )?;
     let grid = g.leads.len() > 1;
@@ -56,7 +68,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                     s.fragment(fragment!("header_notch_row"), &vars!())?;
                 }
             }
-            "standoff + body_h + mating_l"
+            Some("standoff + body_h + mating_l")
         }
         HeaderKind::Socket => {
             s.fragment(fragment!("socket_entry"), &vars!())?;
@@ -68,18 +80,55 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                 &vars!(tools = serde_json::json!(common::copies("Entry", g.leads.len() as u32))),
             )?;
             // The contact shows at the bottom of its cavity.
-            "standoff + body_h - entry_d - cavity_d"
+            Some("standoff + body_h - entry_d - cavity_d")
+        }
+        HeaderKind::Shrouded => {
+            let shroud = f
+                .shroud
+                .ok_or_else(|| ModelError::UnsupportedFamily(package.family.clone()))?;
+            s.fragment(
+                fragment!("shroud_cavity"),
+                &vars!(
+                    wall_t = mm(shroud.wall),
+                    floor_h = mm(shroud.floor),
+                    post_recess = mm(shroud.post_recess),
+                ),
+            )?;
+            Some("standoff + body_h - post_recess")
+        }
+        HeaderKind::RightAngle => {
+            s.param(
+                "mating_l",
+                mm(f.mating_length),
+                "post length beyond the housing's front face (datasheet, else generator default)",
+            );
+            let (dir, inv) = if f.body_offset >= 0.0 {
+                ("+", "-")
+            } else {
+                ("-", "+")
+            };
+            s.fragment(
+                fragment!("header_ra_pin"),
+                &vars!(bend_h = mm(f.bend_height), dir = dir, inv = inv),
+            )?;
+            None
         }
     };
-    s.fragment(
-        fragment!("header_pin"),
-        &vars!(bottom = "-tail_l", top = top),
-    )?;
+    if let Some(top) = top {
+        s.fragment(
+            fragment!("header_pin"),
+            &vars!(bottom = "-tail_l", top = top),
+        )?;
+    }
     if grid {
         s.fragment(fragment!("header_grid"), &vars!(seed = "Pin"))?;
     }
-    s.paint(&["Housing".into()], looks::MOLD);
-    s.paint(&common::copies("Pin", g.leads.len() as u32), looks::GOLD);
+    let (housing, pins) = match f.kind {
+        HeaderKind::Shrouded => (looks::NYLON_NATURAL, looks::TIN),
+        _ => (looks::MOLD, looks::GOLD),
+    };
+    s.paint(&["Housing".into()], housing);
+    s.paint(&common::copies("Pin", g.leads.len() as u32), pins);
     Ok(())
 }
 
@@ -97,10 +146,21 @@ mod tests {
              \x20 body_length: {{nominal: {l}, unit: mm}}\n\
              \x20 lead_width: {{nominal: 0.64, unit: mm}}\n\
              \x20 row_spacing: {{nominal: 2.54, unit: mm}}\n\
-             \x20 hole_diameter: {{nominal: 1.1, unit: mm}}\n",
+             \x20 hole_diameter: {{nominal: 1.1, unit: mm}}\n\
+             \x20 body_offset: {{nominal: {x}, unit: mm}}\n",
             layout[0],
             layout[1],
-            w = 2.54 * layout[0] as f64,
+            x = if family == "right_angle_header" {
+                2.77
+            } else {
+                0.0
+            },
+            w = 2.54 * layout[0] as f64
+                + if family == "shrouded_header" {
+                    2.0
+                } else {
+                    0.0
+                },
             l = 2.54 * layout[1] as f64,
         ))
         .unwrap()
@@ -160,6 +220,10 @@ mod tests {
             ("socket", [2, 3], 7),
             ("header", [1, 1], 2),
             ("header", [1, 2], 3),
+            ("shrouded_header", [1, 4], 5),
+            ("shrouded_header", [2, 3], 7),
+            ("right_angle_header", [1, 4], 5),
+            ("right_angle_header", [1, 1], 2),
         ] {
             let script = script(&header(family, layout));
             assert_eq!(painted(&script).iter().sum::<usize>(), bodies);

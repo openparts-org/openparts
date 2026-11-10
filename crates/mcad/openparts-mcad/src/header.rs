@@ -1,5 +1,6 @@
-//! Through-hole pin headers (`header`) and socket strips (`socket`,
-//! female headers), straight (vertical).
+//! Through-hole pin headers (`header`), socket strips (`socket`, female
+//! headers), shrouded wire-to-board headers (`shrouded_header`, e.g. JST
+//! XH/PH) and right-angle pin headers (`right_angle_header`).
 //!
 //! Frame (top view, the KiCad library's orientation): `lead_layout` is
 //! `[rows, pins_per_row]`. A row runs along Y at `pitch`, the rows sit
@@ -8,30 +9,51 @@
 //! the rows: pin 2 beside pin 1 in the next row, pin 3 below pin 1, ...
 //! (odd pins in the first row, even pins in the second for a 2-row
 //! part). Rows 1 and 2 only: parts numbered row by row, or with three
-//! rows, need their own convention.
+//! rows, need their own convention. A right-angle header has one row.
 //!
 //! Footprint: a round land per pin on the source's recommended hole
 //! (`dimensions.hole_diameter`, required), `dimensions.pad_diameter`
 //! when the source gives the land, else the hole plus
 //! [`defaults::HEADER`]'s annular ring.
 //!
-//! Body: the housing (insulator), `body_width` (across the rows) x
-//! `body_length` (along them) x `body_height`, centred on the pin grid,
-//! `standoff` above the board (0 when not stated). What only the 3D model
-//! needs (pin size, post and tail lengths) is resolved by
+//! Body: the housing (insulator), `body_width` (along X) x `body_length`
+//! (along Y) x `body_height`, `standoff` above the board (0 when not
+//! stated). Its centre sits `dimensions.body_offset` along X from the
+//! grid's centre (0 when not stated; required for a right-angle header,
+//! whose housing lies on the board beside its holes, its pins bent 90°
+//! towards +X for a positive offset). What only the 3D model needs (pin
+//! size, post and tail lengths, the shroud's walls) is resolved by
 //! [`header_features`] with the same value rules.
 
 use crate::defaults::{self, stated, HEADER};
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
-/// Pin header or socket strip.
+/// The header families' shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeaderKind {
     /// Male pins standing above the housing (`header`).
     Pin,
     /// Female contacts inside the housing, entries on its top (`socket`).
     Socket,
+    /// Male posts inside an open-top box housing (`shrouded_header`).
+    Shrouded,
+    /// Pins bent 90°: a tail down into each hole, the post running
+    /// along X through a housing lying on the board
+    /// (`right_angle_header`).
+    RightAngle,
+}
+
+/// A shrouded header's box (generator defaults: wire-to-board drawings
+/// dimension the outline only).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Shroud {
+    /// Wall thickness.
+    pub wall: f64,
+    /// Cavity floor above the housing underside.
+    pub floor: f64,
+    /// Post tips below the shroud's rim.
+    pub post_recess: f64,
 }
 
 /// What a header's 3D model draws beyond its `MechanicalGeometry`.
@@ -44,31 +66,51 @@ pub struct HeaderFeatures {
     pub row_spacing: f64,
     /// Square pin (post and tail) size: `lead_width`, else the default.
     pub pin_width: f64,
-    /// Post above the housing (`mating_length`); 0 for a socket.
+    /// `Pin`: post above the housing; `RightAngle`: post beyond the
+    /// housing's front face (`mating_length`, else the default); 0
+    /// otherwise.
     pub mating_length: f64,
     /// Tail below the housing (`tail_length`).
     pub tail_length: f64,
     /// Housing underside above the board (`standoff`, else 0).
     pub standoff: f64,
+    /// Housing height (`body_height`, else the family default).
+    pub body_height: f64,
+    /// Housing centre's X offset from the grid centre (`body_offset`,
+    /// else 0).
+    pub body_offset: f64,
+    /// `Shrouded` only.
+    pub shroud: Option<Shroud>,
+    /// `RightAngle` only: the bent post's centre line above the board
+    /// (the housing's mid-height: drawings rarely dimension it).
+    pub bend_height: f64,
 }
 
 fn kind(package: &Package) -> Result<HeaderKind, McadError> {
     match package.family.to_ascii_lowercase().as_str() {
         "header" => Ok(HeaderKind::Pin),
         "socket" => Ok(HeaderKind::Socket),
+        "shrouded_header" => Ok(HeaderKind::Shrouded),
+        "right_angle_header" => Ok(HeaderKind::RightAngle),
         _ => Err(McadError::UnsupportedFamily(package.family.clone())),
     }
 }
 
-/// `[rows, pins_per_row]`, checked against `lead_count`.
-fn layout(package: &Package) -> Result<(u32, u32), McadError> {
+/// `[rows, pins_per_row]`, checked against `lead_count` (one row for a
+/// right-angle header).
+fn layout(package: &Package, kind: HeaderKind) -> Result<(u32, u32), McadError> {
     let Some(layout) = package.lead_layout.as_deref() else {
         return Err(McadError::MissingLeadLayout {
             family: package.family.clone(),
         });
     };
+    let max_rows = if kind == HeaderKind::RightAngle { 1 } else { 2 };
     match *layout {
-        [rows @ (1 | 2), per_row] if per_row > 0 && rows * per_row == package.lead_count => {
+        [rows, per_row]
+            if (1..=max_rows).contains(&rows)
+                && per_row > 0
+                && rows * per_row == package.lead_count =>
+        {
             Ok((rows, per_row))
         }
         _ => Err(McadError::InvalidLeadLayout {
@@ -82,7 +124,7 @@ fn layout(package: &Package) -> Result<(u32, u32), McadError> {
 /// midpoint, else the one stated limit; else the default for the grid).
 pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
     let kind = kind(package)?;
-    let (rows, pins_per_row) = layout(package)?;
+    let (rows, pins_per_row) = layout(package, kind)?;
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     let d = &package.dimensions;
     let row_spacing = if rows > 1 {
@@ -91,27 +133,65 @@ pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
         pitch
     };
     let scale = pitch / 2.54;
+    let standoff = stated(&d.standoff).unwrap_or(0.0);
+    let body_height = stated(&d.body_height).unwrap_or(
+        scale
+            * match kind {
+                HeaderKind::Pin | HeaderKind::RightAngle => HEADER.header_height,
+                HeaderKind::Socket => HEADER.socket_height,
+                HeaderKind::Shrouded => HEADER.shroud_height,
+            },
+    );
+    let body_offset = match stated(&d.body_offset) {
+        Some(offset) => offset,
+        None if kind == HeaderKind::RightAngle => {
+            return Err(McadError::MissingDimension("dimensions.body_offset"))
+        }
+        None => 0.0,
+    };
+    let pin_width = stated(&d.lead_width).unwrap_or(HEADER.pin_width * scale);
+    let shroud = (kind == HeaderKind::Shrouded).then_some(Shroud {
+        wall: HEADER.shroud_wall * scale,
+        floor: body_height * HEADER.shroud_floor_ratio,
+        post_recess: HEADER.shroud_post_recess * scale,
+    });
     Ok(HeaderFeatures {
         kind,
         rows,
         pins_per_row,
         row_spacing,
-        pin_width: stated(&d.lead_width).unwrap_or(HEADER.pin_width * scale),
+        pin_width,
         mating_length: match kind {
-            HeaderKind::Pin => stated(&d.mating_length).unwrap_or(HEADER.mating_length * scale),
-            HeaderKind::Socket => 0.0,
+            HeaderKind::Pin | HeaderKind::RightAngle => {
+                stated(&d.mating_length).unwrap_or(HEADER.mating_length * scale)
+            }
+            HeaderKind::Socket | HeaderKind::Shrouded => 0.0,
         },
         tail_length: stated(&d.tail_length).unwrap_or(HEADER.tail_length * scale),
-        standoff: stated(&d.standoff).unwrap_or(0.0),
+        standoff,
+        body_height,
+        body_offset,
+        shroud,
+        bend_height: if kind == HeaderKind::RightAngle {
+            standoff + body_height / 2.0
+        } else {
+            0.0
+        },
     })
 }
 
-/// Generates Mechanical Geometry for a straight pin header or socket
-/// strip (see the module docs).
+/// The pin rows' X positions, pin 1's row first.
+fn row_xs(f: &HeaderFeatures) -> impl Iterator<Item = f64> + '_ {
+    let x0 = -(f.rows as f64 - 1.0) * f.row_spacing / 2.0;
+    (0..f.rows).map(move |row| x0 + row as f64 * f.row_spacing)
+}
+
+/// Generates Mechanical Geometry for a header, socket strip, shrouded
+/// header or right-angle header (see the module docs).
 pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    let kind = kind(package)?;
+    kind(package)?;
     if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !["header", "socket"].contains(&generator.to_ascii_lowercase().as_str()) {
+        if !package.family.eq_ignore_ascii_case(generator) {
             return Err(McadError::UnsupportedGenerator(generator.clone()));
         }
     }
@@ -120,13 +200,6 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
     let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
-    let body_h = stated(&d.body_height).unwrap_or(
-        pitch / 2.54
-            * match kind {
-                HeaderKind::Pin => HEADER.header_height,
-                HeaderKind::Socket => HEADER.socket_height,
-            },
-    );
     let hole =
         stated(&d.hole_diameter).ok_or(McadError::MissingDimension("dimensions.hole_diameter"))?;
 
@@ -156,8 +229,31 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
              {grid} mm grid"
         )));
     }
+    // Where the housing stands relative to the pins.
+    let reach = row_xs(&f)
+        .map(|x| (x - f.body_offset).abs())
+        .fold(0.0, f64::max);
+    match f.kind {
+        HeaderKind::RightAngle if reach - f.pin_width / 2.0 <= body_w / 2.0 => {
+            return Err(McadError::InconsistentDimensions(format!(
+                "a right-angle header's housing lies beside its holes: body_offset ({}) must \
+                 exceed half the body width ({body_w}) plus half the pin",
+                f.body_offset
+            )));
+        }
+        HeaderKind::Pin | HeaderKind::Socket | HeaderKind::Shrouded
+            if reach + f.pin_width / 2.0 >= body_w / 2.0 =>
+        {
+            return Err(McadError::InconsistentDimensions(format!(
+                "the pin rows must lie inside the housing: body_offset ({}) leaves a row \
+                 outside the {body_w} mm body width",
+                f.body_offset
+            )));
+        }
+        _ => {}
+    }
 
-    let x0 = -(f.rows as f64 - 1.0) * f.row_spacing / 2.0;
+    let xs: Vec<f64> = row_xs(&f).collect();
     let y0 = (f.pins_per_row as f64 - 1.0) * pitch / 2.0;
     let leads = (0..package.lead_count)
         .map(|i| {
@@ -165,7 +261,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
             Lead {
                 number: (i + 1).to_string(),
                 position: Point3 {
-                    x: x0 + row as f64 * f.row_spacing,
+                    x: xs[row as usize],
                     y: y0 - col as f64 * pitch,
                     z: 0.0,
                 },
@@ -182,19 +278,20 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
 
     let body = Body {
         position: Point3 {
-            x: 0.0,
+            x: f.body_offset,
             y: 0.0,
-            z: f.standoff + body_h / 2.0,
+            z: f.standoff + f.body_height / 2.0,
         },
         size: Size3 {
             x: body_w,
             y: body_l,
-            z: body_h,
+            z: f.body_height,
         },
         shape: BodyShape::Box,
     };
-    // No pin-1 marker: the housings this family covers carry none (the
-    // footprint's square pad 1 marks it on the board).
+    // No pin-1 marker: the housings this family covers carry none, or an
+    // undimensioned one (the footprint's square pad 1 marks it on the
+    // board).
     Ok(MechanicalGeometry {
         body,
         leads,
@@ -264,6 +361,7 @@ mod tests {
                 mating_length: Some(mm(6.0)),
                 tail_length: Some(mm(3.0)),
                 pad_diameter: None,
+                body_offset: None,
             },
             lead_layout: Some(vec![2, 5]),
             tab: None,
@@ -401,6 +499,106 @@ mod tests {
         assert!(matches!(
             generate_header(&p),
             Err(McadError::UnsupportedFamily(_))
+        ));
+    }
+
+    /// JST B4B-XH-A: 1 x 4 at 2.5 mm, housing 12.4 x 5.75 x 7, the pin
+    /// row 2.35 from the lock-side (+X) face: centre at -0.525.
+    fn xh_4() -> Package {
+        let mut p = wrphd_2x5();
+        p.family = "shrouded_header".into();
+        p.lead_count = 4;
+        p.lead_layout = Some(vec![1, 4]);
+        p.pitch = mm(2.5);
+        p.dimensions.row_spacing = None;
+        p.dimensions.body_width = mm(5.75);
+        p.dimensions.body_length = mm(12.4);
+        p.dimensions.body_height = Some(mm(7.0));
+        p.dimensions.mating_length = None;
+        p.dimensions.tail_length = Some(mm(3.4));
+        p.dimensions.hole_diameter = Some(mm(0.9));
+        p.dimensions.body_offset = Some(mm(-0.525));
+        p
+    }
+
+    #[test]
+    fn a_shrouded_header_sits_off_centre_around_its_row() {
+        let g = crate::generate(&xh_4()).unwrap();
+        assert!(close(g.body.position.x, -0.525) && close(g.body.size.x, 5.75));
+        assert!(close(g.body.position.z, 3.5));
+        assert!(close(lead(&g, "1").position.y, 3.75));
+        assert!(close(lead(&g, "4").position.y, -3.75));
+        assert!(g.leads.iter().all(|l| close(l.position.x, 0.0)));
+        assert!(g.leads.iter().all(|l| l.drill == Some(0.9)));
+        let f = header_features(&xh_4()).unwrap();
+        assert_eq!(f.kind, HeaderKind::Shrouded);
+        assert!(close(f.mating_length, 0.0) && close(f.tail_length, 3.4));
+        let shroud = f.shroud.expect("a shroud");
+        assert!(shroud.wall > 0.0 && shroud.floor > 0.0 && shroud.floor < 7.0);
+        // No offset stated: centred. A row outside the housing: error.
+        let mut p = xh_4();
+        p.dimensions.body_offset = None;
+        assert!(close(crate::generate(&p).unwrap().body.position.x, 0.0));
+        p.dimensions.body_offset = Some(mm(3.0));
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::InconsistentDimensions(_))
+        ));
+    }
+
+    /// Würth 61300411021: 1 x 4 right-angle, housing 2.54 deep along the
+    /// pins, its back face 1.5 from the holes (centre at 1.5 + 1.27).
+    fn wrphd_ra_4() -> Package {
+        let mut p = wrphd_2x5();
+        p.family = "right_angle_header".into();
+        p.lead_count = 4;
+        p.lead_layout = Some(vec![1, 4]);
+        p.dimensions.row_spacing = None;
+        p.dimensions.body_width = mm(2.54);
+        p.dimensions.body_length = mm(10.16);
+        p.dimensions.body_offset = Some(mm(2.77));
+        p
+    }
+
+    #[test]
+    fn a_right_angle_header_lies_beside_its_holes() {
+        let g = crate::generate(&wrphd_ra_4()).unwrap();
+        assert!(close(g.body.position.x, 2.77) && close(g.body.position.z, 1.27));
+        assert!(close(lead(&g, "1").position.y, 3.81));
+        assert!(g.leads.iter().all(|l| close(l.position.x, 0.0)));
+        let f = header_features(&wrphd_ra_4()).unwrap();
+        assert_eq!(f.kind, HeaderKind::RightAngle);
+        assert!(close(f.mating_length, 6.0) && close(f.bend_height, 1.27));
+        assert!(f.shroud.is_none());
+        // The offset is required, the housing must clear the holes, and
+        // one row only.
+        let mut p = wrphd_ra_4();
+        p.dimensions.body_offset = None;
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::MissingDimension("dimensions.body_offset"))
+        ));
+        p.dimensions.body_offset = Some(mm(1.0));
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::InconsistentDimensions(_))
+        ));
+        let mut p = wrphd_ra_4();
+        p.lead_layout = Some(vec![2, 2]);
+        p.dimensions.row_spacing = Some(mm(2.54));
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::InvalidLeadLayout { .. })
+        ));
+        // A generator naming another family is refused.
+        let mut p = wrphd_ra_4();
+        p.geometry = Some(openparts_core::PackageGeometrySpec {
+            geometry_type: openparts_core::GeometryType::Parametric,
+            generator: Some("header".into()),
+        });
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::UnsupportedGenerator(_))
         ));
     }
 }
