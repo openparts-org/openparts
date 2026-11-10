@@ -89,6 +89,14 @@ a diagnostic body rather than guessing (Testing and Quality
 Specification section 7). A 3D model that is neither bundled nor
 buildable here (no SolidCraft) returns `503`.
 
+## Self-hosting on a Raspberry Pi
+
+`deploy/raspberrypi/` serves the API, the prebuilt artifact bundle and
+the web site from one Pi behind Cloudflare Tunnel (no open ports, no
+SolidCraft on the Pi): see its README. Relevant settings: `HOST`
+(listen address, `127.0.0.1` behind a tunnel), `OPENPARTS_WEB_DIR` (an
+openparts-web build served at `/`; the API is then also at `/api`).
+
 ## Deployment
 
 `container/Containerfile` (Podman-first, OCI-compatible) and

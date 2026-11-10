@@ -1,4 +1,4 @@
-use openparts_server::{bundle, routes, store};
+use openparts_server::{app, bundle, store};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,9 +31,20 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(8080);
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    // HOST=127.0.0.1 keeps the server private behind a tunnel/proxy.
+    let host: std::net::IpAddr = std::env::var("HOST")
+        .ok()
+        .and_then(|h| h.parse().ok())
+        .unwrap_or(std::net::IpAddr::from([0, 0, 0, 0]));
+    let addr = SocketAddr::from((host, port));
 
-    let app = routes::build_router(loaded_store);
+    // OPENPARTS_WEB_DIR: an openparts-web build to serve alongside the API
+    // (same origin; the site calls /api/...).
+    let web_dir = std::env::var_os("OPENPARTS_WEB_DIR").map(PathBuf::from);
+    if let Some(dir) = &web_dir {
+        tracing::info!(web_dir = %dir.display(), "serving the web site");
+    }
+    let app = app::build_app(loaded_store, web_dir.as_deref());
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!(%addr, "openparts-server listening");
     axum::serve(listener, app).await?;
