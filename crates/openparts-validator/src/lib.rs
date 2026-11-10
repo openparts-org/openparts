@@ -22,9 +22,10 @@
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
 //! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; `header`/`socket`'s `mating_length`, `tail_length`, `pad_diameter`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
 //! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
 //! | `aux_pads.invalid` | a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y` |
+//! | `header.invalid` | a `header`/`socket` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), or two rows without `dimensions.row_spacing` |
 //! | `mpn.empty` | `part.mpn` is empty |
 
 use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
@@ -165,12 +166,13 @@ pub fn validate_part(
     out.extend(check_package_provenance(&package_entity, package));
     out.extend(check_package_tab(&package_entity, package));
     out.extend(check_package_aux_pads(&package_entity, package));
+    out.extend(check_package_header(&package_entity, package));
 
     out
 }
 
 /// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 18] = [
+const PROVENANCE_REQUIRED: [&str; 21] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -189,6 +191,9 @@ const PROVENANCE_REQUIRED: [&str; 18] = [
     "/dimensions/mounting_hole_diameter",
     "/dimensions/mounting_hole_spacing",
     "/dimensions/mounting_hole_inset",
+    "/dimensions/mating_length",
+    "/dimensions/tail_length",
+    "/dimensions/pad_diameter",
 ];
 
 fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -320,6 +325,49 @@ fn check_package_aux_pads(entity: &str, package: &Package) -> Vec<Diagnostic> {
                 format!("a package with aux_pads must state {path}"),
             ));
         }
+    }
+    out
+}
+
+/// Pin headers and sockets: the grid and the drill must be stated (the
+/// generator never guesses either).
+fn check_package_header(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    if !["header", "socket"].contains(&package.family.to_ascii_lowercase().as_str()) {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let rows = match package.lead_layout.as_deref() {
+        Some(&[rows @ (1 | 2), per_row]) if rows * per_row == package.lead_count => Some(rows),
+        _ => {
+            out.push(Diagnostic::error(
+                "header.invalid",
+                entity,
+                Some("/lead_layout"),
+                format!(
+                    "a {} needs lead_layout [rows, pins_per_row] with 1 or 2 rows and \
+                     rows x pins_per_row = lead_count ({})",
+                    package.family, package.lead_count
+                ),
+            ));
+            None
+        }
+    };
+    let d = &package.dimensions;
+    if d.hole_diameter.is_none() {
+        out.push(Diagnostic::error(
+            "header.invalid",
+            entity,
+            Some("/dimensions/hole_diameter"),
+            "a header must state dimensions.hole_diameter (the recommended PCB hole)".to_string(),
+        ));
+    }
+    if rows == Some(2) && d.row_spacing.is_none() {
+        out.push(Diagnostic::error(
+            "header.invalid",
+            entity,
+            Some("/dimensions/row_spacing"),
+            "a 2-row header must state dimensions.row_spacing".to_string(),
+        ));
     }
     out
 }
@@ -597,6 +645,9 @@ mod tests {
                 mounting_hole_diameter: None,
                 mounting_hole_spacing: None,
                 mounting_hole_inset: None,
+                mating_length: None,
+                tail_length: None,
+                pad_diameter: None,
             },
             lead_layout: None,
             tab: None,
@@ -900,5 +951,58 @@ mod tests {
                 .any(|d| d.rule_id == "aux_pads.invalid" || d.rule_id == "provenance.missing"),
             "{diags:?}"
         );
+    }
+
+    #[test]
+    fn headers_need_their_grid_drill_and_provenance() {
+        let mut package = base_package();
+        package.family = "header".into();
+        package.lead_layout = Some(vec![2, 3]);
+        package.dimensions.tail_length = mm(3.0);
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        let paths = |diags: &[Diagnostic], rule: &str| -> Vec<String> {
+            diags
+                .iter()
+                .filter(|d| d.rule_id == rule)
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        assert_eq!(
+            paths(&diags, "provenance.missing"),
+            vec!["/dimensions/tail_length"]
+        );
+        assert_eq!(
+            paths(&diags, "header.invalid"),
+            vec!["/lead_layout", "/dimensions/hole_diameter"],
+            "2 x 3 is not lead_count 4"
+        );
+
+        package.lead_layout = Some(vec![2, 2]);
+        package.dimensions.hole_diameter = mm(1.0);
+        cite(&mut package, "/dimensions/hole_diameter");
+        cite(&mut package, "/dimensions/tail_length");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert_eq!(
+            paths(&diags, "header.invalid"),
+            vec!["/dimensions/row_spacing"]
+        );
+        package.dimensions.row_spacing = mm(2.54);
+        cite(&mut package, "/dimensions/row_spacing");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.rule_id == "header.invalid" || d.rule_id == "provenance.missing"),
+            "{diags:?}"
+        );
+        // One row needs no row spacing; other families aren't checked.
+        package.lead_layout = Some(vec![1, 4]);
+        package.dimensions.row_spacing = None;
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(paths(&diags, "header.invalid").is_empty());
+        package.family = "lqfp".into();
+        package.lead_layout = None;
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(paths(&diags, "header.invalid").is_empty());
     }
 }

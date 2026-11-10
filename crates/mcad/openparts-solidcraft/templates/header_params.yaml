@@ -1,0 +1,20 @@
+# Pin header / socket strip (openparts-mcad `header`, `socket`): the pin
+# grid, parametric. A row runs along Y at the pitch, the rows sit
+# row_pitch apart along X; pin 1 is at the top-left (-X, +Y). Needs
+# body_w, body_l, body_h. Vars: pitch, rows, per_row, row_pitch, pin_w,
+# tail_l, standoff.
+- params:
+    pitch: ["{{pitch}}", pin pitch along a row (datasheet)]
+    pin_rows: ["{{rows}}", pin rows, ""]
+    pins_per_row: ["{{per_row}}", pins per row, ""]
+    row_pitch: ["{{row_pitch}}", centre distance of the rows (datasheet)]
+    pin_w: ["{{pin_w}}", "square pin size (datasheet, else generator default)"]
+    tail_l: ["{{tail_l}}", "solder tail below the housing (datasheet, else generator default)"]
+    standoff: ["{{standoff}}", board to housing underside]
+    pin_x0: [-(pin_rows - 1) * row_pitch / 2, pin 1 X]
+    pin_y0: [(pins_per_row - 1) * pitch / 2, pin 1 Y]
+    tip_l: [pin_w * 0.35, chamfered pin end length]
+    tip_taper: [35 deg, pin end chamfer angle]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     operation: new, body_name: Housing, name: Housing}

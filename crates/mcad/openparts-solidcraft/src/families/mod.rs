@@ -6,6 +6,7 @@ mod bga;
 mod chip;
 mod dip;
 mod gullwing;
+mod header;
 mod module;
 mod qfn;
 mod radial;
@@ -34,6 +35,7 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         "sip" => dip::sip(&mut s, input)?,
         "bga" => bga::build(&mut s, input)?,
         "module" => module::build(&mut s, input)?,
+        "header" | "socket" => header::build(&mut s, input)?,
         other => return Err(ModelError::UnsupportedFamily(other.to_string())),
     }
     Ok(s)

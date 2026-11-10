@@ -165,6 +165,43 @@ pub(crate) const MODULE: ModuleDefaults = ModuleDefaults {
     pad_thickness: 0.035,
 };
 
+/// Pin header / socket (`header`, `socket`) defaults.
+pub(crate) struct HeaderDefaults {
+    /// Annular ring around the recommended hole when the source gives no
+    /// land: 0.35 mm, KiCad's 2.54 mm pin-header footprints' 1.7 mm pad
+    /// on a 1.0 mm drill (`Connector_PinHeader_2.54mm.pretty`).
+    pub annular_ring: f64,
+    /// Copper gap the defaulted ring is reduced to keep between
+    /// neighbouring lands: 0.25 mm (KiCad's 1.27 mm pin headers leave
+    /// 0.27 mm: 1.0 mm pads on a 1.27 mm grid).
+    pub min_gap: f64,
+    /// Smallest ring the reduction may leave; below it the hole doesn't
+    /// fit the grid and generation fails.
+    pub min_ring: f64,
+    /// The 3D model's values when the package states none, for a
+    /// 2.54 mm grid (scaled by pitch / 2.54 for other grids): the common
+    /// 0.64 mm (0.025 in) square post standing 6.0 mm above a 2.54 mm
+    /// housing with a 3.0 mm tail, and an 8.5 mm socket housing --
+    /// typical values (e.g. Würth WR-PHD 61300211121 / 61300211821),
+    /// drawing only, never a fact about a part.
+    pub pin_width: f64,
+    pub mating_length: f64,
+    pub tail_length: f64,
+    pub header_height: f64,
+    pub socket_height: f64,
+}
+
+pub(crate) const HEADER: HeaderDefaults = HeaderDefaults {
+    annular_ring: 0.35,
+    min_gap: 0.25,
+    min_ring: 0.1,
+    pin_width: 0.64,
+    mating_length: 6.0,
+    tail_length: 3.0,
+    header_height: 2.54,
+    socket_height: 8.5,
+};
+
 /// The value a generator uses for an optional dimension: the stated
 /// nominal, else the middle of a stated min..max range (many outline
 /// tables give only limits). The midpoint is an approximation inside

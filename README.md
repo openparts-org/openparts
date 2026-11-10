@@ -15,8 +15,9 @@ First Vertical Slice (Architecture Specification section 32):
 Canonical YAML -> Parser -> Validator -> Effective Model -> KiCad + STEP.
 Package support covers the LQFP/TQFP, QFN, SOIC, TSSOP, SSOP, MSOP/VSSOP,
 SOT, SOT-223, TO-252 (DPAK), chip (2-terminal), radial, axial, TO-92, DIP,
-SIP and BGA families, and castellated modules (`module`, e.g. Raspberry Pi
-Pico).
+SIP and BGA families, castellated modules (`module`, e.g. Raspberry Pi
+Pico), and straight through-hole pin headers and socket strips (`header`,
+`socket`; 1 or 2 rows).
 
 3D models (STEP, STL, coloured 3MF, and an editable SolidCraft design)
 are built by `openparts-solidcraft` and exported by a locally installed

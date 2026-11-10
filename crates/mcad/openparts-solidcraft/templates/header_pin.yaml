@@ -1,0 +1,17 @@
+# Pin 1's square pin from z = bottom to z = top, both ends chamfered.
+# Vars: bottom, top.
+- sketch.create: {plane: XY, offset: "{{bottom}} + tip_l", name: PinShaftOutline}
+- sketch.rectangle.center: {center: [pin_x0, pin_y0], corner: [pin_x0 + pin_w / 2, pin_y0 + pin_w / 2]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: PinShaftOutline, distance: "{{top}} - ({{bottom}}) - 2 * tip_l",
+     operation: new, body_name: Pin, name: PinShaft}
+- solid.extrude:
+    {sketch: PinShaftOutline, distance: tip_l, direction: negative, taper: -tip_taper,
+     operation: join, targets: [Pin], name: PinTailEnd}
+- sketch.create: {plane: XY, offset: "{{top}} - tip_l", name: PinTipOutline}
+- sketch.rectangle.center: {center: [pin_x0, pin_y0], corner: [pin_x0 + pin_w / 2, pin_y0 + pin_w / 2]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: PinTipOutline, distance: tip_l, taper: -tip_taper,
+     operation: join, targets: [Pin], name: PinTip}

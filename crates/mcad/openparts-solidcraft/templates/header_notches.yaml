@@ -1,0 +1,24 @@
+# Pin header housing: the V-grooves down both long sides between pin 1
+# and pin 2's positions along the row (where the strip breaks apart).
+- params:
+    notch_d: [pitch * 0.1, breakaway groove depth]
+    notch_y: [pin_y0 - pitch / 2, the first groove's place along the row]
+- sketch.create: {plane: XY, offset: standoff - 0.01 mm, name: NotchOutline}
+- sketch.line:
+    closed: true
+    ids: [notchl0, notchl1, notchl2]
+    points:
+      - [-body_w / 2 - 0.01 mm, notch_y - notch_d]
+      - [-body_w / 2 + notch_d, notch_y]
+      - [-body_w / 2 - 0.01 mm, notch_y + notch_d]
+- sketch.line:
+    closed: true
+    ids: [notchr0, notchr1, notchr2]
+    points:
+      - [body_w / 2 + 0.01 mm, notch_y - notch_d]
+      - [body_w / 2 + 0.01 mm, notch_y + notch_d]
+      - [body_w / 2 - notch_d, notch_y]
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: NotchOutline, distance: body_h + 0.02 mm,
+     operation: cut, targets: [Housing], name: Notch}

@@ -1,0 +1,5 @@
+# Repeats pin 1's body over the whole grid: down each row, then across
+# the rows. Vars: seed.
+- solid.pattern.rectangular:
+    {bodies: ["{{seed}}"], dir1: [0, -1, 0], count1: pins_per_row, spacing1: pitch,
+     dir2: [1, 0, 0], count2: pin_rows, spacing2: row_pitch, name: "{{seed}}Grid"}

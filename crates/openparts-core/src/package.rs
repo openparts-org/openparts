@@ -70,13 +70,16 @@ pub struct PackageDimensions {
     /// same lead span as the leads opposite it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab_length: Option<Dimension>,
-    /// `module` only: centre-to-centre distance between the plated holes
-    /// of the two pin rows (Raspberry Pi Pico: 17.78). The footprint pads
+    /// `module`: centre-to-centre distance between the plated holes of
+    /// the two pin rows (Raspberry Pi Pico: 17.78). The footprint pads
     /// come from `overall_width`/`lead_*`; this places the 3D holes.
+    /// `header`/`socket`: centre distance between adjacent pin rows
+    /// (across the rows, along X).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_spacing: Option<Dimension>,
-    /// `module` only: diameter of the plated pin holes, and of the
-    /// half-holes (castellations) cut by the board edge.
+    /// `module`: diameter of the plated pin holes, and of the half-holes
+    /// (castellations) cut by the board edge. `header`/`socket`: the
+    /// source's recommended PCB hole (the footprint drill).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hole_diameter: Option<Dimension>,
     /// `module` only: size along X of each pad in [`Package::aux_pads`]'s
@@ -105,6 +108,19 @@ pub struct PackageDimensions {
     /// centres, along Y.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounting_hole_inset: Option<Dimension>,
+    /// `header` only: how far each pin reaches above the housing's top
+    /// face (the mating post).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mating_length: Option<Dimension>,
+    /// `header`/`socket`: how far each pin (the solder tail) reaches
+    /// below the housing's underside, into the board.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tail_length: Option<Dimension>,
+    /// `header`/`socket`: diameter of the source's recommended round
+    /// land around each hole (`hole_diameter`). Absent: the generator's
+    /// annular-ring default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pad_diameter: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -141,6 +157,9 @@ impl PackageDimensions {
                 &self.mounting_hole_spacing,
             ),
             ("/dimensions/mounting_hole_inset", &self.mounting_hole_inset),
+            ("/dimensions/mating_length", &self.mating_length),
+            ("/dimensions/tail_length", &self.tail_length),
+            ("/dimensions/pad_diameter", &self.pad_diameter),
         ];
         out.extend(
             optional
@@ -233,7 +252,9 @@ pub struct Package {
     /// asymmetric 2-sided layout, where vendors disagree on which side
     /// gets the lower numbers. Not needed by families with a fixed or
     /// symmetric convention (lqfp, qfn, soic all split `lead_count`
-    /// evenly and don't use this field).
+    /// evenly and don't use this field). `bga`, `header` and `socket`
+    /// use it as `[rows, columns]` (a header's columns are its pins per
+    /// row).
     #[serde(default)]
     pub lead_layout: Option<Vec<u32>>,
     /// The package's wide tab, for families that have one (`sot223`,

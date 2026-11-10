@@ -553,7 +553,8 @@ dimensions:
 ```
 
 `lqfp`/`qfn`/`soic`のように`lead_count`から均等に辺数で割り切れるFamilyは
-`lead_layout`を必要としない。
+`lead_layout`を必要としない。`bga`、`header`、`socket`では`lead_layout`を
+`[行数, 列数]`（Pin headerでは`[列数, 1列あたりのピン数]`）として使う。
 
 ## 20.1 Package Dimensions
 
@@ -576,8 +577,8 @@ dimensions:
 | `lead_thickness` | Lead frame厚 | c（QFN/DFNではA3） | 省略可 |
 | `tab_width` | Tab（SOT-223/TO-252の放熱Tab）の辺方向の幅 | b2（SOT-223）、E1/b3（TO-252） | Tabを持つPackageでは必須 |
 | `tab_length` | Body端からTab先端まで（TO-252のみ） | L3 | 省略可 |
-| `row_spacing` | 2列のピン穴（Plated through-hole）の中心間距離（`module`のみ） | Pico: 17.78 | 省略可 |
-| `hole_diameter` | ピン穴および端面のCastellation（半穴）の径（`module`のみ） | Pico: ∅1 | 省略可 |
+| `row_spacing` | `module`: 2列のピン穴（Plated through-hole）の中心間距離。`header`/`socket`: 隣り合うピン列の中心間距離（X方向） | Pico: 17.78、2.54 mm header: 2.54 | 省略可（2列の`header`/`socket`では必須） |
+| `hole_diameter` | `module`: ピン穴および端面のCastellation（半穴）の径。`header`/`socket`: 一次資料の推奨PCB穴径（FootprintのDrill） | Pico: ∅1、Würth WR-PHD: ∅1.10 ±0.15 | 省略可（`header`/`socket`では必須） |
 | `aux_pad_width` | `aux_pads`列の各PadのX方向の幅（`module`のみ） | — | `aux_pads`があれば必須 |
 | `aux_pad_length` | 同、Y方向の長さ | — | `aux_pads`があれば必須 |
 | `aux_row_x` | Board左端（pin 1側）から`aux_pads`列の中心までのX距離 | — | `aux_pads`があれば必須 |
@@ -585,6 +586,9 @@ dimensions:
 | `mounting_hole_diameter` | 取付穴の径（`module`のみ） | Pico: 2.1 ±0.05 | 省略可 |
 | `mounting_hole_spacing` | 各端の取付穴2個のX方向中心間距離 | Pico: 11.4 | 省略可 |
 | `mounting_hole_inset` | Boardの短辺から取付穴中心までのY距離（両端で対称に描く） | Pico: 2 | 省略可 |
+| `mating_length` | Housing上面からピン先端まで（嵌合部、`header`のみ） | WR-PHD 2.54: 6.0 ±0.20 | 省略可 |
+| `tail_length` | Housing下面からはんだ付けTail先端まで（`header`/`socket`） | WR-PHD 2.54: 3.0 ±0.20 | 省略可 |
+| `pad_diameter` | 一次資料の推奨Land（丸Pad）径（`header`/`socket`） | — | 省略可 |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -592,7 +596,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -643,6 +647,30 @@ Padの長さ／幅である（PadはBoard端より外へ出てよい）。Pin he
 family: module
 lead_count: 40           # 両辺のピン数（aux_padsを含まない）
 aux_pads: [D1, D2, D3]   # 上面視で左から、pitch間隔
+```
+
+Pin header（`family: header`）とSocket strip（Female header、`family: socket`）は、
+ストレート（垂直）のThrough-hole部品である。`lead_layout`は`[列数, 1列あたりのピン数]`
+（1列または2列）で必須。上面視（KiCadのライブラリと同じ向き）で1列は`pitch`間隔でY方向に
+並び、列どうしは`row_spacing`（2列では必須）だけX方向に離れ、グリッドは原点中心。pin 1は
+左上で、番号は列をまたいでジグザグに進む（pin 2はpin 1の隣の列、pin 3はpin 1の下。2列なら
+奇数ピンが1列目、偶数ピンが2列目）。一次資料の図面（推奨穴パターンの"1"、"2"の位置）で
+この採番であることを確かめて記録し、列ごとに採番する部品や3列以上の部品はこのFamilyで
+表さない。Footprintは各ピンに丸Padと一次資料の推奨穴（`hole_diameter`、必須）のDrillを
+置く。Pad径は`pad_diameter`、記載が無ければ穴径＋Generator既定のAnnular ring（0.35 mm、
+隣接Padとの銅間隔0.25 mmを保つように縮める）。`body_*`はHousing（絶縁体）で、
+`body_width`が列をまたぐ方向（X）、`body_length`が列方向（Y）の長さ、ピン
+グリッドの中心に置く。`lead_width`は角ピンの太さ、`mating_length`はHousing上面から
+ピン先端まで（`header`のみ）、`tail_length`はHousing下面からTail先端まで。Validator rule
+`header.invalid`が`lead_layout`、`hole_diameter`、2列の`row_spacing`を検査する。
+
+```yaml
+family: header
+lead_count: 10
+lead_layout: [2, 5]      # 2列 x 5ピン、pin 2はpin 1の隣の列
+dimensions:
+  row_spacing: {nominal: 2.54, min: 2.39, max: 2.69, unit: mm}
+  hole_diameter: {nominal: 1.1, min: 0.95, max: 1.25, unit: mm}
 ```
 
 ## 20.2 Package Construction

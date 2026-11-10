@@ -1,0 +1,22 @@
+# Socket strip housing: pin 1's contact entry as a cutting tool body
+# (`Entry`), a funnel from the housing top into the square contact
+# cavity; the builder repeats it over the grid and cuts the housing.
+- params:
+    entry_w: [pitch * 0.6, contact entry width at the housing top]
+    entry_d: [pitch * 0.2, entry funnel depth]
+    cavity_w: [entry_w - 2 * entry_d * 0.7, contact cavity width (the funnel at 35 deg)]
+    cavity_d: ["min(body_h * 0.4, pitch)", contact cavity depth below the funnel]
+- sketch.create: {plane: XY, offset: standoff + body_h, name: EntryOutline}
+- sketch.rectangle.center: {center: [pin_x0, pin_y0], corner: [pin_x0 + entry_w / 2, pin_y0 + entry_w / 2]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: EntryOutline, distance: entry_d, direction: negative, taper: -35 deg,
+     operation: new, body_name: Entry, name: EntryFunnel}
+- solid.extrude:
+    {sketch: EntryOutline, distance: 0.1 mm, operation: join, targets: [Entry], name: EntryClearance}
+- sketch.create: {plane: XY, offset: standoff + body_h - entry_d, name: CavityOutline}
+- sketch.rectangle.center: {center: [pin_x0, pin_y0], corner: [pin_x0 + cavity_w / 2, pin_y0 + cavity_w / 2]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: CavityOutline, distance: cavity_d, direction: negative,
+     operation: join, targets: [Entry], name: Cavity}
