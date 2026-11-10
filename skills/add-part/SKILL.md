@@ -74,6 +74,11 @@ comment header saying what you verified where.
   ordering table or a product page's orderable list (cite it). An MPN
   assembled from a part-numbering legend ("not all combinations are
   valid") or an ordering *example* is `probable`; say which in the header.
+  By family: tinyAVR 0/1/2 and AVR-DA/DB/DD datasheets have orderable
+  tables (verified); classic PIC10/12/16/18 only a "Product Identification
+  System" legend with examples (probable); a package-marking table is not
+  an orderable list. Würth prints the order code in each drawing's title
+  block (verified).
 - Value-specific passives need **two** citations under `/existence`: the
   ordering-code legend and the availability table (resistance range/E
   series, the MLCC voltage/value cell).
@@ -140,10 +145,12 @@ match number-for-number stay separate (each cites its own drawing).
 | `dip` | `body_width` is the **row spacing** eA (7.62/15.24) | E (shoulder width) is not the row spacing |
 | `sip`, `bga` | single row / `lead_layout: [rows, cols]`, A1 top-left | |
 | `module` | castellated board (Pico): pins 1..N/2 down the left edge from the top, the rest up the right; optional `aux_pads` row (debug pads) | body = the PCB (`body_height` = board thickness); pads are the source's recommended land: `overall_width` outer span, `lead_length`/`lead_width` pad size; `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*` per canonical-data 20.1 |
+| `header`, `socket` | straight THT pin header / socket strip; `lead_layout: [rows, pins_per_row]` (1 or 2 rows), rows along Y at `pitch`, `row_spacing` apart in X; pin 1 top-left, numbers zig-zag across the rows (pin 2 beside pin 1, pin 3 below it) -- check the drawing's "1"/"2" labels (Würth: first-angle projection, the hole pattern is the component side) | `body_*` = housing (`body_width` across the rows, `body_length` = L along them); `hole_diameter` (recommended PCB hole, required) is the drill, `pad_diameter` the land if given (else hole + ring default); `lead_width` square pin, `mating_length` post above the housing, `tail_length` below it; row-by-row numbering and 3+ rows not supported |
 
 Not supported (report, don't force): DFN with leads on 2 sides only,
-SOIC-EP, 4-pad crystals, multi-die/RGB LEDs, round drum inductors, HC-49
-ovals, connectors.
+SOIC-EP, SC70, X2QFN/USON, 4-pad crystals, multi-die/RGB LEDs, round drum
+inductors, HC-49 ovals, shrouded/off-centre-housing connectors (JST XH/PH,
+Molex KK), right-angle headers.
 
 ### Dimensions (canonical-data.md 20.1)
 `body_width`, `body_length`, `body_height` (A2, else A when no A2 is
@@ -199,6 +206,19 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
   useless: copy it and read it with poppler.
 - Rejections can arrive as HTTP 200 HTML ("Request Rejected", onsemi's
   missing-datasheet page): always `file` the download.
+- **Proving a reused drawing**: extract the outline page with `pdftotext
+  -layout`, strip header/footer lines and `diff` it against the page the
+  package was read from -- no rendering needed. Same drawing number with
+  different revisions can still differ in one row (Microchip C04-065 Rev B
+  c 0.17-0.25 vs Rev D 0.10-0.25): compare every row.
+- **First-angle projections** (Würth): the view above the front view is
+  the *bottom* view, mirrored against the hole pattern. Number pins from
+  the "Recommended Hole Pattern" (component side). Rotated dimension text
+  is dropped by pdftotext: render it.
+- Never derive an unstated dimension by subtracting printed ones (a
+  header's housing height from total pin length - post - tail); sums or
+  differences of *printed* dimensions that define a stated feature are
+  fine when the locator shows the arithmetic.
 - A vendor reuses one outline drawing revision across many datasheets
   (TI DBV0005A, DGK0008A): diff the outline pages' `pdftotext -layout`
   text, then create one `packages/manufacturers/<mfr>/<DRAWING>` package
@@ -217,7 +237,7 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
 
 | reachable directly | blocked with curl (retry once with WebFetch) / unavailable (don't work around) |
 |---|---|
-| ti.com/lit/ds/symlink/<part>.pdf; onsemi.com/pdf/datasheet/<x>-d.pdf and onsemi.com/download/package-drawing/pdf/<case>.pdf (curl, 2026-11); we-online.com/components/products/datasheet/<code>.pdf (WebFetch); aosmd.com (outline PO-00009 at /sites/default/files/res/package/TO252.pdf); vishay.com/docs/<n>/; richtek.com/en/product-specifications/... (JSON-LD has the SKU list and datasheet URL: cite as product_page); datasheets.raspberrypi.com (redirects to pip-assets: take id/revision from the redirect) and pip.raspberrypi.com (order codes); nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | st.com (timeouts with curl and WebFetch), KEMET content site (expired TLS), TDK, Silicon Labs, Nexperia, Torex (403 to both), Lite-On ("Request Rejected" to both), Coilcraft (Cloudflare challenge: unavailable), Nordic (Cloudflare challenge), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
+| ti.com/lit/ds/symlink/<part>.pdf; onsemi.com/pdf/datasheet/<x>-d.pdf and onsemi.com/download/package-drawing/pdf/<case>.pdf (curl, 2026-11); we-online.com/components/products/datasheet/<code>.pdf (WebFetch; one PDF per order code, a missing code is 404); jst-mfg.com (WebFetch; encrypted PDFs allow text extraction); ww1.microchip.com/downloads/en/DeviceDoc/<DSnumber><rev>.pdf (a non-existent file answers 301 to filehandler, not 404: accept only 200; the newest revision is often the file name *without* a revision letter); aosmd.com (outline PO-00009 at /sites/default/files/res/package/TO252.pdf); vishay.com/docs/<n>/; richtek.com/en/product-specifications/... (JSON-LD has the SKU list and datasheet URL: cite as product_page); datasheets.raspberrypi.com (redirects to pip-assets: take id/revision from the redirect) and pip.raspberrypi.com (order codes); nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | st.com (timeouts with curl and WebFetch), KEMET content site (expired TLS), TDK, Silicon Labs, Nexperia, Torex (403 to both), Lite-On ("Request Rejected" to both), Coilcraft (Cloudflare challenge: unavailable), Nordic (Cloudflare challenge), WCH CH32V003 page (JavaScript only), microchip.com product pages (403 to both), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
 
 ## 6. Verify
 
@@ -238,14 +258,18 @@ cargo run -q -p openparts-solidcraft --example gallery -- ../openparts-data <out
 ```
 
 Look at the PNG of every new **package**: leads on the right sides, pin-1
-mark at pin 1, plausible proportions. For `sot` layouts with 4+ leads,
+mark at pin 1, plausible proportions. SOT and header models carry no
+pin-1 mark: check pin 1 from the generated footprint pads instead. For `sot` layouts with 4+ leads,
 also check the generated pad x-positions against the datasheet's top view.
 
 ## 7. Working in parallel
 
 - Each agent owns its manufacturers, its package families or folders
   (`packages/manufacturers/<mfr>/`), and the manufacturer files it may
-  create. Check before creating anything; never overwrite.
+  create. Check before creating anything; never overwrite. List the
+  package folder again right before moving files into place: another
+  agent may have just created the same outline -- switch to reuse when
+  the numbers match.
 - One malformed file from anyone breaks everyone's `validate.sh` and
   gallery run: write files in one go (generate, then move into place), and
   if a failure points at someone else's file, wait and re-run.
