@@ -832,6 +832,7 @@ mod tests {
                     name: format!("P{i}"),
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -932,6 +933,7 @@ mod tests {
                     name: name.into(),
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -970,6 +972,7 @@ mod tests {
                     name: format!("GPIO{i}"),
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -980,6 +983,7 @@ mod tests {
                     name: name.into(),
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -989,6 +993,7 @@ mod tests {
                 name: "TESTEN".into(),
                 pin_type: PinType::Reserved,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         for n in ["15", "16", "17"] {
@@ -998,6 +1003,7 @@ mod tests {
                     name: "IOVDD".into(),
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -1007,6 +1013,7 @@ mod tests {
                 name: "GND".into(),
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
 
@@ -1180,6 +1187,7 @@ mod tests {
                     name: format!("GPIO{i}"),
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -1189,6 +1197,7 @@ mod tests {
                 name: "IOVDD".into(),
                 pin_type: PinType::Power,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         pins.insert(
@@ -1197,6 +1206,7 @@ mod tests {
                 name: "GND".into(),
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         Device {
@@ -1288,6 +1298,7 @@ mod tests {
                     name: name.into(),
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }
@@ -1401,6 +1412,7 @@ mod tests {
                     name: name.to_string(),
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
+                    connected_to: None,
                 },
             );
         }

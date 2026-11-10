@@ -24,6 +24,12 @@ pub struct Pin {
     pub pin_type: PinType,
     #[serde(default)]
     pub alternate_functions: Vec<String>,
+    /// The pin number this pin is internally connected to, when the
+    /// source says so (a SOT-223/TO-252 tab tied to pin 2, a second
+    /// collector terminal). Such a pin may repeat the other pin's name
+    /// (Canonical Data Specification section 14).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected_to: Option<String>,
 }
 
 /// A partial Pin used inside `DeviceRevision.overrides.pins` (Canonical
@@ -37,6 +43,8 @@ pub struct PinOverride {
     pub pin_type: Option<PinType>,
     #[serde(default)]
     pub alternate_functions: Option<Vec<String>>,
+    #[serde(default)]
+    pub connected_to: Option<String>,
 }
 
 impl Pin {
@@ -51,6 +59,10 @@ impl Pin {
                 .alternate_functions
                 .clone()
                 .unwrap_or_else(|| self.alternate_functions.clone()),
+            connected_to: ov
+                .connected_to
+                .clone()
+                .or_else(|| self.connected_to.clone()),
         }
     }
 }
@@ -65,11 +77,13 @@ mod tests {
             name: "VSS".to_string(),
             pin_type: PinType::Ground,
             alternate_functions: vec!["FOO".to_string()],
+            connected_to: None,
         };
         let ov = PinOverride {
             name: Some("PDR_ON".to_string()),
             pin_type: None,
             alternate_functions: None,
+            connected_to: None,
         };
         let merged = base.apply_override(&ov);
         assert_eq!(merged.name, "PDR_ON");

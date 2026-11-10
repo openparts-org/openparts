@@ -105,9 +105,12 @@ comment header saying what you verified where.
 - **Exposed pad**: add an `EP` pin only if the datasheet says what it
   connects to; "recommended to VSS" -> type `passive`, never `ground`.
   Otherwise omit the pin (the footprint still gets the pad).
-- `pin.duplicate_name` is exempt only for power/ground/nc/reserved: a
-  repeated name needs a type the datasheet justifies (a regulator's tab
-  repeating VOUT is `power`).
+- `pin.duplicate_name` is exempt only for power/ground/nc/reserved pins
+  and for pins linked by `connected_to`: when the source says a terminal
+  is internally connected to another pin (a SOT-223/TO-252 tab "connected
+  to pin 2", a second collector), give it `connected_to: "<pin>"` and the
+  same name. Separate dies' terminals are different nets: name them apart
+  (`Cathode1`/`Cathode2`). A TO-252 trimmed lead can simply be left out.
 
 ## 4. Packages
 
@@ -136,6 +139,7 @@ match number-for-number stay separate (each cites its own drawing).
 | `to92` | 3 leads, middle staggered | |
 | `dip` | `body_width` is the **row spacing** eA (7.62/15.24) | E (shoulder width) is not the row spacing |
 | `sip`, `bga` | single row / `lead_layout: [rows, cols]`, A1 top-left | |
+| `module` | castellated board (Pico): pins 1..N/2 down the left edge from the top, the rest up the right; optional `aux_pads` row (debug pads) | body = the PCB (`body_height` = board thickness); pads are the source's recommended land: `overall_width` outer span, `lead_length`/`lead_width` pad size; `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*` per canonical-data 20.1 |
 
 Not supported (report, don't force): DFN with leads on 2 sides only,
 SOIC-EP, 4-pad crystals, multi-die/RGB LEDs, round drum inductors, HC-49
@@ -183,17 +187,37 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
   omit some package drawings (PDIP N/P, D0016A): check the drawing exists
   before choosing an MPN; TI's old MECHANICAL DATA sheets
   (`ti.com/lit/pdf/mpdi001`) are image-only.
-- Dates: Raspberry Pi colophons are MM/DD/YYYY; Bourns footers carry
+- Dates: Raspberry Pi colophon build dates are **DD/MM/YYYY** ("03/07/2026"
+  = 3 July 2026; check the release history); Bourns footers carry
   "REV. MM/YY"; Toshiba datasheets have no document number (cite the
   footer date); Renesas document numbers embed the revision.
 - Shell: use a quoted heredoc (`<<'EOF'`) for YAML -- an unquoted one runs
-  backticks in comments.
+  backticks in comments. Work in your own scratchpad subdirectory (other
+  agents share the scratchpad).
+- **WebFetch on a PDF URL also saves the original file** (under the
+  session's `tool-results/webfetch-*.pdf`) even when its text answer is
+  useless: copy it and read it with poppler.
+- Rejections can arrive as HTTP 200 HTML ("Request Rejected", onsemi's
+  missing-datasheet page): always `file` the download.
+- A vendor reuses one outline drawing revision across many datasheets
+  (TI DBV0005A, DGK0008A): diff the outline pages' `pdftotext -layout`
+  text, then create one `packages/manufacturers/<mfr>/<DRAWING>` package
+  and reuse it. Datasheets embed outlines newer than themselves (onsemi
+  369C Issue L in a 2021 datasheet): note both dates.
+- Board modules (`module`): use the datasheet's "SMT footprint" figure as
+  the land pattern and the "pin numbering" figure for pad numbers; spell
+  out any sum/difference of printed dimensions in the locator.
+- Ordering tables can contain typos (Raspberry Pi "SCO918"): cross-check
+  with the vendor's product-information page.
+- Downloading a distributor-hosted copy (DigiKey) may be refused by the
+  permission classifier; that needs the user's approval -- don't work
+  around it, report it.
 
 ### Manufacturer access notes (as of 2026-11)
 
 | reachable directly | blocked with curl (retry once with WebFetch) / unavailable (don't work around) |
 |---|---|
-| ti.com/lit/ds/symlink/<part>.pdf; nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | onsemi.com (403; newer datasheets also drop the outline), st.com (timeouts), KEMET content site (expired TLS), TDK, Lite-On, Würth (Akamai 403 to curl; WebFetch has worked for Würth), Coilcraft (Cloudflare challenge: unavailable), Nordic and Silicon Labs (403), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
+| ti.com/lit/ds/symlink/<part>.pdf; onsemi.com/pdf/datasheet/<x>-d.pdf and onsemi.com/download/package-drawing/pdf/<case>.pdf (curl, 2026-11); we-online.com/components/products/datasheet/<code>.pdf (WebFetch); aosmd.com (outline PO-00009 at /sites/default/files/res/package/TO252.pdf); vishay.com/docs/<n>/; richtek.com/en/product-specifications/... (JSON-LD has the SKU list and datasheet URL: cite as product_page); datasheets.raspberrypi.com (redirects to pip-assets: take id/revision from the redirect) and pip.raspberrypi.com (order codes); nxp.com/docs/en/data-sheet/; renesas.com/en/document/dst/; gd32mcu.com/data/documents/datasheet/; ww1.microchip.com aemDocuments PDFs (MSLD/APID/MPD paths); winbond.com/resource-files/; ams-osram.com product pages -> look.ams-osram.com PDFs (check English vs Chinese); kingbrightusa.com/images/catalog/spec/<mpn lowercase, / -> ->.pdf; ecsxtal.com/<series> (orderable list: verified existence); wch-ic.com/download/file?id=<n>; Toshiba product page `info/docget.jsp` links; product.samsungsem.com/mlcc/<PN>.do | st.com (timeouts with curl and WebFetch), KEMET content site (expired TLS), TDK, Silicon Labs, Nexperia, Torex (403 to both), Lite-On ("Request Rejected" to both), Coilcraft (Cloudflare challenge: unavailable), Nordic (Cloudflare challenge), Infineon (empty 202), analog.com (timeouts), Sharp opto (redirect), aviaic.com (TLS), Mouser PDFs (HTTP/2 errors), murata.com (JS app, no static PDFs) |
 
 ## 6. Verify
 
@@ -207,7 +231,9 @@ From `openparts/`:
 ../openparts-data/scripts/validate.sh
 # every package must generate; SMD pads must not overlap; toes at the span
 cargo test -q -p openparts --test vertical_slice
-# 3D model + PNG (one model per *package*: filter by the first MPN using it)
+# 3D model + PNG: one model per *package* (the first part found); the
+# filter matches "<family>_<Category>_<mpn>", so filter by family or a
+# series prefix (e.g. "module", "15006"), not necessarily your MPN
 cargo run -q -p openparts-solidcraft --example gallery -- ../openparts-data <out-dir> <filter>
 ```
 

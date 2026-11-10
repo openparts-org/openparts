@@ -369,6 +369,14 @@ EP
 TAB
 ```
 
+ソースが「Tabはpin 2に接続」のように内部接続を明記している場合、そのPinに`connected_to`で接続先のPin番号を記録する。内部接続されたPinは同一端子として扱い、同じPin名（例：`COLLECTOR`）を重複して使用できる。接続先は同じDevice内の別Pinでなければならない。
+
+```yaml
+pins:
+  "2": { name: COLLECTOR, type: passive }
+  "4": { name: COLLECTOR, type: passive, connected_to: "2" }
+```
+
 ---
 
 # 15. Pin Type

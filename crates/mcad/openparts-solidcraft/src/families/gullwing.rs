@@ -138,7 +138,7 @@ pub fn lead_params(
     input: &ModelInput<'_>,
     rows: &[common::Row<'_>],
     family: &Family,
-    (thickness, foot_length, _): (f64, f64, f64),
+    (thickness, foot_length, standoff): (f64, f64, f64),
 ) -> Result<(), ModelError> {
     let g = input.geometry;
     // The geometry fixes the lead width, where the toe lands and the
@@ -153,6 +153,8 @@ pub fn lead_params(
     let reach = rows[0].outer_extent() - half;
     let exit = family.lead_exit.min(reach * 0.3);
     let foot = foot_length.min(reach - exit - 0.1).max(0.1);
+    let parting = standoff + g.body.size.z * family.parting_ratio;
+    let bend_r = bend_radius(thickness, reach, foot, exit, family.lead_embed, parting);
     s.fragment(
         fragment!("gullwing_lead"),
         &vars!(
@@ -162,9 +164,33 @@ pub fn lead_params(
             foot = mm(foot),
             exit = mm(exit),
             embed = mm(family.lead_embed),
+            bend_r = mm(bend_r),
         ),
     )?;
     Ok(())
+}
+
+/// The inner bend radius of the gull-wing profile (`gullwing_row.yaml`):
+/// 0.75 x the lead thickness, reduced so every bend fits on its straight
+/// segments. A fillet of radius r between a horizontal run and the slope
+/// takes r * tan(theta / 2) of each, where theta is the slope's angle; the
+/// outer bends use r + t. Thin, short-reach parts (TSOT-23) need the
+/// smaller radius, or the sketch fillet is refused.
+fn bend_radius(t: f64, reach: f64, foot: f64, exit: f64, embed: f64, parting: f64) -> f64 {
+    let dx = (reach - foot - exit).max(1e-3);
+    let dz = (parting - t).max(1e-3);
+    let k = (dz.atan2(dx) / 2.0).tan(); // tangent length per unit radius
+    let slope = dx.hypot(dz);
+    // Room per segment (with a 10 % margin), as `radius sum * k <= length`.
+    let limits = [
+        slope / (2.0 * k) - t / 2.0,  // slope: (r + t) + r on each face
+        (embed + exit) / k - t,       // top run into the upper bend: r + t
+        (embed + exit - t * 0.5) / k, // bottom run: r
+        foot / k,                     // foot top: r
+        (foot + t * 0.5) / k - t,     // foot bottom: r + t
+    ];
+    let fit = limits.iter().copied().fold(f64::INFINITY, f64::min) * 0.9;
+    (t * 0.75).min(fit).max(0.005)
 }
 
 /// Gull-wing lead rows extruded to the parameter `width`; returns the bodies.

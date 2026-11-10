@@ -9,4 +9,4 @@
     lead_foot: ["{{foot}}", flat foot length on the board (L)]
     lead_exit: ["{{exit}}", straight run out of the body before the bend]
     lead_embed: ["{{embed}}", lead length kept inside the body]
-    bend_r: [lead_t * 0.75, inner bend radius]
+    bend_r: ["{{bend_r}}", "inner bend radius (0.75 x lead_t, smaller when the bends would not fit)"]

@@ -17,12 +17,14 @@
 //! | `ref.package_mismatch` | `part.package` does not match the loaded Package's `id` |
 //! | `ref.manufacturer_mismatch` | `part.manufacturer` does not match the Device's `manufacturer` |
 //! | `ref.unknown_source` | a `sources` or `provenance` entry references a Source that was not supplied |
-//! | `pin.duplicate_name` | two different pin numbers on one Device share the same *signal* pin name (power/ground/nc/reserved pins are exempt -- repeating `VDD`/`VSS`/`NC` across many pins is normal) |
+//! | `pin.duplicate_name` | two different pin numbers on one Device share the same *signal* pin name (power/ground/nc/reserved pins are exempt -- repeating `VDD`/`VSS`/`NC` across many pins is normal -- and so are pins linked by `connected_to`) |
+//! | `pin.connected_to.invalid` | a pin's `connected_to` names no other pin of the Device |
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
 //! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`), `construction` or `tab` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
 //! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
+//! | `aux_pads.invalid` | a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y` |
 //! | `mpn.empty` | `part.mpn` is empty |
 
 use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
@@ -396,10 +398,32 @@ fn check_duplicate_pin_names(entity: &str, device: &Device) -> Vec<Diagnostic> {
     let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     let mut out = Vec::new();
     for (number, pin) in &device.pins {
+        if let Some(target) = &pin.connected_to {
+            match device.pins.get(target) {
+                Some(_) if target != number => {}
+                _ => out.push(Diagnostic::error(
+                    "pin.connected_to.invalid",
+                    entity,
+                    Some(&format!("/pins/{number}/connected_to")),
+                    format!("pin \"{number}\" is connected_to \"{target}\", which is not another pin of this device"),
+                )),
+            }
+        }
+    }
+    // Two pins the source says are internally connected (a tab tied to
+    // pin 2) are one terminal and may share its name.
+    let linked = |a: &str, b: &str| {
+        let to = |x: &str| device.pins.get(x).and_then(|p| p.connected_to.as_deref());
+        to(a) == Some(b) || to(b) == Some(a)
+    };
+    for (number, pin) in &device.pins {
         if allows_repeated_names(pin.pin_type) {
             continue;
         }
         if let Some(&first_number) = seen.get(pin.name.as_str()) {
+            if linked(first_number, number) {
+                continue;
+            }
             out.push(Diagnostic::error(
                 "pin.duplicate_name",
                 entity,
@@ -511,6 +535,7 @@ mod tests {
                 name: "VBAT".into(),
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         Device {
@@ -602,6 +627,32 @@ mod tests {
     }
 
     #[test]
+    fn connected_pins_may_share_a_name_but_must_point_at_a_real_pin() {
+        let pin = |name: &str, to: Option<&str>| openparts_core::Pin {
+            name: name.into(),
+            pin_type: openparts_core::PinType::Passive,
+            alternate_functions: vec![],
+            connected_to: to.map(str::to_string),
+        };
+        let mut device = base_device();
+        device.pins.clear();
+        device.pins.insert("1".into(), pin("BASE", None));
+        device.pins.insert("2".into(), pin("COLLECTOR", None));
+        device.pins.insert("3".into(), pin("EMITTER", None));
+        device.pins.insert("4".into(), pin("COLLECTOR", Some("2")));
+        let diags = check_duplicate_pin_names("d", &device);
+        assert!(diags.is_empty(), "{diags:?}");
+        device.pins.insert("4".into(), pin("COLLECTOR", None));
+        assert!(check_duplicate_pin_names("d", &device)
+            .iter()
+            .any(|d| d.rule_id == "pin.duplicate_name"));
+        device.pins.insert("4".into(), pin("COLLECTOR", Some("9")));
+        assert!(check_duplicate_pin_names("d", &device)
+            .iter()
+            .any(|d| d.rule_id == "pin.connected_to.invalid"));
+    }
+
+    #[test]
     fn rejects_duplicate_signal_pin_names() {
         let mut device = base_device();
         device.pins.insert(
@@ -610,6 +661,7 @@ mod tests {
                 name: "PA0".into(),
                 pin_type: openparts_core::PinType::Io,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         device.pins.insert(
@@ -618,6 +670,7 @@ mod tests {
                 name: "PA0".into(),
                 pin_type: openparts_core::PinType::Io,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());
@@ -636,6 +689,7 @@ mod tests {
                 name: "VDD".into(),
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         device.pins.insert(
@@ -644,6 +698,7 @@ mod tests {
                 name: "VDD".into(),
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         device.pins.insert(
@@ -652,6 +707,7 @@ mod tests {
                 name: "VSS".into(),
                 pin_type: openparts_core::PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         device.pins.insert(
@@ -660,6 +716,7 @@ mod tests {
                 name: "VSS".into(),
                 pin_type: openparts_core::PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());

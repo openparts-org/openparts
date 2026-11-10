@@ -76,6 +76,7 @@ pub fn build_effective_model(
                         .alternate_functions
                         .clone()
                         .unwrap_or_default(),
+                    connected_to: pin_override.connected_to.clone(),
                 },
             };
             effective_device.pins.insert(number.clone(), merged);
@@ -187,6 +188,7 @@ mod tests {
                 name: "VSS".into(),
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
         pins.insert(
@@ -195,6 +197,7 @@ mod tests {
                 name: "VSS".into(),
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
+                connected_to: None,
             },
         );
 
@@ -205,6 +208,7 @@ mod tests {
                 name: Some("PDR_ON".into()),
                 pin_type: None,
                 alternate_functions: None,
+                connected_to: None,
             },
         );
         let mut revisions = BTreeMap::new();
