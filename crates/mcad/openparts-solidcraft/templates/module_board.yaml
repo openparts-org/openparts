@@ -1,0 +1,10 @@
+# Castellated module (openparts-mcad `module`): the bare PCB, body_w x
+# body_l, body_h thick including the copper on both faces: the laminate
+# fills the stack between the copper layers, so pads (and the plated
+# holes) touch the board without a boolean against it. Vars: pad_w,
+# edge_pad.
+- params:
+    pad_w: ["{{pad_w}}", pad width along the board edge (footprint lead_width)]
+    edge_pad: ["{{edge_pad}}", "pad length on the module, from its edge inward (the part of the land under the board)"]
+    pad_t: [0.035 mm, copper pad thickness]
+- solid.box: {length: body_w, width: body_l, height: body_h - 2 * pad_t, center: [0, 0, body_h / 2], body_name: Board, name: Board}

@@ -162,12 +162,13 @@ pub fn validate_part(
     out.extend(check_package_consistency(&package_entity, package));
     out.extend(check_package_provenance(&package_entity, package));
     out.extend(check_package_tab(&package_entity, package));
+    out.extend(check_package_aux_pads(&package_entity, package));
 
     out
 }
 
 /// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 9] = [
+const PROVENANCE_REQUIRED: [&str; 18] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -177,6 +178,15 @@ const PROVENANCE_REQUIRED: [&str; 9] = [
     "/dimensions/lead_thickness",
     "/dimensions/tab_width",
     "/dimensions/tab_length",
+    "/dimensions/row_spacing",
+    "/dimensions/hole_diameter",
+    "/dimensions/aux_pad_width",
+    "/dimensions/aux_pad_length",
+    "/dimensions/aux_row_x",
+    "/dimensions/aux_row_y",
+    "/dimensions/mounting_hole_diameter",
+    "/dimensions/mounting_hole_spacing",
+    "/dimensions/mounting_hole_inset",
 ];
 
 fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -192,6 +202,9 @@ fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> 
     }
     if package.tab.is_some() {
         present.push("/tab");
+    }
+    if !package.aux_pads.is_empty() {
+        present.push("/aux_pads");
     }
     present
         .into_iter()
@@ -252,6 +265,59 @@ fn check_package_tab(entity: &str, package: &Package) -> Vec<Diagnostic> {
             Some("/dimensions/tab_width"),
             "a package with a tab must state dimensions.tab_width".to_string(),
         ));
+    }
+    out
+}
+
+/// Auxiliary pads (`module`): distinct, non-empty numbers that don't
+/// reuse an edge pin's number, and the row's size and place stated (the
+/// generator can't draw them otherwise).
+fn check_package_aux_pads(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    if package.aux_pads.is_empty() {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    for number in &package.aux_pads {
+        let edge_pin = number
+            .parse::<u32>()
+            .is_ok_and(|n| (1..=package.lead_count).contains(&n));
+        let problem = if number.trim().is_empty() {
+            Some("an aux pad number is empty".to_string())
+        } else if edge_pin {
+            Some(format!(
+                "aux pad \"{number}\" reuses an edge pin number (1..={})",
+                package.lead_count
+            ))
+        } else if !seen.insert(number.as_str()) {
+            Some(format!("aux pad \"{number}\" is listed twice"))
+        } else {
+            None
+        };
+        if let Some(message) = problem {
+            out.push(Diagnostic::error(
+                "aux_pads.invalid",
+                entity,
+                Some("/aux_pads"),
+                message,
+            ));
+        }
+    }
+    let d = &package.dimensions;
+    for (path, dim) in [
+        ("/dimensions/aux_pad_width", &d.aux_pad_width),
+        ("/dimensions/aux_pad_length", &d.aux_pad_length),
+        ("/dimensions/aux_row_x", &d.aux_row_x),
+        ("/dimensions/aux_row_y", &d.aux_row_y),
+    ] {
+        if dim.is_none() {
+            out.push(Diagnostic::error(
+                "aux_pads.invalid",
+                entity,
+                Some(path),
+                format!("a package with aux_pads must state {path}"),
+            ));
+        }
     }
     out
 }
@@ -497,9 +563,19 @@ mod tests {
                 lead_thickness: None,
                 tab_width: None,
                 tab_length: None,
+                row_spacing: None,
+                hole_diameter: None,
+                aux_pad_width: None,
+                aux_pad_length: None,
+                aux_row_x: None,
+                aux_row_y: None,
+                mounting_hole_diameter: None,
+                mounting_hole_spacing: None,
+                mounting_hole_inset: None,
             },
             lead_layout: None,
             tab: None,
+            aux_pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
@@ -716,6 +792,55 @@ mod tests {
             !diags
                 .iter()
                 .any(|d| d.rule_id == "tab.invalid" || d.rule_id == "provenance.missing"),
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn aux_pads_need_distinct_numbers_their_row_and_provenance() {
+        let mut package = base_package();
+        package.family = "module".into();
+        package.aux_pads = vec!["D1".into(), "D1".into(), "3".into()];
+        package.dimensions.aux_pad_width = mm(1.6);
+        cite(&mut package, "/dimensions/aux_pad_width");
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        let paths = |rule: &str| -> Vec<String> {
+            diags
+                .iter()
+                .filter(|d| d.rule_id == rule)
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        assert_eq!(paths("provenance.missing"), vec!["/aux_pads"]);
+        assert_eq!(
+            paths("aux_pads.invalid"),
+            vec![
+                "/aux_pads",
+                "/aux_pads",
+                "/dimensions/aux_pad_length",
+                "/dimensions/aux_row_x",
+                "/dimensions/aux_row_y"
+            ],
+            "a repeated number and an edge-pin number (lead_count 4)"
+        );
+
+        package.aux_pads = vec!["D1".into(), "D2".into(), "D3".into()];
+        for path in [
+            "/aux_pads",
+            "/dimensions/aux_pad_length",
+            "/dimensions/aux_row_x",
+            "/dimensions/aux_row_y",
+        ] {
+            cite(&mut package, path);
+        }
+        package.dimensions.aux_pad_length = mm(3.2);
+        package.dimensions.aux_row_x = mm(10.5);
+        package.dimensions.aux_row_y = mm(0.8);
+        let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.rule_id == "aux_pads.invalid" || d.rule_id == "provenance.missing"),
             "{diags:?}"
         );
     }

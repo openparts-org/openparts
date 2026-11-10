@@ -1,0 +1,10 @@
+# The plated through-hole of the row's seed pin (for a pin header), at
+# the row spacing. Vars: tag, neg, first, row_span.
+- params:
+    row_span: ["{{row_span}}", centre distance of the two rows of plated pin holes (datasheet)]
+- solid.cylinder:
+    {diameter: hole_d + 2 * plating_t, height: body_h, base: ["{{neg}}(row_span / 2)", "{{first}}", 0 mm],
+     operation: join, targets: ["Pad{{tag}}"], name: "Via{{tag}}"}
+- solid.cylinder:
+    {diameter: hole_d, height: body_h + 0.2 mm, base: ["{{neg}}(row_span / 2)", "{{first}}", -0.1 mm],
+     operation: cut, targets: ["Pad{{tag}}"], name: "ViaHole{{tag}}"}

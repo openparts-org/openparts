@@ -151,6 +151,20 @@ pub(crate) const QFN: FlushDefaults = FlushDefaults {
     thickness: 0.2,
 };
 
+/// Castellated-module (`module`) presentation defaults.
+pub(crate) struct ModuleDefaults {
+    /// Board thickness when the package states no `body_height`: the
+    /// common 1.6 mm FR-4 board.
+    pub board_thickness: f64,
+    /// Copper pad thickness (1 oz copper, 35 um) -- drawing only.
+    pub pad_thickness: f64,
+}
+
+pub(crate) const MODULE: ModuleDefaults = ModuleDefaults {
+    board_thickness: 1.6,
+    pad_thickness: 0.035,
+};
+
 /// The value a generator uses for an optional dimension: the stated
 /// nominal, else the middle of a stated min..max range (many outline
 /// tables give only limits). The midpoint is an approximation inside

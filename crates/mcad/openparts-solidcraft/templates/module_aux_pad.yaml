@@ -1,0 +1,9 @@
+# The first pad of the module's extra pad row (e.g. SWD debug pads), on
+# the board's top face: the part of its land that lies on the board.
+# Vars: x0, y, w, l (x0/y: the first pad's centre).
+- params:
+    aux_w: ["{{w}}", extra-row pad width along X (datasheet)]
+    aux_l: ["{{l}}", extra-row pad length on the board along Y]
+- solid.box:
+    {length: aux_w, width: aux_l, height: pad_t, center: ["{{x0}}", "{{y}}", body_h - pad_t / 2],
+     operation: new, body_name: Aux, name: Aux}

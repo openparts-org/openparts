@@ -568,6 +568,15 @@ dimensions:
 | `lead_thickness` | Lead frame厚 | c（QFN/DFNではA3） | 省略可 |
 | `tab_width` | Tab（SOT-223/TO-252の放熱Tab）の辺方向の幅 | b2（SOT-223）、E1/b3（TO-252） | Tabを持つPackageでは必須 |
 | `tab_length` | Body端からTab先端まで（TO-252のみ） | L3 | 省略可 |
+| `row_spacing` | 2列のピン穴（Plated through-hole）の中心間距離（`module`のみ） | Pico: 17.78 | 省略可 |
+| `hole_diameter` | ピン穴および端面のCastellation（半穴）の径（`module`のみ） | Pico: ∅1 | 省略可 |
+| `aux_pad_width` | `aux_pads`列の各PadのX方向の幅（`module`のみ） | — | `aux_pads`があれば必須 |
+| `aux_pad_length` | 同、Y方向の長さ | — | `aux_pads`があれば必須 |
+| `aux_row_x` | Board左端（pin 1側）から`aux_pads`列の中心までのX距離 | — | `aux_pads`があれば必須 |
+| `aux_row_y` | Board下端（pin 1と反対の端）から`aux_pads`の中心までのY距離 | — | `aux_pads`があれば必須 |
+| `mounting_hole_diameter` | 取付穴の径（`module`のみ） | Pico: 2.1 ±0.05 | 省略可 |
+| `mounting_hole_spacing` | 各端の取付穴2個のX方向中心間距離 | Pico: 11.4 | 省略可 |
+| `mounting_hole_inset` | Boardの短辺から取付穴中心までのY距離（両端で対称に描く） | Pico: 2 | 省略可 |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -575,7 +584,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`）と`construction`、`tab`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -608,6 +617,24 @@ lead_count: 3            # Tabを除くLead位置の数（切断されたLeadを
 tab:
   number: "2"
   trimmed_leads: ["2"]
+```
+
+Castellated module（`family: module`、Raspberry Pi Picoなど）は、小さなPCBを端面の半穴
+（Castellation）で母基板にはんだ付けするPackageである。`body_width`/`body_length`は
+Boardの外形、`body_height`はBoard厚（部品は含まない）。ピンは上面視でpin 1が左辺の上、
+1..`lead_count`/2が左辺を下へ、残りが右辺を上へ（DIPと同じ）、両列ともBoard中央に
+揃えて`pitch`で並ぶ。Footprint padは一次資料の推奨Land pattern（Pico datasheetの
+SMT footprint）で、`overall_width`が両列のPad外端間、`lead_length`/`lead_width`が
+Padの長さ／幅である（PadはBoard端より外へ出てよい）。Pin header用の穴径が一次資料に
+無ければ、Footprintに穴を作らない。Debug padのような追加のPad列は`aux_pads`に
+一次資料の番号（Pico: "D1","D2","D3"）を左から順に記録し、大きさと位置を`aux_*`に
+記録する（Validator rule `aux_pads.invalid`）。`row_spacing`、`hole_diameter`、
+`mounting_hole_*`は3D Modelだけが使う。
+
+```yaml
+family: module
+lead_count: 40           # 両辺のピン数（aux_padsを含まない）
+aux_pads: [D1, D2, D3]   # 上面視で左から、pitch間隔
 ```
 
 ## 20.2 Package Construction

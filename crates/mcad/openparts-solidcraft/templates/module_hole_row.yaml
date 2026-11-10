@@ -1,0 +1,10 @@
+# Drills one row of the board's pin holes, out to the plating's outer
+# wall, at x = neg(x): the castellations (x = body_w / 2) or the
+# through-holes (x = row_span / 2), from the row's first pin, patterned
+# along the row.
+# Vars: tag, neg, first, x, what, count, spacing.
+- solid.cylinder:
+    {diameter: hole_d + 2 * plating_t, height: body_h + 0.2 mm, base: ["{{neg}}({{x}})", "{{first}}", -0.1 mm],
+     operation: cut, targets: [Board], name: "{{what}}{{tag}}"}
+- solid.pattern.rectangular:
+    {features: ["{{what}}{{tag}}"], dir1: [0, 1, 0], count1: "{{count}}", spacing1: "{{spacing}}", name: "{{what}}Row{{tag}}"}

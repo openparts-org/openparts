@@ -10,6 +10,7 @@ mod chip;
 mod defaults;
 mod dip;
 mod lqfp;
+mod module;
 mod qfn;
 mod radial;
 mod sip;
@@ -23,6 +24,7 @@ pub use bga::generate_bga;
 pub use chip::generate_chip;
 pub use dip::generate_dip;
 pub use lqfp::generate_lqfp;
+pub use module::{generate_module, module_features, ModuleFeatures, ModuleHoles, MountingHoles};
 pub use qfn::generate_qfn;
 pub use radial::generate_radial;
 pub use sip::generate_sip;
@@ -50,6 +52,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "dip" => generate_dip(package),
         "sip" => generate_sip(package),
         "bga" => generate_bga(package),
+        "module" => generate_module(package),
         _ => Err(McadError::UnsupportedFamily(package.family.clone())),
     }
 }
@@ -171,7 +174,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, tssop, ssop, msop, sot, sot223, dpak, radial, axial, to92, dip, sip, bga are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, tssop, ssop, msop, sot, sot223, dpak, radial, axial, to92, dip, sip, bga, module are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]

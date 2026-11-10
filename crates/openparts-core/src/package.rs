@@ -70,6 +70,41 @@ pub struct PackageDimensions {
     /// same lead span as the leads opposite it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab_length: Option<Dimension>,
+    /// `module` only: centre-to-centre distance between the plated holes
+    /// of the two pin rows (Raspberry Pi Pico: 17.78). The footprint pads
+    /// come from `overall_width`/`lead_*`; this places the 3D holes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_spacing: Option<Dimension>,
+    /// `module` only: diameter of the plated pin holes, and of the
+    /// half-holes (castellations) cut by the board edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hole_diameter: Option<Dimension>,
+    /// `module` only: size along X of each pad in [`Package::aux_pads`]'s
+    /// row (e.g. the Pico's SWD debug pads).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aux_pad_width: Option<Dimension>,
+    /// `module` only: size along Y of each auxiliary pad.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aux_pad_length: Option<Dimension>,
+    /// `module` only: from the board's left edge (the pin-1 side) to the
+    /// centre of the auxiliary pad row, along X.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aux_row_x: Option<Dimension>,
+    /// `module` only: from the board's bottom edge (the end away from
+    /// pin 1) to the auxiliary pads' centres, along Y.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aux_row_y: Option<Dimension>,
+    /// `module` only: diameter of the board's mounting holes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounting_hole_diameter: Option<Dimension>,
+    /// `module` only: centre-to-centre distance between the mounting
+    /// holes along X (the pair at each end of the board).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounting_hole_spacing: Option<Dimension>,
+    /// `module` only: from each short board edge to the mounting holes'
+    /// centres, along Y.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounting_hole_inset: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -91,6 +126,21 @@ impl PackageDimensions {
             ("/dimensions/lead_thickness", &self.lead_thickness),
             ("/dimensions/tab_width", &self.tab_width),
             ("/dimensions/tab_length", &self.tab_length),
+            ("/dimensions/row_spacing", &self.row_spacing),
+            ("/dimensions/hole_diameter", &self.hole_diameter),
+            ("/dimensions/aux_pad_width", &self.aux_pad_width),
+            ("/dimensions/aux_pad_length", &self.aux_pad_length),
+            ("/dimensions/aux_row_x", &self.aux_row_x),
+            ("/dimensions/aux_row_y", &self.aux_row_y),
+            (
+                "/dimensions/mounting_hole_diameter",
+                &self.mounting_hole_diameter,
+            ),
+            (
+                "/dimensions/mounting_hole_spacing",
+                &self.mounting_hole_spacing,
+            ),
+            ("/dimensions/mounting_hole_inset", &self.mounting_hole_inset),
         ];
         out.extend(
             optional
@@ -190,6 +240,13 @@ pub struct Package {
     /// `dpak`); `None` otherwise. Its size is in `dimensions.tab_*`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tab: Option<PackageTab>,
+    /// `module` only: pad numbers of an extra row of pads beyond the
+    /// `lead_count` edge pins (the Raspberry Pi Pico's SWD debug pads
+    /// "D1", "D2", "D3"), as the source numbers them, left to right in
+    /// the top view, at `pitch`. Their size and place are in
+    /// `dimensions.aux_*`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aux_pads: Vec<String>,
     /// Physical construction as the source states it (section 20);
     /// `None` when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]

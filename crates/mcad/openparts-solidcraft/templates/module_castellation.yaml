@@ -1,0 +1,21 @@
+# Turns the row's seed pad into a castellated pin: the plated half-barrel
+# where the board edge cuts the pin hole, and the same pad on the bottom
+# face. Vars: tag, neg, first, hole_d.
+- params:
+    hole_d: ["{{hole_d}}", plated pin hole and castellation diameter (datasheet)]
+    plating_t: [0.05 mm, plating thickness on the hole walls]
+- solid.cylinder:
+    {diameter: hole_d + 2 * plating_t, height: body_h, base: ["{{neg}}(body_w / 2)", "{{first}}", 0 mm],
+     operation: join, targets: ["Pad{{tag}}"], name: "Barrel{{tag}}"}
+- solid.box:
+    {length: edge_pad, width: pad_w, height: pad_t,
+     center: ["{{neg}}(body_w / 2 - edge_pad / 2)", "{{first}}", pad_t / 2],
+     operation: join, targets: ["Pad{{tag}}"], name: "PadBottom{{tag}}"}
+- solid.cylinder:
+    {diameter: hole_d, height: body_h + 0.2 mm, base: ["{{neg}}(body_w / 2)", "{{first}}", -0.1 mm],
+     operation: cut, targets: ["Pad{{tag}}"], name: "BarrelHole{{tag}}"}
+# Keep only what lies on the board: the barrel's outer half is the cut-away.
+- solid.box:
+    {length: body_w / 2, width: "max(pad_w, hole_d + 2 * plating_t)", height: body_h,
+     center: ["{{neg}}(body_w / 4)", "{{first}}", body_h / 2],
+     operation: intersect, targets: ["Pad{{tag}}"], name: "BarrelTrim{{tag}}"}

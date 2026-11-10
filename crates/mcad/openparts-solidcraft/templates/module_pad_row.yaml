@@ -1,0 +1,6 @@
+# One edge pad on the module's top face at the row's first pin, from the
+# board edge inward. Vars: tag, neg, first (as gullwing_row).
+- solid.box:
+    {length: edge_pad, width: pad_w, height: pad_t,
+     center: ["{{neg}}(body_w / 2 - edge_pad / 2)", "{{first}}", body_h - pad_t / 2],
+     operation: new, body_name: "Pad{{tag}}", name: "PadTop{{tag}}"}
