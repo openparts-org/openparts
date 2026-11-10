@@ -346,11 +346,27 @@ impl Flush {
 }
 
 /// Body thickness: `body_height`, else the overall height less the
-/// standoff, else `default`.
+/// standoff, else `default` -- each read with [`required`] (a lone "max"
+/// counts), like every other drawn dimension.
 pub(crate) fn body_height(package: &Package, standoff: f64, default: f64) -> f64 {
     let d = &package.dimensions;
-    value(&d.body_height)
-        .or_else(|| value(&d.overall_height).map(|a| a - standoff))
+    // A height given only as a minimum is a floor, not a size to draw at:
+    // keep the family default unless it falls below that floor.
+    let floor_only = |dim: &Option<Dimension>| {
+        dim.as_ref()
+            .filter(|x| x.nominal.is_none() && x.max.is_none())
+            .and_then(|x| x.min)
+    };
+    if let Some(min) = floor_only(&d.body_height) {
+        return default.max(min);
+    }
+    stated(&d.body_height)
+        .or_else(|| {
+            if let Some(min) = floor_only(&d.overall_height) {
+                return Some((default + standoff).max(min) - standoff);
+            }
+            stated(&d.overall_height).map(|a| a - standoff)
+        })
         .filter(|h| *h > 0.0)
         .unwrap_or(default)
 }

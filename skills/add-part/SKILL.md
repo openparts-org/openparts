@@ -17,7 +17,9 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   state. Never estimate, average, or copy from a "similar" part. A range
   given only as min/max is recorded as min/max -- never add a nominal (the
   generators draw such a dimension at its midpoint without storing it). A
-  lone "1.80 max" is recorded as `max: 1.80` only.
+  lone "1.80 max" is recorded as `max: 1.80` only -- never copy it into
+  `nominal` (the generator draws at the max; a min-only height is treated
+  as a floor).
 - **Cite what you read.** The provenance `source` is the exact document
   *and revision* you opened. A newer revision than an existing Source gets
   its own Source (`id: <mfr>/<doc>@rev<N>`, file
@@ -146,11 +148,14 @@ match number-for-number stay separate (each cites its own drawing).
 | `sip`, `bga` | single row / `lead_layout: [rows, cols]`, A1 top-left | |
 | `module` | castellated board (Pico): pins 1..N/2 down the left edge from the top, the rest up the right; optional `aux_pads` row (debug pads) | body = the PCB (`body_height` = board thickness); pads are the source's recommended land: `overall_width` outer span, `lead_length`/`lead_width` pad size; `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*` per canonical-data 20.1 |
 | `header`, `socket` | straight THT pin header / socket strip; `lead_layout: [rows, pins_per_row]` (1 or 2 rows), rows along Y at `pitch`, `row_spacing` apart in X; pin 1 top-left, numbers zig-zag across the rows (pin 2 beside pin 1, pin 3 below it) -- check the drawing's "1"/"2" labels (Würth: first-angle projection, the hole pattern is the component side) | `body_*` = housing (`body_width` across the rows, `body_length` = L along them); `hole_diameter` (recommended PCB hole, required) is the drill, `pad_diameter` the land if given (else hole + ring default); `lead_width` square pin, `mating_length` post above the housing, `tail_length` below it; row-by-row numbering and 3+ rows not supported |
+| `shrouded_header` | box-shaped wire-to-board header (JST XH/PH), top entry; same frame, numbering and footprint rules as `header` (turn the source's PC-board layout, viewed from the mounting side, so pin 1 is on top and numbers run down) | `body_*` = housing outline (`body_width` = depth across the row); `body_offset` = housing centre's signed X offset from the pin grid (printed row-to-face distance and depth, arithmetic in the locator: XH 5.75/2 - (2.35) towards the boss side = -0.525); walls/floor/post height are generator defaults; undimensioned lock slots aren't drawn; drawn natural nylon + tin |
+| `right_angle_header` | 1-row right-angle pin header: housing lying on the board beside the holes, pins bent 90° | `body_offset` required (Würth: tail-to-housing "1,5" + depth 2.54/2 = 2.77, +X when the hole pattern's housing is below the row and pin 1 on the right); `body_width` = housing depth along the pins, `body_height` = its height, `mating_length` = housing front face to tip, `tail_length` = board to tail end |
 
 Not supported (report, don't force): DFN with leads on 2 sides only,
 SOIC-EP, SC70, X2QFN/USON, 4-pad crystals, multi-die/RGB LEDs, round drum
-inductors, HC-49 ovals, shrouded/off-centre-housing connectors (JST XH/PH,
-Molex KK), right-angle headers.
+inductors, HC-49 ovals, 2-row right-angle headers, side-entry or SMT
+wire-to-board headers, connectors with extra board holes (boss/peg
+variants such as JST B?B-XH-AM: the footprint would lack the hole).
 
 ### Dimensions (canonical-data.md 20.1)
 `body_width`, `body_length`, `body_height` (A2, else A when no A2 is
@@ -206,6 +211,11 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
   useless: copy it and read it with poppler.
 - Rejections can arrive as HTTP 200 HTML ("Request Rejected", onsemi's
   missing-datasheet page): always `file` the download.
+- **Proving a reused image-only drawing** (onsemi outlines are images, so
+  text diffs prove nothing): render the same crop of each outline page
+  (`pdftoppm -r 100 -f P -l P -x .. -y .. -W .. -H .. -png`) and compare
+  checksums; identical embedded drawings come out byte-identical. Say in
+  the header that the check was pixel identity.
 - **Proving a reused drawing**: extract the outline page with `pdftotext
   -layout`, strip header/footer lines and `diff` it against the page the
   package was read from -- no rendering needed. Same drawing number with
@@ -227,6 +237,29 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
 - Board modules (`module`): use the datasheet's "SMT footprint" figure as
   the land pattern and the "pin numbering" figure for pad numbers; spell
   out any sum/difference of printed dimensions in the locator.
+- onsemi: the STYLE list is on the page after the case outline (STYLE 6
+  BJTs, 21 MOSFETs, 8 zeners, 318E STYLE 1 SOT-223 BJTs) -- use it to check
+  discrete pinouts. Standalone outlines need the case suffix
+  (`.../package-drawing/pdf/318E-04.pdf`; bare `318E.pdf` is empty). Old
+  Fairchild FDN/NDS parts carry CASE 527AG, not CASE 318. Memory
+  datasheets' pin tables have no numbers: number from the pin figure.
+- Zener and similar series print the full OPN only in the electrical
+  table's Device column while the ordering table shows a pattern
+  (`BZX84CxxxLT1G`): that is `probable`.
+- Samsung CL: the 9th code (Q/R/U/Z) widens L/W/T tolerances; take L/W/T
+  from the product page, not an N-code package. Product pages state NRND
+  and replacements (first-party lifecycle).
+- PDFs can be revised page by page (KOA RK73H p1 10/26/25, p2 01/27/26):
+  check every page footer and `pdfinfo` CreationDate before reusing a
+  Source. Ratings can split one size by resistance range: cite the row
+  that contains the value.
+- JST catalogue PDFs have no revision: cite the PDF creation date; "Model
+  No." tables are orderable lists (verified). The housing side comes from
+  the PC-board layout (No. 1 circuit, boss, "Connector outline", lock
+  side) plus the side view's row-to-face distance; record that distance
+  and the depth and compute `body_offset` in the locator.
+- Diodes TSOT26 (DS41326) uses JEDEC letters in Min/Max/Typ columns,
+  unlike older Diodes letter codes.
 - Ordering tables can contain typos (Raspberry Pi "SCO918"): cross-check
   with the vendor's product-information page.
 - Downloading a distributor-hosted copy (DigiKey) may be refused by the
@@ -273,6 +306,12 @@ also check the generated pad x-positions against the datasheet's top view.
 - One malformed file from anyone breaks everyone's `validate.sh` and
   gallery run: write files in one go (generate, then move into place), and
   if a failure points at someone else's file, wait and re-run.
+- Validate in a merged copy first: copy openparts-data plus your staged
+  files into your scratchpad, run its `scripts/validate.sh` with
+  `OPENPARTS_CLI=target/debug/openparts` and the prebuilt gallery on it,
+  then move the files into the shared tree.
+- Check SOT/header pin positions with `openparts generate ... --out <dir>`
+  and `grep '(pad' <dir>/*.kicad_mod` (KiCad Y points down).
 - If `cargo run --example gallery` doesn't compile because code is being
   edited, the prebuilt `target/debug/examples/gallery` still works.
 
