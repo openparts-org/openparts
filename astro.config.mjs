@@ -5,11 +5,13 @@ import preact from '@astrojs/preact';
 
 // https://astro.build/config
 export default defineConfig({
-  // GitHub Pages project site: served at
+  // Default: the GitHub Pages project site, served at
   // https://openparts-org.github.io/openparts-web/, so internal links
-  // must be prefixed with this base (see src/lib/base.ts).
-  site: 'https://openparts-org.github.io',
-  base: '/openparts-web',
+  // must be prefixed with this base (see src/lib/base.ts). A self-hosted
+  // build (openparts-server serving the site at the root of its own
+  // domain, the API under /api) sets OPENPARTS_SITE and OPENPARTS_BASE=/.
+  site: process.env.OPENPARTS_SITE ?? 'https://openparts-org.github.io',
+  base: process.env.OPENPARTS_BASE ?? '/openparts-web',
   integrations: [preact()],
   vite: {
     server: {
