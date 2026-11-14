@@ -40,7 +40,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
 
     let term_len = defaults::value(&package.dimensions.lead_length)
         .unwrap_or(crate::defaults::chip::TERMINATION_LENGTH)
-        .min(body_len / 2.0);
+        .min(body_len * crate::defaults::chip::MAX_TERMINATION_RATIO);
     let term_size = Size3 {
         x: term_len,
         y: body_w,

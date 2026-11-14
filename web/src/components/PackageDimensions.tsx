@@ -3,11 +3,11 @@ import type { Dimension, Package } from "../lib/types";
 
 function formatDimension(dim?: Dimension | null): string {
   if (!dim) return "-";
-  if (dim.nominal !== undefined) return `${dim.nominal} ${dim.unit}`;
-  if (dim.min !== undefined && dim.max !== undefined)
-    return `${dim.min}–${dim.max} ${dim.unit}`;
-  if (dim.min !== undefined) return `≥${dim.min} ${dim.unit}`;
-  if (dim.max !== undefined) return `≤${dim.max} ${dim.unit}`;
+  // Unstated limits arrive as null (or are absent).
+  if (dim.nominal != null) return `${dim.nominal} ${dim.unit}`;
+  if (dim.min != null && dim.max != null) return `${dim.min}–${dim.max} ${dim.unit}`;
+  if (dim.min != null) return `≥${dim.min} ${dim.unit}`;
+  if (dim.max != null) return `≤${dim.max} ${dim.unit}`;
   return "-";
 }
 

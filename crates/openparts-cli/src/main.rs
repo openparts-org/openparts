@@ -307,7 +307,11 @@ fn cmd_generate(
     let write = |kind: ArtifactKind, bytes: &[u8]| {
         std::fs::write(out_dir.join(build.file_name(kind)), bytes)
     };
-    for kind in [ArtifactKind::KicadSymbol, ArtifactKind::KicadFootprint] {
+    for kind in [
+        ArtifactKind::KicadSymbol,
+        ArtifactKind::KicadFootprint,
+        ArtifactKind::FootprintSvg,
+    ] {
         write(kind, &build.render(kind)?)?;
     }
     // The detailed 3D model, built and exported by SolidCraft in one run.

@@ -6,6 +6,7 @@ import type {
   Device,
   Package,
   Part,
+  PartSource,
   PartSummary,
   RevisionSummary,
 } from "./types";
@@ -49,6 +50,11 @@ export const getPart = (manufacturer: string, mpn: string) =>
 export const getRevisions = (manufacturer: string, mpn: string) =>
   request<RevisionSummary[]>(
     `/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}/revisions`,
+  );
+
+export const getSources = (manufacturer: string, mpn: string) =>
+  request<PartSource[]>(
+    `/v1/parts/${encodeURIComponent(manufacturer)}/${encodeURIComponent(mpn)}/sources`,
   );
 
 export const listArtifacts = (manufacturer: string, mpn: string) =>

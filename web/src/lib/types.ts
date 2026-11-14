@@ -14,6 +14,8 @@ export type { Package } from "./api/Package";
 export type { PackageDimensions } from "./api/PackageDimensions";
 export type { Part } from "./api/Part";
 export type { PartSummary } from "./api/PartSummary";
+export type { PartSource } from "./api/PartSource";
+export type { Source } from "./api/Source";
 export type { Pin } from "./api/Pin";
 export type { ProvenanceEntry } from "./api/ProvenanceEntry";
 export type { ProvenanceResponse } from "./api/ProvenanceResponse";

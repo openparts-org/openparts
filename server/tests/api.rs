@@ -473,3 +473,50 @@ fn a_manifest_of_another_format_is_refused() {
     assert!(openparts_server::bundle::Bundle::load(&root).is_err());
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[tokio::test]
+async fn sources_list_every_cited_document_with_its_link() {
+    let response = get(app(), "/v1/parts/raspberrypi/RP2040/sources").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    let list = body.as_array().unwrap();
+    // The datasheet, possibly in more than one revision.
+    let ds: Vec<&serde_json::Value> = list
+        .iter()
+        .filter(|s| {
+            s["source"]["document_id"]
+                .as_str()
+                .unwrap()
+                .contains("RP-008371")
+        })
+        .collect();
+    assert!(!ds.is_empty(), "the RP2040 datasheet is cited");
+    assert!(ds
+        .iter()
+        .all(|s| s["source"]["url"].as_str().unwrap().starts_with("https://")));
+    let cited_by: Vec<&str> = ds
+        .iter()
+        .flat_map(|s| s["cited_by"].as_array().unwrap())
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert!(
+        cited_by.contains(&"part") && cited_by.contains(&"device"),
+        "{cited_by:?}"
+    );
+}
+
+#[tokio::test]
+async fn footprint_svg_preview_shows_every_pad() {
+    let response = get(
+        app(),
+        "/v1/parts/raspberrypi/RP2040/artifacts/footprint-svg",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "image/svg+xml");
+    let svg = body_string(response).await;
+    assert!(svg.starts_with("<svg"));
+    // 56 numbered pads, plus the scale bar's label.
+    assert_eq!(svg.matches("<text").count(), 56 + 1);
+    assert!(svg.contains(">1</text>") && svg.contains(">56</text>"));
+}

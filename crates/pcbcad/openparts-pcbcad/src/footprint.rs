@@ -54,11 +54,13 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
         })
         .collect();
 
+    let pads: Vec<Pad> = pads;
+    let graphics = crate::outline::drawings(geometry, &pads);
     PcbFootprint {
         name: name.to_string(),
+        courtyard: Some(crate::outline::courtyard(geometry, &pads, &graphics)),
+        graphics,
         pads,
-        graphics: vec![],
-        courtyard: None,
         model: Some(Model3d::new(default_model_path(name))),
     }
 }

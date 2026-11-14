@@ -247,3 +247,27 @@ td {
 .text-muted {
   color: var(--color-text-muted);
 }
+
+.footprint-preview {
+  margin: 0;
+}
+.footprint-preview img {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  max-height: 480px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #0b1a12;
+}
+.footprint-preview figcaption {
+  font-size: 0.85em;
+  margin-top: 0.4em;
+}
+.source-list {
+  padding-left: 1.2em;
+}
+.source-list li {
+  margin: 0.3em 0;
+  overflow-wrap: anywhere;
+}

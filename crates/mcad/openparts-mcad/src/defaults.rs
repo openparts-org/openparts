@@ -370,6 +370,9 @@ pub(crate) mod chip {
     /// `lead_length`. Not a datasheet fact -- an approximation, same policy
     /// as `defaults.rs`.
     pub const TERMINATION_LENGTH: f64 = 0.3;
+    /// A termination never covers more than this share of the body
+    /// length (0201: 0.15 of 0.6; EIA chips are ~0.25).
+    pub const MAX_TERMINATION_RATIO: f64 = 0.3;
     pub const BODY_HEIGHT: f64 = 0.45;
 }
 
@@ -403,6 +406,61 @@ pub(crate) mod dip {
     /// same policy as every other family's own defaults, not a fact about
     /// any specific part.
     pub const BODY_HEIGHT: f64 = 3.3;
+}
+
+/// IPC-7351B land calculation (density level N) -- see `ipc.rs`.
+pub(crate) mod ipc {
+    use crate::ipc::Fillets;
+    /// Fabrication and placement tolerances, as KiCad's footprint
+    /// generator uses them.
+    pub const FABRICATION: f64 = 0.1;
+    pub const PLACEMENT: f64 = 0.05;
+    /// Gull-wing, pitch > 0.625 mm (IPC-7351B table 3-2, N).
+    pub const GULL_WING: Fillets = Fillets {
+        toe: 0.35,
+        heel: 0.35,
+        side: 0.03,
+    };
+    /// Gull-wing, pitch <= 0.625 mm (table 3-3, N).
+    pub const GULL_WING_FINE: Fillets = Fillets {
+        toe: 0.35,
+        heel: 0.35,
+        side: -0.02,
+    };
+    /// Flat no-lead: QFN, DFN, SON (table 3-15, N).
+    pub const FLAT_NO_LEAD: Fillets = Fillets {
+        toe: 0.3,
+        heel: 0.0,
+        side: -0.04,
+    };
+    /// Flat leads out of the body underside (SOD-123F class).
+    pub const FLAT_LEAD: Fillets = Fillets {
+        toe: 0.3,
+        heel: 0.0,
+        side: 0.03,
+    };
+    /// Inward-L / J-bend under the body: DO-214 SMA/SMB/SMC (table 3-11, N).
+    pub const INWARD_L: Fillets = Fillets {
+        toe: 0.15,
+        heel: 0.5,
+        side: -0.05,
+    };
+    /// Rectangular chip terminations, 1608 (0603) and larger (table 3-5, N).
+    pub const CHIP: Fillets = Fillets {
+        toe: 0.35,
+        heel: -0.05,
+        side: 0.0,
+    };
+    /// Smaller chips (1005 / 0402 and below, table 3-6, N).
+    pub const CHIP_SMALL: Fillets = Fillets {
+        toe: 0.1,
+        heel: 0.0,
+        side: 0.0,
+    };
+    /// Smallest gap between two opposite lands (a tiny chip's).
+    pub const MIN_GAP: f64 = 0.2;
+    /// Gap kept between a terminal land and an exposed pad.
+    pub const EP_CLEARANCE: f64 = 0.2;
 }
 
 /// Explicit land patterns (`Package::pads`).

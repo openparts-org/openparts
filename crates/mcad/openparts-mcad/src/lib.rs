@@ -11,6 +11,7 @@ mod defaults;
 mod diode;
 mod dip;
 mod header;
+mod ipc;
 mod land;
 mod lqfp;
 mod module;
@@ -72,6 +73,8 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
     renumber(&mut geometry, package)?;
     if !package.pads.is_empty() && package.family != F::UsbC {
         geometry.lands = land::from_pads(package)?;
+    } else if let Some(lands) = ipc::lands(package, &geometry) {
+        geometry.lands = lands;
     }
     Ok(geometry)
 }
@@ -248,9 +251,10 @@ pub struct MechanicalGeometry {
     /// The lead pitch the geometry was drawn at, when the package has one.
     pub pitch: Option<f64>,
     pub details: Details,
-    /// The footprint's pads when the package states its recommended
-    /// land pattern (`Package::pads`); empty means the footprint pads
-    /// are the leads' outlines.
+    /// The footprint's pads: the package's stated land pattern
+    /// (`Package::pads`), else IPC-7351B lands computed from the SMD
+    /// terminals (`ipc.rs`); empty means the footprint pads are the
+    /// leads' outlines (through-hole, LGA, USB-C).
     pub lands: Vec<Lead>,
     pub body: Body,
     pub leads: Vec<Lead>,

@@ -11,7 +11,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use openparts_artifacts::{ArtifactKind, BuildError, PartBuild};
-use openparts_core::{Device, Package, Part, ProvenanceMap};
+use openparts_core::{Device, Package, Part, ProvenanceMap, Source};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -26,6 +26,7 @@ pub fn build_router(store: Arc<Store>) -> Router {
             get(get_provenance),
         )
         .route("/v1/parts/:manufacturer/:mpn/revisions", get(get_revisions))
+        .route("/v1/parts/:manufacturer/:mpn/sources", get(get_sources))
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts",
             get(list_artifacts),
@@ -37,6 +38,10 @@ pub fn build_router(store: Arc<Store>) -> Router {
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts/kicad-footprint",
             get(artifact_kicad_footprint),
+        )
+        .route(
+            "/v1/parts/:manufacturer/:mpn/artifacts/footprint-svg",
+            get(artifact_footprint_svg),
         )
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts/step",
@@ -185,6 +190,58 @@ async fn get_provenance(
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
+struct PartSource {
+    source: Source,
+    /// Which documents cite it: "part", "device", "package".
+    cited_by: Vec<String>,
+}
+
+/// `GET /v1/parts/{manufacturer}/{mpn}/sources`: every Source the part,
+/// its device and its package cite (in `sources` or field provenance),
+/// with what cites it. Unknown ids are skipped (validation reports
+/// them).
+async fn get_sources(
+    State(store): State<Arc<Store>>,
+    Path((manufacturer, mpn)): Path<(String, String)>,
+) -> Result<Json<Vec<PartSource>>, ApiError> {
+    let part = resolve_part(&store, &manufacturer, &mpn)?;
+    let device = resolve_device(&store, &part.device.0)?;
+    let package = resolve_package(&store, &part.package.0)?;
+    let mut cited: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut cite = |id: &str, by: &str| {
+        let list = cited.entry(id.to_string()).or_default();
+        if !list.iter().any(|b| b == by) {
+            list.push(by.to_string());
+        }
+    };
+    for id in &part.sources {
+        cite(&id.0, "part");
+    }
+    for (by, provenance) in [
+        ("part", &part.provenance),
+        ("device", &device.provenance),
+        ("package", &package.provenance),
+    ] {
+        for entry in provenance.values().flatten() {
+            cite(&entry.source.0, by);
+        }
+    }
+    let mut out: Vec<PartSource> = cited
+        .into_iter()
+        .filter_map(|(id, cited_by)| {
+            let source = store.dataset.sources.get(&id)?.clone();
+            Some(PartSource { source, cited_by })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (&a.source.publisher, &a.source.document_id)
+            .cmp(&(&b.source.publisher, &b.source.document_id))
+    });
+    Ok(Json(out))
+}
+
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[derive(Serialize)]
 struct RevisionSummary {
     id: String,
     manufacturer_revision: String,
@@ -216,6 +273,8 @@ struct ArtifactsResponse {
     kicad_symbol: String,
     #[serde(rename = "kicad-footprint")]
     kicad_footprint: String,
+    #[serde(rename = "footprint-svg")]
+    footprint_svg: String,
     step: String,
     stl: String,
     #[serde(rename = "3mf")]
@@ -232,6 +291,7 @@ async fn list_artifacts(
     Ok(Json(ArtifactsResponse {
         kicad_symbol: format!("{base}/kicad-symbol"),
         kicad_footprint: format!("{base}/kicad-footprint"),
+        footprint_svg: format!("{base}/footprint-svg"),
         step: format!("{base}/step"),
         stl: format!("{base}/stl"),
         three_mf: format!("{base}/3mf"),
@@ -361,6 +421,7 @@ macro_rules! artifact_route {
 
 artifact_route!(artifact_kicad_symbol, ArtifactKind::KicadSymbol);
 artifact_route!(artifact_kicad_footprint, ArtifactKind::KicadFootprint);
+artifact_route!(artifact_footprint_svg, ArtifactKind::FootprintSvg);
 artifact_route!(artifact_step, ArtifactKind::Step);
 artifact_route!(artifact_stl, ArtifactKind::Stl);
 artifact_route!(artifact_3mf, ArtifactKind::ThreeMf);

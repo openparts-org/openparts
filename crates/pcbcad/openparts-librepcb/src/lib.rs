@@ -207,6 +207,56 @@ fn render_package(
     if let Some(model_uuid) = model_uuid {
         out.push_str(&format!("  (3d_model {})\n", fmt_uuid(model_uuid)));
     }
+    // Silkscreen, documentation and courtyard drawings.
+    let mut drawings: Vec<(&str, f64, openparts_pcbcad::FpShape)> = footprint
+        .graphics
+        .iter()
+        .map(|g| {
+            let layer = match g.layer {
+                openparts_pcbcad::FpLayer::Silk => "top_legend",
+                openparts_pcbcad::FpLayer::Fab => "top_documentation",
+            };
+            (layer, g.width, g.shape.clone())
+        })
+        .collect();
+    if let Some(c) = &footprint.courtyard {
+        drawings.push((
+            "top_courtyard",
+            openparts_pcbcad::COURTYARD_WIDTH,
+            openparts_pcbcad::FpShape::Polygon(c.outline.clone()),
+        ));
+    }
+    for (i, (layer, width, shape)) in drawings.iter().enumerate() {
+        let uuid = fmt_uuid(uuid_gen::derive(&format!("fp-drawing:{mpn}:{i}")));
+        let vertex = |p: &openparts_pcbcad::Point2| {
+            format!("(vertex (position {:.3} {:.3}) (angle 0.0))", p.x, p.y)
+        };
+        match shape {
+            openparts_pcbcad::FpShape::Line(a, b) => out.push_str(&format!(
+                "  (polygon {uuid} (layer {layer}) (width {width:.3}) (fill false) (grab_area false) {} {})\n",
+                vertex(a),
+                vertex(b)
+            )),
+            openparts_pcbcad::FpShape::Polygon(points) => {
+                // Closed: back to the first vertex.
+                let mut v: Vec<String> = points.iter().map(vertex).collect();
+                if let Some(first) = points.first() {
+                    v.push(vertex(first));
+                }
+                out.push_str(&format!(
+                    "  (polygon {uuid} (layer {layer}) (width {width:.3}) (fill false) (grab_area false) {})\n",
+                    v.join(" ")
+                ));
+            }
+            openparts_pcbcad::FpShape::Circle { center, radius } => out.push_str(&format!(
+                "  (circle {uuid} (layer {layer}) (width {width:.3}) (fill {}) (grab_area false) (diameter {:.3}) (position {:.3} {:.3}))\n",
+                *radius <= 0.15,
+                radius * 2.0,
+                center.x,
+                center.y
+            )),
+        }
+    }
     for pad in footprint
         .pads
         .iter()

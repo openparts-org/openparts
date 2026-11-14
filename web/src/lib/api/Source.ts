@@ -8,4 +8,14 @@ export type Source = { schema_version: string, kind: Kind, id: SourceId, publish
  * Kept as a String, not a number: revisions are labels ("8", "A",
  * "rev-b2"), not an ordered numeric scale.
  */
-revision: string, date: string, url: string, };
+revision: string, date: string, 
+/**
+ * Where the document was read. Vendor "latest" links (TI's
+ * `.../symlink/<part>.pdf`) may serve a newer revision later than
+ * the one recorded in `revision`.
+ */
+url: string, 
+/**
+ * When the document was downloaded and read (`YYYY-MM-DD`).
+ */
+retrieved?: string | null, };

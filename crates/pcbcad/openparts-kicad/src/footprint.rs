@@ -1,5 +1,5 @@
 use openparts_mcad::Mounting;
-use openparts_pcbcad::{Model3d, Pad, PadShape, PcbFootprint};
+use openparts_pcbcad::{FpLayer, FpShape, Model3d, Pad, PadShape, PcbFootprint};
 
 /// Renders a KiCad 6+ `.kicad_mod` footprint file.
 ///
@@ -36,13 +36,40 @@ pub fn render_footprint(footprint: &PcbFootprint) -> String {
     } else {
         "  (attr smd)\n"
     });
-    out.push_str("  (fp_text reference \"REF**\" (at 0 -5.5) (layer \"F.SilkS\")\n");
-    out.push_str("    (effects (font (size 1 1) (thickness 0.15))))\n");
+    // Reference above the courtyard, value below it (KiCad Y-down).
+    let (top, bottom) = footprint.courtyard.as_ref().map_or((5.5, -5.5), |c| {
+        let ys = c.outline.iter().map(|p| p.y);
+        (
+            ys.clone().fold(f64::MIN, f64::max),
+            ys.fold(f64::MAX, f64::min),
+        )
+    });
     out.push_str(&format!(
-        "  (fp_text value \"{}\" (at 0 5.5) (layer \"F.Fab\")\n",
-        footprint.name
+        "  (fp_text reference \"REF**\" (at 0 {:.2}) (layer \"F.SilkS\")\n",
+        flip_y(top + 1.0)
     ));
     out.push_str("    (effects (font (size 1 1) (thickness 0.15))))\n");
+    out.push_str(&format!(
+        "  (fp_text value \"{}\" (at 0 {:.2}) (layer \"F.Fab\")\n",
+        footprint.name,
+        flip_y(bottom - 1.0)
+    ));
+    out.push_str("    (effects (font (size 1 1) (thickness 0.15))))\n");
+
+    for g in &footprint.graphics {
+        let layer = match g.layer {
+            FpLayer::Silk => "F.SilkS",
+            FpLayer::Fab => "F.Fab",
+        };
+        out.push_str(&render_shape(&g.shape, g.width, layer));
+    }
+    if let Some(c) = &footprint.courtyard {
+        out.push_str(&render_shape(
+            &FpShape::Polygon(c.outline.clone()),
+            openparts_pcbcad::COURTYARD_WIDTH,
+            "F.CrtYd",
+        ));
+    }
 
     for pad in &footprint.pads {
         out.push_str(&render_pad(pad));
@@ -111,6 +138,39 @@ fn drill(pad: &Pad) -> String {
         Some(len) if pad.size.0 >= pad.size.1 => format!("oval {len:.3} {d:.3}"),
         Some(len) => format!("oval {d:.3} {len:.3}"),
         None => format!("{d:.3}"),
+    }
+}
+
+/// One drawing (`fp_line` / `fp_poly` / `fp_circle`) on `layer`.
+fn render_shape(shape: &FpShape, width: f64, layer: &str) -> String {
+    let stroke = format!("(stroke (width {width:.3}) (type solid))");
+    match shape {
+        FpShape::Line(a, b) => format!(
+            "  (fp_line (start {:.3} {:.3}) (end {:.3} {:.3}) {stroke} (layer \"{layer}\"))\n",
+            a.x,
+            flip_y(a.y),
+            b.x,
+            flip_y(b.y)
+        ),
+        FpShape::Polygon(points) => {
+            let pts: Vec<String> = points
+                .iter()
+                .map(|p| format!("(xy {:.3} {:.3})", p.x, flip_y(p.y)))
+                .collect();
+            format!(
+                "  (fp_poly (pts {}) {stroke} (fill none) (layer \"{layer}\"))\n",
+                pts.join(" ")
+            )
+        }
+        FpShape::Circle { center, radius } => format!(
+            "  (fp_circle (center {:.3} {:.3}) (end {:.3} {:.3}) {stroke} (fill {}) (layer \"{layer}\"))\n",
+            center.x,
+            flip_y(center.y),
+            center.x + radius,
+            flip_y(center.y),
+            // A pin-1 dot is filled; outlines aren't.
+            if *radius <= 0.15 { "solid" } else { "none" }
+        ),
     }
 }
 

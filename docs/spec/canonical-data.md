@@ -806,7 +806,10 @@ revision: "8"
 date: "2026-03"
 
 url: "https://..."
+retrieved: "2026-04-10"   # 省略可: 文書を取得して読んだ日
 ```
+
+`url`はその文書を読んだ場所。メーカーの「最新版」リンク（TIの`.../symlink/<part>.pdf`など）は、あとで`revision`より新しい版を返すことがある。表示側は`revision`と`date`を必ず併記する。`retrieved`は取得日（`YYYY-MM-DD`）で、分かる場合に記録する。PDFの複製は配布しない（リンクのみ）。
 
 初期Document Type：
 

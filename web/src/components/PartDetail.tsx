@@ -5,12 +5,15 @@ import {
   getPackage,
   getPart,
   getRevisions,
+  getSources,
   listArtifacts,
 } from "../lib/api";
 import { localizedHref } from "../lib/base";
 import { t, type Lang } from "../lib/i18n";
-import type { Device, Package, Part, RevisionSummary } from "../lib/types";
+import type { Device, Package, Part, PartSource, RevisionSummary } from "../lib/types";
 import ArtifactDownloads from "./ArtifactDownloads";
+import FootprintPreview from "./FootprintPreview";
+import SourceList from "./SourceList";
 import ModelViewer from "./ModelViewer";
 import PackageDimensions from "./PackageDimensions";
 import PinTable from "./PinTable";
@@ -20,6 +23,7 @@ interface Loaded {
   device: Device;
   pkg: Package;
   revisions: RevisionSummary[];
+  sources: PartSource[];
 }
 
 function existenceBadgeClass(status: Part["existence"]["status"]): string {
@@ -82,13 +86,14 @@ export default function PartDetail({ lang }: { lang: Lang }) {
     async function load() {
       try {
         const part = await getPart(manufacturer, mpn);
-        const [device, pkg, revisions] = await Promise.all([
+        const [device, pkg, revisions, sources] = await Promise.all([
           getDevice(part.device),
           getPackage(part.package),
           getRevisions(manufacturer, mpn),
+          getSources(manufacturer, mpn),
         ]);
         if (cancelled) return;
-        setData({ part, device, pkg, revisions });
+        setData({ part, device, pkg, revisions, sources });
 
         // Artifact generation can 422 independently of the rest of the
         // part data (e.g. a missing dimension) -- don't let that hide
@@ -141,7 +146,7 @@ export default function PartDetail({ lang }: { lang: Lang }) {
     return <p class="text-muted">{errorMessage ?? copy.loadFailed}</p>;
   }
 
-  const { part, device, pkg, revisions } = data;
+  const { part, device, pkg, revisions, sources } = data;
 
   return (
     <div>
@@ -172,6 +177,11 @@ export default function PartDetail({ lang }: { lang: Lang }) {
       </section>
 
       <section class="section">
+        <h3>{copy.footprintPreview}</h3>
+        <FootprintPreview manufacturer={part.manufacturer} mpn={part.mpn} lang={lang} />
+      </section>
+
+      <section class="section">
         <PinTable
           device={device}
           manufacturer={part.manufacturer}
@@ -195,6 +205,11 @@ export default function PartDetail({ lang }: { lang: Lang }) {
 
       <section class="section">
         <PackageDimensions pkg={pkg} lang={lang} />
+      </section>
+
+      <section class="section">
+        <h3>{copy.sourcesHeading}</h3>
+        <SourceList sources={sources} lang={lang} />
       </section>
     </div>
   );

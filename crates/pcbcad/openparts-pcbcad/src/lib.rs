@@ -5,12 +5,18 @@
 //! Device pins and Mechanical Geometry leads.
 
 mod footprint;
+mod outline;
+mod svg;
+
+pub use outline::COURTYARD_WIDTH;
+pub use svg::render_svg;
 mod symbol;
 
 pub use footprint::build_footprint;
 pub use symbol::build_symbol;
 
 use openparts_core::PinType;
+pub(crate) use openparts_mcad::Mounting;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point2 {
@@ -139,11 +145,39 @@ pub struct Courtyard {
     pub outline: Vec<Point2>,
 }
 
+/// A footprint drawing layer (the courtyard is [`Courtyard`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FpLayer {
+    /// Silkscreen: printed on the board.
+    Silk,
+    /// Fabrication / documentation: the body outline for assembly drawings.
+    Fab,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FpShape {
+    Line(Point2, Point2),
+    /// Closed.
+    Polygon(Vec<Point2>),
+    Circle {
+        center: Point2,
+        radius: f64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FpGraphic {
+    pub layer: FpLayer,
+    /// Stroke width (mm).
+    pub width: f64,
+    pub shape: FpShape,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PcbFootprint {
     pub name: String,
     pub pads: Vec<Pad>,
-    pub graphics: Vec<Graphic>,
+    pub graphics: Vec<FpGraphic>,
     pub courtyard: Option<Courtyard>,
     /// Optional 3D model attached to the footprint. [`build_footprint`]
     /// fills this in by default (see [`default_model_path`]); `None`

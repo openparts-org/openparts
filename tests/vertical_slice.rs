@@ -82,10 +82,11 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
     assert_eq!(parsed_pads.len(), 56);
 
-    // The footprint pad and the mechanical geometry lead agree on
-    // position for every pin -- the IR conversion doesn't silently drop
-    // or reorder anything.
-    for lead in &geometry.leads {
+    // The footprint pads are the geometry's lands (IPC-7351B, from the
+    // leads), position for position -- the IR conversion doesn't
+    // silently drop or reorder anything.
+    assert!(!geometry.lands.is_empty(), "QFN gets IPC lands");
+    for lead in &geometry.lands {
         let pad = parsed_pads
             .iter()
             .find(|p| p.number == lead.number)
@@ -234,11 +235,32 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         };
         // Through-hole pads are KiCad reference-footprint copper sizes,
         // not lead outlines, and aren't checked here.
+        // Both the leads and the footprint lands made from them.
         let smd: Vec<_> = geometry
             .leads
             .iter()
             .filter(|l| l.mounting == openparts_mcad::Mounting::Smd)
             .collect();
+        let lands: Vec<_> = geometry
+            .lands
+            .iter()
+            .filter(|l| l.mounting == openparts_mcad::Mounting::Smd)
+            .collect();
+        for (i, a) in lands.iter().enumerate() {
+            for b in &lands[i + 1..] {
+                let (ra, rb) = (rect(a), rect(b));
+                let overlap = ra.0 < rb.1 - 1e-9
+                    && rb.0 < ra.1 - 1e-9
+                    && ra.2 < rb.3 - 1e-9
+                    && rb.2 < ra.3 - 1e-9;
+                if overlap && a.number != b.number {
+                    failures.push(format!(
+                        "{}: lands {} and {} overlap",
+                        package.id, a.number, b.number
+                    ));
+                }
+            }
+        }
         for (i, a) in smd.iter().enumerate() {
             for b in &smd[i + 1..] {
                 let (ra, rb) = (rect(a), rect(b));
@@ -310,4 +332,63 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         "packages that fail to generate:\n{}",
         failures.join("\n")
     );
+}
+
+/// Every package's footprint: the courtyard encloses every pad and the
+/// silkscreen, and no silkscreen line runs over copper.
+#[test]
+fn dataset_footprints_have_a_courtyard_around_pads_and_silk_clear_of_copper() {
+    use openparts_pcbcad::{FpLayer, FpShape};
+    let dataset = openparts_data::Dataset::load(data_dir()).unwrap();
+    let mut failures = Vec::new();
+    for package in dataset.packages.values() {
+        let Ok(geometry) = openparts_mcad::generate(package) else {
+            continue;
+        };
+        let fp = openparts_pcbcad::build_footprint("X", &geometry);
+        let c = fp.courtyard.as_ref().expect("a courtyard");
+        let (cx0, cx1) = c
+            .outline
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.x), b.max(p.x)));
+        let (cy0, cy1) = c
+            .outline
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.y), b.max(p.y)));
+        let inside = |x: f64, y: f64| {
+            x >= cx0 - 1e-6 && x <= cx1 + 1e-6 && y >= cy0 - 1e-6 && y <= cy1 + 1e-6
+        };
+        for pad in &fp.pads {
+            let (hx, hy) = (pad.size.0 / 2.0, pad.size.1 / 2.0);
+            if !inside(pad.position.x - hx, pad.position.y - hy)
+                || !inside(pad.position.x + hx, pad.position.y + hy)
+            {
+                failures.push(format!(
+                    "{}: pad {} outside the courtyard",
+                    package.id, pad.number
+                ));
+            }
+        }
+        for g in fp.graphics.iter().filter(|g| g.layer == FpLayer::Silk) {
+            if let FpShape::Line(a, b) = &g.shape {
+                if !inside(a.x, a.y) || !inside(b.x, b.y) {
+                    failures.push(format!("{}: silkscreen outside the courtyard", package.id));
+                }
+                // Sample the line: no point within a pad.
+                for i in 0..=20 {
+                    let t = i as f64 / 20.0;
+                    let (x, y) = (a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+                    if let Some(p) = fp.pads.iter().find(|p| {
+                        (x - p.position.x).abs() < p.size.0 / 2.0
+                            && (y - p.position.y).abs() < p.size.1 / 2.0
+                    }) {
+                        failures.push(format!("{}: silkscreen over pad {}", package.id, p.number));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    failures.dedup();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

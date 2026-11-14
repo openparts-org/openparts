@@ -20,6 +20,12 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   lone "1.80 max" is recorded as `max: 1.80` only -- never copy it into
   `nominal` (the generator draws at the max; a min-only height is treated
   as a floor).
+- **Record the land pattern.** When the datasheet gives a recommended
+  PCB land ("Recommended Land Pattern", "Example Board Layout", "PCB
+  layout"), record it in `pads` (every pad, arithmetic in the `/pads`
+  locator): the footprint then uses it. Without it the footprint lands
+  are computed from the leads by IPC-7351B (density N) -- fine, but the
+  vendor's land is better.
 - **Cite what you read.** The provenance `source` is the exact document
   *and revision* you opened. A newer revision than an existing Source gets
   its own Source (`id: <mfr>/<doc>@rev<N>`, file
@@ -43,7 +49,9 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
 
 ```
 manufacturers/<mfr>.yaml                   one per manufacturer (shared)
-sources/<mfr>/<doc>.yaml                   one per document revision
+sources/<mfr>/<doc>.yaml                   one per document revision (with
+                                           `retrieved: "YYYY-MM-DD"`, the
+                                           day you downloaded it)
 devices/<mfr>/<DEVICE>.yaml                logical device: pins, category
 packages/standards/<family>/<ID>.yaml      generic outline, reusable
 packages/manufacturers/<mfr>/<ID>.yaml     a vendor's own drawing
@@ -323,7 +331,9 @@ cargo run -q -p openparts-solidcraft --example gallery -- ../openparts-data <out
 ```
 
 Look at the PNG of every new **package**: leads on the right sides, pin-1
-mark at pin 1, plausible proportions. SOT and header models carry no
+mark at pin 1, plausible proportions. Look at the footprint too:
+`openparts generate` writes `<mpn>.footprint.svg` (pads with their
+numbers, silkscreen, body outline, courtyard) -- open it in a browser. SOT and header models carry no
 pin-1 mark: check pin 1 from the generated footprint pads instead. For `sot` layouts with 4+ leads,
 also check the generated pad x-positions against the datasheet's top view.
 
@@ -342,8 +352,8 @@ also check the generated pad x-positions against the datasheet's top view.
   files into your scratchpad, run its `scripts/validate.sh` with
   `OPENPARTS_CLI=target/debug/openparts` and the prebuilt gallery on it,
   then move the files into the shared tree.
-- Check SOT/header pin positions with `openparts generate ... --out <dir>`
-  and `grep '(pad' <dir>/*.kicad_mod` (KiCad Y points down).
+- Check pin positions in `<mpn>.footprint.svg` from `openparts generate
+  ... --out <dir>` (or `grep '(pad' <dir>/*.kicad_mod`, KiCad Y down).
 - If `cargo run --example gallery` doesn't compile because code is being
   edited, the prebuilt `target/debug/examples/gallery` still works.
 

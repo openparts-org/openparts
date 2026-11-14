@@ -31,5 +31,11 @@ pub struct Source {
     /// "rev-b2"), not an ordered numeric scale.
     pub revision: String,
     pub date: String,
+    /// Where the document was read. Vendor "latest" links (TI's
+    /// `.../symlink/<part>.pdf`) may serve a newer revision later than
+    /// the one recorded in `revision`.
     pub url: String,
+    /// When the document was downloaded and read (`YYYY-MM-DD`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieved: Option<String>,
 }

@@ -20,6 +20,8 @@ pub use openparts_librepcb::LpFile;
 pub enum ArtifactKind {
     KicadSymbol,
     KicadFootprint,
+    /// A browser preview of the footprint (top view).
+    FootprintSvg,
     Step,
     Stl,
     ThreeMf,
@@ -28,9 +30,10 @@ pub enum ArtifactKind {
 }
 
 impl ArtifactKind {
-    pub const ALL: [ArtifactKind; 6] = [
+    pub const ALL: [ArtifactKind; 7] = [
         ArtifactKind::KicadSymbol,
         ArtifactKind::KicadFootprint,
+        ArtifactKind::FootprintSvg,
         ArtifactKind::Step,
         ArtifactKind::Stl,
         ArtifactKind::ThreeMf,
@@ -49,6 +52,7 @@ impl ArtifactKind {
         match self {
             ArtifactKind::KicadSymbol => "kicad-symbol",
             ArtifactKind::KicadFootprint => "kicad-footprint",
+            ArtifactKind::FootprintSvg => "footprint-svg",
             ArtifactKind::Step => "step",
             ArtifactKind::Stl => "stl",
             ArtifactKind::ThreeMf => "3mf",
@@ -64,6 +68,7 @@ impl ArtifactKind {
         match self {
             ArtifactKind::KicadSymbol => "kicad_sym",
             ArtifactKind::KicadFootprint => "kicad_mod",
+            ArtifactKind::FootprintSvg => "footprint.svg",
             ArtifactKind::Step => "step",
             ArtifactKind::Stl => "stl",
             ArtifactKind::ThreeMf => "3mf",
@@ -74,6 +79,7 @@ impl ArtifactKind {
     pub fn content_type(self) -> &'static str {
         match self {
             ArtifactKind::KicadSymbol | ArtifactKind::KicadFootprint => "text/plain; charset=utf-8",
+            ArtifactKind::FootprintSvg => "image/svg+xml",
             ArtifactKind::Step => "model/step",
             ArtifactKind::Stl => "model/stl",
             ArtifactKind::ThreeMf => "model/3mf",
@@ -269,6 +275,9 @@ impl PartBuild {
             }
             ArtifactKind::KicadFootprint => {
                 openparts_kicad::render_footprint(&self.footprint()?).into_bytes()
+            }
+            ArtifactKind::FootprintSvg => {
+                openparts_pcbcad::render_svg(&self.footprint()?).into_bytes()
             }
             _ => self.models(&[kind])?.remove(0),
         })
