@@ -177,6 +177,8 @@ pub fn describe(diags: &[openparts_validator::Diagnostic]) -> String {
 #[derive(Debug)]
 pub struct PartBuild {
     pub model: EffectiveModel,
+    /// The part's datasheet URL, when built from a dataset that has it.
+    pub datasheet: Option<String>,
     geometry: Result<MechanicalGeometry, openparts_mcad::McadError>,
 }
 
@@ -200,7 +202,11 @@ impl PartBuild {
         let model =
             openparts_core::build_effective_model(part.clone(), device, package.clone(), revision)?;
         let geometry = openparts_mcad::generate(&model.package);
-        Ok(PartBuild { model, geometry })
+        Ok(PartBuild {
+            model,
+            datasheet: None,
+            geometry,
+        })
     }
 
     /// [`PartBuild::new`] for a part of `dataset`, validated against the
@@ -211,7 +217,14 @@ impl PartBuild {
         revision: Option<&str>,
     ) -> Result<PartBuild, BuildError> {
         let (device, package) = dataset.resolve(part)?;
-        PartBuild::new(part, device, package, &dataset.source_ids(), revision)
+        let mut build = PartBuild::new(part, device, package, &dataset.source_ids(), revision)?;
+        build.datasheet = part
+            .sources
+            .iter()
+            .filter_map(|id| dataset.sources.get(&id.0))
+            .find(|s| s.document_type == openparts_core::DocumentType::Datasheet)
+            .map(|s| s.url.clone());
+        Ok(build)
     }
 
     pub fn mpn(&self) -> &str {
@@ -229,7 +242,11 @@ impl PartBuild {
     }
 
     pub fn symbol(&self) -> PcbSymbol {
-        openparts_pcbcad::build_symbol(self.mpn(), &self.model.device)
+        let mut symbol = openparts_pcbcad::build_symbol(self.mpn(), &self.model.device);
+        if let Some(url) = &self.datasheet {
+            symbol.datasheet = url.clone();
+        }
+        symbol
     }
 
     pub fn geometry(&self) -> Result<&MechanicalGeometry, BuildError> {

@@ -6,6 +6,7 @@ fn electrical_type_str(t: PinElectricalType) -> &'static str {
         PinElectricalType::Output => "output",
         PinElectricalType::Bidirectional => "bidirectional",
         PinElectricalType::PowerIn => "power_in",
+        PinElectricalType::PowerOut => "power_out",
         PinElectricalType::Passive => "passive",
         PinElectricalType::NoConnect => "no_connect",
         PinElectricalType::Unspecified => "unspecified",
@@ -29,6 +30,51 @@ pub fn render_symbol(symbol: &PcbSymbol) -> String {
     out.push_str("  (generator openparts)\n");
     out.push_str(&format!("  (symbol \"{}\"\n", symbol.name));
     out.push_str("    (in_bom yes) (on_board yes)\n");
+    // Reference above the body, value below it; footprint and
+    // datasheet hidden (KiCad's own library convention).
+    let (top, bottom) = symbol
+        .graphics
+        .iter()
+        .map(|g| {
+            let openparts_pcbcad::GraphicKind::Rectangle { start, end } = g.kind;
+            (start.y.max(end.y), start.y.min(end.y))
+        })
+        .chain(symbol.pins.iter().map(|p| (p.position.y, p.position.y)))
+        .fold((0.0_f64, 0.0_f64), |(t, b), (gt, gb)| {
+            (t.max(gt), b.min(gb))
+        });
+    let property = |out: &mut String, id: u32, key: &str, value: &str, y: f64, hide: bool| {
+        out.push_str(&format!(
+            "    (property \"{key}\" \"{}\" (id {id}) (at 0 {y:.2} 0)\n      (effects (font (size 1.27 1.27)){}))\n",
+            escape(value),
+            if hide { " hide" } else { "" }
+        ));
+    };
+    property(
+        &mut out,
+        0,
+        "Reference",
+        &symbol.reference,
+        top + 2.54,
+        false,
+    );
+    property(&mut out, 1, "Value", &symbol.value, bottom - 2.54, false);
+    property(
+        &mut out,
+        2,
+        "Footprint",
+        &symbol.footprint,
+        bottom - 5.08,
+        true,
+    );
+    property(
+        &mut out,
+        3,
+        "Datasheet",
+        &symbol.datasheet,
+        bottom - 7.62,
+        true,
+    );
 
     // Unit 0: the body outline, plus any pins shared across every
     // numbered unit (only present when build_symbol split a large bus
@@ -69,6 +115,10 @@ pub fn render_symbol(symbol: &PcbSymbol) -> String {
     out.push_str("  )\n");
     out.push_str(")\n");
     out
+}
+
+fn escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn write_pin(out: &mut String, pin: &openparts_pcbcad::SymbolPin) {
@@ -173,6 +223,10 @@ mod tests {
     fn round_trips_pin_number_name_and_position() {
         let symbol = PcbSymbol {
             name: "TEST".into(),
+            reference: "U".into(),
+            value: "X".into(),
+            footprint: String::new(),
+            datasheet: String::new(),
             units: vec![SymbolUnit { index: 1 }],
             pins: vec![SymbolPin {
                 number: "7".into(),
@@ -211,6 +265,10 @@ mod tests {
         // other by the reader when they're adjacent in the file.
         let symbol = PcbSymbol {
             name: "TEST".into(),
+            reference: "U".into(),
+            value: "X".into(),
+            footprint: String::new(),
+            datasheet: String::new(),
             units: vec![SymbolUnit { index: 1 }],
             pins: vec![
                 SymbolPin {
@@ -266,6 +324,10 @@ mod tests {
     fn multi_unit_symbols_get_one_block_per_unit_plus_a_shared_unit_zero_block() {
         let symbol = PcbSymbol {
             name: "BIGMCU".into(),
+            reference: "U".into(),
+            value: "X".into(),
+            footprint: String::new(),
+            datasheet: String::new(),
             units: vec![SymbolUnit { index: 1 }, SymbolUnit { index: 2 }],
             pins: vec![
                 pin("57", "IOVDD", 0),

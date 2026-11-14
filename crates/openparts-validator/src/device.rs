@@ -10,7 +10,7 @@ use openparts_core::{Device, PinType};
 pub(crate) fn allows_repeated_names(pin_type: PinType) -> bool {
     matches!(
         pin_type,
-        PinType::Power | PinType::Ground | PinType::Nc | PinType::Reserved
+        PinType::Power | PinType::PowerOut | PinType::Ground | PinType::Nc | PinType::Reserved
     )
 }
 

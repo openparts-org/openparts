@@ -4,6 +4,7 @@
 //! Canonical YAML directly -- only `PcbSymbol`/`PcbFootprint`.
 
 mod footprint;
+pub mod library;
 mod symbol;
 
 pub use footprint::{

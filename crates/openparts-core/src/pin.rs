@@ -4,13 +4,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PinType {
+    /// A supply input.
     Power,
+    /// A supply output (a regulator's VOUT, an MCU's core-regulator
+    /// output).
+    PowerOut,
     Ground,
     Input,
     Output,
     Io,
     Analog,
+    /// A clock input.
     Clock,
+    /// A clock the part drives (a flash clock, a crystal driver's output).
+    ClockOut,
     Reset,
     Nc,
     Reserved,

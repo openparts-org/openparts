@@ -62,6 +62,15 @@ enum Commands {
     Search {
         query: String,
     },
+    /// Install parts from the registry into a KiCad project's own
+    /// libraries (`openparts.kicad_sym`, `openparts.pretty`, 3D models,
+    /// library tables).
+    KicadInstall {
+        #[arg(long)]
+        project: PathBuf,
+        /// `<manufacturer>/<mpn>` (the MPN may itself contain `/`).
+        parts: Vec<String>,
+    },
     Show {
         manufacturer: String,
         mpn: String,
@@ -113,6 +122,9 @@ fn main() -> anyhow::Result<()> {
             anyhow::bail!("validate needs --data <dir>, or --part, --device and --package")
         }
         Commands::Search { query } => cmd_search(&cli.registry, &query),
+        Commands::KicadInstall { project, parts } => {
+            cmd_kicad_install(&cli.registry, &project, &parts)
+        }
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
         Commands::Bundle {
             data,
@@ -311,6 +323,41 @@ fn cmd_search(registry: &str, query: &str) -> anyhow::Result<()> {
         );
     }
     println!("{} part(s) found", results.len());
+    Ok(())
+}
+
+/// `openparts kicad-install --project <dir> <manufacturer>/<mpn>...`:
+/// every artifact comes from the registry (`--registry`).
+fn cmd_kicad_install(
+    registry: &str,
+    project: &std::path::Path,
+    parts: &[String],
+) -> anyhow::Result<()> {
+    use openparts_client::ArtifactKind;
+    let client = openparts_client::Client::new(registry);
+    std::fs::create_dir_all(project)?;
+    for spec in parts {
+        let (manufacturer, mpn) = spec
+            .split_once('/')
+            .with_context(|| format!("{spec}: expected <manufacturer>/<mpn>"))?;
+        let get = |kind| {
+            client
+                .get_artifact(manufacturer, mpn, kind, None)
+                .with_context(|| format!("fetching {spec} {kind:?} from {registry}"))
+        };
+        let symbol = get(ArtifactKind::KicadSymbol)?;
+        let footprint = get(ArtifactKind::KicadFootprint)?;
+        let step = get(ArtifactKind::Step)?;
+        openparts_kicad::library::install_into_project(
+            project,
+            mpn,
+            &symbol.content,
+            &footprint.content,
+            step.content.as_bytes(),
+        )
+        .with_context(|| format!("installing {spec}"))?;
+        println!("installed {spec}");
+    }
     Ok(())
 }
 

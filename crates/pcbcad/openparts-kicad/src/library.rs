@@ -1,3 +1,8 @@
+//! Installing OpenParts parts into a KiCad project's own libraries
+//! (`openparts.kicad_sym`, `openparts.pretty/`, `openparts_3d/` and the
+//! project's `sym-lib-table`/`fp-lib-table`), shared by `openparts kicad
+//! install` and the KiCad plugin.
+//!
 //! Pure file-manipulation logic: no `eframe`/`egui`, no KiCad API --
 //! everything here operates on plain strings and is fully unit-testable
 //! in this environment. `sym-lib-table`/`fp-lib-table` and
@@ -151,6 +156,69 @@ pub fn add_lib_table_row(
             "({table_tag}\n  (lib (name \"{lib_name}\")(type \"{lib_type}\")(uri \"{uri}\")(options \"\")(descr \"\"))\n)\n"
         )
     }
+}
+
+/// Writes one part's fetched artifacts into `project_dir`: the STEP
+/// under `openparts_3d/`, the footprint (its 3D model pointed there)
+/// under `openparts.pretty/`, the symbol merged into
+/// `openparts.kicad_sym`, and the `openparts` rows of both library
+/// tables. Idempotent: installing a part again replaces it.
+pub fn install_into_project(
+    project_dir: &std::path::Path,
+    mpn: &str,
+    symbol_lib_text: &str,
+    footprint_text: &str,
+    step: &[u8],
+) -> Result<(), InstallError> {
+    let file_stem = safe_filename(mpn);
+    let step_dir = project_dir.join("openparts_3d");
+    std::fs::create_dir_all(&step_dir)?;
+    std::fs::write(step_dir.join(format!("{file_stem}.step")), step)?;
+
+    let step_rel = format!("${{KIPRJMOD}}/openparts_3d/{file_stem}.step");
+    let pretty_dir = project_dir.join("openparts.pretty");
+    std::fs::create_dir_all(&pretty_dir)?;
+    std::fs::write(
+        pretty_dir.join(format!("{file_stem}.kicad_mod")),
+        patch_footprint_3d_model(footprint_text, &step_rel),
+    )?;
+
+    let symbol_block = extract_symbol_block(symbol_lib_text, mpn)?;
+    let sym_path = project_dir.join("openparts.kicad_sym");
+    let existing = std::fs::read_to_string(&sym_path).ok();
+    std::fs::write(
+        &sym_path,
+        merge_symbol_library(existing.as_deref(), mpn, &symbol_block),
+    )?;
+
+    for (file, table, uri) in [
+        (
+            "sym-lib-table",
+            "sym_lib_table",
+            "${KIPRJMOD}/openparts.kicad_sym",
+        ),
+        (
+            "fp-lib-table",
+            "fp_lib_table",
+            "${KIPRJMOD}/openparts.pretty",
+        ),
+    ] {
+        let path = project_dir.join(file);
+        let existing = std::fs::read_to_string(&path).ok();
+        std::fs::write(
+            &path,
+            add_lib_table_row(existing.as_deref(), table, "openparts", "KiCad", uri),
+        )?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InstallError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Sync(#[from] SyncError),
 }
 
 #[cfg(test)]

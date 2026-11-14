@@ -1,5 +1,5 @@
 mod kicad_detect;
-mod library_sync;
+use openparts_kicad::library;
 
 use eframe::egui;
 use openparts_client::{ArtifactKind, Client, PartSummary};
@@ -286,61 +286,14 @@ fn install_part(
         .get_artifact(manufacturer, mpn, ArtifactKind::Step, revision)
         .map_err(|e| e.to_string())?;
 
-    // Same `/` -> `-` sanitisation the generator uses for its own file
-    // names: an MPN like `LPC1114FBD48/302` must not become a
-    // subdirectory.
-    let file_stem = library_sync::safe_filename(mpn);
-
-    let step_dir = project_dir.join("openparts_3d");
-    std::fs::create_dir_all(&step_dir).map_err(|e| e.to_string())?;
-    std::fs::write(
-        step_dir.join(format!("{file_stem}.step")),
-        &step_artifact.content,
+    library::install_into_project(
+        project_dir,
+        mpn,
+        &symbol_artifact.content,
+        &footprint_artifact.content,
+        step_artifact.content.as_bytes(),
     )
     .map_err(|e| e.to_string())?;
-
-    // The fetched footprint already references `<file_stem>.step`
-    // relative to its library; point it at where we actually put it.
-    let step_rel = format!("${{KIPRJMOD}}/openparts_3d/{file_stem}.step");
-    let patched_footprint =
-        library_sync::patch_footprint_3d_model(&footprint_artifact.content, &step_rel);
-    let pretty_dir = project_dir.join("openparts.pretty");
-    std::fs::create_dir_all(&pretty_dir).map_err(|e| e.to_string())?;
-    std::fs::write(
-        pretty_dir.join(format!("{file_stem}.kicad_mod")),
-        patched_footprint,
-    )
-    .map_err(|e| e.to_string())?;
-
-    let symbol_block = library_sync::extract_symbol_block(&symbol_artifact.content, mpn)
-        .map_err(|e| e.to_string())?;
-    let sym_path = project_dir.join("openparts.kicad_sym");
-    let existing_sym = std::fs::read_to_string(&sym_path).ok();
-    let merged_sym =
-        library_sync::merge_symbol_library(existing_sym.as_deref(), mpn, &symbol_block);
-    std::fs::write(&sym_path, merged_sym).map_err(|e| e.to_string())?;
-
-    let sym_table_path = project_dir.join("sym-lib-table");
-    let existing_sym_table = std::fs::read_to_string(&sym_table_path).ok();
-    let updated_sym_table = library_sync::add_lib_table_row(
-        existing_sym_table.as_deref(),
-        "sym_lib_table",
-        "openparts",
-        "KiCad",
-        "${KIPRJMOD}/openparts.kicad_sym",
-    );
-    std::fs::write(&sym_table_path, updated_sym_table).map_err(|e| e.to_string())?;
-
-    let fp_table_path = project_dir.join("fp-lib-table");
-    let existing_fp_table = std::fs::read_to_string(&fp_table_path).ok();
-    let updated_fp_table = library_sync::add_lib_table_row(
-        existing_fp_table.as_deref(),
-        "fp_lib_table",
-        "openparts",
-        "KiCad",
-        "${KIPRJMOD}/openparts.pretty",
-    );
-    std::fs::write(&fp_table_path, updated_fp_table).map_err(|e| e.to_string())?;
 
     Ok(format!(
         "Installed {mpn} into {} (symbol hash sha256:{}, footprint hash sha256:{}, step hash sha256:{})",

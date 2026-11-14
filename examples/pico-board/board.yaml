@@ -1,0 +1,125 @@
+# A Raspberry Pi Pico-style RP2040 board (51 x 21 mm, 2 x 20 pins at
+# 2.54 mm on 17.78 mm row spacing), following the RP2040 hardware design
+# guide's minimal design: 12 MHz crystal, QSPI flash, 3.3 V LDO from
+# USB (USB-C here, with its CC pull-downs), BOOTSEL button, LED on
+# GPIO25. Every part is fetched from the OpenParts registry.
+#
+#   tools/kicad-board/build.py examples/pico-board/board.yaml --out <dir>
+name: pico
+registry: http://127.0.0.1:8080/api
+
+board:
+  width: 51.0
+  height: 21.0
+  layers: 2
+  rules:
+    track: 0.2
+    clearance: 0.15
+    via_diameter: 0.6
+    via_drill: 0.3
+  power_nets:
+    track: 0.4
+    nets: [GND, VBUS, 3V3, 1V1]
+  # Copper pours on both layers.
+  zones: [GND]
+
+components:
+  U1: raspberrypi/RP2040
+  U2: winbond/W25Q128JVSIQ
+  U3: onsemi/NCP1117ST33T3G
+  Y1: abracon/ABM8-272-T3
+  J1: gct/USB4105-GF-A
+  J2: wurth/61302021121
+  J3: wurth/61302021121
+  SW1: omron/B3FS-1050
+  D1: kingbright/APT1608SGC
+  R1: yageo/RC0603FR-0727RL      # USB D+ series
+  R2: yageo/RC0603FR-0727RL      # USB D- series
+  R3: yageo/RC0603FR-071KL       # XOUT series
+  R4: yageo/RC0603FR-071KL       # BOOTSEL to QSPI_CS
+  R5: yageo/RC0603FR-075K1L      # CC1 pull-down
+  R6: yageo/RC0603FR-075K1L      # CC2 pull-down
+  R7: yageo/RC0603FR-07330RL     # LED
+  C1: samsung/CL10B104KB8NNNC    # IOVDD decoupling x6
+  C2: samsung/CL10B104KB8NNNC
+  C3: samsung/CL10B104KB8NNNC
+  C4: samsung/CL10B104KB8NNNC
+  C5: samsung/CL10B104KB8NNNC
+  C6: samsung/CL10B104KB8NNNC
+  C7: samsung/CL10B104KB8NNNC    # ADC_AVDD
+  C8: samsung/CL10B104KB8NNNC    # USB_VDD
+  C9: samsung/CL10B104KB8NNNC    # flash VCC
+  C10: samsung/CL10B104KB8NNNC   # DVDD
+  C11: samsung/CL10B104KB8NNNC   # DVDD
+  C12: samsung/CL10A105KB8NNNC   # VREG_VIN 1 uF
+  C13: samsung/CL10A105KB8NNNC   # VREG_VOUT 1 uF
+  C14: samsung/CL10A106KP8NNNC   # LDO in 10 uF
+  C15: samsung/CL10A106KP8NNNC   # LDO out 10 uF
+  C16: samsung/CL10C150JB8NNNC   # crystal load caps, 15 pF C0G
+  C17: samsung/CL10C150JB8NNNC
+
+nets:
+  GND: [U1.EP, U1.19, U2.4, U3.1, J1.A1, J1.A12, J1.B1, J1.B12, J1.SHELL,
+        SW1.3, SW1.4, D1.1, R5.2, R6.2,
+        C1.2, C2.2, C3.2, C4.2, C5.2, C6.2, C7.2, C8.2, C9.2, C10.2, C11.2,
+        C12.2, C13.2, C14.2, C15.2, C16.2, C17.2, Y1.2, Y1.4,
+        J2.3, J2.8, J2.13, J2.18, J3.3, J3.8, J3.13, J3.18]
+  VBUS: [J1.A4, J1.A9, J1.B4, J1.B9, U3.3, C14.1, J3.19, J3.20]
+  3V3: [U3.2, U3.4, C15.1, U1.1, U1.10, U1.22, U1.33, U1.42, U1.49,
+        U1.43, U1.48, U1.44, U2.8,
+        C1.1, C2.1, C3.1, C4.1, C5.1, C6.1, C7.1, C8.1, C9.1, C12.1,
+        J3.15, J3.16]
+  1V1: [U1.45, U1.23, U1.50, C10.1, C11.1, C13.1]
+  USB_CONN_DP: [J1.A6, J1.B6, R1.1]
+  USB_CONN_DM: [J1.A7, J1.B7, R2.1]
+  USB_DP: [R1.2, U1.47]
+  USB_DM: [R2.2, U1.46]
+  CC1: [J1.A5, R5.1]
+  CC2: [J1.B5, R6.1]
+  XIN: [U1.20, Y1.1, C16.1]
+  XOUT: [U1.21, R3.1]
+  XTAL_OUT: [R3.2, Y1.3, C17.1]
+  QSPI_CS: [U1.56, U2.1, R4.2]
+  BOOTSEL: [R4.1, SW1.1, SW1.2]
+  QSPI_SCLK: [U1.52, U2.6]
+  QSPI_SD0: [U1.53, U2.5]
+  QSPI_SD1: [U1.55, U2.2]
+  QSPI_SD2: [U1.54, U2.3]
+  QSPI_SD3: [U1.51, U2.7]
+  RUN: [U1.26, J3.10]
+  LED: [U1.37, R7.1]
+  LED_A: [R7.2, D1.2]
+  # Header pins as on the Pico (pins 1-20 on J2, 21-40 on J3 counted
+  # from the far end): GPIO, GND every fifth pin.
+  GP0: [U1.2, J2.1]
+  GP1: [U1.3, J2.2]
+  GP2: [U1.4, J2.4]
+  GP3: [U1.5, J2.5]
+  GP4: [U1.6, J2.6]
+  GP5: [U1.7, J2.7]
+  GP6: [U1.8, J2.9]
+  GP7: [U1.9, J2.10]
+  GP8: [U1.11, J2.11]
+  GP9: [U1.12, J2.12]
+  GP10: [U1.13, J2.14]
+  GP11: [U1.14, J2.15]
+  GP12: [U1.15, J2.16]
+  GP13: [U1.16, J2.17]
+  GP14: [U1.17, J2.19]
+  GP15: [U1.18, J2.20]
+  GP16: [U1.27, J3.1]
+  GP17: [U1.28, J3.2]
+  GP18: [U1.29, J3.4]
+  GP19: [U1.30, J3.5]
+  GP20: [U1.31, J3.6]
+  GP21: [U1.32, J3.7]
+  GP22: [U1.34, J3.9]
+  GP26: [U1.38, J3.11]
+  GP27: [U1.39, J3.12]
+  GP28: [U1.40, J3.14]
+
+# Nets fed from outside the schematic's own power outputs.
+power_flags: [GND, VBUS]
+
+# Pins deliberately left open (get a no-connect flag).
+no_connect: [U1.24, U1.25, U1.35, U1.36, U1.41, J1.A8, J1.B8, J3.17]

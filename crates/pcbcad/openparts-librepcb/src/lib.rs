@@ -37,7 +37,7 @@ fn pin_role(t: PinElectricalType) -> &'static str {
         PinElectricalType::Input => "input",
         PinElectricalType::Output => "output",
         PinElectricalType::Bidirectional => "inout",
-        PinElectricalType::PowerIn => "power",
+        PinElectricalType::PowerIn | PinElectricalType::PowerOut => "power",
         PinElectricalType::Passive => "passive",
         // LibrePCB's SignalRole has no "no connect"/"unspecified" role
         // (only passive/power/input/output/inout/opendrain) -- "passive"
@@ -608,6 +608,10 @@ mod tests {
     fn synthetic_symbol() -> PcbSymbol {
         PcbSymbol {
             name: "TEST".into(),
+            reference: "U".into(),
+            value: "X".into(),
+            footprint: String::new(),
+            datasheet: String::new(),
             units: vec![SymbolUnit { index: 1 }],
             pins: vec![
                 SymbolPin {

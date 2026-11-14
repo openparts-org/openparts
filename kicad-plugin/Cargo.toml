@@ -22,6 +22,7 @@ kicad-ipc = ["dep:kicad-ipc-rs"]
 [dependencies]
 openparts-client = { path = "../crates/openparts-client" }
 openparts-core = { path = "../crates/openparts-core" }
+openparts-kicad = { path = "../crates/pcbcad/openparts-kicad" }
 
 eframe = "0.29"
 thiserror = "1"

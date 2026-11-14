@@ -271,6 +271,25 @@ const BUS_UNIT_MAX_PINS: usize = 32;
 ///     F --> G["split the bus into chunks of &le; 32,<br/>in ascending pin-number order"]
 ///     G --> H["unit 1..N: one chunk each,<br/>right side, shared rectangle from unit 0"]
 /// ```
+/// KiCad's 1.27 mm grid (pin ends sit on it).
+const HALF_GRID_MM: f64 = GRID_MM / 2.0;
+
+/// The conventional reference designator prefix for a category.
+pub fn reference_prefix(category: openparts_core::ComponentCategory) -> &'static str {
+    use openparts_core::ComponentCategory as C;
+    match category {
+        C::Resistor => "R",
+        C::Capacitor => "C",
+        C::Inductor => "L",
+        C::Diode | C::Led => "D",
+        C::Transistor => "Q",
+        C::Crystal => "Y",
+        C::Fuse => "F",
+        C::Connector => "J",
+        C::Microcontroller | C::Other => "U",
+    }
+}
+
 pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let mut numbers: Vec<&String> = device.pins.keys().collect();
     numbers.sort_by_key(|n| n.parse::<u32>().unwrap_or(u32::MAX));
@@ -280,7 +299,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let mut rest: Vec<&String> = Vec::new();
     for number in &numbers {
         match device.pins[*number].pin_type {
-            PinType::Power => top.push(number),
+            PinType::Power | PinType::PowerOut => top.push(number),
             PinType::Ground => bottom.push(number),
             _ => rest.push(number),
         }
@@ -409,6 +428,11 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             corner_boosted_reach(&left_specs, &left_pos, margin),
             f64::max,
         );
+    // Pin ends on KiCad's 1.27 mm (50 mil) grid, so wires and labels
+    // snap onto them: the body edges (pins are a 2.54 length beyond them)
+    // move out to the next grid line.
+    let snap = |v: f64| (v / HALF_GRID_MM - 1e-9).ceil() * HALF_GRID_MM;
+    let (half_width, half_height) = (snap(half_width), snap(half_height));
 
     let mut pins = Vec::with_capacity(numbers.len());
     // Only the first pin in a stacked name-group (see `SymbolPin::hidden`'s
@@ -517,6 +541,10 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 
     PcbSymbol {
         name: name.to_string(),
+        reference: reference_prefix(device.category).to_string(),
+        value: name.to_string(),
+        footprint: format!("openparts:{}", crate::safe_filename(name)),
+        datasheet: String::new(),
         units,
         pins,
         graphics: vec![Graphic {

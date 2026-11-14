@@ -13,7 +13,7 @@ pub use svg::render_svg;
 mod symbol;
 
 pub use footprint::{add_shared_pads, build_footprint};
-pub use symbol::build_symbol;
+pub use symbol::{build_symbol, reference_prefix};
 
 use openparts_core::PinType;
 pub(crate) use openparts_mcad::Mounting;
@@ -30,6 +30,7 @@ pub enum PinElectricalType {
     Output,
     Bidirectional,
     PowerIn,
+    PowerOut,
     Passive,
     NoConnect,
     Unspecified,
@@ -39,8 +40,9 @@ impl From<PinType> for PinElectricalType {
     fn from(t: PinType) -> Self {
         match t {
             PinType::Power | PinType::Ground => PinElectricalType::PowerIn,
+            PinType::PowerOut => PinElectricalType::PowerOut,
             PinType::Input | PinType::Clock | PinType::Reset => PinElectricalType::Input,
-            PinType::Output => PinElectricalType::Output,
+            PinType::Output | PinType::ClockOut => PinElectricalType::Output,
             PinType::Io => PinElectricalType::Bidirectional,
             PinType::Analog | PinType::Reserved | PinType::Passive => PinElectricalType::Passive,
             PinType::Nc => PinElectricalType::NoConnect,
@@ -109,6 +111,14 @@ pub struct SymbolUnit {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PcbSymbol {
     pub name: String,
+    /// Reference designator prefix ("U", "R", ...).
+    pub reference: String,
+    /// The symbol's value (the MPN).
+    pub value: String,
+    /// The footprint's library id (`openparts:<file name>`).
+    pub footprint: String,
+    /// A datasheet URL, when the caller knows one.
+    pub datasheet: String,
     pub units: Vec<SymbolUnit>,
     pub pins: Vec<SymbolPin>,
     pub graphics: Vec<Graphic>,
