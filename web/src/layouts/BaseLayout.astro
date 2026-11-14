@@ -1,0 +1,41 @@
+---
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { withBase } from "../lib/base";
+import type { Lang } from "../lib/i18n";
+import "../styles/global.css";
+
+interface Props {
+  lang: Lang;
+  currentPath: string;
+  query?: string;
+  title: string;
+  description?: string;
+}
+
+const {
+  lang,
+  currentPath,
+  query = "",
+  title,
+  description = "OpenParts",
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={withBase("/favicon.svg")} />
+    <title>{title} | OpenParts</title>
+  </head>
+  <body>
+    <Nav lang={lang} currentPath={currentPath} query={query} />
+    <main class="container section">
+      <slot />
+    </main>
+    <Footer lang={lang} />
+  </body>
+</html>
