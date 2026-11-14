@@ -25,7 +25,7 @@ pub struct ExposedPadDimensions {
 /// field the datasheet doesn't state stays `None` -- the generator then
 /// falls back to its own documented family default, which is never
 /// written back here (section 7).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PackageDimensions {
     pub body_width: Dimension,
     pub body_length: Dimension,

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// Canonical Data Specification section 7 / 9: a physical quantity that
 /// may have `nominal`/`min`/`max`, none of which are invented when a
 /// datasheet doesn't state them.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Dimension {
     #[serde(default)]
     pub nominal: Option<f64>,

@@ -130,7 +130,8 @@ pub struct UsbCFeatures {
 pub fn usb_c_features(package: &Package) -> UsbCFeatures {
     UsbCFeatures {
         shell_thickness: crate::defaults::usb_c::SHELL_THICKNESS,
-        tail_length: value(&package.dimensions.tail_length).unwrap_or(crate::defaults::usb_c::TAIL_LENGTH),
+        tail_length: value(&package.dimensions.tail_length)
+            .unwrap_or(crate::defaults::usb_c::TAIL_LENGTH),
     }
 }
 
