@@ -657,7 +657,7 @@ aux_pads: [D1, D2, D3]   # 上面視で左から、pitch間隔
 
 `pad_order`は、Familyの位置順（例: タクトスイッチの左上・左下・右下・右上）に対して、Sourceが振っているPad番号を並べたもの。Vendorごとに角の番号付けが違う部品で使う。要素数は`lead_count`と同じ。
 
-`pads`は推奨ランドパターンを1 Padずつ明示的に記録する（`usb_c`）。各要素は`number`、`x`、`y`、`width`（X方向）、`length`（Y方向）と、メッキ穴なら`drill`、長穴なら`drill_length`（長穴の全長、Padの長辺方向）。座標系はFamilyが定義する。Sourceの図から座標を算出した場合は、Provenanceのlocatorに計算を書く。
+`pad_order`と`pads`はすべてのFamilyで使える。`pads`は推奨ランドパターンを1 Padずつ明示的に記録する（`usb_c`では必須、他のFamilyではFootprintのPadをLead外形の代わりにこれで作る）。各要素は`number`、`x`、`y`、`width`（X方向）、`length`（Y方向）と、メッキ穴なら`drill`、長穴なら`drill_length`（長穴の全長、Padの長辺方向）、メッキなし穴（位置決めピン）なら`plated: false`（`number`は空でよい）。座標系はFamilyが定義する。Sourceの図から座標を算出した場合は、Provenanceのlocatorに計算を書く。
 
 Pin header（`family: header`）とSocket strip（Female header、`family: socket`）は、
 ストレート（垂直）のThrough-hole部品である。`lead_layout`は`[列数, 1列あたりのピン数]`

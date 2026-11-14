@@ -290,6 +290,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
     // board).
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
         pitch: crate::defaults::required(&package.pitch),
         details: crate::Details::Header(f),
         body,

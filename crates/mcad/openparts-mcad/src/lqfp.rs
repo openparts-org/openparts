@@ -149,6 +149,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
 
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
 
         pitch: crate::defaults::required(&package.pitch),
 

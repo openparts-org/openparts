@@ -252,6 +252,19 @@ pub struct PackagePad {
     pub drill: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drill_length: Option<f64>,
+    /// `false` for a non-plated hole (an alignment peg): `drill` is the
+    /// hole, `width`/`length` its size, and the pad has no copper (its
+    /// number may be empty).
+    #[serde(default = "plated_default", skip_serializing_if = "is_plated")]
+    pub plated: bool,
+}
+
+fn plated_default() -> bool {
+    true
+}
+
+fn is_plated(p: &bool) -> bool {
+    *p
 }
 
 /// Canonical Data Specification section 21.

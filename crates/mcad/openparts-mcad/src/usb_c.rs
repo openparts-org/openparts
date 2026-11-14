@@ -12,7 +12,7 @@
 //! board). `lead_count` is the number of pads (tabs included).
 
 use crate::defaults::{self, value};
-use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
+use crate::{Body, BodyShape, McadError, MechanicalGeometry, Point3, Size3};
 use openparts_core::Package;
 
 pub fn generate_usb_c(package: &Package) -> Result<MechanicalGeometry, McadError> {
@@ -33,68 +33,11 @@ pub fn generate_usb_c(package: &Package) -> Result<MechanicalGeometry, McadError
         value(&d.body_offset).ok_or(McadError::MissingDimension("dimensions.body_offset"))?;
     let standoff = value(&d.standoff).unwrap_or(0.0);
 
-    let mut leads = Vec::with_capacity(package.pads.len());
-    for p in &package.pads {
-        if p.width <= 0.0 || p.length <= 0.0 {
-            return Err(McadError::InconsistentDimensions(format!(
-                "pad {} has a non-positive size",
-                p.number
-            )));
-        }
-        if let Some(drill) = p.drill {
-            if drill >= p.width.min(p.length) && p.drill_length.is_none() {
-                return Err(McadError::InconsistentDimensions(format!(
-                    "pad {}: drill {drill} leaves no copper",
-                    p.number
-                )));
-            }
-            if p.drill_length
-                .is_some_and(|l| l < drill || l >= p.width.max(p.length))
-            {
-                return Err(McadError::InconsistentDimensions(format!(
-                    "pad {}: slot length must lie between the drill and the pad length",
-                    p.number
-                )));
-            }
-        } else if p.drill_length.is_some() {
-            return Err(McadError::InconsistentDimensions(format!(
-                "pad {}: drill_length without a drill",
-                p.number
-            )));
-        }
-        let tht = p.drill.is_some();
-        leads.push(Lead {
-            number: p.number.clone(),
-            position: Point3 {
-                x: p.x,
-                y: p.y,
-                z: if tht {
-                    0.0
-                } else {
-                    crate::defaults::usb_c::PAD_T / 2.0
-                },
-            },
-            size: Size3 {
-                x: p.width,
-                y: p.length,
-                z: if tht {
-                    standoff
-                } else {
-                    crate::defaults::usb_c::PAD_T
-                },
-            },
-            mounting: if tht {
-                Mounting::ThroughHole
-            } else {
-                Mounting::Smd
-            },
-            drill: p.drill,
-            slot: p.drill_length,
-        });
-    }
+    let leads = crate::land::from_pads_with(package, standoff)?;
 
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
 
         pitch: crate::defaults::required(&package.pitch),
 
@@ -159,9 +102,9 @@ mod tests {
     fn pads_come_straight_from_the_land_pattern() {
         let g = generate_usb_c(&usb()).unwrap();
         assert_eq!(g.leads.len(), 3);
-        assert_eq!(g.leads[0].mounting, Mounting::Smd);
+        assert_eq!(g.leads[0].mounting, crate::Mounting::Smd);
         let s1 = &g.leads[2];
-        assert_eq!(s1.mounting, Mounting::ThroughHole);
+        assert_eq!(s1.mounting, crate::Mounting::ThroughHole);
         assert_eq!((s1.drill, s1.slot), (Some(0.6), Some(1.7)));
         assert!((g.body.position.y + 1.0).abs() < 1e-9);
     }

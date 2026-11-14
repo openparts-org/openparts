@@ -177,12 +177,11 @@ fn render_package(
     out.push_str(" (grid_interval 2.54)\n");
     out.push_str(" (min_copper_clearance 0.15)\n");
 
-    for pad in &footprint.pads {
-        let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{}", pad.number));
+    for number in pad_numbers(footprint) {
+        let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{number}"));
         out.push_str(&format!(
-            " (pad {} (name \"{}\"))\n",
-            fmt_uuid(pad_uuid),
-            pad.number
+            " (pad {} (name \"{number}\"))\n",
+            fmt_uuid(pad_uuid)
         ));
     }
 
@@ -208,11 +207,39 @@ fn render_package(
     if let Some(model_uuid) = model_uuid {
         out.push_str(&format!("  (3d_model {})\n", fmt_uuid(model_uuid)));
     }
-    for pad in &footprint.pads {
+    for pad in footprint
+        .pads
+        .iter()
+        .filter(|p| p.mounting == openparts_mcad::Mounting::NonPlated)
+    {
+        // A non-plated hole is a footprint-level hole, not a pad.
+        let d = pad
+            .drill
+            .expect("a non-plated hole must have a drill diameter");
+        let uuid = uuid_gen::derive(&format!(
+            "pkg-npth:{mpn}:{:.3}:{:.3}",
+            pad.position.x, pad.position.y
+        ));
+        out.push_str(&format!(
+            "  (hole {} (diameter {d:.3}) (vertex (position {:.3} {:.3}) (angle 0.0)))\n",
+            fmt_uuid(uuid),
+            pad.position.x,
+            pad.position.y
+        ));
+    }
+    for (i, pad) in footprint
+        .pads
+        .iter()
+        .filter(|p| p.mounting != openparts_mcad::Mounting::NonPlated)
+        .enumerate()
+    {
+        // Several footprint pads may share a number (and so a package
+        // pad); each needs its own uuid.
         let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{}", pad.number));
+        let fp_pad_uuid = uuid_gen::derive(&format!("fp-pad:{mpn}:{}:{i}", pad.number));
         out.push_str(&format!(
             "  (pad {} (side top) (shape roundrect)\n",
-            fmt_uuid(pad_uuid)
+            fmt_uuid(fp_pad_uuid)
         ));
         // LibrePCB has no separate "circle" pad shape -- a pad is
         // always `roundrect`, and `radius` (a 0.0-1.0 "how rounded"
@@ -222,7 +249,7 @@ fn render_package(
         // rounded) for `PadShape::Circle`.
         let radius = match pad.shape {
             openparts_pcbcad::PadShape::Rect => 0.0,
-            openparts_pcbcad::PadShape::Circle => 1.0,
+            openparts_pcbcad::PadShape::Circle | openparts_pcbcad::PadShape::Oval => 1.0,
         };
         out.push_str(&format!(
             "   (position {:.3} {:.3}) (rotation 0.0) (size {:.3} {:.3}) (radius {radius:.1})\n",
@@ -271,6 +298,19 @@ fn render_package(
     out
 }
 
+/// The distinct numbers of the footprint's copper pads, in order of
+/// first appearance (non-plated holes have none).
+fn pad_numbers(footprint: &PcbFootprint) -> Vec<&str> {
+    let mut seen = std::collections::BTreeSet::new();
+    footprint
+        .pads
+        .iter()
+        .filter(|p| p.mounting != openparts_mcad::Mounting::NonPlated)
+        .map(|p| p.number.as_str())
+        .filter(|n| seen.insert(*n))
+        .collect()
+}
+
 /// LibrePCB's real `AssemblyType` enum (`none | tht | smt | mixed |
 /// other | auto`, per LibrePCB/librepcb-parts-generator's
 /// `entities/package.py`) -- this project doesn't yet have a mixed-
@@ -282,6 +322,7 @@ fn assembly_type(footprint: &PcbFootprint) -> &'static str {
         match pad.mounting {
             openparts_mcad::Mounting::Smd => has_smd = true,
             openparts_mcad::Mounting::ThroughHole => has_tht = true,
+            openparts_mcad::Mounting::NonPlated => {}
         }
     }
     match (has_smd, has_tht) {
@@ -373,9 +414,9 @@ fn render_device(
     out.push_str(&format!(" (category {})\n", fmt_uuid(cmpcat_uuid)));
     out.push_str(&format!(" (component {})\n", fmt_uuid(cmp_uuid)));
     out.push_str(&format!(" (package {})\n", fmt_uuid(pkg_uuid)));
-    for pad in &footprint.pads {
-        let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{}", pad.number));
-        let signal_uuid = uuid_gen::derive(&format!("cmp-signal:{mpn}:{}", pad.number));
+    for number in pad_numbers(footprint) {
+        let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{number}"));
+        let signal_uuid = uuid_gen::derive(&format!("cmp-signal:{mpn}:{number}"));
         out.push_str(&format!(
             " (pad {} (optional false)\n  (signal {})\n )\n",
             fmt_uuid(pad_uuid),

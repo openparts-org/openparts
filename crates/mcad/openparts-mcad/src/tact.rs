@@ -32,16 +32,8 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
     if n != 2 && n != 4 {
         return Err(McadError::InvalidLeadCount(n));
     }
-    let numbers: Vec<String> = if package.pad_order.is_empty() {
-        (1..=n).map(|i| i.to_string()).collect()
-    } else if package.pad_order.len() == n as usize {
-        package.pad_order.clone()
-    } else {
-        return Err(McadError::InconsistentDimensions(format!(
-            "pad_order has {} entries for {n} terminals",
-            package.pad_order.len()
-        )));
-    };
+    // Position numbers; `pad_order` is applied by `crate::generate`.
+    let numbers: Vec<String> = (1..=n).map(|i| i.to_string()).collect();
     let d = &package.dimensions;
     let body_w = defaults::required(&d.body_width)
         .ok_or(McadError::MissingDimension("dimensions.body_width"))?;
@@ -127,6 +119,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
 
     let mut geometry = MechanicalGeometry {
         family: package.family,
+        lands: vec![],
 
         pitch: crate::defaults::required(&package.pitch),
 
@@ -225,11 +218,11 @@ mod tests {
     fn pad_order_renumbers_the_positions() {
         let mut p = tht();
         p.pad_order = vec!["1".into(), "3".into(), "4".into(), "2".into()];
-        let g = generate_tact_switch(&p).unwrap();
+        let g = crate::generate(&p).unwrap();
         let numbers: Vec<&str> = g.leads.iter().map(|l| l.number.as_str()).collect();
         assert_eq!(numbers, ["1", "3", "4", "2"]);
         p.pad_order.pop();
-        assert!(generate_tact_switch(&p).is_err());
+        assert!(crate::generate(&p).is_err());
     }
 
     #[test]
@@ -243,7 +236,7 @@ mod tests {
              \x20 lead_width: {nominal: 0.7, unit: mm}\n\
              \x20 lead_length: {nominal: 1.0, unit: mm}\n",
         );
-        let g = generate_tact_switch(&p).unwrap();
+        let g = crate::generate(&p).unwrap();
         let l4 = &g.leads[3];
         assert!((l4.position.x + l4.size.x / 2.0 - 4.5).abs() < 1e-9);
         assert!((l4.size.x - 1.0).abs() < 1e-9 && (l4.size.y - 0.7).abs() < 1e-9);

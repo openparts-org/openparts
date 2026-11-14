@@ -405,13 +405,17 @@ pub(crate) mod dip {
     pub const BODY_HEIGHT: f64 = 3.3;
 }
 
+/// Explicit land patterns (`Package::pads`).
+pub(crate) mod land {
+    /// Copper thickness drawn for an SMD pad (3D only).
+    pub const PAD_T: f64 = 0.1;
+}
+
 /// `usb_c` generator defaults.
 pub(crate) mod usb_c {
     /// Shell tabs below the board, and shell sheet thickness (3D only).
     pub const TAIL_LENGTH: f64 = 1.0;
     pub const SHELL_THICKNESS: f64 = 0.2;
-    /// Copper thickness drawn for an SMD pad (3D only).
-    pub const PAD_T: f64 = 0.1;
 }
 
 /// `radial` generator defaults.

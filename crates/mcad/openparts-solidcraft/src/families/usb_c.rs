@@ -55,6 +55,8 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                 )?;
                 contacts.push(name);
             }
+            // Alignment-peg holes: the pegs are part of the housing.
+            Mounting::NonPlated => {}
             Mounting::ThroughHole => {
                 let name = format!("Tab{}", i + 1);
                 let drill = l.drill.unwrap_or(0.6);

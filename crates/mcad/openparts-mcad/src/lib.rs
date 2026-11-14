@@ -11,6 +11,7 @@ mod defaults;
 mod diode;
 mod dip;
 mod header;
+mod land;
 mod lqfp;
 mod module;
 mod qfn;
@@ -43,7 +44,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
             return Err(McadError::UnsupportedGenerator(generator.clone()));
         }
     }
-    match package.family {
+    let mut geometry = match package.family {
         F::Lqfp => lqfp::generate_lqfp(package),
         F::Qfn | F::Dfn | F::Son | F::Lga => qfn::generate_qfn(package),
         F::Soic | F::Tssop | F::Ssop | F::Msop => soic::generate_soic(package),
@@ -67,7 +68,36 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         }
         F::TactSwitchSmd | F::TactSwitchTht => tact::generate_tact_switch(package),
         F::UsbC => usb_c::generate_usb_c(package),
+    }?;
+    renumber(&mut geometry, package)?;
+    if !package.pads.is_empty() && package.family != F::UsbC {
+        geometry.lands = land::from_pads(package)?;
     }
+    Ok(geometry)
+}
+
+/// Applies `package.pad_order`: the leads numbered "1"..="lead_count" by
+/// the family's position convention take the source's numbers instead.
+fn renumber(geometry: &mut MechanicalGeometry, package: &Package) -> Result<(), McadError> {
+    let order = &package.pad_order;
+    if order.is_empty() {
+        return Ok(());
+    }
+    if order.len() != package.lead_count as usize {
+        return Err(McadError::InconsistentDimensions(format!(
+            "pad_order has {} entries for lead_count {}",
+            order.len(),
+            package.lead_count
+        )));
+    }
+    for lead in &mut geometry.leads {
+        if let Ok(i) = lead.number.parse::<usize>() {
+            if (1..=order.len()).contains(&i) {
+                lead.number = order[i - 1].clone();
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,6 +144,8 @@ pub struct Body {
 pub enum Mounting {
     Smd,
     ThroughHole,
+    /// A non-plated hole (alignment peg): no copper, `drill` is the hole.
+    NonPlated,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -216,6 +248,10 @@ pub struct MechanicalGeometry {
     /// The lead pitch the geometry was drawn at, when the package has one.
     pub pitch: Option<f64>,
     pub details: Details,
+    /// The footprint's pads when the package states its recommended
+    /// land pattern (`Package::pads`); empty means the footprint pads
+    /// are the leads' outlines.
+    pub lands: Vec<Lead>,
     pub body: Body,
     pub leads: Vec<Lead>,
     pub markers: Vec<Marker>,

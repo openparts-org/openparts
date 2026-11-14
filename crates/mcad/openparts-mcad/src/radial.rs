@@ -94,6 +94,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
 
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
 
         pitch: crate::defaults::required(&package.pitch),
 

@@ -45,6 +45,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                     ),
                 )?;
             }
+            Mounting::NonPlated => continue,
             Mounting::ThroughHole => {
                 let drill = l.drill.unwrap_or(1.0);
                 s.fragment(

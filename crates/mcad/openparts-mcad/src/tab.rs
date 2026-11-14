@@ -212,6 +212,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
 
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
 
         pitch: crate::defaults::required(&package.pitch),
 

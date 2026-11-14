@@ -140,6 +140,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
     }];
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
         pitch: crate::defaults::required(&package.pitch),
         details: crate::Details::Module(module_features(package)?),
         body,

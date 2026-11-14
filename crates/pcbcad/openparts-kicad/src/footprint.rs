@@ -70,6 +70,7 @@ fn render_pad(pad: &Pad) -> String {
     let shape = match pad.shape {
         PadShape::Rect => "rect",
         PadShape::Circle => "circle",
+        PadShape::Oval => "oval",
     };
     // IR is Y-up, KiCad footprints are Y-down (see `render_footprint`).
     let y = flip_y(pad.position.y);
@@ -78,19 +79,41 @@ fn render_pad(pad: &Pad) -> String {
             "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"))\n",
             pad.number, pad.position.x, y, pad.size.0, pad.size.1
         ),
-        Mounting::ThroughHole => {
-            let d = pad.drill.expect("through-hole pad must have a drill diameter");
-            // A slot runs along the pad's longer side: `(drill oval X Y)`.
-            let drill = match pad.slot {
-                Some(len) if pad.size.0 >= pad.size.1 => format!("oval {len:.3} {d:.3}"),
-                Some(len) => format!("oval {d:.3} {len:.3}"),
-                None => format!("{d:.3}"),
+        Mounting::ThroughHole => format!(
+            "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {}) (layers \"*.Cu\" \"*.Mask\"))\n",
+            pad.number,
+            pad.position.x,
+            y,
+            pad.size.0,
+            pad.size.1,
+            drill(pad)
+        ),
+        // A non-plated hole is its own size and carries no number.
+        Mounting::NonPlated => {
+            let d = pad.drill.expect("a non-plated hole must have a drill diameter");
+            let (w, h) = match pad.slot {
+                Some(len) if pad.size.0 >= pad.size.1 => (len, d),
+                Some(len) => (d, len),
+                None => (d, d),
             };
             format!(
-                "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {drill}) (layers \"*.Cu\" \"*.Mask\"))\n",
-                pad.number, pad.position.x, y, pad.size.0, pad.size.1
+                "  (pad \"\" np_thru_hole {shape} (at {:.3} {:.3}) (size {w:.3} {h:.3}) (drill {}) (layers \"*.Cu\" \"*.Mask\"))\n",
+                pad.position.x,
+                y,
+                drill(pad)
             )
         }
+    }
+}
+
+/// The `(drill ...)` value: a diameter, or `oval X Y` for a slot along
+/// the pad's longer side.
+fn drill(pad: &Pad) -> String {
+    let d = pad.drill.expect("a drilled pad must have a drill diameter");
+    match pad.slot {
+        Some(len) if pad.size.0 >= pad.size.1 => format!("oval {len:.3} {d:.3}"),
+        Some(len) => format!("oval {d:.3} {len:.3}"),
+        None => format!("{d:.3}"),
     }
 }
 
@@ -420,6 +443,26 @@ mod tests {
         assert_eq!(model.offset, [0.25, -1.0, 0.0]);
         assert_eq!(model.scale, [1.0, 1.0, 2.0]);
         assert_eq!(model.rotate, [-90.0, 0.0, 180.0]);
+    }
+
+    #[test]
+    fn non_plated_holes_render_as_np_thru_hole_without_a_number() {
+        let pad = Pad {
+            number: String::new(),
+            position: Point2 { x: 1.0, y: 2.0 },
+            size: (0.65, 0.65),
+            shape: PadShape::Circle,
+            mounting: Mounting::NonPlated,
+            drill: Some(0.65),
+            slot: None,
+        };
+        let line = render_pad(&pad);
+        assert!(
+            line.contains(
+                "(pad \"\" np_thru_hole circle (at 1.000 -2.000) (size 0.650 0.650) (drill 0.650)"
+            ),
+            "{line}"
+        );
     }
 
     #[test]

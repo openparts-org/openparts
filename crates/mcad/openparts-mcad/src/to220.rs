@@ -79,6 +79,7 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
         .collect();
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
         pitch: crate::defaults::required(&package.pitch),
         details: crate::Details::To220(to220_features(package)),
         body,

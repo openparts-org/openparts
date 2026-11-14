@@ -60,6 +60,7 @@ pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> 
     };
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
         pitch: crate::defaults::required(&package.pitch),
         details: crate::Details::None,
         body,
@@ -110,6 +111,7 @@ pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError
     });
     Ok(MechanicalGeometry {
         family: package.family,
+        lands: vec![],
         pitch: crate::defaults::required(&package.pitch),
         details: crate::Details::None,
         body,

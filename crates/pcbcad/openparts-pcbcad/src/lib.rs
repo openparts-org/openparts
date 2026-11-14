@@ -107,6 +107,9 @@ pub struct PcbSymbol {
 pub enum PadShape {
     Rect,
     Circle,
+    /// Obround: a through-hole pad longer than it is wide (slotted
+    /// shell tabs).
+    Oval,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -788,14 +791,22 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
 /// footprint. Use [`PcbFootprint::with_model`] / `without_model` to
 /// change that.
 pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprint {
-    let pads = geometry
-        .leads
+    use openparts_mcad::Mounting;
+    // The package's stated land pattern when it has one, else the leads.
+    let lands = if geometry.lands.is_empty() {
+        &geometry.leads
+    } else {
+        &geometry.lands
+    };
+    let pads = lands
         .iter()
         .map(|lead| {
+            let square = (lead.size.x - lead.size.y).abs() < 1e-9;
             let shape = match lead.mounting {
-                openparts_mcad::Mounting::Smd => PadShape::Rect,
-                openparts_mcad::Mounting::ThroughHole if lead.number == "1" => PadShape::Rect,
-                openparts_mcad::Mounting::ThroughHole => PadShape::Circle,
+                Mounting::Smd => PadShape::Rect,
+                Mounting::ThroughHole if lead.number == "1" && square => PadShape::Rect,
+                Mounting::ThroughHole | Mounting::NonPlated if square => PadShape::Circle,
+                Mounting::ThroughHole | Mounting::NonPlated => PadShape::Oval,
             };
             Pad {
                 number: lead.number.clone(),
@@ -1612,6 +1623,7 @@ mod tests {
             family: openparts_mcad::PackageFamily::Qfn,
             pitch: None,
             details: openparts_mcad::Details::None,
+            lands: vec![],
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1675,6 +1687,7 @@ mod tests {
             family: openparts_mcad::PackageFamily::Qfn,
             pitch: None,
             details: openparts_mcad::Details::None,
+            lands: vec![],
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1722,6 +1735,7 @@ mod tests {
             family: openparts_mcad::PackageFamily::Qfn,
             pitch: None,
             details: openparts_mcad::Details::None,
+            lands: vec![],
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1761,6 +1775,7 @@ mod tests {
             family: openparts_mcad::PackageFamily::Qfn,
             pitch: None,
             details: openparts_mcad::Details::None,
+            lands: vec![],
             body: Body {
                 position: Point3 {
                     x: 0.0,
