@@ -93,6 +93,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: lead_size_along,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
         pin_num += 1;
     }
@@ -109,6 +110,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: lead_size_perp,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
         pin_num += 1;
     }
@@ -125,6 +127,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: lead_size_along,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
         pin_num += 1;
     }
@@ -141,6 +144,7 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: lead_size_perp,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
         pin_num += 1;
     }
@@ -219,10 +223,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

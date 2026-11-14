@@ -186,6 +186,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
             },
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         })
         .collect();
     leads.push(Lead {
@@ -202,6 +203,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
         },
         mounting: Mounting::Smd,
         drill: None,
+        slot: None,
     });
 
     let inset = (body_w.min(body_l) * 0.15).min(0.5);
@@ -281,6 +283,8 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: Some(PackageTab {
@@ -288,6 +292,8 @@ mod tests {
                 trimmed_leads: vec![],
             }),
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

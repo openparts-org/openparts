@@ -104,6 +104,9 @@ pub const ALL: &[Fragment] = &[
     fragment!("socket_cut"),
     fragment!("socket_entry"),
     fragment!("tab_plate"),
+    fragment!("tact_smd_lead"),
+    fragment!("tact_switch"),
+    fragment!("tact_tht_pin"),
     fragment!("tht_lead_params"),
     fragment!("tht_wire"),
     fragment!("to220"),
@@ -111,6 +114,9 @@ pub const ALL: &[Fragment] = &[
     fragment!("to92"),
     fragment!("to92_formed_leg"),
     fragment!("to92_leg"),
+    fragment!("usb_c"),
+    fragment!("usb_c_pad"),
+    fragment!("usb_c_tab"),
 ];
 
 pub fn named(name: &str) -> Option<Fragment> {

@@ -82,6 +82,7 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
             },
             mounting: Mounting::ThroughHole,
             drill: Some(drill),
+            slot: None,
         })
         .collect();
     Ok(MechanicalGeometry {

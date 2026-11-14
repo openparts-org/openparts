@@ -1,0 +1,6 @@
+# An SMD tact-switch foot: from under the housing edge out to the toe,
+# flat on the board. Vars: name, x0, x1 (inner and outer ends), y, w, t.
+- solid.box:
+    {length: "{{x1}} - ({{x0}})", width: "{{w}}", height: "{{t}}",
+     center: ["(({{x0}}) + ({{x1}})) / 2", "{{y}}", "{{t}} / 2"],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

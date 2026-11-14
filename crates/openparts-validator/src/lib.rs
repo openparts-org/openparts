@@ -22,7 +22,7 @@
 //! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
 //! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
 //! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`), `construction`, `tab` or `aux_pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
+//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
 //! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
 //! | `aux_pads.invalid` | a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y` |
 //! | `header.invalid` | a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies) |
@@ -172,7 +172,7 @@ pub fn validate_part(
 }
 
 /// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 22] = [
+const PROVENANCE_REQUIRED: [&str; 24] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -195,6 +195,8 @@ const PROVENANCE_REQUIRED: [&str; 22] = [
     "/dimensions/tail_length",
     "/dimensions/pad_diameter",
     "/dimensions/body_offset",
+    "/dimensions/lead_inset",
+    "/dimensions/actuator_diameter",
 ];
 
 fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -210,6 +212,12 @@ fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> 
     }
     if package.tab.is_some() {
         present.push("/tab");
+    }
+    if !package.pad_order.is_empty() {
+        present.push("/pad_order");
+    }
+    if !package.pads.is_empty() {
+        present.push("/pads");
     }
     if !package.aux_pads.is_empty() {
         present.push("/aux_pads");
@@ -670,10 +678,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

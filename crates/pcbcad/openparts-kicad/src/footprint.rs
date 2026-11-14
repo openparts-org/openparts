@@ -79,10 +79,16 @@ fn render_pad(pad: &Pad) -> String {
             pad.number, pad.position.x, y, pad.size.0, pad.size.1
         ),
         Mounting::ThroughHole => {
-            let drill = pad.drill.expect("through-hole pad must have a drill diameter");
+            let d = pad.drill.expect("through-hole pad must have a drill diameter");
+            // A slot runs along the pad's longer side: `(drill oval X Y)`.
+            let drill = match pad.slot {
+                Some(len) if pad.size.0 >= pad.size.1 => format!("oval {len:.3} {d:.3}"),
+                Some(len) => format!("oval {d:.3} {len:.3}"),
+                None => format!("{d:.3}"),
+            };
             format!(
-                "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {:.3}) (layers \"*.Cu\" \"*.Mask\"))\n",
-                pad.number, pad.position.x, y, pad.size.0, pad.size.1, drill
+                "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {drill}) (layers \"*.Cu\" \"*.Mask\"))\n",
+                pad.number, pad.position.x, y, pad.size.0, pad.size.1
             )
         }
     }
@@ -241,7 +247,12 @@ pub fn parse_footprint_pads(text: &str) -> Vec<ParsedPad> {
         let drill = trimmed.find("(drill ").map(|drill_idx| {
             let after_drill = &trimmed[drill_idx + 7..];
             let drill_close = after_drill.find(')').unwrap();
-            after_drill[..drill_close].trim().parse().unwrap()
+            // `oval X Y` (a slot): the drill is its width.
+            let spec = after_drill[..drill_close].trim();
+            spec.trim_start_matches("oval")
+                .split_whitespace()
+                .map(|v| v.parse::<f64>().unwrap())
+                .fold(f64::INFINITY, f64::min)
         });
 
         pads.push(ParsedPad {
@@ -280,6 +291,7 @@ mod tests {
                 shape: PadShape::Rect,
                 mounting: Mounting::Smd,
                 drill: None,
+                slot: None,
             }],
             graphics: vec![],
             courtyard: None,
@@ -312,6 +324,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: Mounting::Smd,
                     drill: None,
+                    slot: None,
                 },
                 Pad {
                     number: "2".into(),
@@ -320,6 +333,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: Mounting::Smd,
                     drill: None,
+                    slot: None,
                 },
             ],
             graphics: vec![],
@@ -358,6 +372,7 @@ mod tests {
                 shape: PadShape::Rect,
                 mounting: Mounting::Smd,
                 drill: None,
+                slot: None,
             }],
             graphics: vec![],
             courtyard: None,
@@ -408,6 +423,21 @@ mod tests {
     }
 
     #[test]
+    fn slots_render_as_oval_drills_along_the_longer_side() {
+        let pad = |size: (f64, f64)| Pad {
+            number: "S1".into(),
+            position: Point2 { x: 0.0, y: 0.0 },
+            size,
+            shape: PadShape::Rect,
+            mounting: Mounting::ThroughHole,
+            drill: Some(0.6),
+            slot: Some(1.7),
+        };
+        assert!(render_pad(&pad((1.0, 2.1))).contains("(drill oval 0.600 1.700)"));
+        assert!(render_pad(&pad((2.1, 1.0))).contains("(drill oval 1.700 0.600)"));
+    }
+
+    #[test]
     fn round_trips_through_hole_pads_with_drill_and_pin1_squared() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
@@ -419,6 +449,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: Mounting::ThroughHole,
                     drill: Some(0.8),
+                    slot: None,
                 },
                 Pad {
                     number: "2".into(),
@@ -427,6 +458,7 @@ mod tests {
                     shape: PadShape::Circle,
                     mounting: Mounting::ThroughHole,
                     drill: Some(0.8),
+                    slot: None,
                 },
             ],
             graphics: vec![],

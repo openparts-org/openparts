@@ -272,6 +272,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
                 },
                 mounting: Mounting::ThroughHole,
                 drill: Some(hole),
+                slot: None,
             }
         })
         .collect();
@@ -362,10 +363,14 @@ mod tests {
                 tail_length: Some(mm(3.0)),
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: Some(vec![2, 5]),
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

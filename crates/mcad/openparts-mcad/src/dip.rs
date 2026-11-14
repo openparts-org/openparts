@@ -98,6 +98,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             size: pad_size,
             mounting: Mounting::ThroughHole,
             drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            slot: None,
         });
         pin_num += 1;
     }
@@ -115,6 +116,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             size: pad_size,
             mounting: Mounting::ThroughHole,
             drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            slot: None,
         });
         pin_num += 1;
     }
@@ -192,10 +194,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

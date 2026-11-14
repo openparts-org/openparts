@@ -11,9 +11,11 @@ mod header;
 mod module;
 mod qfn;
 mod radial;
+mod switch;
 mod tabbed;
 mod to220;
 mod to92;
+mod usb_c;
 
 use crate::{ModelError, ModelInput, Script};
 use openparts_mcad::Lead;
@@ -31,8 +33,10 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         "sod_flat" => diode::sod_flat(&mut s, input)?,
         "do214" => diode::do214(&mut s, input)?,
         "to220" => to220::build(&mut s, input)?,
+        "tact_switch_smd" | "tact_switch_tht" => switch::build(&mut s, input)?,
+        "usb_c" => usb_c::build(&mut s, input)?,
         "sot" => gullwing::build(&mut s, input, &gullwing::SOT)?,
-        "qfn" | "dfn" | "son" => qfn::build(&mut s, input)?,
+        "qfn" | "dfn" | "son" | "lga" => qfn::build(&mut s, input)?,
         "chip" => chip::build(&mut s, input)?,
         "radial" => radial::build(&mut s, input)?,
         "axial" => axial::build(&mut s, input)?,

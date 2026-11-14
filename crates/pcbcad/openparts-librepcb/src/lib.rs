@@ -243,8 +243,25 @@ fn render_package(
                 .drill
                 .expect("through-hole pad must have a drill diameter");
             let hole_uuid = uuid_gen::derive(&format!("pkg-pad-hole:{mpn}:{}", pad.number));
+            // A slot is a hole path of two vertices along the pad's
+            // longer side, the drill diameter wide.
+            let vertices = match pad.slot {
+                Some(len) => {
+                    let h = ((len - drill) / 2.0).max(0.0);
+                    let (dx, dy) = if pad.size.0 >= pad.size.1 {
+                        (h, 0.0)
+                    } else {
+                        (0.0, h)
+                    };
+                    format!(
+                        "(vertex (position {:.3} {:.3}) (angle 0.0)) (vertex (position {:.3} {:.3}) (angle 0.0))",
+                        -dx, -dy, dx, dy
+                    )
+                }
+                None => "(vertex (position 0.0 0.0) (angle 0.0))".to_string(),
+            };
             out.push_str(&format!(
-                "   (hole {} (diameter {drill:.3}) (vertex (position 0.0 0.0) (angle 0.0)))\n",
+                "   (hole {} (diameter {drill:.3}) {vertices})\n",
                 fmt_uuid(hole_uuid)
             ));
         }
@@ -544,6 +561,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: openparts_mcad::Mounting::Smd,
                     drill: None,
+                    slot: None,
                 },
                 Pad {
                     number: "2".into(),
@@ -552,6 +570,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: openparts_mcad::Mounting::Smd,
                     drill: None,
+                    slot: None,
                 },
             ],
             graphics: vec![],
@@ -608,6 +627,7 @@ mod tests {
                     shape: PadShape::Rect,
                     mounting: openparts_mcad::Mounting::ThroughHole,
                     drill: Some(0.8),
+                    slot: None,
                 },
                 Pad {
                     number: "2".into(),
@@ -616,6 +636,7 @@ mod tests {
                     shape: PadShape::Circle,
                     mounting: openparts_mcad::Mounting::ThroughHole,
                     drill: Some(0.8),
+                    slot: None,
                 },
             ],
             graphics: vec![],

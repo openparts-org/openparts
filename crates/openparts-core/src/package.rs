@@ -131,6 +131,13 @@ pub struct PackageDimensions {
     /// centred on the grid (not allowed for `right_angle_header`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body_offset: Option<Dimension>,
+    /// `lga`: body edge to each terminal's outer end (terminals set in
+    /// from the edge). Absent: flush with the edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_inset: Option<Dimension>,
+    /// Switches: diameter of the round actuator (plunger) on top.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_diameter: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -171,6 +178,8 @@ impl PackageDimensions {
             ("/dimensions/tail_length", &self.tail_length),
             ("/dimensions/pad_diameter", &self.pad_diameter),
             ("/dimensions/body_offset", &self.body_offset),
+            ("/dimensions/lead_inset", &self.lead_inset),
+            ("/dimensions/actuator_diameter", &self.actuator_diameter),
         ];
         out.extend(
             optional
@@ -226,6 +235,25 @@ pub struct PackageTab {
     pub trimmed_leads: Vec<String>,
 }
 
+/// One pad of an explicit land pattern (`Package::pads`), in mm, top
+/// view, X right and Y up (the family documents the origin). `width` is
+/// the pad along X, `length` along Y. A plated hole has a `drill`
+/// diameter; a slotted hole also a `drill_length` (the slot's overall
+/// length, along the pad's longer side).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackagePad {
+    pub number: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub length: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drill: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drill_length: Option<f64>,
+}
+
 /// Canonical Data Specification section 21.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -279,6 +307,17 @@ pub struct Package {
     /// `dimensions.aux_*`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aux_pads: Vec<String>,
+    /// Pad numbers in the generator's position order, when the source
+    /// numbers the positions differently from the family convention
+    /// (tactile switches: vendors number the four corners in different
+    /// orders). Must hold exactly `lead_count` entries; empty means the
+    /// convention's own numbers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pad_order: Vec<String>,
+    /// Explicit land pattern (`usb_c`): every pad as the source's
+    /// recommended PCB layout gives it, in the family's frame.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pads: Vec<PackagePad>,
     /// Physical construction as the source states it (section 20);
     /// `None` when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]

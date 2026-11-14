@@ -68,6 +68,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: term_size,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         },
         Lead {
             number: "2".to_string(),
@@ -79,6 +80,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             size: term_size,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         },
     ];
 
@@ -151,10 +153,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

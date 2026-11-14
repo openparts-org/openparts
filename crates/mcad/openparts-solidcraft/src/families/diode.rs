@@ -260,4 +260,75 @@ mod tests {
         assert_eq!(bodies, ["Body", "Tab", "Lead1", "Lead2", "Lead3"]);
         assert!(solids.is_none_or(|n| n == 5), "{solids:?}");
     }
+
+    #[test]
+    fn lga_tact_switches_and_usb_c_build() {
+        let lga = package(
+            "family: lga\nlead_count: 8\nlead_layout: [4, 0, 4, 0]\n\
+             pitch: {nominal: 0.65, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 2.5, unit: mm}\n\
+             \x20 body_length: {nominal: 2.5, unit: mm}\n\
+             \x20 body_height: {nominal: 0.93, unit: mm}\n\
+             \x20 lead_length: {nominal: 0.5, unit: mm}\n\
+             \x20 lead_width: {nominal: 0.35, unit: mm}\n\
+             \x20 lead_inset: {nominal: 0.1, unit: mm}\n",
+        );
+        let (bodies, solids) = model(&lga, ComponentCategory::Other);
+        assert_eq!(bodies.len(), 9, "{bodies:?}");
+        assert!(solids.is_none_or(|n| n == 9), "{solids:?}");
+
+        let tht = package(
+            "family: tact_switch_tht\nlead_count: 4\npitch: {nominal: 4.5, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 6.0, unit: mm}\n\
+             \x20 body_length: {nominal: 6.0, unit: mm}\n\
+             \x20 body_height: {nominal: 3.5, unit: mm}\n\
+             \x20 overall_height: {nominal: 5.0, unit: mm}\n\
+             \x20 actuator_diameter: {nominal: 3.5, unit: mm}\n\
+             \x20 row_spacing: {nominal: 6.5, unit: mm}\n\
+             \x20 hole_diameter: {nominal: 1.0, unit: mm}\n",
+        );
+        let (bodies, solids) = model(&tht, ComponentCategory::Other);
+        assert_eq!(
+            bodies,
+            [
+                "Body",
+                "Actuator",
+                "Terminal1",
+                "Terminal2",
+                "Terminal3",
+                "Terminal4"
+            ]
+        );
+        assert!(solids.is_none_or(|n| n == 6), "{solids:?}");
+
+        let smd = package(
+            "family: tact_switch_smd\nlead_count: 4\npitch: {nominal: 4.5, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 6.0, unit: mm}\n\
+             \x20 body_length: {nominal: 6.0, unit: mm}\n\
+             \x20 body_height: {nominal: 3.5, unit: mm}\n\
+             \x20 overall_width: {nominal: 9.0, unit: mm}\n\
+             \x20 lead_width: {nominal: 0.7, unit: mm}\n\
+             \x20 lead_length: {nominal: 1.0, unit: mm}\n",
+        );
+        let (_, solids) = model(&smd, ComponentCategory::Other);
+        assert!(solids.is_none_or(|n| n == 6), "{solids:?}");
+
+        let usb = package(
+            "family: usb_c\nlead_count: 6\npitch: {unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 8.94, unit: mm}\n\
+             \x20 body_length: {nominal: 7.35, unit: mm}\n\
+             \x20 body_height: {nominal: 3.16, unit: mm}\n\
+             \x20 body_offset: {nominal: -0.5, unit: mm}\n\
+             pads:\n\
+             \x20 - {number: A5, x: -0.25, y: -4.0, width: 0.3, length: 1.0}\n\
+             \x20 - {number: B5, x: 0.25, y: -4.0, width: 0.3, length: 1.0}\n\
+             \x20 - {number: S1, x: -4.32, y: -3.3, width: 1.0, length: 2.1, drill: 0.6, drill_length: 1.7}\n\
+             \x20 - {number: S1, x: 4.32, y: -3.3, width: 1.0, length: 2.1, drill: 0.6, drill_length: 1.7}\n\
+             \x20 - {number: S1, x: -4.32, y: 0.9, width: 1.0, length: 1.6, drill: 0.6, drill_length: 1.2}\n\
+             \x20 - {number: S1, x: 4.32, y: 0.9, width: 1.0, length: 1.6, drill: 0.6, drill_length: 1.2}\n",
+        );
+        let (bodies, solids) = model(&usb, ComponentCategory::Connector);
+        assert_eq!(bodies.len(), 8, "{bodies:?}");
+        assert!(solids.is_none_or(|n| n == 8), "{solids:?}");
+    }
 }

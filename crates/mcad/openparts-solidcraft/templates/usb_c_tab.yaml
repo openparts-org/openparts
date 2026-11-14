@@ -1,0 +1,6 @@
+# A shell tab down through its plated hole or slot. Vars: name, x, y,
+# w (along X), l (along Y), tail.
+- solid.box:
+    {length: "{{w}}", width: "{{l}}", height: "standoff + 0.3 mm + {{tail}}",
+     center: ["{{x}}", "{{y}}", "(standoff + 0.3 mm - {{tail}}) / 2"],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

@@ -249,6 +249,15 @@ pub(crate) const QFN: FlushDefaults = FlushDefaults {
     thickness: 0.2,
 };
 
+/// Sensor LGA (Bosch, ST): A ~0.9..1.0, terminals ~0.35 x 0.25, plated
+/// pads ~0.05 thick (no lead frame).
+pub(crate) const LGA: FlushDefaults = FlushDefaults {
+    body_height: 0.95,
+    lead_length: 0.35,
+    lead_width: 0.25,
+    thickness: 0.05,
+};
+
 /// Castellated-module (`module`) presentation defaults.
 pub(crate) struct ModuleDefaults {
     /// Board thickness when the package states no `body_height`: the

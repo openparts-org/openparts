@@ -19,8 +19,10 @@ mod sip;
 mod soic;
 mod sot;
 mod tab;
+mod tact;
 mod to220;
 mod to92;
+mod usb_c;
 
 pub use axial::generate_axial;
 pub use bga::generate_bga;
@@ -36,8 +38,10 @@ pub use sip::generate_sip;
 pub use soic::generate_soic;
 pub use sot::generate_sot;
 pub use tab::{generate_d2pak, generate_dpak, generate_sot223};
+pub use tact::{generate_tact_switch, switch_features, SwitchFeatures};
 pub use to220::{generate_to220, to220_features, To220Features};
 pub use to92::generate_to92;
+pub use usb_c::{generate_usb_c, usb_c_features, UsbCFeatures};
 
 use openparts_core::Package;
 
@@ -46,7 +50,7 @@ use openparts_core::Package;
 pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
     match package.family.to_ascii_lowercase().as_str() {
         "lqfp" => generate_lqfp(package),
-        "qfn" | "dfn" | "son" => generate_qfn(package),
+        "qfn" | "dfn" | "son" | "lga" => generate_qfn(package),
         "chip" => generate_chip(package),
         "soic" | "tssop" | "ssop" | "msop" => generate_soic(package),
         "sot223" => generate_sot223(package),
@@ -55,6 +59,8 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         "sod" | "sod_flat" => generate_sod(package),
         "do214" => generate_do214(package),
         "to220" => generate_to220(package),
+        "tact_switch_smd" | "tact_switch_tht" => generate_tact_switch(package),
+        "usb_c" => generate_usb_c(package),
         "sot" => generate_sot(package),
         "radial" => generate_radial(package),
         "axial" => generate_axial(package),
@@ -124,6 +130,10 @@ pub struct Lead {
     pub mounting: Mounting,
     /// Drill diameter (mm). `Some` only when `mounting` is `ThroughHole`.
     pub drill: Option<f64>,
+    /// Slotted hole: the slot's overall length (mm), along the pad's
+    /// longer side; `drill` is then the slot width. `None` for a round
+    /// hole.
+    pub slot: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,7 +211,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, dfn, son, chip, soic, tssop, ssop, msop, sot, sot223, dpak, d2pak, sod, sod_flat, do214, to220, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, dfn, son, lga, chip, soic, tssop, ssop, msop, sot, sot223, dpak, d2pak, sod, sod_flat, do214, to220, tact_switch_smd, tact_switch_tht, usb_c, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]

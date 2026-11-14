@@ -121,6 +121,9 @@ pub struct Pad {
     /// Drill diameter (mm). `Some` only when `mounting` is
     /// `ThroughHole`.
     pub drill: Option<f64>,
+    /// Slot length (mm) for a slotted hole, along the pad's longer side
+    /// (`drill` is the slot width); `None` for a round hole.
+    pub slot: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -804,6 +807,7 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
                 shape,
                 mounting: lead.mounting,
                 drill: lead.drill,
+                slot: lead.slot,
             }
         })
         .collect();
@@ -1632,6 +1636,7 @@ mod tests {
                 },
                 mounting: Mounting::Smd,
                 drill: None,
+                slot: None,
             }],
             markers: vec![],
             lead_form: None,
@@ -1661,6 +1666,7 @@ mod tests {
             },
             mounting: Mounting::ThroughHole,
             drill: Some(0.8),
+            slot: None,
         };
         let geometry = MechanicalGeometry {
             body: Body {
@@ -1704,6 +1710,7 @@ mod tests {
             },
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         };
         let geometry = MechanicalGeometry {
             body: Body {

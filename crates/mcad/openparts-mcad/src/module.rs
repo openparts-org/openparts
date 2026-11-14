@@ -85,6 +85,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
         },
         mounting: Mounting::Smd,
         drill: None,
+        slot: None,
     };
     let mut leads: Vec<Lead> = (1..=per_side)
         .map(|n| pad(n, -pad_x, half_span - (n - 1) as f64 * pitch))
@@ -118,6 +119,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
                 },
                 mounting: Mounting::Smd,
                 drill: None,
+                slot: None,
             });
         }
     }
@@ -287,10 +289,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec!["D1".into(), "D2".into(), "D3".into()],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

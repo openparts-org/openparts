@@ -1,9 +1,10 @@
 # QFN/DFN: a sawn, straight-sided mold body whose lead-frame terminals sit
 # flush in its underside and show on the sawn edges.
-# Vars: pad_len, pad_w, term_t (from the geometry: datasheet L / b / A3,
+# Vars: pad_len, pad_w, term_t, pad_inset (from the geometry: datasheet L / b / A3,
 # else the openparts-mcad family default).
 - params:
     pad_len: ["{{pad_len}}", terminal length (L)]
     pad_w: ["{{pad_w}}", terminal width (b)]
     term_t: ["{{term_t}}", terminal thickness visible on the sawn edge (A3)]
+    pad_inset: ["{{pad_inset}}", body edge to the terminal's outer end (LGA; 0 when flush)]
 - solid.box: {length: body_w, width: body_l, height: body_h, center: [0, 0, body_h / 2], body_name: Body, name: Body}

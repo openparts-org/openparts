@@ -1,0 +1,6 @@
+# A straight THT tact-switch pin from inside the housing down through the
+# board. Vars: name, x, y, w, t, tail.
+- solid.box:
+    {length: "{{t}}", width: "{{w}}", height: "standoff + 0.5 mm + {{tail}}",
+     center: ["{{x}}", "{{y}}", "(standoff + 0.5 mm - {{tail}}) / 2"],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

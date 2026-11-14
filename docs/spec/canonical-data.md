@@ -591,6 +591,8 @@ dimensions:
 | `tail_length` | Housing下面からはんだ付けTail先端まで（Header系Family） | WR-PHD 2.54: 3.0 ±0.20 | 省略可 |
 | `pad_diameter` | 一次資料の推奨Land（丸Pad）径（Header系Family） | — | 省略可 |
 | `body_offset` | ピングリッド中心からHousing中心までのX方向の符号付き距離（pin 1を左上にした上面視で+X向きが正。`shrouded_header`/`right_angle_header`） | JST XH: 5.75/2 − (2.35) = 0.525（−X向き）、WR-PHD Angled: 1.5 + 2.54/2 = 2.77 | 省略可（`right_angle_header`では必須） |
+| `lead_inset` | Body端から端子外端までの距離（`lga`の端子が端から引っ込んでいる場合） | — | 省略可（省略時は端と面一） |
+| `actuator_diameter` | スイッチ上面の丸いアクチュエータ（押し子）の直径 | — | 省略可（3D表示のみ） |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -598,7 +600,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`）と`construction`、`tab`、`aux_pads`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -650,6 +652,12 @@ family: module
 lead_count: 40           # 両辺のピン数（aux_padsを含まない）
 aux_pads: [D1, D2, D3]   # 上面視で左から、pitch間隔
 ```
+
+### pad_order と pads
+
+`pad_order`は、Familyの位置順（例: タクトスイッチの左上・左下・右下・右上）に対して、Sourceが振っているPad番号を並べたもの。Vendorごとに角の番号付けが違う部品で使う。要素数は`lead_count`と同じ。
+
+`pads`は推奨ランドパターンを1 Padずつ明示的に記録する（`usb_c`）。各要素は`number`、`x`、`y`、`width`（X方向）、`length`（Y方向）と、メッキ穴なら`drill`、長穴なら`drill_length`（長穴の全長、Padの長辺方向）。座標系はFamilyが定義する。Sourceの図から座標を算出した場合は、Provenanceのlocatorに計算を書く。
 
 Pin header（`family: header`）とSocket strip（Female header、`family: socket`）は、
 ストレート（垂直）のThrough-hole部品である。`lead_layout`は`[列数, 1列あたりのピン数]`

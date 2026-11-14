@@ -1,0 +1,22 @@
+# USB Type-C receptacle: a stadium-section metal shell open at the +Y
+# end, the moulded tongue inside. Vars: y (shell centre), standoff,
+# shell_t, r (outer corner radius), outer_edges, inner_edges.
+- params:
+    shell_y: ["{{y}}", shell centre along Y]
+    standoff: ["{{standoff}}", shell underside above the board]
+    shell_t: ["{{shell_t}}", shell sheet thickness]
+    shell_r: ["{{r}}", shell corner radius]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, shell_y, standoff + body_h / 2],
+     body_name: Shell, name: Shell}
+- solid.fillet: {body: Shell, edges: "{{outer_edges}}", radius: shell_r, fit: reduce}
+- solid.box:
+    {length: body_w - 2 * shell_t, width: body_l, height: body_h - 2 * shell_t,
+     center: [0 mm, shell_y + shell_t + 0.05 mm, standoff + body_h / 2],
+     operation: new, body_name: Cavity, name: Cavity}
+- solid.fillet: {body: Cavity, edges: "{{inner_edges}}", radius: shell_r - shell_t, fit: reduce}
+- solid.combine: {target: Shell, tools: [Cavity], operation: cut}
+- solid.box:
+    {length: (body_w - 2 * shell_t) * 0.75, width: body_l * 0.75, height: 0.7 mm,
+     center: [0 mm, shell_y + body_l / 2 - body_l * 0.375 - 0.4 mm, standoff + body_h / 2],
+     operation: new, body_name: Tongue, name: Tongue}

@@ -1,5 +1,8 @@
 use crate::defaults::{self, Flush};
-use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
+use crate::{
+    Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
+    Size3,
+};
 use openparts_core::Package;
 
 /// Generates Mechanical Geometry for a QFN/DFN-style leadframe package:
@@ -21,31 +24,54 @@ use openparts_core::Package;
 /// `lead_count / 2` per side, pin 1 at the top of the left edge, down the
 /// left edge, then up the right edge (the SOIC order). `body_width` is
 /// the body across the two rows (X).
+///
+/// Family `lga` (sensor LGAs: BME280, LIS3DH, BMI270...) takes its
+/// per-side terminal counts from `lead_layout: [left, bottom, right,
+/// top]` (zeros allowed), numbered in the same counter-clockwise order,
+/// each side centred at `pitch`; `dimensions.lead_inset` sets the
+/// terminals in from the body edge.
 pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> {
     let family = package.family.to_ascii_lowercase();
-    let two_sided = match family.as_str() {
-        "qfn" => false,
-        "dfn" | "son" => true,
+    let kind = match family.as_str() {
+        "qfn" => Kind::Qfn,
+        "dfn" | "son" => Kind::TwoSided,
+        "lga" => Kind::Lga,
         _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
     };
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            let ok = generator.eq_ignore_ascii_case("qfn")
-                || (two_sided
-                    && (generator.eq_ignore_ascii_case("dfn")
-                        || generator.eq_ignore_ascii_case("son")));
-            if !ok {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
+    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
+        let g = generator.to_ascii_lowercase();
+        let ok = g == "qfn"
+            || (kind == Kind::TwoSided && (g == "dfn" || g == "son"))
+            || (kind == Kind::Lga && g == "lga");
+        if !ok {
+            return Err(McadError::UnsupportedGenerator(generator.clone()));
         }
     }
 
-    let lead_count = package.lead_count;
-    let sides = if two_sided { 2 } else { 4 };
-    if lead_count == 0 || !lead_count.is_multiple_of(sides) {
-        return Err(McadError::InvalidLeadCount(lead_count));
-    }
-    let pins_per_side = lead_count / sides;
+    let n = package.lead_count;
+    // Terminals per side: [left, bottom, right, top].
+    let counts: [u32; 4] = match kind {
+        Kind::Qfn if n > 0 && n.is_multiple_of(4) => [n / 4; 4],
+        Kind::TwoSided if n > 0 && n.is_multiple_of(2) => [n / 2, 0, n / 2, 0],
+        Kind::Lga => {
+            let layout = package
+                .lead_layout
+                .as_ref()
+                .ok_or(McadError::MissingLeadLayout {
+                    family: package.family.clone(),
+                })?;
+            match layout.as_slice() {
+                [l, b, r, t] if l + b + r + t == n && n > 0 => [*l, *b, *r, *t],
+                _ => {
+                    return Err(McadError::InvalidLeadLayout {
+                        layout: layout.clone(),
+                        lead_count: n,
+                    })
+                }
+            }
+        }
+        _ => return Err(McadError::InvalidLeadCount(n)),
+    };
 
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     let body_w = defaults::dim(
@@ -56,9 +82,22 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         &package.dimensions.body_length,
         "dimensions.body_length.nominal",
     )?;
-    let shape = Flush::resolve(package, &defaults::QFN);
+    let shape = Flush::resolve(
+        package,
+        if kind == Kind::Lga {
+            &defaults::LGA
+        } else {
+            &defaults::QFN
+        },
+    );
     let body_h = shape.body_height;
     let (lead_len, lead_w, lead_t) = (shape.lead_length, shape.lead_width, shape.thickness);
+    let inset = defaults::value(&package.dimensions.lead_inset).unwrap_or(0.0);
+    if inset + lead_len > body_w.min(body_l) / 2.0 {
+        return Err(McadError::InconsistentDimensions(format!(
+            "terminals ({lead_len} long, {inset} in from the edge) reach past the body centre"
+        )));
+    }
 
     let body = Body {
         position: Point3 {
@@ -74,88 +113,50 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         shape: BodyShape::Box,
     };
 
-    let span = (pins_per_side as f64 - 1.0) * pitch;
-    let half_span = span / 2.0;
-
-    let lead_size_along = Size3 {
+    let along_y = Size3 {
         x: lead_len,
         y: lead_w,
         z: lead_t,
     };
-    let lead_size_perp = Size3 {
+    let along_x = Size3 {
         x: lead_w,
         y: lead_len,
         z: lead_t,
     };
-    let lead_z = lead_t / 2.0;
+    let (cx, cy) = (
+        body_w / 2.0 - inset - lead_len / 2.0,
+        body_l / 2.0 - inset - lead_len / 2.0,
+    );
+    let z = lead_t / 2.0;
 
-    let mut leads = Vec::with_capacity(lead_count as usize + 1);
-    let mut pin_num = 1u32;
-
-    // Left edge: contact flush with x = -body_w/2, y from +half_span down to -half_span.
-    for i in 0..pins_per_side {
-        let y = half_span - i as f64 * pitch;
+    let mut leads = Vec::with_capacity(n as usize + 1);
+    let mut pin = 1u32;
+    let mut push = |x: f64, y: f64, size: Size3| {
         leads.push(Lead {
-            number: pin_num.to_string(),
-            position: Point3 {
-                x: -(body_w / 2.0 - lead_len / 2.0),
-                y,
-                z: lead_z,
-            },
-            size: lead_size_along,
+            number: pin.to_string(),
+            position: Point3 { x, y, z },
+            size,
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
-        pin_num += 1;
+        pin += 1;
+    };
+    let half = |count: u32| (count as f64 - 1.0) * pitch / 2.0;
+    // Counter-clockwise from the top of the left edge (top view): down
+    // the left edge, left to right along the bottom, up the right edge,
+    // right to left along the top.
+    for i in 0..counts[0] {
+        push(-cx, half(counts[0]) - i as f64 * pitch, along_y);
     }
-    // Bottom edge: flush with y = -body_l/2, x from -half_span to +half_span.
-    let perp_rows = if two_sided { 0 } else { pins_per_side };
-    for i in 0..perp_rows {
-        let x = -half_span + i as f64 * pitch;
-        leads.push(Lead {
-            number: pin_num.to_string(),
-            position: Point3 {
-                x,
-                y: -(body_l / 2.0 - lead_len / 2.0),
-                z: lead_z,
-            },
-            size: lead_size_perp,
-            mounting: Mounting::Smd,
-            drill: None,
-        });
-        pin_num += 1;
+    for i in 0..counts[1] {
+        push(-half(counts[1]) + i as f64 * pitch, -cy, along_x);
     }
-    // Right edge: flush with x = +body_w/2, y from -half_span to +half_span.
-    for i in 0..pins_per_side {
-        let y = -half_span + i as f64 * pitch;
-        leads.push(Lead {
-            number: pin_num.to_string(),
-            position: Point3 {
-                x: body_w / 2.0 - lead_len / 2.0,
-                y,
-                z: lead_z,
-            },
-            size: lead_size_along,
-            mounting: Mounting::Smd,
-            drill: None,
-        });
-        pin_num += 1;
+    for i in 0..counts[2] {
+        push(cx, -half(counts[2]) + i as f64 * pitch, along_y);
     }
-    // Top edge: flush with y = +body_l/2, x from +half_span down to -half_span.
-    for i in 0..perp_rows {
-        let x = half_span - i as f64 * pitch;
-        leads.push(Lead {
-            number: pin_num.to_string(),
-            position: Point3 {
-                x,
-                y: body_l / 2.0 - lead_len / 2.0,
-                z: lead_z,
-            },
-            size: lead_size_perp,
-            mounting: Mounting::Smd,
-            drill: None,
-        });
-        pin_num += 1;
+    for i in 0..counts[3] {
+        push(half(counts[3]) - i as f64 * pitch, cy, along_x);
     }
 
     if let Some(ep) = &package.dimensions.exposed_pad {
@@ -163,11 +164,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.nominal")?;
         leads.push(Lead {
             number: "EP".to_string(),
-            position: Point3 {
-                x: 0.0,
-                y: 0.0,
-                z: lead_z,
-            },
+            position: Point3 { x: 0.0, y: 0.0, z },
             size: Size3 {
                 x: ep_w,
                 y: ep_l,
@@ -175,15 +172,43 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             },
             mounting: Mounting::Smd,
             drill: None,
+            slot: None,
         });
     }
+
+    // Pin-1 mark on the top face, in the corner nearest pin 1.
+    let pin1 = leads[0].position;
+    let inset = (body_w.min(body_l) * 0.15).min(0.5);
+    let markers = vec![Marker {
+        kind: MarkerKind::Pin1Dot,
+        position: Point3 {
+            x: if pin1.x <= 0.0 {
+                -body_w / 2.0 + inset
+            } else {
+                body_w / 2.0 - inset
+            },
+            y: if pin1.y >= 0.0 {
+                body_l / 2.0 - inset
+            } else {
+                -body_l / 2.0 + inset
+            },
+            z: body_h,
+        },
+    }];
 
     Ok(MechanicalGeometry {
         body,
         leads,
-        markers: vec![],
+        markers,
         lead_form: Some(shape.lead_form()),
     })
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Qfn,
+    TwoSided,
+    Lga,
 }
 
 #[cfg(test)]
@@ -255,10 +280,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: None,
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
@@ -312,6 +341,37 @@ mod tests {
         package.family = "son".into();
         assert_eq!(generate_qfn(&package).unwrap().leads.len(), 7);
         package.lead_count = 7;
+        assert!(generate_qfn(&package).is_err());
+    }
+
+    #[test]
+    fn lga_uses_per_side_counts_and_insets_its_terminals() {
+        let mut package = qfn8_with_ep();
+        package.family = "lga".into();
+        package.dimensions.exposed_pad = None;
+        assert!(matches!(
+            generate_qfn(&package),
+            Err(McadError::MissingLeadLayout { .. })
+        ));
+        package.lead_layout = Some(vec![3, 1, 3, 1]);
+        package.dimensions.lead_inset = Some(Dimension {
+            nominal: Some(0.1),
+            min: None,
+            max: None,
+            unit: "mm".into(),
+        });
+        let g = generate_qfn(&package).unwrap();
+        let pos = |n: &str| g.leads.iter().find(|l| l.number == n).unwrap();
+        assert_eq!(g.leads.len(), 8);
+        let p1 = pos("1");
+        assert!(
+            (p1.position.x - p1.size.x / 2.0 + 1.4).abs() < 1e-9,
+            "0.1 in from -1.5"
+        );
+        assert!((p1.position.y - 0.5).abs() < 1e-9);
+        assert!(pos("4").position.x.abs() < 1e-9 && pos("4").position.y < 0.0);
+        assert!(pos("8").position.x.abs() < 1e-9 && pos("8").position.y > 0.0);
+        package.lead_layout = Some(vec![3, 1, 3]);
         assert!(generate_qfn(&package).is_err());
     }
 

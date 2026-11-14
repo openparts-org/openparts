@@ -1,0 +1,4 @@
+# An SMD contact foot on its pad. Vars: name, x, y, w, l.
+- solid.box:
+    {length: "{{w}}", width: "{{l}}", height: 0.1 mm, center: ["{{x}}", "{{y}}", 0.05 mm],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

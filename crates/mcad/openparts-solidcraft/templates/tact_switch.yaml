@@ -1,0 +1,12 @@
+# Tactile switch: the housing with a round actuator on top.
+# Vars: standoff, act_d, act_top.
+- params:
+    standoff: ["{{standoff}}", housing underside above the board]
+    act_d: ["{{act_d}}", actuator diameter]
+    act_top: ["{{act_top}}", actuator top above the board]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Body, name: Body}
+- solid.cylinder:
+    {diameter: act_d, height: act_top - standoff - body_h + 0.1 mm, base: [0 mm, 0 mm, standoff + body_h - 0.1 mm],
+     operation: new, body_name: Actuator, name: Actuator}

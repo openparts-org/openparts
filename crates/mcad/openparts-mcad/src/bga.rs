@@ -141,6 +141,7 @@ pub fn generate_bga(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 size: pad_size,
                 mounting: Mounting::Smd,
                 drill: None,
+                slot: None,
             });
         }
     }
@@ -218,10 +219,14 @@ mod tests {
                 tail_length: None,
                 pad_diameter: None,
                 body_offset: None,
+                lead_inset: None,
+                actuator_diameter: None,
             },
             lead_layout: Some(vec![6, 8]),
             tab: None,
             aux_pads: vec![],
+            pad_order: vec![],
+            pads: vec![],
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),

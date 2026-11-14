@@ -1,5 +1,6 @@
-//! QFN/DFN: a sawn mold body with flush lead-frame terminals and an
-//! optional exposed pad, inlaid in its underside.
+//! QFN/DFN/LGA: a sawn mold body with lead-frame terminals (flush with
+//! the edge, or set in on an LGA) and an optional exposed pad, inlaid in
+//! its underside.
 
 use crate::common;
 use crate::script::{looks, mm};
@@ -21,12 +22,19 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     };
     common::body_params(s, g)?;
     let (pad_len, pad_w) = rows[0].lead_size();
+    let half = if rows[0].side.across_x() {
+        g.body.size.x
+    } else {
+        g.body.size.y
+    } / 2.0;
+    let inset = (half - rows[0].outer_extent()).max(0.0);
     s.fragment(
         fragment!("qfn"),
         &vars!(
             pad_len = mm(pad_len),
             pad_w = mm(pad_w),
-            term_t = mm(thickness.min(g.body.size.z * 0.5))
+            term_t = mm(thickness.min(g.body.size.z * 0.5)),
+            pad_inset = mm(inset)
         ),
     )?;
     common::pin1_dimple(s, g, "Body", "body_h")?;
