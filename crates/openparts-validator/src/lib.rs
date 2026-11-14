@@ -11,60 +11,91 @@
 //!
 //! # Rule ID table
 //!
-//! | Rule ID | Meaning |
-//! |---|---|
-//! | `ref.device_mismatch` | `part.device` does not match the loaded Device's `id` |
-//! | `ref.package_mismatch` | `part.package` does not match the loaded Package's `id` |
-//! | `ref.manufacturer_mismatch` | `part.manufacturer` does not match the Device's `manufacturer` |
-//! | `ref.unknown_source` | a `sources` or `provenance` entry references a Source that was not supplied |
-//! | `pin.duplicate_name` | two different pin numbers on one Device share the same *signal* pin name (power/ground/nc/reserved pins are exempt -- repeating `VDD`/`VSS`/`NC` across many pins is normal -- and so are pins linked by `connected_to`) |
-//! | `pin.connected_to.invalid` | a pin's `connected_to` names no other pin of the Device |
-//! | `dimension.out_of_range` | `nominal` is not within `[min, max]` when all three are present |
-//! | `dimension.inconsistent` | two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values) |
-//! | `provenance.invalid_path` | a provenance key is not a JSON Pointer-shaped path (must start with `/`) |
-//! | `provenance.missing` | a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start) |
-//! | `tab.invalid` | a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width` |
-//! | `aux_pads.invalid` | a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y` |
-//! | `header.invalid` | a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies) |
-//! | `mpn.empty` | `part.mpn` is empty |
+//!
+//! Every rule is listed, with what it means, in [`RULES`].
 
-use openparts_core::{Device, Package, Part, PinType, ProvenanceMap, SourceId};
+mod device;
+mod diagnostic;
+mod package;
+mod provenance;
+
+pub use diagnostic::{Diagnostic, Severity};
+
+use device::*;
+use openparts_core::{Device, Package, Part, SourceId};
+use package::*;
+use provenance::*;
 use std::collections::BTreeSet;
 
+/// A validation rule: its id (as in [`Diagnostic::rule_id`]) and meaning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Severity {
-    Error,
-    Warning,
+pub struct Rule {
+    pub id: &'static str,
+    pub meaning: &'static str,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Diagnostic {
-    pub rule_id: &'static str,
-    pub severity: Severity,
-    /// e.g. "part:ex/EX1", "device:ex/DEV1".
-    pub entity: String,
-    /// JSON-Pointer-shaped path to the offending field, when the
-    /// diagnostic is about a single field rather than the whole entity.
-    pub field_path: Option<String>,
-    pub message: String,
-}
-
-impl Diagnostic {
-    fn error(
-        rule_id: &'static str,
-        entity: impl Into<String>,
-        field_path: Option<&str>,
-        message: impl Into<String>,
-    ) -> Self {
-        Diagnostic {
-            rule_id,
-            severity: Severity::Error,
-            entity: entity.into(),
-            field_path: field_path.map(str::to_string),
-            message: message.into(),
-        }
-    }
-}
+pub const RULES: &[Rule] = &[
+    Rule {
+        id: "ref.device_mismatch",
+        meaning: "`part.device` does not match the loaded Device's `id`",
+    },
+    Rule {
+        id: "ref.package_mismatch",
+        meaning: "`part.package` does not match the loaded Package's `id`",
+    },
+    Rule {
+        id: "ref.manufacturer_mismatch",
+        meaning: "`part.manufacturer` does not match the Device's `manufacturer`",
+    },
+    Rule {
+        id: "ref.unknown_source",
+        meaning: "a `sources` or `provenance` entry references a Source that was not supplied",
+    },
+    Rule {
+        id: "pin.duplicate_name",
+        meaning: "two different pin numbers on one Device share the same *signal* pin name (power/ground/nc/reserved pins are exempt -- repeating `VDD`/`VSS`/`NC` across many pins is normal -- and so are pins linked by `connected_to`)",
+    },
+    Rule {
+        id: "pin.connected_to.invalid",
+        meaning: "a pin's `connected_to` names no other pin of the Device",
+    },
+    Rule {
+        id: "dimension.out_of_range",
+        meaning: "`nominal` is not within `[min, max]` when all three are present",
+    },
+    Rule {
+        id: "dimension.inconsistent",
+        meaning: "two package dimensions contradict each other: a lead span (`overall_width`/`overall_length`) not larger than the body along the same axis, or a `standoff`/`body_height` not smaller than `overall_height` (compared only between stated values)",
+    },
+    Rule {
+        id: "provenance.invalid_path",
+        meaning: "a provenance key is not a JSON Pointer-shaped path (must start with `/`)",
+    },
+    Rule {
+        id: "provenance.missing",
+        meaning: "a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start)",
+    },
+    Rule {
+        id: "tab.invalid",
+        meaning: "a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width`",
+    },
+    Rule {
+        id: "aux_pads.invalid",
+        meaning: "a package's `aux_pads` has an empty or repeated number, a number that is also an edge pin (`1..=lead_count`), or is missing one of `dimensions.aux_pad_width`/`aux_pad_length`/`aux_row_x`/`aux_row_y`",
+    },
+    Rule {
+        id: "header.invalid",
+        meaning: "a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies)",
+    },
+    Rule {
+        id: "mpn.empty",
+        meaning: "`part.mpn` is empty",
+    },
+    Rule {
+        id: "pad_order.invalid",
+        meaning: "a package's `pad_order` does not hold exactly `lead_count` distinct numbers",
+    },
+];
 
 /// Runs every check for the vertical slice against one Part + its
 /// resolved Device + Package. `known_sources` is the set of Source IDs
@@ -167,415 +198,42 @@ pub fn validate_part(
     out.extend(check_package_tab(&package_entity, package));
     out.extend(check_package_aux_pads(&package_entity, package));
     out.extend(check_package_header(&package_entity, package));
+    out.extend(check_package_pad_order(&package_entity, package));
 
-    out
-}
-
-/// Paths of the package fields that must carry their own provenance.
-const PROVENANCE_REQUIRED: [&str; 24] = [
-    "/dimensions/overall_width",
-    "/dimensions/overall_length",
-    "/dimensions/overall_height",
-    "/dimensions/standoff",
-    "/dimensions/lead_width",
-    "/dimensions/lead_length",
-    "/dimensions/lead_thickness",
-    "/dimensions/tab_width",
-    "/dimensions/tab_length",
-    "/dimensions/row_spacing",
-    "/dimensions/hole_diameter",
-    "/dimensions/aux_pad_width",
-    "/dimensions/aux_pad_length",
-    "/dimensions/aux_row_x",
-    "/dimensions/aux_row_y",
-    "/dimensions/mounting_hole_diameter",
-    "/dimensions/mounting_hole_spacing",
-    "/dimensions/mounting_hole_inset",
-    "/dimensions/mating_length",
-    "/dimensions/tail_length",
-    "/dimensions/pad_diameter",
-    "/dimensions/body_offset",
-    "/dimensions/lead_inset",
-    "/dimensions/actuator_diameter",
-];
-
-fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    let mut present: Vec<&str> = package
-        .dimensions
-        .entries()
-        .into_iter()
-        .map(|(path, _)| path)
-        .filter(|path| PROVENANCE_REQUIRED.contains(path))
-        .collect();
-    if package.construction.is_some() {
-        present.push("/construction");
-    }
-    if package.tab.is_some() {
-        present.push("/tab");
-    }
-    if !package.pad_order.is_empty() {
-        present.push("/pad_order");
-    }
-    if !package.pads.is_empty() {
-        present.push("/pads");
-    }
-    if !package.aux_pads.is_empty() {
-        present.push("/aux_pads");
-    }
-    present
-        .into_iter()
-        .filter(|path| {
-            // An entry for the field itself or for one of its parents
-            // (e.g. "/dimensions") covers it.
-            !package.provenance.keys().any(|key| {
-                path.strip_prefix(key.as_str())
-                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
-            })
-        })
-        .map(|path| {
-            Diagnostic::error(
-                "provenance.missing",
-                entity,
-                Some(path),
-                format!("\"{path}\" has no provenance entry"),
-            )
-        })
-        .collect()
-}
-
-/// A tab's trimmed leads must be lead positions of the package, and a
-/// tab needs its width (the generators can't draw a tab without it).
-fn check_package_tab(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    let Some(tab) = &package.tab else {
-        return vec![];
-    };
-    let mut out = Vec::new();
-    if tab.number.trim().is_empty() {
-        out.push(Diagnostic::error(
-            "tab.invalid",
-            entity,
-            Some("/tab/number"),
-            "tab.number is empty".to_string(),
-        ));
-    }
-    for lead in &tab.trimmed_leads {
-        let valid = lead
-            .parse::<u32>()
-            .is_ok_and(|n| (1..=package.lead_count).contains(&n));
-        if !valid {
-            out.push(Diagnostic::error(
-                "tab.invalid",
-                entity,
-                Some("/tab/trimmed_leads"),
-                format!(
-                    "trimmed lead \"{lead}\" is not a lead position (1..={})",
-                    package.lead_count
-                ),
-            ));
-        }
-    }
-    if package.dimensions.tab_width.is_none() {
-        out.push(Diagnostic::error(
-            "tab.invalid",
-            entity,
-            Some("/dimensions/tab_width"),
-            "a package with a tab must state dimensions.tab_width".to_string(),
-        ));
-    }
-    out
-}
-
-/// Auxiliary pads (`module`): distinct, non-empty numbers that don't
-/// reuse an edge pin's number, and the row's size and place stated (the
-/// generator can't draw them otherwise).
-fn check_package_aux_pads(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    if package.aux_pads.is_empty() {
-        return vec![];
-    }
-    let mut out = Vec::new();
-    let mut seen = BTreeSet::new();
-    for number in &package.aux_pads {
-        let edge_pin = number
-            .parse::<u32>()
-            .is_ok_and(|n| (1..=package.lead_count).contains(&n));
-        let problem = if number.trim().is_empty() {
-            Some("an aux pad number is empty".to_string())
-        } else if edge_pin {
-            Some(format!(
-                "aux pad \"{number}\" reuses an edge pin number (1..={})",
-                package.lead_count
-            ))
-        } else if !seen.insert(number.as_str()) {
-            Some(format!("aux pad \"{number}\" is listed twice"))
-        } else {
-            None
-        };
-        if let Some(message) = problem {
-            out.push(Diagnostic::error(
-                "aux_pads.invalid",
-                entity,
-                Some("/aux_pads"),
-                message,
-            ));
-        }
-    }
-    let d = &package.dimensions;
-    for (path, dim) in [
-        ("/dimensions/aux_pad_width", &d.aux_pad_width),
-        ("/dimensions/aux_pad_length", &d.aux_pad_length),
-        ("/dimensions/aux_row_x", &d.aux_row_x),
-        ("/dimensions/aux_row_y", &d.aux_row_y),
-    ] {
-        if dim.is_none() {
-            out.push(Diagnostic::error(
-                "aux_pads.invalid",
-                entity,
-                Some(path),
-                format!("a package with aux_pads must state {path}"),
-            ));
-        }
-    }
-    out
-}
-
-/// Pin headers and sockets: the grid and the drill must be stated (the
-/// generator never guesses either), and a right-angle header's housing
-/// position.
-fn check_package_header(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    if !package.family.is_header() {
-        return vec![];
-    }
-    let right_angle = package.family == openparts_core::PackageFamily::RightAngleHeader;
-    let max_rows = if right_angle { 1 } else { 2 };
-    let mut out = Vec::new();
-    let rows = match package.lead_layout.as_deref() {
-        Some(&[rows, per_row])
-            if (1..=max_rows).contains(&rows) && rows * per_row == package.lead_count =>
-        {
-            Some(rows)
-        }
-        _ => {
-            out.push(Diagnostic::error(
-                "header.invalid",
-                entity,
-                Some("/lead_layout"),
-                format!(
-                    "a {} needs lead_layout [rows, pins_per_row] with {} and \
-                     rows x pins_per_row = lead_count ({})",
-                    package.family,
-                    if right_angle { "1 row" } else { "1 or 2 rows" },
-                    package.lead_count
-                ),
-            ));
-            None
-        }
-    };
-    let d = &package.dimensions;
-    if d.hole_diameter.is_none() {
-        out.push(Diagnostic::error(
-            "header.invalid",
-            entity,
-            Some("/dimensions/hole_diameter"),
-            "a header must state dimensions.hole_diameter (the recommended PCB hole)".to_string(),
-        ));
-    }
-    if rows == Some(2) && d.row_spacing.is_none() {
-        out.push(Diagnostic::error(
-            "header.invalid",
-            entity,
-            Some("/dimensions/row_spacing"),
-            "a 2-row header must state dimensions.row_spacing".to_string(),
-        ));
-    }
-    if right_angle && d.body_offset.is_none() {
-        out.push(Diagnostic::error(
-            "header.invalid",
-            entity,
-            Some("/dimensions/body_offset"),
-            "a right-angle header must state dimensions.body_offset (where its housing lies \
-             beside the holes)"
-                .to_string(),
-        ));
-    }
-    out
-}
-
-/// The largest / smallest value a dimension states (nominal, min or
-/// max) -- comparisons use only stated numbers, never a synthesized one.
-fn largest(dim: &openparts_core::Dimension) -> Option<f64> {
-    [dim.nominal, dim.min, dim.max]
-        .into_iter()
-        .flatten()
-        .reduce(f64::max)
-}
-fn smallest(dim: &openparts_core::Dimension) -> Option<f64> {
-    [dim.nominal, dim.min, dim.max]
-        .into_iter()
-        .flatten()
-        .reduce(f64::min)
-}
-
-fn check_package_consistency(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    let d = &package.dimensions;
-    let mut out = Vec::new();
-    // (larger, smaller): `larger` must exceed `smaller` even comparing
-    // the most pessimistic stated values.
-    let pairs = [
-        (
-            ("/dimensions/overall_width", d.overall_width.as_ref()),
-            ("/dimensions/body_width", Some(&d.body_width)),
-        ),
-        (
-            ("/dimensions/overall_length", d.overall_length.as_ref()),
-            ("/dimensions/body_length", Some(&d.body_length)),
-        ),
-        (
-            ("/dimensions/overall_height", d.overall_height.as_ref()),
-            ("/dimensions/standoff", d.standoff.as_ref()),
-        ),
-        (
-            ("/dimensions/overall_height", d.overall_height.as_ref()),
-            ("/dimensions/body_height", d.body_height.as_ref()),
-        ),
-    ];
-    for ((big_path, big), (small_path, small)) in pairs {
-        let (Some(big), Some(small)) = (big, small) else {
-            continue;
-        };
-        let (Some(big_v), Some(small_v)) = (largest(big), smallest(small)) else {
-            continue;
-        };
-        if big_v <= small_v {
-            out.push(Diagnostic::error(
-                "dimension.inconsistent",
-                entity,
-                Some(big_path),
-                format!(
-                    "{big_path} (at most {big_v}) must be larger than {small_path} (at least {small_v})"
-                ),
-            ));
-        }
-    }
-    out
-}
-
-/// Pin types allowed to repeat a name across many pins without it being
-/// a data-entry mistake (a package commonly has several `VDD`/`VSS`/`NC`
-/// pins). Every other type ("signal" pins) is expected to have a unique
-/// name per Device -- a repeat there is usually a copy-paste error.
-fn allows_repeated_names(pin_type: PinType) -> bool {
-    matches!(
-        pin_type,
-        PinType::Power | PinType::Ground | PinType::Nc | PinType::Reserved
-    )
-}
-
-fn check_duplicate_pin_names(entity: &str, device: &Device) -> Vec<Diagnostic> {
-    let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
-    let mut out = Vec::new();
-    for (number, pin) in &device.pins {
-        if let Some(target) = &pin.connected_to {
-            match device.pins.get(target) {
-                Some(_) if target != number => {}
-                _ => out.push(Diagnostic::error(
-                    "pin.connected_to.invalid",
-                    entity,
-                    Some(&format!("/pins/{number}/connected_to")),
-                    format!("pin \"{number}\" is connected_to \"{target}\", which is not another pin of this device"),
-                )),
-            }
-        }
-    }
-    // Two pins the source says are internally connected (a tab tied to
-    // pin 2) are one terminal and may share its name.
-    let linked = |a: &str, b: &str| {
-        let to = |x: &str| device.pins.get(x).and_then(|p| p.connected_to.as_deref());
-        to(a) == Some(b) || to(b) == Some(a)
-    };
-    for (number, pin) in &device.pins {
-        if allows_repeated_names(pin.pin_type) {
-            continue;
-        }
-        if let Some(&first_number) = seen.get(pin.name.as_str()) {
-            if linked(first_number, number) {
-                continue;
-            }
-            out.push(Diagnostic::error(
-                "pin.duplicate_name",
-                entity,
-                Some(&format!("/pins/{number}/name")),
-                format!(
-                    "pins \"{first_number}\" and \"{number}\" both use the name \"{}\"",
-                    pin.name
-                ),
-            ));
-        } else {
-            seen.insert(pin.name.as_str(), number.as_str());
-        }
-    }
-    out
-}
-
-fn check_dimension(
-    entity: &str,
-    field_path: &str,
-    dim: &openparts_core::Dimension,
-) -> Option<Diagnostic> {
-    let (Some(nominal), Some(min), Some(max)) = (dim.nominal, dim.min, dim.max) else {
-        // Only checkable when all three are present (Testing and Quality
-        // Specification section 6: never synthesize a missing value in
-        // order to validate).
-        return None;
-    };
-    if !(min <= nominal && nominal <= max) {
-        Some(Diagnostic::error(
-            "dimension.out_of_range",
-            entity,
-            Some(field_path),
-            format!("nominal ({nominal}) is not within [{min}, {max}]"),
-        ))
-    } else {
-        None
-    }
-}
-
-fn check_provenance(
-    entity: &str,
-    provenance: &ProvenanceMap,
-    known_sources: &BTreeSet<SourceId>,
-) -> Vec<Diagnostic> {
-    let mut out = Vec::new();
-    for (path, entries) in provenance {
-        if !path.starts_with('/') {
-            out.push(Diagnostic::error(
-                "provenance.invalid_path",
-                entity,
-                Some(path),
-                format!(
-                    "provenance path \"{path}\" is not JSON-Pointer-shaped (must start with \"/\")"
-                ),
-            ));
-        }
-        for entry in entries {
-            if !known_sources.contains(&entry.source) {
-                out.push(Diagnostic::error(
-                    "ref.unknown_source",
-                    entity,
-                    Some(path),
-                    format!(
-                        "provenance for \"{path}\" cites source \"{}\" which was not supplied for validation",
-                        entry.source
-                    ),
-                ));
-            }
-        }
-    }
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every rule id the checks can emit is documented in `RULES`, and
+    /// every documented rule is emitted somewhere.
+    #[test]
+    fn rules_table_matches_the_checks() {
+        let src = [
+            include_str!("lib.rs"),
+            include_str!("device.rs"),
+            include_str!("package.rs"),
+            include_str!("provenance.rs"),
+        ]
+        .concat();
+        let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
+        let mut emitted = BTreeSet::new();
+        for chunk in src.split("Diagnostic::error(").skip(1) {
+            let id = chunk.trim_start().trim_start_matches('"');
+            let id = &id[..id.find('"').unwrap()];
+            // Skip this test's own text; rule ids look like `area.name`.
+            if id.contains('.')
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '.' || c == '_')
+            {
+                emitted.insert(id);
+            }
+        }
+        assert_eq!(documented, emitted);
+    }
     use openparts_core::{
         Dimension, Existence, ExistenceStatus, Kind, Lifecycle, LifecycleStatus, ManufacturerId,
         PackageDimensions, PartId,
