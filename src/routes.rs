@@ -65,6 +65,7 @@ struct SearchQuery {
     category: Option<openparts_core::ComponentCategory>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct PartSummary {
     manufacturer: String,
@@ -159,6 +160,7 @@ async fn get_package(
     Ok(Json(resolve_package(&store, &id)?.clone()))
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct ProvenanceResponse {
     part: ProvenanceMap,
@@ -181,6 +183,7 @@ async fn get_provenance(
     }))
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct RevisionSummary {
     id: String,
@@ -206,6 +209,7 @@ async fn get_revisions(
     Ok(Json(revisions))
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct ArtifactsResponse {
     #[serde(rename = "kicad-symbol")]

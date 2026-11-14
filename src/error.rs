@@ -16,6 +16,7 @@ pub enum ApiError {
     Unavailable(String),
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct DiagnosticBody {
     rule_id: &'static str,
@@ -37,6 +38,7 @@ impl From<&openparts_validator::Diagnostic> for DiagnosticBody {
     }
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Serialize)]
 struct ErrorBody {
     error: String,
