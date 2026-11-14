@@ -1,23 +1,15 @@
-//! Prebuilt artifacts: a bundle written by `openparts bundle` (see
-//! `openparts/crates/openparts-cli/src/bundle.rs`), served instead of
-//! building each artifact per request.
-//!
-//! ```text
-//! <OPENPARTS_ARTIFACT_DIR>/
-//! ├── manifest.json            (manufacturer, mpn) -> kind -> sha256
-//! └── artifacts/sha256/<hex>
-//! ```
+//! Prebuilt artifacts: a bundle written by `openparts bundle`, in the
+//! layout and manifest schema of `openparts_artifacts::bundle`, served
+//! instead of building each artifact per request.
 //!
 //! The bundle is built where SolidCraft is installed (at dataset
 //! release); with it, this server needs no SolidCraft at all.
 
-use serde::Deserialize;
+use openparts_artifacts::bundle::{Manifest, FORMAT, FORMAT_VERSION};
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-pub const MANIFEST_FILE: &str = "manifest.json";
-const FORMAT: &str = "openparts-bundle";
-const FORMAT_VERSION: u32 = 1;
+pub use openparts_artifacts::bundle::{Artifact, MANIFEST_FILE};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BundleError {
@@ -43,34 +35,6 @@ pub enum BundleError {
     Template { path: String, template: String },
 }
 
-#[derive(Debug, Deserialize)]
-struct Manifest {
-    format: String,
-    format_version: u32,
-    artifact_path: String,
-    #[serde(default)]
-    reproducibility: serde_json::Value,
-    parts: Vec<ManifestPart>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManifestPart {
-    manufacturer: String,
-    mpn: String,
-    #[serde(default)]
-    artifacts: BTreeMap<String, Artifact>,
-}
-
-/// One prebuilt artifact.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Artifact {
-    pub sha256: String,
-    pub size: u64,
-    pub content_type: String,
-    #[serde(default)]
-    pub filename: Option<String>,
-}
-
 #[derive(Debug, Default)]
 pub struct Bundle {
     root: PathBuf,
@@ -79,7 +43,7 @@ pub struct Bundle {
     parts: HashMap<(String, String), BTreeMap<String, Artifact>>,
     /// The conditions the bundle was built under, as the manifest
     /// records them.
-    pub reproducibility: serde_json::Value,
+    pub reproducibility: openparts_artifacts::bundle::Reproducibility,
 }
 
 impl Bundle {

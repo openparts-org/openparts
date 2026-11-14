@@ -234,7 +234,8 @@ fn tiny_bundle(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&root);
     let store = root.join("artifacts/sha256");
     std::fs::create_dir_all(&store).unwrap();
-    let mut artifacts = serde_json::Map::new();
+    use openparts_artifacts::bundle::{self as b, Manifest, PartEntry, Status};
+    let mut artifacts = std::collections::BTreeMap::new();
     for (kind, bytes, content_type, write) in [
         ("step", &b"ISO-10303-21; bundled"[..], "model/step", true),
         ("3mf", &b"PK\x03\x04 bundled"[..], "model/3mf", true),
@@ -257,25 +258,41 @@ fn tiny_bundle(name: &str) -> PathBuf {
             std::fs::write(store.join(&hex), bytes).unwrap();
         }
         artifacts.insert(
-            kind.into(),
-            serde_json::json!({"sha256": hex, "size": bytes.len(), "content_type": content_type}),
+            kind.to_string(),
+            b::Artifact {
+                sha256: hex,
+                size: bytes.len() as u64,
+                content_type: content_type.to_string(),
+                filename: format!("RP2040.{kind}"),
+            },
         );
     }
-    let manifest = serde_json::json!({
-        "format": "openparts-bundle",
-        "format_version": 1,
-        "artifact_path": "artifacts/sha256/{sha256}",
-        "reproducibility": {"toolchain": {"solidcraft": "solidcraft-cli test"}},
-        "parts": [{
-            "manufacturer": "raspberrypi",
-            "mpn": "RP2040",
-            "status": "ok",
-            "artifacts": artifacts,
-            "errors": [],
+    let manifest = Manifest {
+        format: b::FORMAT.into(),
+        format_version: b::FORMAT_VERSION,
+        artifact_path: b::ARTIFACT_PATH.into(),
+        reproducibility: b::Reproducibility {
+            toolchain: [("solidcraft".to_string(), "solidcraft-cli test".to_string())].into(),
+            ..Default::default()
+        },
+        summary: b::Summary::default(),
+        parts: vec![PartEntry {
+            manufacturer: "raspberrypi".into(),
+            mpn: "RP2040".into(),
+            part_id: "raspberrypi/RP2040".into(),
+            device: "raspberrypi/RP2040".into(),
+            package: "standards/QFN56-RP2040".into(),
+            status: Status::Ok,
+            artifacts,
+            errors: vec![],
         }],
-        "load_errors": [],
-    });
-    std::fs::write(root.join("manifest.json"), manifest.to_string()).unwrap();
+        load_errors: vec![],
+    };
+    std::fs::write(
+        root.join(b::MANIFEST_FILE),
+        serde_json::to_string(&manifest).unwrap(),
+    )
+    .unwrap();
     root
 }
 

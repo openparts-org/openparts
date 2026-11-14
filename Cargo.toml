@@ -9,17 +9,14 @@ description = "OpenParts distribution API server (Architecture Specification sec
 openparts-core = { path = "../openparts/crates/openparts-core" }
 openparts-data = { path = "../openparts/crates/openparts-data" }
 openparts-validator = { path = "../openparts/crates/openparts-validator" }
-openparts-mcad = { path = "../openparts/crates/mcad/openparts-mcad" }
 openparts-solidcraft = { path = "../openparts/crates/mcad/openparts-solidcraft" }
-openparts-pcbcad = { path = "../openparts/crates/pcbcad/openparts-pcbcad" }
-openparts-kicad = { path = "../openparts/crates/pcbcad/openparts-kicad" }
+openparts-artifacts = { path = "../openparts/crates/openparts-artifacts" }
 
 axum = "0.7"
 tower-http = { version = "0.6", features = ["fs"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
 sha2 = "0.10"
 thiserror = "1"
 anyhow = "1"
