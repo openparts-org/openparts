@@ -1,6 +1,6 @@
 [package]
 name = "openparts-kicad-plugin"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 publish = false
 description = "Standalone GUI companion app: search OpenParts and install Symbol/Footprint/STEP into a KiCad project's local libraries."

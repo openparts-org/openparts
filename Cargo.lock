@@ -2670,7 +2670,7 @@ dependencies = [
 
 [[package]]
 name = "openparts-kicad-plugin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "eframe",
  "kicad-ipc-rs",
