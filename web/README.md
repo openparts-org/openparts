@@ -20,7 +20,7 @@ The OpenParts web site: a single-page app written in
 Needs `moon` and `bun` (or npm).
 
 ```sh
-moon install            # MoonBit dependencies (into .mooncakes/)
+moon check --target js  # fetches the MoonBit dependencies (.mooncakes/)
 bun install             # Vite, three.js and the three.js bindings' JS
 bun run dev             # http://localhost:5173, /api proxied to :8080
 bun run test            # moon test --target js

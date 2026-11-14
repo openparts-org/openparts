@@ -34,7 +34,9 @@ jobs:
         with:
           bun-version: latest
 
-      - run: moon install
+      # Fetches the MoonBit dependencies into .mooncakes/ (bun install
+      # links the three.js bindings' JS from there).
+      - run: moon check --target js
 
       - run: bun install --frozen-lockfile
 

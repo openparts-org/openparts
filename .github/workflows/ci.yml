@@ -61,7 +61,7 @@ jobs:
 
       - name: The web site's API types are up to date
         run: |
-          (cd web && moon install)
+          (cd web && moon check --target js)  # fetches the MoonBit dependencies
           web/scripts/gen-api-types.sh
           git diff --exit-code -- web/api
 
@@ -79,7 +79,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: moon install
+      # Fetches the MoonBit dependencies into .mooncakes/ (bun install
+      # links the three.js bindings' JS from there).
+      - run: moon check --target js
       - run: bun install --frozen-lockfile
       - run: moon check --target js --deny-warn
       - run: moon test --target js
