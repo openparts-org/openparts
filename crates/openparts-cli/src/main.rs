@@ -45,13 +45,17 @@ enum Commands {
         out: PathBuf,
     },
     /// Run openparts-validator against a Part/Device/Package triple.
+    /// Validate one part (`--part/--device/--package/--source`) or a
+    /// whole dataset (`--data <dir>`).
     Validate {
+        #[arg(long, conflicts_with_all = ["part", "device", "package"])]
+        data: Option<PathBuf>,
+        #[arg(long, requires_all = ["device", "package"])]
+        part: Option<PathBuf>,
         #[arg(long)]
-        part: PathBuf,
+        device: Option<PathBuf>,
         #[arg(long)]
-        device: PathBuf,
-        #[arg(long)]
-        package: PathBuf,
+        package: Option<PathBuf>,
         #[arg(long = "source")]
         sources: Vec<PathBuf>,
     },
@@ -96,11 +100,18 @@ fn main() -> anyhow::Result<()> {
             out,
         } => cmd_generate(part, device, package, sources, revision, out),
         Commands::Validate {
-            part,
-            device,
-            package,
+            data: Some(data), ..
+        } => cmd_validate_dataset(&data),
+        Commands::Validate {
+            part: Some(part),
+            device: Some(device),
+            package: Some(package),
             sources,
+            ..
         } => cmd_validate(part, device, package, sources),
+        Commands::Validate { .. } => {
+            anyhow::bail!("validate needs --data <dir>, or --part, --device and --package")
+        }
         Commands::Search { query } => cmd_search(&cli.registry, &query),
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
         Commands::Bundle {
@@ -143,15 +154,6 @@ fn load_triple(
     Ok((part, device, package))
 }
 
-fn run_validation(
-    part: &openparts_core::Part,
-    device: &openparts_core::Device,
-    package: &openparts_core::Package,
-    known_sources: &BTreeSet<openparts_core::SourceId>,
-) -> Vec<openparts_validator::Diagnostic> {
-    openparts_validator::validate_part(part, device, package, known_sources)
-}
-
 fn print_diagnostics(diags: &[openparts_validator::Diagnostic]) {
     for d in diags {
         let field = d.field_path.as_deref().unwrap_or("");
@@ -170,7 +172,7 @@ fn cmd_validate(
 ) -> anyhow::Result<()> {
     let (part, device, package) = load_triple(&part, &device, &package)?;
     let known_sources = load_known_sources(&sources)?;
-    let diags = run_validation(&part, &device, &package, &known_sources);
+    let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
     if diags.is_empty() {
         println!("OK: no validation diagnostics");
         Ok(())
@@ -178,6 +180,44 @@ fn cmd_validate(
         print_diagnostics(&diags);
         anyhow::bail!("{} validation diagnostic(s)", diags.len());
     }
+}
+
+/// Validates every part of the dataset at `data` against the dataset's
+/// own devices, packages and sources; files that fail to load count as
+/// failures too.
+fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
+    let dataset = openparts_data::Dataset::load(data)?;
+    let sources = dataset.source_ids();
+    let mut failures = 0;
+    for issue in &dataset.issues {
+        eprintln!("FAIL {}: {}", issue.path.display(), issue.error);
+        failures += 1;
+    }
+    for part in &dataset.parts {
+        let path = dataset.paths.get(&part.id.to_string());
+        let shown = path.map_or_else(|| part.id.to_string(), |p| p.display().to_string());
+        let diags = match dataset.resolve(part) {
+            Ok((device, package)) => {
+                openparts_validator::validate_part(part, device, package, &sources)
+            }
+            Err(e) => {
+                eprintln!("FAIL {shown}: {e}");
+                failures += 1;
+                continue;
+            }
+        };
+        if !diags.is_empty() {
+            eprintln!("FAIL {shown}:");
+            print_diagnostics(&diags);
+            failures += 1;
+        }
+    }
+    println!("Checked {} part(s).", dataset.parts.len());
+    if failures > 0 {
+        anyhow::bail!("{failures} part(s) or file(s) failed");
+    }
+    println!("OK: no validation diagnostics");
+    Ok(())
 }
 
 /// `openparts search <query>` (Architecture Specification section 7.5).
@@ -233,20 +273,6 @@ fn cmd_show(registry: &str, manufacturer: &str, mpn: &str) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Real MPNs can legitimately contain characters that aren't safe in a
-/// filename component -- confirmed with a real part this project
-/// generates output for: NXP's own ordering-table MPN is literally
-/// "LPC1114FBD48/302" (the "/" is NXP's own separator convention, not
-/// a typo). Used only for filesystem paths below; `part.mpn` itself
-/// (used for symbol/footprint/STEP/STL content, which has no such
-/// constraint) is passed through unsanitized everywhere else.
-/// Shared with the footprint's 3D model reference
-/// (`openparts_pcbcad::default_model_path`), so the `.step` written here is
-/// the file the `.kicad_mod` points at.
-fn safe_filename(mpn: &str) -> String {
-    openparts_pcbcad::safe_filename(mpn)
-}
-
 fn cmd_generate(
     part_path: PathBuf,
     device_path: PathBuf,
@@ -255,77 +281,48 @@ fn cmd_generate(
     revision: Option<String>,
     out_dir: PathBuf,
 ) -> anyhow::Result<()> {
+    use openparts_artifacts::{ArtifactKind, BuildError, PartBuild};
+
     let (part, device, package) = load_triple(&part_path, &device_path, &package_path)?;
     let known_sources = load_known_sources(&sources)?;
-
-    let diags = run_validation(&part, &device, &package, &known_sources);
-    if !diags.is_empty() {
-        print_diagnostics(&diags);
-        anyhow::bail!(
-            "{} validation diagnostic(s); aborting generate",
-            diags.len()
-        );
-    }
-
-    let model = openparts_core::build_effective_model(
-        part.clone(),
+    let build = match PartBuild::new(
+        &part,
         &device,
-        package.clone(),
+        &package,
+        &known_sources,
         revision.as_deref(),
-    )
-    .context("building effective model")?;
-
-    let geometry = openparts_mcad::generate(&model.package).context("generating geometry")?;
+    ) {
+        Ok(b) => b,
+        Err(BuildError::Validation(diags)) => {
+            print_diagnostics(&diags);
+            anyhow::bail!(
+                "{} validation diagnostic(s); aborting generate",
+                diags.len()
+            );
+        }
+        Err(e) => return Err(e).context("building the effective model"),
+    };
 
     std::fs::create_dir_all(&out_dir)?;
-    let mpn_file = safe_filename(&part.mpn);
-
-    let symbol = openparts_pcbcad::build_symbol(&part.mpn, &model.device);
-    let symbol_text = openparts_kicad::render_symbol(&symbol);
-    std::fs::write(out_dir.join(format!("{mpn_file}.kicad_sym")), symbol_text)?;
-
-    let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
-    let footprint_text = openparts_kicad::render_footprint(&footprint);
-    std::fs::write(
-        out_dir.join(format!("{mpn_file}.kicad_mod")),
-        footprint_text,
-    )?;
-
-    // The detailed 3D model, built and exported by SolidCraft in one run:
-    // STEP (coloured), binary STL, 3MF (coloured), and the parametric
-    // SolidCraft design itself (`.sc`, editable in SolidCraft).
-    let input = openparts_solidcraft::ModelInput {
-        package: &model.package,
-        geometry: &geometry,
-        category: Some(model.device.category),
-        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
+    let write = |kind: ArtifactKind, bytes: &[u8]| {
+        std::fs::write(out_dir.join(build.file_name(kind)), bytes)
     };
-    let models = openparts_solidcraft::generate(
-        &input,
-        &part.mpn,
-        &[
-            openparts_solidcraft::Format::Step,
-            openparts_solidcraft::Format::Stl,
-            openparts_solidcraft::Format::ThreeMf,
-            openparts_solidcraft::Format::Design,
-        ],
-    )
-    .context("generating the 3D model with SolidCraft")?;
-    for (bytes, ext) in models.iter().zip(["step", "stl", "3mf", "sc"]) {
-        std::fs::write(out_dir.join(format!("{mpn_file}.{ext}")), bytes)?;
+    for kind in [ArtifactKind::KicadSymbol, ArtifactKind::KicadFootprint] {
+        write(kind, &build.render(kind)?)?;
+    }
+    // The detailed 3D model, built and exported by SolidCraft in one run.
+    let models = build
+        .models(&ArtifactKind::MODELS)
+        .context("generating the 3D model with SolidCraft")?;
+    for (kind, bytes) in ArtifactKind::MODELS.into_iter().zip(&models) {
+        write(kind, bytes)?;
     }
 
-    // LibrePCB library element (a directory tree, not a single file --
-    // written under <out>/<mpn>.lplib/).
-    let librepcb_dir = out_dir.join(format!("{mpn_file}.lplib"));
-    // The LibrePCB package embeds the same STEP as its 3D model.
+    // LibrePCB library element (a directory tree under <out>/<mpn>.lplib/),
+    // embedding the same STEP as its 3D model.
+    let librepcb_dir = out_dir.join(format!("{}.lplib", build.file_stem()));
     let step_text = std::str::from_utf8(&models[0]).context("SolidCraft STEP is not UTF-8")?;
-    for file in openparts_librepcb::generate_library_with_step(
-        &part.mpn,
-        &symbol,
-        &footprint,
-        Some(step_text),
-    ) {
+    for file in build.librepcb(Some(step_text))? {
         let path = librepcb_dir.join(&file.path);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -334,23 +331,22 @@ fn cmd_generate(
     }
 
     // Reproducibility record (Testing and Quality Specification section
-    // 10): the conditions this specific output was generated under.
+    // 10): the conditions this output was generated under.
     let report = format!(
-        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts_mcad: \"{}\"\n  openparts_kicad: \"{}\"\n  openparts_step: \"{}\"\n  openparts_stl: \"{}\"\n  openparts_librepcb: \"{}\"\n  openparts_solidcraft: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n  solidcraft: \"{}\"\n",
+        "schema_version: \"{}\"\npart_id: \"{}\"\napplied_revision: {}\ngenerator:\n  openparts: \"{}\"\ntoolchain:\n  rustc: \"{}\"\n  solidcraft: \"{}\"\n",
         part.schema_version,
         part.id,
-        model.applied_revision.as_deref().map(|r| format!("\"{r}\"")).unwrap_or_else(|| "null".to_string()),
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_VERSION"),
-        env!("CARGO_PKG_VERSION"),
+        build
+            .model
+            .applied_revision
+            .as_deref()
+            .map_or_else(|| "null".to_string(), |r| format!("\"{r}\"")),
         env!("CARGO_PKG_VERSION"),
         rustc_version(),
         openparts_solidcraft::runner::version().unwrap_or_else(|_| "unknown".to_string()),
     );
     std::fs::write(
-        out_dir.join(format!("{mpn_file}.generation-report.yaml")),
+        out_dir.join(format!("{}.generation-report.yaml", build.file_stem())),
         report,
     )?;
 
@@ -369,21 +365,4 @@ fn rustc_version() -> String {
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "unknown".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Regression test for a real bug found generating a real part:
-    /// NXP's own ordering-table MPN is "LPC1114FBD48/302" -- the "/" is
-    /// NXP's own separator, not a typo -- and `out_dir.join(format!("{mpn}.step"))`
-    /// silently treated it as a path separator, failing with "No such
-    /// file or directory" because the resulting nested directory
-    /// (`.../LPC1114FBD48/302.step`) was never created.
-    #[test]
-    fn sanitizes_slashes_in_real_world_mpns() {
-        assert_eq!(safe_filename("LPC1114FBD48/302"), "LPC1114FBD48-302");
-        assert_eq!(safe_filename("2N7002ET1G"), "2N7002ET1G");
-    }
 }

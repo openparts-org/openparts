@@ -3,11 +3,13 @@
 //! own meaning for the data — it defers entirely to the Canonical Data
 //! Specification and to `openparts-core`'s types.
 //!
-//! Loaders take a direct file path; scanning `openparts-data`'s directory
-//! layout for a given ID is out of scope for the first vertical slice.
+//! The `load_*` functions read one file; [`Dataset::load`] reads a whole
+//! `openparts-data` tree.
 
+mod dataset;
 mod error;
 
+pub use dataset::{yaml_files, Dataset, LoadIssue, ResolveError};
 pub use error::DataError;
 
 use openparts_core::{Device, Kind, Manufacturer, Package, Part, Source};

@@ -203,28 +203,17 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
 /// moved real footprint pads.
 #[test]
 fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
-    let mut files = Vec::new();
-    let mut dirs = vec![data_dir().join("packages")];
-    while let Some(dir) = dirs.pop() {
-        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                dirs.push(path);
-            } else if path.extension().is_some_and(|e| e == "yaml") {
-                files.push(path);
-            }
-        }
-    }
-    assert!(!files.is_empty());
+    let dataset = openparts_data::Dataset::load(data_dir()).unwrap();
+    assert!(dataset.issues.is_empty(), "{:?}", dataset.issues);
+    assert!(!dataset.packages.is_empty());
     // Every package must generate: a package the generators can't draw
     // is a data or generator bug, not something to skip silently. The
     // only exceptions are listed here, each with its reason.
     const KNOWN_UNDRAWABLE: &[(&str, &str)] =
         &[("standards/RADIAL-ECS-200-9X", "source states no lead pitch")];
     let mut failures = Vec::new();
-    for file in files {
-        let package = openparts_data::load_package(&file).unwrap();
-        let geometry = match openparts_mcad::generate(&package) {
+    for package in dataset.packages.values() {
+        let geometry = match openparts_mcad::generate(package) {
             Ok(g) => g,
             Err(e) => {
                 if !KNOWN_UNDRAWABLE

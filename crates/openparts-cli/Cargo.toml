@@ -17,6 +17,7 @@ openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "../pcbcad/openparts-kicad" }
 openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
 openparts-client = { path = "../openparts-client" }
+openparts-artifacts = { path = "../openparts-artifacts" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

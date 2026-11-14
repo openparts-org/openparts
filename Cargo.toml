@@ -13,6 +13,7 @@ members = [
     "crates/openparts-validator",
     "crates/openparts-client",
     "crates/openparts-cli",
+    "crates/openparts-artifacts",
     "crates/pcbcad/openparts-pcbcad",
     "crates/pcbcad/openparts-kicad",
     "crates/pcbcad/openparts-librepcb",

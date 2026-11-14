@@ -208,7 +208,7 @@ pub struct MechanicalGeometry {
     pub lead_form: Option<LeadForm>,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum McadError {
     #[error(
         "package family \"{0}\" has no supported generator (lqfp, qfn, dfn, son, lga, chip, soic, tssop, ssop, msop, sot, sot223, dpak, d2pak, sod, sod_flat, do214, to220, tact_switch_smd, tact_switch_tht, usb_c, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"

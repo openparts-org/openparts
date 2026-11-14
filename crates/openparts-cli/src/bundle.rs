@@ -1,263 +1,40 @@
-//! `openparts bundle`: prebuilds every part's artifacts for distribution.
-//!
-//! Walks an `openparts-data` checkout, validates every Part, builds its
-//! Effective Model (base revision) and writes each artifact once, content
-//! addressed (Architecture Specification section 24):
-//!
-//! ```text
-//! <out>/
-//! ├── manifest.json
-//! └── artifacts/sha256/<hex>
-//! ```
-//!
-//! `manifest.json` maps (manufacturer, mpn) to each artifact kind's
-//! digest, size and content type, lists every part that failed (and
-//! why) instead of dropping it, and records the conditions the bundle was
-//! built under (section 23: generator versions, SolidCraft version,
-//! dataset revision, schema versions). It has no time stamp, so the same
-//! dataset and toolchain give the same bundle, byte for byte.
+//! `openparts bundle`: prebuilds every part's artifacts for distribution,
+//! in the layout described in [`openparts_artifacts::bundle`].
 //!
 //! The bundle is built where SolidCraft is installed (at dataset
 //! release) and shipped to `openparts-server`, which then serves it
 //! without running SolidCraft itself.
 
 use anyhow::Context;
-use openparts_core::{Device, Package, Part, SourceId};
-use openparts_solidcraft::Format;
-use serde::Serialize;
+use openparts_artifacts::bundle::{
+    self, Artifact, DatasetRevision, GitRevision, LoadError, Manifest, PartEntry, PartError,
+    Reproducibility, Status, Summary,
+};
+use openparts_artifacts::{ArtifactKind, BuildError, PartBuild};
+use openparts_core::Part;
+use openparts_data::Dataset;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
-
-/// Version of the bundle layout and `manifest.json` schema.
-pub const BUNDLE_FORMAT_VERSION: u32 = 1;
-pub const MANIFEST_FILE: &str = "manifest.json";
-
-/// The 3D exports, all from one SolidCraft run per part: (format,
-/// artifact kind, content type).
-const MODEL_FORMATS: [(Format, &str, &str); 4] = [
-    (Format::Step, "step", "model/step"),
-    (Format::Stl, "stl", "model/stl"),
-    (Format::ThreeMf, "3mf", "model/3mf"),
-    (Format::Design, "solidcraft", "application/octet-stream"),
-];
-const KICAD_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
-
-#[derive(Serialize)]
-pub struct Manifest {
-    pub format: &'static str,
-    pub format_version: u32,
-    /// Where each artifact lives, relative to the bundle root, with
-    /// `{sha256}` standing for its hex digest.
-    pub artifact_path: &'static str,
-    pub reproducibility: Reproducibility,
-    pub summary: Summary,
-    /// Sorted by (manufacturer, mpn).
-    pub parts: Vec<PartEntry>,
-    /// Dataset files that could not be loaded at all (a Part among them
-    /// has no manufacturer/MPN to be listed under).
-    pub load_errors: Vec<LoadError>,
-}
-
-#[derive(Serialize)]
-pub struct Reproducibility {
-    pub dataset: DatasetRevision,
-    /// `schema_version`s of the Parts/Devices/Packages bundled.
-    pub schema_versions: BTreeSet<String>,
-    /// Generator crate versions (one workspace version today).
-    pub generator: BTreeMap<&'static str, &'static str>,
-    /// The openparts source checkout the generators were built from,
-    /// when it is a git repository.
-    pub generator_revision: Option<GitRevision>,
-    pub toolchain: BTreeMap<&'static str, String>,
-    /// The Effective Model's revision: always the base device.
-    pub silicon_revision: Option<String>,
-    /// Artifact kinds that are not byte-identical across rebuilds of
-    /// the same input: SolidCraft's saved design keeps per-feature build
-    /// timings in its cache. Every other kind is.
-    pub not_byte_reproducible: Vec<&'static str>,
-}
-
-#[derive(Serialize)]
-pub struct DatasetRevision {
-    pub git: Option<GitRevision>,
-}
-
-#[derive(Serialize)]
-pub struct GitRevision {
-    pub commit: String,
-    /// Uncommitted changes were present.
-    pub dirty: bool,
-}
-
-#[derive(Serialize)]
-pub struct Summary {
-    pub parts: usize,
-    pub ok: usize,
-    pub partial: usize,
-    pub failed: usize,
-    pub artifacts: usize,
-    pub total_bytes: u64,
-}
-
-#[derive(Serialize)]
-pub struct PartEntry {
-    pub manufacturer: String,
-    pub mpn: String,
-    pub part_id: String,
-    pub device: String,
-    pub package: String,
-    pub status: Status,
-    /// Artifact kind (`step`, `stl`, `3mf`, `solidcraft`,
-    /// `kicad-symbol`, `kicad-footprint`) -> artifact.
-    pub artifacts: BTreeMap<&'static str, Artifact>,
-    pub errors: Vec<PartError>,
-}
-
-#[derive(Serialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Status {
-    /// Every artifact was built.
-    Ok,
-    /// Some were built; `errors` says why the rest were not.
-    Partial,
-    /// None were built.
-    Failed,
-}
-
-#[derive(Serialize, Clone)]
-pub struct Artifact {
-    pub sha256: String,
-    pub size: u64,
-    pub content_type: &'static str,
-    /// A file name to save it under.
-    pub filename: String,
-}
-
-#[derive(Serialize)]
-pub struct PartError {
-    /// `resolve`, `validation`, `effective-model`, `geometry` or `3d-model`.
-    pub stage: &'static str,
-    pub message: String,
-}
-
-#[derive(Serialize)]
-pub struct LoadError {
-    pub path: String,
-    pub message: String,
-}
-
-struct Dataset {
-    parts: Vec<Part>,
-    devices: HashMap<String, Device>,
-    packages: HashMap<String, Package>,
-    sources: BTreeSet<SourceId>,
-    load_errors: Vec<LoadError>,
-}
-
-fn yaml_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .map(|e| e.map(|e| e.path()))
-        .collect::<Result<_, _>>()?;
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            yaml_files(&path, out)?;
-        } else if path.extension().is_some_and(|e| e == "yaml") {
-            out.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn load_dataset(data: &Path) -> anyhow::Result<Dataset> {
-    let mut files = Vec::new();
-    yaml_files(data, &mut files).with_context(|| format!("reading {}", data.display()))?;
-    let mut dataset = Dataset {
-        parts: Vec::new(),
-        devices: HashMap::new(),
-        packages: HashMap::new(),
-        sources: BTreeSet::new(),
-        load_errors: Vec::new(),
-    };
-    for path in files {
-        let rel = path
-            .strip_prefix(data)
-            .unwrap_or(&path)
-            .display()
-            .to_string();
-        let result = (|| -> anyhow::Result<()> {
-            let text = std::fs::read_to_string(&path)?;
-            let value: serde_yaml::Value = serde_yaml::from_str(&text)?;
-            match value.get("kind").and_then(|k| k.as_str()) {
-                Some("part") => dataset.parts.push(openparts_data::load_part(&path)?),
-                Some("device") => {
-                    let d = openparts_data::load_device(&path)?;
-                    dataset.devices.insert(d.id.to_string(), d);
-                }
-                Some("package") => {
-                    let p = openparts_data::load_package(&path)?;
-                    dataset.packages.insert(p.id.to_string(), p);
-                }
-                Some("source") => {
-                    dataset
-                        .sources
-                        .insert(openparts_data::load_source(&path)?.id);
-                }
-                // Manufacturers, errata, rejected entries, scripts' own
-                // YAML: nothing to bundle.
-                _ => {}
-            }
-            Ok(())
-        })();
-        if let Err(e) = result {
-            dataset.load_errors.push(LoadError {
-                path: rel,
-                message: format!("{e:#}"),
-            });
-        }
-    }
-    dataset
-        .parts
-        .sort_by(|a, b| (&a.manufacturer.0, &a.mpn).cmp(&(&b.manufacturer.0, &b.mpn)));
-    Ok(dataset)
-}
-
-fn git_revision(dir: &Path) -> Option<GitRevision> {
-    let git = |args: &[&str]| {
-        std::process::Command::new("git")
-            .arg("-C")
-            .arg(dir)
-            .args(args)
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-    };
-    let commit = git(&["rev-parse", "HEAD"])?;
-    let dirty = git(&["status", "--porcelain", "--", "."]).is_some_and(|s| !s.is_empty());
-    Some(GitRevision { commit, dirty })
-}
 
 /// Writes `bytes` under its digest (once: an existing file with that
 /// name already holds these bytes) and describes it.
 fn store(
     out: &Path,
     bytes: &[u8],
-    content_type: &'static str,
+    kind: ArtifactKind,
     filename: String,
 ) -> anyhow::Result<Artifact> {
     let sha256 = hex(&Sha256::digest(bytes));
-    let dir = out.join("artifacts").join("sha256");
-    let path = dir.join(&sha256);
+    let path = out.join(bundle::artifact_path(&sha256));
     if !path.is_file() {
         // Written aside and renamed, so a concurrent writer of the same
         // bytes or an interrupted run never leaves a partial file.
         static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let tmp = dir.join(format!(
+        let tmp = path.with_file_name(format!(
             ".tmp-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
@@ -268,7 +45,7 @@ fn store(
     Ok(Artifact {
         sha256,
         size: bytes.len() as u64,
-        content_type,
+        content_type: kind.content_type().to_string(),
         filename,
     })
 }
@@ -291,103 +68,60 @@ fn bundle_part(dataset: &Dataset, part: &Part, out: &Path) -> anyhow::Result<Par
         artifacts: BTreeMap::new(),
         errors: Vec::new(),
     };
-    let fail = |mut entry: PartEntry, stage, message: String| {
-        entry.errors.push(PartError { stage, message });
-        entry.status = if entry.artifacts.is_empty() {
-            Status::Failed
-        } else {
-            Status::Partial
-        };
-        Ok(entry)
+    let put = |entry: &mut PartEntry, build: &PartBuild, kind: ArtifactKind, bytes: &[u8]| {
+        let artifact = store(out, bytes, kind, build.file_name(kind))?;
+        entry.artifacts.insert(kind.id().to_string(), artifact);
+        anyhow::Ok(())
     };
-
-    let device = dataset.devices.get(&part.device.to_string());
-    let package = dataset.packages.get(&part.package.to_string());
-    let (device, package) = match (device, package) {
-        (Some(d), Some(p)) => (d, p),
-        (d, _) => {
-            let missing = if d.is_none() {
-                format!("device {} is not in the dataset", part.device)
-            } else {
-                format!("package {} is not in the dataset", part.package)
-            };
-            return fail(entry, "resolve", missing);
+    let result = (|| -> anyhow::Result<Result<(), BuildError>> {
+        let build = match PartBuild::from_dataset(dataset, part, None) {
+            Ok(b) => b,
+            Err(e) => return Ok(Err(e)),
+        };
+        for kind in [ArtifactKind::KicadSymbol, ArtifactKind::KicadFootprint] {
+            match build.render(kind) {
+                Ok(bytes) => put(&mut entry, &build, kind, &bytes)?,
+                Err(e) => return Ok(Err(e)),
+            }
         }
+        match build.models(&ArtifactKind::MODELS) {
+            Ok(models) => {
+                for (kind, bytes) in ArtifactKind::MODELS.into_iter().zip(&models) {
+                    put(&mut entry, &build, kind, bytes)?;
+                }
+                Ok(Ok(()))
+            }
+            Err(e) => Ok(Err(e)),
+        }
+    })()?;
+    entry.status = match &result {
+        Ok(()) => Status::Ok,
+        Err(_) if entry.artifacts.is_empty() => Status::Failed,
+        Err(_) => Status::Partial,
     };
-
-    let diags = openparts_validator::validate_part(part, device, package, &dataset.sources);
-    if !diags.is_empty() {
-        let message = diags
-            .iter()
-            .map(|d| {
-                format!(
-                    "[{:?}] {} {} {}: {}",
-                    d.severity,
-                    d.rule_id,
-                    d.entity,
-                    d.field_path.as_deref().unwrap_or(""),
-                    d.message
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
-        return fail(entry, "validation", message);
+    if let Err(e) = result {
+        entry.errors.push(PartError {
+            stage: e.stage().id().to_string(),
+            message: e.to_string(),
+        });
     }
-
-    let model =
-        match openparts_core::build_effective_model(part.clone(), device, package.clone(), None) {
-            Ok(m) => m,
-            Err(e) => return fail(entry, "effective-model", e.to_string()),
-        };
-    let file = crate::safe_filename(&part.mpn);
-
-    let symbol = openparts_pcbcad::build_symbol(&part.mpn, &model.device);
-    let symbol_text = openparts_kicad::render_symbol(&symbol);
-    entry.artifacts.insert(
-        "kicad-symbol",
-        store(
-            out,
-            symbol_text.as_bytes(),
-            KICAD_CONTENT_TYPE,
-            format!("{file}.kicad_sym"),
-        )?,
-    );
-
-    let geometry = match openparts_mcad::generate(&model.package) {
-        Ok(g) => g,
-        Err(e) => return fail(entry, "geometry", e.to_string()),
-    };
-    let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
-    let footprint_text = openparts_kicad::render_footprint(&footprint);
-    entry.artifacts.insert(
-        "kicad-footprint",
-        store(
-            out,
-            footprint_text.as_bytes(),
-            KICAD_CONTENT_TYPE,
-            format!("{file}.kicad_mod"),
-        )?,
-    );
-
-    let input = openparts_solidcraft::ModelInput {
-        package: &model.package,
-        geometry: &geometry,
-        category: Some(model.device.category),
-        marked_pin: openparts_solidcraft::polarity_pin(&model.device),
-    };
-    let formats: Vec<Format> = MODEL_FORMATS.iter().map(|(f, _, _)| *f).collect();
-    let models = match openparts_solidcraft::generate(&input, &part.mpn, &formats) {
-        Ok(m) => m,
-        Err(e) => return fail(entry, "3d-model", e.to_string()),
-    };
-    for ((format, kind, content_type), bytes) in MODEL_FORMATS.iter().zip(&models) {
-        let filename = format!("{file}.{}", format.extension());
-        entry
-            .artifacts
-            .insert(kind, store(out, bytes, content_type, filename)?);
-    }
-    entry.status = Status::Ok;
     Ok(entry)
+}
+
+fn git_revision(dir: &Path) -> Option<GitRevision> {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let commit = git(&["rev-parse", "HEAD"])?;
+    let dirty = git(&["status", "--porcelain", "--", "."]).is_some_and(|s| !s.is_empty());
+    Some(GitRevision { commit, dirty })
 }
 
 pub struct Options {
@@ -397,25 +131,12 @@ pub struct Options {
     pub strict: bool,
 }
 
-pub fn run(opts: Options) -> anyhow::Result<()> {
-    let started = Instant::now();
-    let solidcraft = openparts_solidcraft::version()
-        .context("openparts bundle builds every 3D model, so it needs SolidCraft installed")?;
-    let dataset = load_dataset(&opts.data)?;
-    std::fs::create_dir_all(opts.out.join("artifacts").join("sha256"))
-        .with_context(|| format!("creating {}", opts.out.display()))?;
-
+/// Builds every part's entry with `jobs` workers, in dataset order.
+fn bundle_all(dataset: &Dataset, out: &Path, jobs: usize) -> anyhow::Result<Vec<PartEntry>> {
     let total = dataset.parts.len();
-    let jobs = opts.jobs.max(1).min(total.max(1));
-    eprintln!(
-        "bundling {total} part(s) from {} with {jobs} job(s) ({solidcraft})",
-        opts.data.display()
-    );
-
-    // Workers take the next part index until none remain.
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
-    let results: Mutex<Vec<Option<PartEntry>>> = Mutex::new((0..total).map(|_| None).collect());
+    let results: Mutex<Vec<Option<PartEntry>>> = Mutex::new(vec![None; total]);
     let first_error: Mutex<Option<anyhow::Error>> = Mutex::new(None);
     std::thread::scope(|scope| {
         for _ in 0..jobs {
@@ -425,23 +146,19 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
                     break;
                 }
                 let part = &dataset.parts[i];
-                let part_started = Instant::now();
-                match bundle_part(&dataset, part, &opts.out) {
+                let started = Instant::now();
+                match bundle_part(dataset, part, out) {
                     Ok(entry) => {
                         let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                        let note = match entry.status {
-                            Status::Ok => "ok".to_string(),
-                            _ => format!(
-                                "{}: {}",
-                                entry.errors[0].stage,
-                                first_line(&entry.errors[0].message)
-                            ),
+                        let note = match entry.errors.first() {
+                            None => "ok".to_string(),
+                            Some(e) => format!("{}: {}", e.stage, first_line(&e.message)),
                         };
                         eprintln!(
                             "[{n}/{total}] {}/{} {note} ({:.1}s)",
                             part.manufacturer,
                             part.mpn,
-                            part_started.elapsed().as_secs_f64()
+                            started.elapsed().as_secs_f64()
                         );
                         results.lock().unwrap()[i] = Some(entry);
                     }
@@ -455,38 +172,54 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
     if let Some(e) = first_error.into_inner().unwrap() {
         return Err(e.context("writing the bundle"));
     }
-    let parts: Vec<PartEntry> = results
+    Ok(results
         .into_inner()
         .unwrap()
         .into_iter()
         .flatten()
-        .collect();
+        .collect())
+}
 
+fn reproducibility(dataset: &Dataset, data: &Path, solidcraft: String) -> Reproducibility {
     let mut schema_versions = BTreeSet::new();
     for part in &dataset.parts {
         schema_versions.insert(part.schema_version.clone());
-        if let Some(d) = dataset.devices.get(&part.device.to_string()) {
+        if let Ok((d, p)) = dataset.resolve(part) {
             schema_versions.insert(d.schema_version.clone());
-        }
-        if let Some(p) = dataset.packages.get(&part.package.to_string()) {
             schema_versions.insert(p.schema_version.clone());
         }
     }
-    let version = env!("CARGO_PKG_VERSION");
-    let generator = BTreeMap::from([
-        ("openparts-cli", version),
-        ("openparts-core", version),
-        ("openparts-validator", version),
-        ("openparts-mcad", version),
-        ("openparts-solidcraft", version),
-        ("openparts-pcbcad", version),
-        ("openparts-kicad", version),
-    ]);
-    let toolchain = BTreeMap::from([
-        ("solidcraft", solidcraft),
-        ("rustc", crate::rustc_version()),
-    ]);
+    let version = env!("CARGO_PKG_VERSION").to_string();
+    let generator = [
+        "openparts-cli",
+        "openparts-core",
+        "openparts-validator",
+        "openparts-artifacts",
+        "openparts-mcad",
+        "openparts-solidcraft",
+        "openparts-pcbcad",
+        "openparts-kicad",
+    ]
+    .into_iter()
+    .map(|c| (c.to_string(), version.clone()))
+    .collect();
+    Reproducibility {
+        dataset: DatasetRevision {
+            git: git_revision(data),
+        },
+        schema_versions,
+        generator,
+        generator_revision: git_revision(Path::new(env!("CARGO_MANIFEST_DIR"))),
+        toolchain: BTreeMap::from([
+            ("solidcraft".to_string(), solidcraft),
+            ("rustc".to_string(), crate::rustc_version()),
+        ]),
+        silicon_revision: None,
+        not_byte_reproducible: vec![ArtifactKind::SolidCraft.id().to_string()],
+    }
+}
 
+fn summary(parts: &[PartEntry]) -> Summary {
     let mut digests = BTreeSet::new();
     let mut total_bytes = 0;
     for artifact in parts.iter().flat_map(|p| p.artifacts.values()) {
@@ -495,34 +228,48 @@ pub fn run(opts: Options) -> anyhow::Result<()> {
         }
     }
     let count = |s: Status| parts.iter().filter(|p| p.status == s).count();
-    let summary = Summary {
+    Summary {
         parts: parts.len(),
         ok: count(Status::Ok),
         partial: count(Status::Partial),
         failed: count(Status::Failed),
         artifacts: digests.len(),
         total_bytes,
-    };
+    }
+}
+
+pub fn run(opts: Options) -> anyhow::Result<()> {
+    let started = Instant::now();
+    let solidcraft = openparts_solidcraft::version()
+        .context("openparts bundle builds every 3D model, so it needs SolidCraft installed")?;
+    let dataset = Dataset::load(&opts.data)?;
+    std::fs::create_dir_all(opts.out.join("artifacts").join("sha256"))
+        .with_context(|| format!("creating {}", opts.out.display()))?;
+
+    let total = dataset.parts.len();
+    let jobs = opts.jobs.max(1).min(total.max(1));
+    eprintln!(
+        "bundling {total} part(s) from {} with {jobs} job(s) ({solidcraft})",
+        opts.data.display()
+    );
+    let parts = bundle_all(&dataset, &opts.out, jobs)?;
     let manifest = Manifest {
-        format: "openparts-bundle",
-        format_version: BUNDLE_FORMAT_VERSION,
-        artifact_path: "artifacts/sha256/{sha256}",
-        reproducibility: Reproducibility {
-            dataset: DatasetRevision {
-                git: git_revision(&opts.data),
-            },
-            schema_versions,
-            generator,
-            generator_revision: git_revision(Path::new(env!("CARGO_MANIFEST_DIR"))),
-            toolchain,
-            silicon_revision: None,
-            not_byte_reproducible: vec!["solidcraft"],
-        },
-        summary,
+        format: bundle::FORMAT.to_string(),
+        format_version: bundle::FORMAT_VERSION,
+        artifact_path: bundle::ARTIFACT_PATH.to_string(),
+        reproducibility: reproducibility(&dataset, &opts.data, solidcraft),
+        summary: summary(&parts),
         parts,
-        load_errors: dataset.load_errors,
+        load_errors: dataset
+            .issues
+            .iter()
+            .map(|i| LoadError {
+                path: i.path.display().to_string(),
+                message: i.error.to_string(),
+            })
+            .collect(),
     };
-    let manifest_path = opts.out.join(MANIFEST_FILE);
+    let manifest_path = opts.out.join(bundle::MANIFEST_FILE);
     let mut json = serde_json::to_string_pretty(&manifest)?;
     json.push('\n');
     std::fs::write(&manifest_path, json)
@@ -574,8 +321,8 @@ mod tests {
         let out =
             std::env::temp_dir().join(format!("openparts-bundle-test-{}", std::process::id()));
         std::fs::create_dir_all(out.join("artifacts/sha256")).unwrap();
-        let a = store(&out, b"hello", "text/plain", "a.txt".into()).unwrap();
-        let b = store(&out, b"hello", "text/plain", "b.txt".into()).unwrap();
+        let a = store(&out, b"hello", ArtifactKind::Stl, "a.txt".into()).unwrap();
+        let b = store(&out, b"hello", ArtifactKind::Stl, "b.txt".into()).unwrap();
         assert_eq!(
             a.sha256,
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
@@ -583,7 +330,7 @@ mod tests {
         assert_eq!(a.sha256, b.sha256);
         assert_eq!(a.size, 5);
         assert_eq!(
-            std::fs::read(out.join("artifacts/sha256").join(&a.sha256)).unwrap(),
+            std::fs::read(out.join(bundle::artifact_path(&a.sha256))).unwrap(),
             b"hello"
         );
         // Only the one file, no leftover temporaries.
@@ -597,20 +344,18 @@ mod tests {
     }
 
     #[test]
-    fn bundles_the_real_dataset_and_lists_failures() {
+    fn a_part_that_does_not_resolve_is_recorded_not_dropped() {
         let data = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../openparts-data");
         if !data.is_dir() {
             return;
         }
-        let dataset = load_dataset(&data).unwrap();
-        assert!(!dataset.parts.is_empty());
-        // A part whose device is missing is recorded, not dropped.
+        let dataset = Dataset::load(&data).unwrap();
         let mut orphan = dataset.parts[0].clone();
         orphan.device = openparts_core::DeviceId::from("nobody/NOTHING");
         let out =
             std::env::temp_dir().join(format!("openparts-bundle-orphan-{}", std::process::id()));
         let entry = bundle_part(&dataset, &orphan, &out).unwrap();
-        assert!(entry.status == Status::Failed);
+        assert_eq!(entry.status, Status::Failed);
         assert_eq!(entry.errors[0].stage, "resolve");
     }
 }

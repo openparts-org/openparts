@@ -484,11 +484,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "openparts-artifacts"
+version = "0.1.0"
+dependencies = [
+ "openparts-core",
+ "openparts-data",
+ "openparts-kicad",
+ "openparts-librepcb",
+ "openparts-mcad",
+ "openparts-pcbcad",
+ "openparts-solidcraft",
+ "openparts-validator",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "openparts-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "openparts-artifacts",
  "openparts-client",
  "openparts-core",
  "openparts-data",

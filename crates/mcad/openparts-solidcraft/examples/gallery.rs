@@ -9,23 +9,8 @@
 use openparts_core::{ComponentCategory, Dimension, Kind, Package, PackageDimensions, PackageId};
 use openparts_mcad::generate as generate_geometry;
 use openparts_solidcraft::{build_script, run, Format, ModelInput};
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
-
-fn yaml_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-    entries.sort();
-    for p in entries {
-        if p.is_dir() {
-            yaml_files(&p, out);
-        } else if p.extension().is_some_and(|e| e == "yaml") {
-            out.push(p);
-        }
-    }
-}
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -42,27 +27,18 @@ fn main() {
     let filter = args.get(3).cloned().unwrap_or_default();
     std::fs::create_dir_all(&out).unwrap();
 
-    let mut packages = HashMap::new();
-    let mut files = Vec::new();
-    yaml_files(&data.join("packages"), &mut files);
-    for f in files.drain(..) {
-        let p = openparts_data::load_package(&f).unwrap();
-        packages.insert(p.id.to_string(), p);
+    let dataset = openparts_data::Dataset::load(&data).unwrap();
+    for issue in &dataset.issues {
+        println!("{}: load: {}", issue.path.display(), issue.error);
     }
-    let mut devices = HashMap::new();
-    yaml_files(&data.join("devices"), &mut files);
-    for f in files.drain(..) {
-        let d = openparts_data::load_device(&f).unwrap();
-        devices.insert(d.id.to_string(), d);
-    }
-
     // One part per package id, so every distinct package is shown once.
     let mut picks = BTreeMap::new();
-    yaml_files(&data.join("parts"), &mut files);
-    for f in files.drain(..) {
-        let part = openparts_data::load_part(&f).unwrap();
-        picks.entry(part.package.to_string()).or_insert(part);
+    for part in &dataset.parts {
+        picks
+            .entry(part.package.to_string())
+            .or_insert(part.clone());
     }
+    let (packages, devices) = (&dataset.packages, &dataset.devices);
 
     // (package, category, polarity pin, mpn)
     let mut jobs: Vec<(Package, Option<ComponentCategory>, Option<String>, String)> = picks

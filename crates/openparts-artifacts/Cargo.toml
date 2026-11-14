@@ -1,0 +1,17 @@
+[package]
+name = "openparts-artifacts"
+version.workspace = true
+edition.workspace = true
+description = "Part -> Effective Model -> geometry -> every artifact: the one pipeline the CLI, the bundler and the server share."
+
+[dependencies]
+openparts-core = { path = "../openparts-core" }
+openparts-data = { path = "../openparts-data" }
+openparts-validator = { path = "../openparts-validator" }
+openparts-mcad = { path = "../mcad/openparts-mcad" }
+openparts-solidcraft = { path = "../mcad/openparts-solidcraft" }
+openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
+openparts-kicad = { path = "../pcbcad/openparts-kicad" }
+openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
+thiserror = { workspace = true }
+serde = { workspace = true }
