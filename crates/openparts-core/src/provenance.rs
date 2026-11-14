@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 /// One piece of evidence for a field. Canonical Data Specification
 /// section 25: paths are JSON Pointer strings, e.g. `/pins/1/name`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProvenanceEntry {
     pub source: SourceId,

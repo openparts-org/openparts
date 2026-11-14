@@ -4,8 +4,13 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+ts-rs = { version = "11", optional = true, features = ["no-serde-warnings"] }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 serde_yaml = { workspace = true }
+
+[features]
+# Exports the API document types as TypeScript (openparts-web).
+ts = ["dep:ts-rs"]

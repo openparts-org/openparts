@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Canonical Data Specification section 18.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RevisionDetection {
     pub method: String,
@@ -21,6 +22,7 @@ pub struct RevisionDetection {
 
 /// Canonical Data Specification section 19: a diff against the base
 /// Device, not a full copy.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DeviceOverrides {
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
@@ -28,6 +30,7 @@ pub struct DeviceOverrides {
 }
 
 /// Canonical Data Specification section 17.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceRevision {
     pub manufacturer_revision: String,
@@ -38,6 +41,7 @@ pub struct DeviceRevision {
 }
 
 /// Canonical Data Specification section 14.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
     pub schema_version: String,

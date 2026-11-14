@@ -3,6 +3,7 @@ use crate::kind::Kind;
 use serde::{Deserialize, Serialize};
 
 /// Canonical Data Specification section 23.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentType {
@@ -17,6 +18,7 @@ pub enum DocumentType {
     Other,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Source {
     pub schema_version: String,
