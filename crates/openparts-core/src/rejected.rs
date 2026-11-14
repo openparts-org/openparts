@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Canonical Data Specification section 33: a tombstone for a claimed
 /// MPN that was investigated and found not to exist / not to be valid.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Rejected {
     pub schema_version: String,
     pub kind: Kind,

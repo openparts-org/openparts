@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// datasheet doesn't state them.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Dimension {
     #[serde(default)]
     pub nominal: Option<f64>,

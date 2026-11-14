@@ -65,6 +65,33 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
     }
 }
 
+/// Pads for device pins that share another pin's contact: a pin with
+/// no pad of its own whose `connected_to` pin has one (USB-C "A1 B12",
+/// one contact numbered twice) gets a copy of that pad under its own
+/// number, as KiCad's own footprints overlay them.
+pub fn add_shared_pads(footprint: &mut PcbFootprint, device: &openparts_core::Device) {
+    let mut extra = Vec::new();
+    for (number, pin) in &device.pins {
+        if footprint.pads.iter().any(|p| &p.number == number) {
+            continue;
+        }
+        let Some(target) = &pin.connected_to else {
+            continue;
+        };
+        extra.extend(
+            footprint
+                .pads
+                .iter()
+                .filter(|p| &p.number == target)
+                .map(|p| Pad {
+                    number: number.clone(),
+                    ..p.clone()
+                }),
+        );
+    }
+    footprint.pads.extend(extra);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -44,14 +44,20 @@ fn load_rp2040() -> (
 fn rp2040_fixture_passes_validation() {
     let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    assert!(
+        !diags.iter().any(|d| d.is_error()),
+        "unexpected errors: {diags:?}"
+    );
 }
 
 #[test]
 fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    assert!(
+        !diags.iter().any(|d| d.is_error()),
+        "unexpected errors: {diags:?}"
+    );
 
     let model = openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
         .expect("effective model");
@@ -59,11 +65,8 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     // Uses the family dispatcher (not generate_qfn directly), matching
     // what the CLI actually calls.
     let geometry = openparts_mcad::generate(&model.package).expect("geometry");
-    // 56 perimeter leads; no Exposed Pad lead, since its physical
-    // dimensions are not confirmed in the source datasheet (the Device
-    // still records the "EP" pin electrically -- see the symbol check
-    // below).
-    assert_eq!(geometry.leads.len(), 56);
+    // 56 perimeter leads and the exposed pad (D2/E2 from the datasheet).
+    assert_eq!(geometry.leads.len(), 57, "56 pins + the exposed pad");
 
     let symbol = openparts_pcbcad::build_symbol(&part.mpn, &model.device);
     let symbol_text = openparts_kicad::render_symbol(&symbol);
@@ -80,7 +83,8 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     let footprint = openparts_pcbcad::build_footprint(&part.mpn, &geometry);
     let footprint_text = openparts_kicad::render_footprint(&footprint);
     let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
-    assert_eq!(parsed_pads.len(), 56);
+    assert_eq!(parsed_pads.len(), 57);
+    assert!(parsed_pads.iter().any(|p| p.number == "EP"));
 
     // The footprint pads are the geometry's lands (IPC-7351B, from the
     // leads), position for position -- the IR conversion doesn't
@@ -106,9 +110,10 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
     };
     let step_text = openparts_step::generate_step(&input, &part.mpn).expect("step");
     assert!(step_text.starts_with("ISO-10303-21;"));
-    // The body plus 56 terminals inlaid in it, each its own coloured solid.
-    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 57);
-    assert_eq!(step_text.matches("STYLED_ITEM(").count(), 57);
+    // The body plus 56 terminals and the exposed pad inlaid in it, each
+    // its own coloured solid.
+    assert_eq!(step_text.matches("MANIFOLD_SOLID_BREP(").count(), 58);
+    assert_eq!(step_text.matches("STYLED_ITEM(").count(), 58);
 
     let stl = openparts_stl::generate_stl(&input, &part.mpn).expect("stl");
     assert!(openparts_stl::triangle_count(&stl).unwrap() >= 57 * 12);
@@ -123,7 +128,7 @@ fn known_revision_with_no_documented_overrides_matches_the_base_device() {
     // synthesize a value that wasn't actually given).
     let (part, device, package, known_sources) = load_rp2040();
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
-    assert!(diags.is_empty());
+    assert!(!diags.iter().any(|d| d.is_error()), "{diags:?}");
 
     let base_model =
         openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
@@ -168,7 +173,10 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
     known_sources.insert(source.id);
 
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    assert!(
+        !diags.iter().any(|d| d.is_error()),
+        "unexpected errors: {diags:?}"
+    );
 
     let model = openparts_core::build_effective_model(part.clone(), &device, package.clone(), None)
         .unwrap();

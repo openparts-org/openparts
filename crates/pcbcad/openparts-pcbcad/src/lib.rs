@@ -12,7 +12,7 @@ pub use outline::COURTYARD_WIDTH;
 pub use svg::render_svg;
 mod symbol;
 
-pub use footprint::build_footprint;
+pub use footprint::{add_shared_pads, build_footprint};
 pub use symbol::build_symbol;
 
 use openparts_core::PinType;

@@ -192,8 +192,10 @@ impl PartBuild {
         revision: Option<&str>,
     ) -> Result<PartBuild, BuildError> {
         let diags = openparts_validator::validate_part(part, device, package, sources);
-        if !diags.is_empty() {
-            return Err(BuildError::Validation(diags));
+        if diags.iter().any(|d| d.is_error()) {
+            return Err(BuildError::Validation(
+                diags.into_iter().filter(|d| d.is_error()).collect(),
+            ));
         }
         let model =
             openparts_core::build_effective_model(part.clone(), device, package.clone(), revision)?;
@@ -236,11 +238,12 @@ impl PartBuild {
             .map_err(|e| BuildError::Geometry(e.clone()))
     }
 
+    /// The footprint, with overlaid pads for pins that share a contact
+    /// (`connected_to`).
     pub fn footprint(&self) -> Result<PcbFootprint, BuildError> {
-        Ok(openparts_pcbcad::build_footprint(
-            self.mpn(),
-            self.geometry()?,
-        ))
+        let mut fp = openparts_pcbcad::build_footprint(self.mpn(), self.geometry()?);
+        openparts_pcbcad::add_shared_pads(&mut fp, &self.model.device);
+        Ok(fp)
     }
 
     /// The 3D model's input: geometry plus the device's category and

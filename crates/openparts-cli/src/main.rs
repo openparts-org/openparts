@@ -173,50 +173,121 @@ fn cmd_validate(
     let (part, device, package) = load_triple(&part, &device, &package)?;
     let known_sources = load_known_sources(&sources)?;
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
-    if diags.is_empty() {
-        println!("OK: no validation diagnostics");
+    print_diagnostics(&diags);
+    let errors = diags.iter().filter(|d| d.is_error()).count();
+    if errors == 0 {
+        println!("OK: no validation errors");
         Ok(())
     } else {
-        print_diagnostics(&diags);
-        anyhow::bail!("{} validation diagnostic(s)", diags.len());
+        anyhow::bail!("{errors} validation error(s)");
     }
 }
 
-/// Validates every part of the dataset at `data` against the dataset's
-/// own devices, packages and sources; files that fail to load count as
-/// failures too.
+/// Validates the whole dataset at `data`: every part against the
+/// dataset's own devices, packages and sources, every source's formats
+/// and every file's location. Errors fail; warnings are listed.
 fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
+    use openparts_validator::{validate_location, validate_source, DocKind};
     let dataset = openparts_data::Dataset::load(data)?;
     let sources = dataset.source_ids();
     let mut failures = 0;
+    let mut warnings = Vec::new();
+    let mut unresolved = 0;
     for issue in &dataset.issues {
         eprintln!("FAIL {}: {}", issue.path.display(), issue.error);
         failures += 1;
     }
+    let mut results: Vec<(String, Vec<openparts_validator::Diagnostic>)> = Vec::new();
+    let mut report = |shown: &str, diags: Vec<openparts_validator::Diagnostic>| {
+        results.push((shown.to_string(), diags));
+    };
+    use openparts_core::Kind;
+    let shown = |kind: Kind, id: &str| {
+        dataset
+            .path_of(kind, id)
+            .map_or_else(|| id.to_string(), |p| p.display().to_string())
+    };
     for part in &dataset.parts {
-        let path = dataset.paths.get(&part.id.to_string());
-        let shown = path.map_or_else(|| part.id.to_string(), |p| p.display().to_string());
         let diags = match dataset.resolve(part) {
             Ok((device, package)) => {
                 openparts_validator::validate_part(part, device, package, &sources)
             }
             Err(e) => {
-                eprintln!("FAIL {shown}: {e}");
-                failures += 1;
+                eprintln!("FAIL {}: {e}", shown(Kind::Part, &part.id.0));
+                unresolved += 1;
                 continue;
             }
         };
-        if !diags.is_empty() {
-            eprintln!("FAIL {shown}:");
-            print_diagnostics(&diags);
-            failures += 1;
+        report(&shown(Kind::Part, &part.id.0), diags);
+    }
+    for source in dataset.sources.values() {
+        report(&shown(Kind::Source, &source.id.0), validate_source(source));
+    }
+    let located = dataset
+        .parts
+        .iter()
+        .map(|p| (DocKind::Part, Kind::Part, &p.id.0))
+        .chain(
+            dataset
+                .devices
+                .values()
+                .map(|d| (DocKind::Device, Kind::Device, &d.id.0)),
+        )
+        .chain(
+            dataset
+                .packages
+                .values()
+                .map(|p| (DocKind::Package, Kind::Package, &p.id.0)),
+        )
+        .chain(
+            dataset
+                .sources
+                .values()
+                .map(|s| (DocKind::Source, Kind::Source, &s.id.0)),
+        )
+        .chain(
+            dataset
+                .manufacturers
+                .values()
+                .map(|m| (DocKind::Manufacturer, Kind::Manufacturer, &m.id.0)),
+        );
+    for (doc_kind, kind, id) in located {
+        if let Some(path) = dataset.path_of(kind, id) {
+            let path = path.display().to_string();
+            report(&path, validate_location(doc_kind, id, &path));
         }
     }
-    println!("Checked {} part(s).", dataset.parts.len());
-    if failures > 0 {
-        anyhow::bail!("{failures} part(s) or file(s) failed");
+    for (shown, diags) in results {
+        let (errors, warns): (Vec<_>, Vec<_>) = diags.into_iter().partition(|d| d.is_error());
+        if !errors.is_empty() {
+            eprintln!("FAIL {shown}:");
+            print_diagnostics(&errors);
+            failures += 1;
+        }
+        warnings.extend(warns.into_iter().map(|w| (shown.clone(), w)));
     }
-    println!("OK: no validation diagnostics");
+    let mut by_rule: std::collections::BTreeMap<&str, usize> = Default::default();
+    for (_, w) in &warnings {
+        *by_rule.entry(w.rule_id).or_default() += 1;
+    }
+    if std::env::var_os("OPENPARTS_SHOW_WARNINGS").is_some() {
+        for (shown, w) in &warnings {
+            eprintln!("WARN {shown}: {} {}", w.rule_id, w.message);
+        }
+    }
+    for (rule, n) in &by_rule {
+        println!("warning: {n} x {rule} (OPENPARTS_SHOW_WARNINGS=1 lists them)");
+    }
+    println!(
+        "Checked {} part(s), {} source(s).",
+        dataset.parts.len(),
+        dataset.sources.len()
+    );
+    failures += unresolved;
+    if failures > 0 {
+        anyhow::bail!("{failures} file(s) failed");
+    }
+    println!("OK: no validation errors");
     Ok(())
 }
 

@@ -13,6 +13,7 @@ pub enum ExistenceStatus {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Existence {
     pub status: ExistenceStatus,
 }

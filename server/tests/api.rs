@@ -179,7 +179,8 @@ async fn esp32_c6_footprint_now_generates_after_jedec_dimensions_were_added() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = body_string(response).await;
-    assert_eq!(body.matches("(pad \"").count(), 40);
+    // 40 terminals and the exposed pad.
+    assert_eq!(body.matches("(pad \"").count(), 41);
 }
 
 #[tokio::test]
@@ -516,7 +517,7 @@ async fn footprint_svg_preview_shows_every_pad() {
     assert_eq!(response.headers()["content-type"], "image/svg+xml");
     let svg = body_string(response).await;
     assert!(svg.starts_with("<svg"));
-    // 56 numbered pads, plus the scale bar's label.
-    assert_eq!(svg.matches("<text").count(), 56 + 1);
-    assert!(svg.contains(">1</text>") && svg.contains(">56</text>"));
+    // 56 numbered pads and the exposed pad, plus the scale bar's label.
+    assert_eq!(svg.matches("<text").count(), 57 + 1);
+    assert!(svg.contains(">1</text>") && svg.contains(">56</text>") && svg.contains(">EP</text>"));
 }

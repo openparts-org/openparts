@@ -34,8 +34,10 @@ pub struct Dataset {
     pub devices: BTreeMap<String, Device>,
     pub packages: BTreeMap<String, Package>,
     pub sources: BTreeMap<String, Source>,
-    /// Every loaded document's id -> its file (relative to `root`).
-    pub paths: BTreeMap<String, PathBuf>,
+    /// Every loaded document's (kind, id) -> its file (relative to
+    /// `root`). Ids are unique per kind only: a Part and its Device may
+    /// share one.
+    pub paths: BTreeMap<(Kind, String), PathBuf>,
     pub issues: Vec<LoadIssue>,
 }
 
@@ -79,33 +81,45 @@ impl Dataset {
         match kind {
             Some(Kind::Part) => {
                 let doc: Part = parse(path, &text, Kind::Part, |d: &Part| d.kind)?;
-                self.paths.insert(doc.id.to_string(), rel);
+                self.paths
+                    .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.parts.push(doc);
             }
             Some(Kind::Device) => {
                 let doc: Device = parse(path, &text, Kind::Device, |d: &Device| d.kind)?;
-                self.paths.insert(doc.id.to_string(), rel);
+                self.paths
+                    .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.devices.insert(doc.id.to_string(), doc);
             }
             Some(Kind::Package) => {
                 let doc: Package = parse(path, &text, Kind::Package, |d: &Package| d.kind)?;
-                self.paths.insert(doc.id.to_string(), rel);
+                self.paths
+                    .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.packages.insert(doc.id.to_string(), doc);
             }
             Some(Kind::Source) => {
                 let doc: Source = parse(path, &text, Kind::Source, |d: &Source| d.kind)?;
-                self.paths.insert(doc.id.to_string(), rel);
+                self.paths
+                    .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.sources.insert(doc.id.to_string(), doc);
             }
             Some(Kind::Manufacturer) => {
                 let doc: Manufacturer =
                     parse(path, &text, Kind::Manufacturer, |d: &Manufacturer| d.kind)?;
-                self.paths.insert(doc.id.to_string(), rel);
+                self.paths
+                    .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.manufacturers.insert(doc.id.to_string(), doc);
             }
             _ => {}
         }
         Ok(())
+    }
+
+    /// The file a document of `kind` with `id` was loaded from.
+    pub fn path_of(&self, kind: Kind, id: &str) -> Option<&Path> {
+        self.paths
+            .get(&(kind, id.to_string()))
+            .map(PathBuf::as_path)
     }
 
     /// The part `manufacturer`/`mpn`.

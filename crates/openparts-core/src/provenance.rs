@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 /// section 25: paths are JSON Pointer strings, e.g. `/pins/1/name`.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProvenanceEntry {
     pub source: SourceId,
     #[serde(default)]

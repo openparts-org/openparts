@@ -20,6 +20,7 @@ pub enum PinType {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Pin {
     pub name: String,
     #[serde(rename = "type")]
@@ -39,6 +40,7 @@ pub struct Pin {
 /// overridden are present; every other field of the base Pin is kept as-is.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PinOverride {
     #[serde(default)]
     pub name: Option<String>,

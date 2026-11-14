@@ -20,6 +20,7 @@ pub enum DocumentType {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Source {
     pub schema_version: String,
     pub kind: Kind,

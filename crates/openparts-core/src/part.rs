@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 /// pinout or Package dimensions — only references them.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Part {
     pub schema_version: String,
     pub kind: Kind,

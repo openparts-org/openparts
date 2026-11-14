@@ -2770,6 +2770,10 @@ name = "openparts-validator"
 version = "0.1.0"
 dependencies = [
  "openparts-core",
+ "openparts-mcad",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "thiserror 1.0.69",
 ]
 

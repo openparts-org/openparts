@@ -33,4 +33,20 @@ impl Diagnostic {
             message: message.into(),
         }
     }
+
+    pub(crate) fn warning(
+        rule_id: &'static str,
+        entity: impl Into<String>,
+        field_path: Option<&str>,
+        message: impl Into<String>,
+    ) -> Self {
+        Diagnostic {
+            severity: Severity::Warning,
+            ..Diagnostic::error(rule_id, entity, field_path, message)
+        }
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.severity == Severity::Error
+    }
 }

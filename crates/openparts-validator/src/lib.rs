@@ -14,11 +14,13 @@
 //!
 //! Every rule is listed, with what it means, in [`RULES`].
 
+mod cross;
 mod device;
 mod diagnostic;
 mod package;
 mod provenance;
 
+pub use cross::{validate_location, validate_source, DocKind};
 pub use diagnostic::{Diagnostic, Severity};
 
 use device::*;
@@ -95,8 +97,35 @@ pub const RULES: &[Rule] = &[
         id: "pad_order.invalid",
         meaning: "a package's `pad_order` does not hold exactly `lead_count` distinct numbers",
     },
+    Rule {
+        id: "pin.no_pad",
+        meaning: "a device pin has no pad in the package's footprint (pins in `tab.trimmed_leads` excepted)",
+    },
+    Rule {
+        id: "pad.no_pin",
+        meaning: "warning: a footprint pad (other than `EP`) has no device pin",
+    },
+    Rule {
+        id: "provenance.unknown_path",
+        meaning: "a provenance key points at a field the document doesn't have",
+    },
+    Rule {
+        id: "existence.unsupported",
+        meaning: "warning: `existence: verified` without an `/existence` provenance entry saying where the MPN is printed",
+    },
+    Rule {
+        id: "source.date_format",
+        meaning: "a Source `date` is not YYYY, YYYY-MM, YYYY-MM-DD or `unknown`, or `retrieved` is not YYYY-MM-DD",
+    },
+    Rule {
+        id: "source.url",
+        meaning: "a Source `url` is not an http(s) link",
+    },
+    Rule {
+        id: "id.location",
+        meaning: "a document's id doesn't match the directory and file it is stored in",
+    },
 ];
-
 /// Runs every check for the vertical slice against one Part + its
 /// resolved Device + Package. `known_sources` is the set of Source IDs
 /// the caller actually loaded and can vouch for; any `sources`/
@@ -199,6 +228,23 @@ pub fn validate_part(
     out.extend(check_package_aux_pads(&package_entity, package));
     out.extend(check_package_header(&package_entity, package));
     out.extend(check_package_pad_order(&package_entity, package));
+    out.extend(cross::check_pins_and_pads(&device_entity, device, package));
+    out.extend(cross::check_provenance_paths(
+        &part_entity,
+        part,
+        &part.provenance,
+    ));
+    out.extend(cross::check_provenance_paths(
+        &device_entity,
+        device,
+        &device.provenance,
+    ));
+    out.extend(cross::check_provenance_paths(
+        &package_entity,
+        package,
+        &package.provenance,
+    ));
+    out.extend(cross::check_existence_evidence(&part_entity, part));
 
     out
 }
@@ -216,11 +262,16 @@ mod tests {
             include_str!("device.rs"),
             include_str!("package.rs"),
             include_str!("provenance.rs"),
+            include_str!("cross.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
         let mut emitted = BTreeSet::new();
-        for chunk in src.split("Diagnostic::error(").skip(1) {
+        for chunk in src
+            .split("Diagnostic::error(")
+            .chain(src.split("Diagnostic::warning("))
+            .filter(|c| c.trim_start().starts_with('"'))
+        {
             let id = chunk.trim_start().trim_start_matches('"');
             let id = &id[..id.find('"').unwrap()];
             // Skip this test's own text; rule ids look like `area.name`.
@@ -332,7 +383,9 @@ mod tests {
             &base_package(),
             &BTreeSet::new(),
         );
-        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        // The minimal fixture device has fewer pins than pads: warnings only.
+        let errors: Vec<_> = diags.iter().filter(|d| d.is_error()).collect();
+        assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     }
 
     #[test]

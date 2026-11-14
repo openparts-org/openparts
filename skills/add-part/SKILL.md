@@ -337,6 +337,26 @@ numbers, silkscreen, body outline, courtyard) -- open it in a browser. SOT and h
 pin-1 mark: check pin 1 from the generated footprint pads instead. For `sot` layouts with 4+ leads,
 also check the generated pad x-positions against the datasheet's top view.
 
+What `openparts validate --data` (and CI) enforces, so you don't learn
+it the hard way (the full list is `RULES` in openparts-validator):
+- **Unknown keys are errors** (a typo like `lead_lenght:` no longer
+  silently falls back to a default).
+- **Every device pin has a pad** (`pin.no_pad`): a pin cut at the body
+  goes in `tab.trimmed_leads`; a pin sharing another's contact (USB-C
+  "A1 B12") gets `connected_to` and the footprint overlays the pad under
+  both numbers. An `EP` pin needs `dimensions.exposed_pad`. Pads without
+  a pin are warnings (`pad.no_pin`).
+- **Provenance keys must name a field the document has**
+  (`provenance.unknown_path`).
+- **`existence: verified` needs an `/existence` provenance entry** (page
+  + locator of the orderable list) -- a warning today, for older parts.
+- Source `date` is `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or `unknown`;
+  `retrieved` is `YYYY-MM-DD`; `url` is http(s).
+- **Ids match their files**: `parts/<mfr>/...`, `devices/<mfr>/<NAME>`,
+  `packages/standards/.../<NAME>` = `standards/<NAME>`,
+  `packages/manufacturers/<mfr>/<NAME>` = `manufacturers/<mfr>/<NAME>`,
+  `sources/<mfr>/...`.
+
 ## 7. Working in parallel
 
 - Each agent owns its manufacturers, its package families or folders

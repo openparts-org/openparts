@@ -81,7 +81,24 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
     {
         s.push_str(&shape(&g.shape, g.width, "#9aa3ad", None));
     }
-    for p in &footprint.pads {
+    // Overlaid pads (one contact, several numbers) are drawn once, with
+    // their numbers joined.
+    let same = |a: &crate::Pad, b: &crate::Pad| {
+        (a.position.x - b.position.x).abs() < 1e-9
+            && (a.position.y - b.position.y).abs() < 1e-9
+            && (a.size.0 - b.size.0).abs() < 1e-9
+            && (a.size.1 - b.size.1).abs() < 1e-9
+    };
+    for (i, p) in footprint.pads.iter().enumerate() {
+        if footprint.pads[..i].iter().any(|q| same(p, q)) {
+            continue;
+        }
+        let label: Vec<&str> = footprint.pads[i..]
+            .iter()
+            .filter(|q| same(p, q) && !q.number.is_empty())
+            .map(|q| q.number.as_str())
+            .collect();
+        let label = label.join("/");
         let (cx, cy, w, h) = (p.position.x, -p.position.y, p.size.0, p.size.1);
         let r = match p.shape {
             PadShape::Rect => 0.0,
@@ -115,10 +132,10 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
                 dw.min(dh) / 2.0
             ));
         }
-        if !p.number.is_empty() {
+        if !label.is_empty() {
             // Along the pad's long side, as large as fits it.
             let (long, short) = (w.max(h), w.min(h));
-            let chars = p.number.chars().count() as f64;
+            let chars = label.chars().count() as f64;
             let size = (short * 0.75)
                 .min(long * 0.85 / (0.6 * chars))
                 .clamp(0.05, 1.2);
@@ -130,7 +147,7 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
             s.push_str(&format!(
                 "<text x=\"{cx:.3}\" y=\"{cy:.3}\" dy=\"0.35em\" font-size=\"{size:.3}\" fill=\"#ffffff\" \
                  text-anchor=\"middle\"{rotate}>{}</text>\n",
-                escape(&p.number)
+                escape(&label)
             ));
         }
     }

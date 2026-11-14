@@ -15,6 +15,7 @@ pub enum ErratumCategory {
 
 /// Canonical Data Specification section 31.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Applicability {
     #[serde(default)]
     pub silicon_revisions: Vec<String>,
@@ -26,6 +27,7 @@ pub struct Applicability {
 /// when the document omits it (unknown), matching section 30's rule that
 /// "unknown" must never be guessed as `true`/`false`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Erratum {
     pub schema_version: String,
     pub kind: Kind,

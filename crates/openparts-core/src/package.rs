@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 /// bonded to it. `None` means the package has no exposed pad.
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExposedPadDimensions {
     pub width: Dimension,
     pub length: Dimension,
@@ -28,6 +29,7 @@ pub struct ExposedPadDimensions {
 /// written back here (section 7).
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PackageDimensions {
     pub body_width: Dimension,
     pub body_length: Dimension,
@@ -227,6 +229,7 @@ pub enum PackageConstruction {
 /// separate Packages (as KiCad's `SOT-223-3_TabPin2` / `_TabPin4`).
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PackageTab {
     /// Pad number of the tab as the source numbers it. It may repeat a
     /// lead's number when the source says the tab is that pin (a
@@ -286,6 +289,7 @@ pub enum GeometryType {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PackageGeometrySpec {
     #[serde(rename = "type")]
     pub geometry_type: GeometryType,
@@ -297,6 +301,7 @@ pub struct PackageGeometrySpec {
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Package {
     pub schema_version: String,
     pub kind: Kind,
