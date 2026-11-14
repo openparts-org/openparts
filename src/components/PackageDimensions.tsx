@@ -1,7 +1,7 @@
 import { t, type Lang } from "../lib/i18n";
 import type { Dimension, Package } from "../lib/types";
 
-function formatDimension(dim?: Dimension): string {
+function formatDimension(dim?: Dimension | null): string {
   if (!dim) return "-";
   if (dim.nominal !== undefined) return `${dim.nominal} ${dim.unit}`;
   if (dim.min !== undefined && dim.max !== undefined)

@@ -14,7 +14,9 @@ export default function PinTable({
   lang: Lang;
 }) {
   const copy = t[lang].part;
-  const pinEntries = Object.entries(device.pins);
+  const pinEntries = Object.entries(device.pins).flatMap(([number, pin]) =>
+    pin ? [[number, pin] as const] : [],
+  );
 
   const issueUrl = reportDataIssueUrl({
     manufacturer,

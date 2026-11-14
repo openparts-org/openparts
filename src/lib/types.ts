@@ -1,147 +1,29 @@
-// Mirrors the JSON shapes served by openparts-server (see
-// openparts-server/src/routes.rs and openparts-core's Part/Device/Package
-// structs). All ID newtypes are #[serde(transparent)] over String, so on
-// the wire they are plain strings.
+// The JSON documents openparts-server returns. Generated from the Rust
+// types by scripts/gen-api-types.sh into ./api -- never edit those
+// files; regenerate them.
 
-export type ExistenceStatus =
-  | "unverified"
-  | "probable"
-  | "verified"
-  | "historical_verified"
-  | "rejected";
+export type { ComponentCategory } from "./api/ComponentCategory";
+export type { Device } from "./api/Device";
+export type { DeviceRevision } from "./api/DeviceRevision";
+export type { DiagnosticBody } from "./api/DiagnosticBody";
+export type { Dimension } from "./api/Dimension";
+export type { ErrorBody as ApiErrorBody } from "./api/ErrorBody";
+export type { ExistenceStatus } from "./api/ExistenceStatus";
+export type { LifecycleStatus } from "./api/LifecycleStatus";
+export type { Package } from "./api/Package";
+export type { PackageDimensions } from "./api/PackageDimensions";
+export type { Part } from "./api/Part";
+export type { PartSummary } from "./api/PartSummary";
+export type { Pin } from "./api/Pin";
+export type { ProvenanceEntry } from "./api/ProvenanceEntry";
+export type { ProvenanceResponse } from "./api/ProvenanceResponse";
+export type { RevisionSummary } from "./api/RevisionSummary";
+export type { ArtifactsResponse } from "./api/ArtifactsResponse";
 
-export type LifecycleStatus =
-  | "pre_release"
-  | "active"
-  | "nrnd"
-  | "eol_announced"
-  | "obsolete"
-  | "unknown";
+import type { ArtifactsResponse } from "./api/ArtifactsResponse";
+import type { ProvenanceEntry } from "./api/ProvenanceEntry";
 
-export type ComponentCategory =
-  | "microcontroller"
-  | "capacitor"
-  | "resistor"
-  | "inductor"
-  | "diode"
-  | "transistor"
-  | "led"
-  | "crystal"
-  | "fuse"
-  | "connector"
-  | "other";
+/// JSON-pointer field path -> evidence entries.
+export type ProvenanceMap = Partial<Record<string, ProvenanceEntry[]>>;
 
-export interface PartSummary {
-  manufacturer: string;
-  mpn: string;
-  existence: ExistenceStatus;
-  lifecycle: LifecycleStatus;
-  category: ComponentCategory | null;
-}
-
-export interface Part {
-  schema_version: string;
-  kind: string;
-  id: string;
-  manufacturer: string;
-  mpn: string;
-  device: string;
-  package: string;
-  existence: { status: ExistenceStatus };
-  lifecycle: { status: LifecycleStatus; replacement: string[] };
-  sources: string[];
-  provenance: ProvenanceMap;
-}
-
-export interface Dimension {
-  nominal?: number;
-  min?: number;
-  max?: number;
-  unit: string;
-}
-
-export interface Pin {
-  name: string;
-  type: string;
-  alternate_functions: string[];
-}
-
-export interface DeviceRevision {
-  manufacturer_revision: string;
-  detection: unknown[];
-  overrides: { pins: Record<string, Partial<Pin>> };
-}
-
-export interface Device {
-  schema_version: string;
-  kind: string;
-  id: string;
-  manufacturer: string;
-  family?: string;
-  // keyed by pin-number STRING, e.g. "1", "A1", "EP"
-  pins: Record<string, Pin>;
-  revisions: Record<string, DeviceRevision>;
-  provenance: ProvenanceMap;
-}
-
-export interface PackageDimensions {
-  body_width: Dimension;
-  body_length: Dimension;
-  body_height?: Dimension;
-  exposed_pad?: { width: Dimension; length: Dimension };
-}
-
-export interface Package {
-  schema_version: string;
-  kind: string;
-  id: string;
-  family: string;
-  lead_count: number;
-  pitch: Dimension;
-  dimensions: PackageDimensions;
-  lead_layout?: number[];
-  geometry?: { type: string; generator?: string };
-  provenance: ProvenanceMap;
-}
-
-export interface ProvenanceEntry {
-  source: string;
-  page?: number;
-  locator?: string;
-}
-
-// JSON-pointer-ish field path -> evidence entries
-export type ProvenanceMap = Record<string, ProvenanceEntry[]>;
-
-export interface RevisionSummary {
-  id: string;
-  manufacturer_revision: string;
-}
-
-export interface ArtifactsResponse {
-  "kicad-symbol": string;
-  "kicad-footprint": string;
-  step: string;
-  stl: string;
-  "3mf": string;
-}
-
-export type ArtifactKind =
-  | "kicad-symbol"
-  | "kicad-footprint"
-  | "step"
-  | "stl"
-  | "3mf";
-
-export interface DiagnosticBody {
-  rule_id: string;
-  severity: string;
-  entity: string;
-  field_path: string | null;
-  message: string;
-}
-
-export interface ApiErrorBody {
-  error: string;
-  diagnostics?: DiagnosticBody[];
-}
+export type ArtifactKind = keyof ArtifactsResponse;
