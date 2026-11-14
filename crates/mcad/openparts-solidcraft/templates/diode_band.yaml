@@ -1,0 +1,15 @@
+# Printed cathode band across a molded diode's top face, at the marked
+# terminal's end, kept inside the drafted top face. Vars: neg ("-" when
+# that terminal is at -X), inset (body end to the top face edge plus a
+# margin), top (top face height).
+- params:
+    band_w: [body_w * 0.18, cathode band width]
+    band_inset: ["{{inset}}", body end to the band (mold draft plus a margin)]
+- solid.box:
+    length: band_w
+    width: body_l - 2 * band_inset
+    height: 0.02 mm
+    center: ["{{neg}}(body_w / 2 - band_inset - band_w / 2)", 0 mm, "{{top}} + 0.01 mm"]
+    operation: new
+    body_name: PolarityBand
+    name: PolarityBand

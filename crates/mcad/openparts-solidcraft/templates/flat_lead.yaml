@@ -1,0 +1,8 @@
+# Flat lead dimensions (SOD-123F class): straight out of the body
+# underside along the board. Width, thickness and reach come from the
+# geometry; the embedded length is a modelling choice.
+- params:
+    lead_w: ["{{lead_w}}", lead width (b)]
+    lead_t: ["{{lead_t}}", lead frame thickness (c)]
+    lead_reach: ["{{reach}}", body end to lead tip ((HE - E) / 2)]
+    lead_embed: ["{{embed}}", lead length kept under the body]

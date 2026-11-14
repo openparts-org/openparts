@@ -1,0 +1,26 @@
+# TO-220, vertical: the molding in front of the metal tab, which rises
+# above it with its mounting hole; straight leads down through the board.
+# Vars: y (body centre behind the lead row), standoff, lead_w, lead_t,
+# tail, tab_t, tab_top, hole_d, hole_inset.
+- params:
+    body_y: ["{{y}}", body centre behind the lead row (toward the tab)]
+    standoff: ["{{standoff}}", body underside above the board]
+    lead_w: ["{{lead_w}}", lead width (b)]
+    lead_t: ["{{lead_t}}", lead thickness (c)]
+    lead_below: ["{{tail}}", lead length under the board top]
+    tab_t: ["{{tab_t}}", tab thickness (J1)]
+    tab_top: ["{{tab_top}}", tab top above the body underside]
+    hole_d: ["{{hole_d}}", mounting hole diameter]
+    hole_inset: ["{{hole_inset}}", tab top to the hole centre]
+- solid.box:
+    {length: body_w, width: body_l - tab_t, height: body_h,
+     center: [0 mm, body_y - tab_t / 2, standoff + body_h / 2],
+     body_name: Body, name: Body}
+- solid.box:
+    {length: body_w, width: tab_t, height: tab_top,
+     center: [0 mm, body_y + body_l / 2 - tab_t / 2, standoff + tab_top / 2],
+     operation: new, body_name: Tab, name: Tab}
+- solid.cylinder:
+    {diameter: hole_d, height: body_l + 0.2 mm, axis: Y,
+     base: [0 mm, body_y - body_l / 2 - 0.1 mm, standoff + tab_top - hole_inset],
+     operation: cut, targets: [Tab, Body], name: MountingHole}

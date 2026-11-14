@@ -1,0 +1,8 @@
+# One flat lead on the board, from under the body out to its tip.
+# Vars: tag, plane, flip, first, neg, half (as gullwing_row).
+- sketch.create: {plane: "{{plane}}", flip: "{{flip}}", offset: "{{first}}", name: "LeadProfile{{tag}}"}
+- sketch.rectangle.two_point: {p0: ["{{neg}}({{half}} - lead_embed)", 0 mm], p1: ["{{neg}}({{half}} + lead_reach)", lead_t]}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: "LeadProfile{{tag}}", distance: lead_w, direction: symmetric,
+     operation: new, body_name: "Lead{{tag}}", name: "Lead{{tag}}"}

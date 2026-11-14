@@ -4,6 +4,7 @@
 mod axial;
 mod bga;
 mod chip;
+mod diode;
 mod dip;
 mod gullwing;
 mod header;
@@ -11,6 +12,7 @@ mod module;
 mod qfn;
 mod radial;
 mod tabbed;
+mod to220;
 mod to92;
 
 use crate::{ModelError, ModelInput, Script};
@@ -24,9 +26,13 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         "tssop" | "msop" => gullwing::build(&mut s, input, &gullwing::THIN_SOP)?,
         "ssop" => gullwing::build(&mut s, input, &gullwing::SSOP)?,
         "sot223" => tabbed::sot223(&mut s, input)?,
-        "dpak" | "to252" => tabbed::dpak(&mut s, input)?,
+        "dpak" | "to252" | "d2pak" | "to263" => tabbed::dpak(&mut s, input)?,
+        "sod" => diode::sod(&mut s, input)?,
+        "sod_flat" => diode::sod_flat(&mut s, input)?,
+        "do214" => diode::do214(&mut s, input)?,
+        "to220" => to220::build(&mut s, input)?,
         "sot" => gullwing::build(&mut s, input, &gullwing::SOT)?,
-        "qfn" => qfn::build(&mut s, input)?,
+        "qfn" | "dfn" | "son" => qfn::build(&mut s, input)?,
         "chip" => chip::build(&mut s, input)?,
         "radial" => radial::build(&mut s, input)?,
         "axial" => axial::build(&mut s, input)?,

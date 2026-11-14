@@ -135,11 +135,17 @@ match number-for-number stay separate (each cites its own drawing).
 | family | convention | notes |
 |---|---|---|
 | `lqfp` (TQFP too) | 4 equal sides, pin 1 top of left edge, CCW | body_width = E1 (X), body_length = D1 |
-| `qfn` | 4 equal sides, flush terminals, optional `exposed_pad` | unequal sides/DFN not supported |
+| `qfn` | 4 equal sides, flush terminals, optional `exposed_pad` | unequal sides not supported |
+| `dfn` / `son` (WSON, VSON, UDFN, TDFN...) | flush terminals on the left/right edges only, pin 1 top-left, down the left, up the right (SOIC order); optional `exposed_pad` | body_width = across the two rows (X); `lead_length` = terminal L, `lead_width` b, `lead_thickness` A3 |
 | `soic`, `tssop`, `ssop`, `msop` (VSSOP) | left/right rows, pin 1 top-left | body_width = E1, overall_width = E; MO-012/153/150/187 defaults |
 | `sot` | `lead_layout: [bottom, top]`; bottom left->right, top right->left (CCW) on the bottom grid | SOT-23-3 `[2, 1]`, SOT-23-5 `[3, 2]`, SOT-23-6 `[3, 3]`; leads exit across `body_length` |
 | `sot223` | 3 leads left edge from the top, tab right | `tab: {number}` from the source, `tab_width` (b2) |
 | `dpak` / `to252` | leads + trimmed centre lead + tab | `tab.trimmed_leads`, `tab_length` (L3) |
+| `d2pak` / `to263` | same layout as `dpak`, TO-263 defaults | body_width = D (along the leads, X), body_length = E (across), `overall_width` = H (lead toe to tab end), `tab_width`, `tab_length` (L3); 5/7-lead variants: `lead_count` = all positions, trimmed ones in `tab.trimmed_leads` |
+| `sod` | 2-terminal molded body, gull-wing leads bent down (SOD-123/323/523) | frame like `chip`: `body_length` = body along the leads (X), `body_width` across; `overall_length` = HE (tip to tip); `lead_width` b, `lead_length` L, `lead_thickness` c; pin 1 at -X -- the cathode is whichever pin the Device names `K`/`cathode` (band drawn there) |
+| `sod_flat` | as `sod`, flat leads straight out of the body underside (SOD-123F/FL, SOD-323F, PowerDI-123 style) | same fields |
+| `do214` | SMA/SMB/SMC: J-bend leads folded under the body | same frame; `overall_length` = E incl. leads, `lead_length` = the folded foot L (becomes the pad), `lead_width` b, `lead_thickness` c |
+| `to220` | vertical TO-220 (and TO-220-5/7 at their pitch): leads in one row along X, pin 1 left (front view, leads down), tab behind (+Y) | `body_width` = E (across), `body_length` = A (thickness incl. tab), `body_height` = molding height above its underside; `overall_height` = tab top, `mounting_hole_diameter`, `mounting_hole_inset` (tab top to hole centre), `hole_diameter` (drill) / `pad_diameter` if the source gives a land; `body_offset` = body centre behind the lead row (default 0.95); fully isolated TO-220F not supported |
 | `chip` | 2 end terminals along X; `body_length` is the long axis | style by category; 4-pad parts not supported |
 | `radial` | can of diameter `body_width`, 2 leads | electrolytic stripe on the `-` lead |
 | `axial` | horizontal can, 2 leads | band at the cathode; axial resistors not supported |
@@ -151,8 +157,7 @@ match number-for-number stay separate (each cites its own drawing).
 | `shrouded_header` | box-shaped wire-to-board header (JST XH/PH), top entry; same frame, numbering and footprint rules as `header` (turn the source's PC-board layout, viewed from the mounting side, so pin 1 is on top and numbers run down) | `body_*` = housing outline (`body_width` = depth across the row); `body_offset` = housing centre's signed X offset from the pin grid (printed row-to-face distance and depth, arithmetic in the locator: XH 5.75/2 - (2.35) towards the boss side = -0.525); walls/floor/post height are generator defaults; undimensioned lock slots aren't drawn; drawn natural nylon + tin |
 | `right_angle_header` | 1-row right-angle pin header: housing lying on the board beside the holes, pins bent 90° | `body_offset` required (Würth: tail-to-housing "1,5" + depth 2.54/2 = 2.77, +X when the hole pattern's housing is below the row and pin 1 on the right); `body_width` = housing depth along the pins, `body_height` = its height, `mating_length` = housing front face to tip, `tail_length` = board to tail end |
 
-Not supported (report, don't force): DFN with leads on 2 sides only,
-SOIC-EP, SC70, X2QFN/USON, 4-pad crystals, multi-die/RGB LEDs, round drum
+Not supported (report, don't force): SOIC-EP, SC70, X2QFN/USON, 4-pad crystals, multi-die/RGB LEDs, round drum
 inductors, HC-49 ovals, 2-row right-angle headers, side-entry or SMT
 wire-to-board headers, connectors with extra board holes (boss/peg
 variants such as JST B?B-XH-AM: the footprint would lack the hole).

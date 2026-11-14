@@ -125,6 +125,104 @@ pub(crate) const DPAK_TAB: TabDefaults = TabDefaults {
     under_body_ratio: 0.7,
 };
 
+/// TO-263 / D2PAK (JEDEC TO-263AB): H 14.61..15.88 over an 8.38..9.65
+/// body with the tab reaching L3 ~1.27 past it, A 4.06..4.83,
+/// b 0.51..0.99, c 0.38..0.74, L 1.78..2.79, A1 0.00..0.25.
+/// `protrusion` is the lead side only (H - D - L3 ~ 15.2 - 9.0 - 1.3).
+pub(crate) const D2PAK: GullWingDefaults = GullWingDefaults {
+    body_height: 4.45,
+    lead_width: 0.81,
+    protrusion: 4.9,
+    thickness: 0.5,
+    foot_length: 2.3,
+    standoff: 0.1,
+};
+
+pub(crate) const D2PAK_TAB: TabDefaults = TabDefaults {
+    length: 1.3,
+    thickness: 1.3,
+    under_body_ratio: 0.75,
+};
+
+/// SOD-123 class (bent leads): HE 3.55..3.85 over a 2.55..2.85 body,
+/// A 0.95..1.35, b 0.45..0.65, c 0.08..0.15, L ~0.3, A1 0.00..0.10.
+/// `lead_width` applies only when the body is SOD-123-sized: smaller
+/// bodies scale it (see [`sod_lead_width`]).
+pub(crate) const SOD: GullWingDefaults = GullWingDefaults {
+    body_height: 1.1,
+    lead_width: 0.55,
+    protrusion: 0.5,
+    thickness: 0.12,
+    foot_length: 0.3,
+    standoff: 0.05,
+};
+
+/// SOD-123F/FL, SOD-323F (flat leads out of the body underside):
+/// A 0.80..1.08, b 0.70..0.90, c 0.10..0.20, HE - E ~1.0.
+pub(crate) const SOD_FLAT: GullWingDefaults = GullWingDefaults {
+    body_height: 0.95,
+    lead_width: 0.8,
+    protrusion: 0.5,
+    thickness: 0.15,
+    foot_length: 0.5,
+    standoff: 0.0,
+};
+
+/// DO-214AC (SMA): overall 4.93..5.28 over a 3.99..4.50 body,
+/// A 1.98..2.29, b 1.25..1.65, c 0.15..0.31, L 0.76..1.52.
+pub(crate) const DO214: GullWingDefaults = GullWingDefaults {
+    body_height: 2.1,
+    lead_width: 1.45,
+    protrusion: 0.4,
+    thickness: 0.2,
+    foot_length: 1.1,
+    standoff: 0.0,
+};
+
+/// Lead width when the package states none, for the 2-terminal molded
+/// families: the family default, but no more than `ratio` of the body
+/// width (an SOD-523's leads are far narrower than an SOD-123's).
+pub(crate) fn two_terminal_lead_width(default: f64, body_w: f64, ratio: f64) -> f64 {
+    default.min(body_w * ratio)
+}
+
+/// TO-220 (JEDEC TO-220AB), vertical through-hole: a 9.66..10.66 wide,
+/// 4.4..4.6 thick molding, 8.6..9.4 tall, its tab rising to 15.1..15.75
+/// with a 3.5..3.9 hole; b 0.7..0.9, c 0.4..0.6. Drill 1.1 and land 1.9
+/// as KiCad's `Package_TO_SOT_THT.pretty/TO-220-3_Vertical` (pad
+/// 1.905 x 2.0, drill 1.1). Body centre 0.95 behind the lead row,
+/// toward the tab (the same footprint's fab outline, y -3.15..1.25).
+pub(crate) struct To220Defaults {
+    pub body_height: f64,
+    pub drill: f64,
+    pub pad_diameter: f64,
+    pub body_offset: f64,
+    pub lead_width: f64,
+    pub lead_thickness: f64,
+    /// Tab: thickness (J1 1.15..1.40), top above the body underside
+    /// (overall 15.1..15.75), hole 3.5..3.9 centred 2.8 below the top.
+    pub tab_thickness: f64,
+    pub overall_height: f64,
+    pub hole_diameter: f64,
+    pub hole_inset: f64,
+    /// Lead length below the board top (3D only).
+    pub tail_length: f64,
+}
+
+pub(crate) const TO220: To220Defaults = To220Defaults {
+    body_height: 9.0,
+    drill: 1.1,
+    pad_diameter: 1.9,
+    body_offset: 0.95,
+    lead_width: 0.8,
+    lead_thickness: 0.5,
+    tab_thickness: 1.3,
+    overall_height: 15.4,
+    hole_diameter: 3.7,
+    hole_inset: 2.8,
+    tail_length: 3.5,
+};
+
 /// SOT-23 class (JEDEC TO-236): HE 2.4 over E 1.3, b 0.3..0.5,
 /// c 0.08..0.20, L ~0.4, A1 0.01..0.10.
 pub(crate) const SOT: GullWingDefaults = GullWingDefaults {
@@ -308,6 +406,11 @@ impl GullWing {
             )));
         }
         Ok(protrusion)
+    }
+
+    /// The family's default lead width (before any datasheet value).
+    pub fn default_lead_width(&self) -> f64 {
+        self.defaults.lead_width
     }
 
     pub fn lead_form(&self) -> LeadForm {

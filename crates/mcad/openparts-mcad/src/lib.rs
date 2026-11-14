@@ -8,6 +8,7 @@ mod axial;
 mod bga;
 mod chip;
 mod defaults;
+mod diode;
 mod dip;
 mod header;
 mod lqfp;
@@ -18,11 +19,13 @@ mod sip;
 mod soic;
 mod sot;
 mod tab;
+mod to220;
 mod to92;
 
 pub use axial::generate_axial;
 pub use bga::generate_bga;
 pub use chip::generate_chip;
+pub use diode::{generate_do214, generate_sod};
 pub use dip::generate_dip;
 pub use header::{generate_header, header_features, HeaderFeatures, HeaderKind, Shroud};
 pub use lqfp::generate_lqfp;
@@ -32,7 +35,8 @@ pub use radial::generate_radial;
 pub use sip::generate_sip;
 pub use soic::generate_soic;
 pub use sot::generate_sot;
-pub use tab::{generate_dpak, generate_sot223};
+pub use tab::{generate_d2pak, generate_dpak, generate_sot223};
+pub use to220::{generate_to220, to220_features, To220Features};
 pub use to92::generate_to92;
 
 use openparts_core::Package;
@@ -42,11 +46,15 @@ use openparts_core::Package;
 pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
     match package.family.to_ascii_lowercase().as_str() {
         "lqfp" => generate_lqfp(package),
-        "qfn" => generate_qfn(package),
+        "qfn" | "dfn" | "son" => generate_qfn(package),
         "chip" => generate_chip(package),
         "soic" | "tssop" | "ssop" | "msop" => generate_soic(package),
         "sot223" => generate_sot223(package),
         "dpak" | "to252" => generate_dpak(package),
+        "d2pak" | "to263" => generate_d2pak(package),
+        "sod" | "sod_flat" => generate_sod(package),
+        "do214" => generate_do214(package),
+        "to220" => generate_to220(package),
         "sot" => generate_sot(package),
         "radial" => generate_radial(package),
         "axial" => generate_axial(package),
@@ -162,6 +170,22 @@ pub enum LeadForm {
         /// Terminal thickness visible on the sawn edge (A3).
         thickness: f64,
     },
+    /// Flat leads leaving the body underside straight out, on the
+    /// seating plane (SOD-123F/FL, SOD-323F). Each `Lead`'s outline runs
+    /// from the body edge to the lead toe.
+    Flat {
+        /// Lead-frame thickness (c).
+        thickness: f64,
+    },
+    /// J-bend leads (DO-214 SMA/SMB/SMC): out of the body end, down the
+    /// end face and folded under the body. Each `Lead`'s outline is the
+    /// folded foot, from the overall end inward by `foot_length`.
+    JBend {
+        /// Lead-frame thickness (c).
+        thickness: f64,
+        /// Folded foot length under the body, from the overall end (L).
+        foot_length: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -177,7 +201,7 @@ pub struct MechanicalGeometry {
 #[derive(Debug, thiserror::Error)]
 pub enum McadError {
     #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, chip, soic, tssop, ssop, msop, sot, sot223, dpak, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"
+        "package family \"{0}\" has no supported generator (lqfp, qfn, dfn, son, chip, soic, tssop, ssop, msop, sot, sot223, dpak, d2pak, sod, sod_flat, do214, to220, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"
     )]
     UnsupportedFamily(String),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]

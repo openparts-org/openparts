@@ -22,6 +22,7 @@ use openparts_core::Package;
 enum Kind {
     Sot223,
     Dpak,
+    D2pak,
 }
 
 /// Generates Mechanical Geometry for a SOT-223 (JEDEC TO-261): gull-wing
@@ -46,11 +47,19 @@ pub fn generate_dpak(package: &Package) -> Result<MechanicalGeometry, McadError>
     generate_tabbed(package, Kind::Dpak)
 }
 
+/// Generates Mechanical Geometry for a TO-263 / D2PAK: the TO-252 layout
+/// ([`generate_dpak`]) at TO-263's size, with `defaults::D2PAK` for what
+/// the package doesn't state.
+pub fn generate_d2pak(package: &Package) -> Result<MechanicalGeometry, McadError> {
+    generate_tabbed(package, Kind::D2pak)
+}
+
 fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, McadError> {
     let family = package.family.to_ascii_lowercase();
     let accepted: &[&str] = match kind {
         Kind::Sot223 => &["sot223"],
         Kind::Dpak => &["dpak", "to252"],
+        Kind::D2pak => &["d2pak", "to263"],
     };
     if !accepted.contains(&family.as_str()) {
         return Err(McadError::UnsupportedFamily(package.family.clone()));
@@ -107,6 +116,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
         match kind {
             Kind::Sot223 => &defaults::SOT223,
             Kind::Dpak => &defaults::DPAK,
+            Kind::D2pak => &defaults::D2PAK,
         },
     );
     let lead_t = shape.thickness;
@@ -119,8 +129,13 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
             let reach = shape.protrusion(package, Axis::X)?;
             (reach, half_w, half_w + reach, lead_t)
         }
-        Kind::Dpak => {
-            let tab_len = value(&d.tab_length).unwrap_or(defaults::DPAK_TAB.length);
+        Kind::Dpak | Kind::D2pak => {
+            let (tab_defaults, lead_defaults) = if kind == Kind::Dpak {
+                (&defaults::DPAK_TAB, &defaults::DPAK)
+            } else {
+                (&defaults::D2PAK_TAB, &defaults::D2PAK)
+            };
+            let tab_len = value(&d.tab_length).unwrap_or(tab_defaults.length);
             let reach = match value(&d.overall_width) {
                 Some(span) => {
                     let reach = span - body_w - tab_len;
@@ -132,11 +147,11 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
                     }
                     reach
                 }
-                None => defaults::DPAK.protrusion,
+                None => lead_defaults.protrusion,
             };
             let end = half_w + tab_len;
-            let from = half_w - body_w * defaults::DPAK_TAB.under_body_ratio;
-            (reach, from, end, defaults::DPAK_TAB.thickness)
+            let from = half_w - body_w * tab_defaults.under_body_ratio;
+            (reach, from, end, tab_defaults.thickness)
         }
     };
 
@@ -394,6 +409,31 @@ mod tests {
         assert!(matches!(
             generate_dpak(&p),
             Err(McadError::MissingDimension(_))
+        ));
+    }
+
+    #[test]
+    fn d2pak_uses_the_dpak_layout_with_to263_defaults() {
+        let mut p = dpak();
+        p.family = "d2pak".into();
+        p.pitch = mm(2.54);
+        p.dimensions.body_width = range(8.38, 9.65).unwrap();
+        p.dimensions.body_length = range(9.65, 10.67).unwrap();
+        p.dimensions.overall_width = range(14.61, 15.88);
+        p.dimensions.tab_length = None;
+        p.dimensions.tab_width = range(6.5, 8.0);
+        p.dimensions.lead_width = None;
+        let g = generate_d2pak(&p).unwrap();
+        let numbers: Vec<&str> = g.leads.iter().map(|l| l.number.as_str()).collect();
+        assert_eq!(numbers, ["1", "3", "2"]);
+        assert!(close(g.leads[0].position.y, 2.54));
+        assert!(close(g.leads[0].size.y, 0.81));
+        let tab = g.leads.last().unwrap();
+        assert!(close(tab.position.x + tab.size.x / 2.0, 9.015 / 2.0 + 1.3));
+        assert!(close(g.body.size.z, 4.45));
+        assert!(matches!(
+            generate_dpak(&p),
+            Err(McadError::UnsupportedFamily(_))
         ));
     }
 

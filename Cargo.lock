@@ -558,6 +558,7 @@ name = "openparts-mcad"
 version = "0.1.0"
 dependencies = [
  "openparts-core",
+ "serde_yaml",
  "thiserror",
 ]
 

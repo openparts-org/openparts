@@ -1,0 +1,10 @@
+# J-bend lead dimensions (DO-214 SMA/SMB/SMC). Width, thickness, reach
+# and the folded foot come from the geometry (the foot is the footprint
+# pad); the embedded length and bend radius are modelling choices.
+- params:
+    lead_w: ["{{lead_w}}", lead width (b)]
+    lead_t: ["{{lead_t}}", lead frame thickness (c)]
+    lead_reach: ["{{reach}}", body end to the lead's outer face ((E - D) / 2)]
+    lead_foot: ["{{foot}}", folded foot length under the body (L)]
+    lead_embed: ["{{embed}}", lead length kept inside the body]
+    bend_r: ["{{bend_r}}", inner bend radius]

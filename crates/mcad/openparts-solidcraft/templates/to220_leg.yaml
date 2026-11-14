@@ -1,0 +1,6 @@
+# A straight TO-220 lead from inside the body down through the board.
+# Vars: name, x.
+- solid.box:
+    {length: lead_w, width: lead_t, height: standoff + lead_below + 1 mm,
+     center: ["{{x}}", 0 mm, (standoff + 1 mm - lead_below) / 2],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

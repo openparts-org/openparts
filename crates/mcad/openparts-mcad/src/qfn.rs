@@ -15,23 +15,37 @@ use openparts_core::Package;
 /// along the top. The Exposed Pad (when present) is a `Lead` keyed
 /// `"EP"`, matching the Device pin key convention for exposed pads
 /// (Canonical Data Specification section 14).
+///
+/// Families `dfn` and `son` (DFN/SON/WSON/VSON/USON...) are the same
+/// construction with terminals on the left and right edges only:
+/// `lead_count / 2` per side, pin 1 at the top of the left edge, down the
+/// left edge, then up the right edge (the SOIC order). `body_width` is
+/// the body across the two rows (X).
 pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("qfn") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
+    let family = package.family.to_ascii_lowercase();
+    let two_sided = match family.as_str() {
+        "qfn" => false,
+        "dfn" | "son" => true,
+        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    };
     if let Some(geometry) = &package.geometry {
         if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("qfn") {
+            let ok = generator.eq_ignore_ascii_case("qfn")
+                || (two_sided
+                    && (generator.eq_ignore_ascii_case("dfn")
+                        || generator.eq_ignore_ascii_case("son")));
+            if !ok {
                 return Err(McadError::UnsupportedGenerator(generator.clone()));
             }
         }
     }
 
     let lead_count = package.lead_count;
-    if lead_count == 0 || !lead_count.is_multiple_of(4) {
+    let sides = if two_sided { 2 } else { 4 };
+    if lead_count == 0 || !lead_count.is_multiple_of(sides) {
         return Err(McadError::InvalidLeadCount(lead_count));
     }
-    let pins_per_side = lead_count / 4;
+    let pins_per_side = lead_count / sides;
 
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
     let body_w = defaults::dim(
@@ -95,7 +109,8 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         pin_num += 1;
     }
     // Bottom edge: flush with y = -body_l/2, x from -half_span to +half_span.
-    for i in 0..pins_per_side {
+    let perp_rows = if two_sided { 0 } else { pins_per_side };
+    for i in 0..perp_rows {
         let x = -half_span + i as f64 * pitch;
         leads.push(Lead {
             number: pin_num.to_string(),
@@ -127,7 +142,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         pin_num += 1;
     }
     // Top edge: flush with y = +body_l/2, x from +half_span down to -half_span.
-    for i in 0..pins_per_side {
+    for i in 0..perp_rows {
         let x = half_span - i as f64 * pitch;
         leads.push(Lead {
             number: pin_num.to_string(),
@@ -279,6 +294,25 @@ mod tests {
             outer_edge >= -1.5 - 1e-9,
             "lead protrudes beyond body: {outer_edge}"
         );
+    }
+
+    #[test]
+    fn dfn_has_two_rows_numbered_like_soic() {
+        let mut package = qfn8_with_ep();
+        package.family = "dfn".into();
+        let g = generate_qfn(&package).unwrap();
+        let pos = |n: &str| g.leads.iter().find(|l| l.number == n).unwrap().position;
+        assert_eq!(g.leads.len(), 9);
+        assert!(pos("1").x < 0.0 && pos("4").x < 0.0 && pos("5").x > 0.0);
+        assert!((pos("1").y - 0.75).abs() < 1e-9, "pin 1 top-left");
+        assert!((pos("4").y + 0.75).abs() < 1e-9);
+        assert!((pos("5").y + 0.75).abs() < 1e-9, "right edge upward");
+        assert!((pos("8").y - 0.75).abs() < 1e-9);
+        package.lead_count = 6;
+        package.family = "son".into();
+        assert_eq!(generate_qfn(&package).unwrap().leads.len(), 7);
+        package.lead_count = 7;
+        assert!(generate_qfn(&package).is_err());
     }
 
     #[test]

@@ -1,0 +1,25 @@
+# One J-bend lead, seen from the side: out of the body end at the
+# parting line, down the end face, folded back under the body.
+# Vars: tag, plane, flip, first, neg, half (as gullwing_row).
+- sketch.create: {plane: "{{plane}}", flip: "{{flip}}", offset: "{{first}}", name: "LeadProfile{{tag}}"}
+- sketch.line:
+    closed: true
+    ids: ["j{{tag}}0", "j{{tag}}1", "j{{tag}}2", "j{{tag}}3", "j{{tag}}4", "j{{tag}}5", "j{{tag}}6", "j{{tag}}7"]
+    points:
+      - ["{{neg}}({{half}} - lead_embed)", parting + lead_t / 2]
+      - ["{{neg}}({{half}} + lead_reach)", parting + lead_t / 2]
+      - ["{{neg}}({{half}} + lead_reach)", 0 mm]
+      - ["{{neg}}({{half}} + lead_reach - lead_foot)", 0 mm]
+      - ["{{neg}}({{half}} + lead_reach - lead_foot)", lead_t]
+      - ["{{neg}}({{half}} + lead_reach - lead_t)", lead_t]
+      - ["{{neg}}({{half}} + lead_reach - lead_t)", parting - lead_t / 2]
+      - ["{{neg}}({{half}} - lead_embed)", parting - lead_t / 2]
+# Top bend (outer, inner) and bottom fold (outer, inner).
+- sketch.fillet: {a: "j{{tag}}0", b: "j{{tag}}1", radius: bend_r + lead_t}
+- sketch.fillet: {a: "j{{tag}}5", b: "j{{tag}}6", radius: bend_r}
+- sketch.fillet: {a: "j{{tag}}1", b: "j{{tag}}2", radius: bend_r + lead_t}
+- sketch.fillet: {a: "j{{tag}}4", b: "j{{tag}}5", radius: bend_r}
+- sketch.finish: {}
+- solid.extrude:
+    {sketch: "LeadProfile{{tag}}", distance: lead_w, direction: symmetric,
+     operation: new, body_name: "Lead{{tag}}", name: "Lead{{tag}}"}
