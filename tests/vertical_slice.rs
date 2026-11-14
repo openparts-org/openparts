@@ -272,7 +272,7 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         };
         // The two-terminal `sod` frame runs its lead span (overall_length)
         // along X, like `chip`; every other gull-wing family along Y.
-        let terminal_axis_x = package.family.eq_ignore_ascii_case("sod");
+        let terminal_axis_x = package.family == openparts_core::PackageFamily::Sod;
         let (x_span, y_span) = if terminal_axis_x {
             (&dims.overall_length, &dims.overall_width)
         } else {

@@ -26,7 +26,6 @@ members = [
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
-license = "TBD"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -9,9 +9,11 @@ use openparts_mcad::Mounting;
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     if g.leads.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
-    let f = openparts_mcad::switch_features(input.package, g);
+    let openparts_mcad::Details::Switch(f) = g.details else {
+        return Err(ModelError::MissingDetails(g.family));
+    };
     let b = &g.body;
     let standoff = b.position.z - b.size.z / 2.0;
     crate::common::body_params(s, g)?;

@@ -20,24 +20,14 @@
 
 use crate::defaults::{self, value};
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
-use openparts_core::Package;
-
-/// Annular ring around a THT tact-switch drill when no land is given.
-const THT_RING: f64 = 0.4;
-/// Lead thickness when unstated (SMD feet), drawing only.
-const SMD_LEAD_T: f64 = 0.25;
+use openparts_core::{Package, PackageFamily as F};
 
 pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    let tht = match package.family.to_ascii_lowercase().as_str() {
-        "tact_switch_smd" => false,
-        "tact_switch_tht" => true,
-        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    let tht = match package.family {
+        F::TactSwitchSmd => false,
+        F::TactSwitchTht => true,
+        other => return Err(McadError::UnsupportedFamily(other)),
     };
-    if let Some(g) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !g.eq_ignore_ascii_case(&package.family) {
-            return Err(McadError::UnsupportedGenerator(g.clone()));
-        }
-    }
     let n = package.lead_count;
     if n != 2 && n != 4 {
         return Err(McadError::InvalidLeadCount(n));
@@ -76,7 +66,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
             value(&d.row_spacing).ok_or(McadError::MissingDimension("dimensions.row_spacing"))?;
         let drill = value(&d.hole_diameter)
             .ok_or(McadError::MissingDimension("dimensions.hole_diameter"))?;
-        let land = value(&d.pad_diameter).unwrap_or(drill + 2.0 * THT_RING);
+        let land = value(&d.pad_diameter).unwrap_or(drill + 2.0 * crate::defaults::tact::THT_RING);
         let standoff = value(&d.standoff).unwrap_or(0.0);
         let leads = corners
             .iter()
@@ -111,7 +101,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
         let foot = value(&d.lead_length).unwrap_or(toe - body_w / 2.0).min(toe);
         let width =
             value(&d.lead_width).ok_or(McadError::MissingDimension("dimensions.lead_width"))?;
-        let t = value(&d.lead_thickness).unwrap_or(SMD_LEAD_T);
+        let t = value(&d.lead_thickness).unwrap_or(crate::defaults::tact::SMD_LEAD_T);
         let leads = corners
             .iter()
             .zip(&numbers)
@@ -135,7 +125,12 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
         (0.0, leads)
     };
 
-    Ok(MechanicalGeometry {
+    let mut geometry = MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body: Body {
             position: Point3 {
                 x: 0.0,
@@ -152,7 +147,9 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
         leads,
         markers: vec![],
         lead_form: None,
-    })
+    };
+    geometry.details = crate::Details::Switch(switch_features(package, &geometry));
+    Ok(geometry)
 }
 
 /// The actuator and lead sizes a switch's 3D model needs: the package's
@@ -179,8 +176,8 @@ pub fn switch_features(package: &Package, geometry: &MechanicalGeometry) -> Swit
         actuator_top: defaults::stated(&d.overall_height)
             .filter(|h| *h > top)
             .unwrap_or(top + 1.0),
-        lead_thickness: value(&d.lead_thickness).unwrap_or(SMD_LEAD_T),
-        tail_length: value(&d.tail_length).unwrap_or(3.0),
+        lead_thickness: value(&d.lead_thickness).unwrap_or(crate::defaults::tact::SMD_LEAD_T),
+        tail_length: value(&d.tail_length).unwrap_or(crate::defaults::tact::TAIL_LENGTH),
     }
 }
 

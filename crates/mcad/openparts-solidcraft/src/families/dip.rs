@@ -9,7 +9,7 @@ pub fn dip(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     let rows = common::perimeter_rows(g);
     if rows.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     let row_span = 2.0 * rows[0].leads[0].position.x.abs();
     // Declared before body_params, so this molding width is the body_w.
@@ -24,7 +24,7 @@ pub fn dip(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     common::molded_body(s, 0.5, 0.45, 7.0)?;
     common::pin1_dimple(s, g, "Body", "standoff + body_h")?;
     s.fragment(fragment!("dip_details"), &vars!())?;
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
     let legs = common::lead_rows(s, &rows, &layouts, fragment!("dip_leg_row"), "Leg")?;
     s.paint(&["Body".into()], looks::MOLD);
     s.paint(&legs, looks::TIN);
@@ -34,7 +34,7 @@ pub fn dip(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
 pub fn sip(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     let Some(first) = g.leads.first() else {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     };
     common::body_params(s, g)?;
     common::molded_body(s, 0.8, 0.5, 4.0)?;
@@ -43,7 +43,7 @@ pub fn sip(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     s.fragment(
         fragment!("sip"),
         &vars!(
-            pitch = mm(input.package.pitch.nominal.unwrap_or(2.54)),
+            pitch = mm(input.geometry.pitch.unwrap_or(2.54)),
             count = n,
             x = mm(first.position.x),
             y = mm(first.position.y),

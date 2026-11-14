@@ -280,7 +280,7 @@ pub struct Package {
     pub schema_version: String,
     pub kind: Kind,
     pub id: PackageId,
-    pub family: String,
+    pub family: crate::family::PackageFamily,
     pub lead_count: u32,
     pub pitch: Dimension,
     pub dimensions: PackageDimensions,

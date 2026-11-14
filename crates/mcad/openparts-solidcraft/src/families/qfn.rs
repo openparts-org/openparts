@@ -12,13 +12,13 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     let rows = common::perimeter_rows(g);
     if rows.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     let Some(LeadForm::Flush { thickness }) = g.lead_form else {
-        return Err(ModelError::UnsupportedFamily(format!(
-            "{} (geometry has no flush-terminal lead form)",
-            input.package.family
-        )));
+        return Err(ModelError::LeadForm {
+            family: g.family,
+            expected: "flush-terminal",
+        });
     };
     common::body_params(s, g)?;
     let (pad_len, pad_w) = rows[0].lead_size();
@@ -38,7 +38,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         ),
     )?;
     common::pin1_dimple(s, g, "Body", "body_h")?;
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
     let mut terminals = common::lead_rows(s, &rows, &layouts, fragment!("qfn_pad_row"), "Pad")?;
     if let Some(ep) = g.leads.iter().find(|l| l.number == "EP") {
         s.fragment(

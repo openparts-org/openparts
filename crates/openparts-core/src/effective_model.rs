@@ -129,7 +129,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: PackageId::from("standards/PKG1"),
-            family: "lqfp".into(),
+            family: crate::family::PackageFamily::Lqfp,
             lead_count: 4,
             pitch: Dimension {
                 nominal: Some(0.5),

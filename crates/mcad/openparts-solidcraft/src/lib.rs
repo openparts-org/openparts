@@ -27,7 +27,7 @@ mod template;
 pub use runner::{available, run, version, Format, RunError};
 pub use script::{looks, mm, Look, Script};
 
-use openparts_core::{ComponentCategory, Device, Package};
+use openparts_core::{ComponentCategory, Device, Package, PackageFamily};
 use openparts_mcad::MechanicalGeometry;
 
 /// Everything a detailed model is built from.
@@ -89,10 +89,15 @@ pub fn polarity_pin(device: &Device) -> Option<&str> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
-    #[error("package family \"{0}\" has no SolidCraft model builder")]
-    UnsupportedFamily(String),
-    #[error("geometry has no leads where family \"{0}\" needs them")]
-    NoLeads(String),
+    #[error("family \"{0}\": the geometry has no leads where the model needs them")]
+    NoLeads(PackageFamily),
+    #[error("family \"{family}\": the geometry has no {expected} lead form")]
+    LeadForm {
+        family: PackageFamily,
+        expected: &'static str,
+    },
+    #[error("family \"{0}\": the geometry lacks the family's 3D details")]
+    MissingDetails(PackageFamily),
     #[error(transparent)]
     Template(#[from] template::TemplateError),
 }

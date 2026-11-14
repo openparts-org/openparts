@@ -1,4 +1,5 @@
-//! The one place package-shape defaults live, and how they combine with
+//! The one place package-shape defaults live (generators keep no
+//! numeric defaults of their own), and how they combine with
 //! the package's own dimensions: a datasheet value always wins over a
 //! family default. Footprint pads (through `Lead`) and the detailed 3D
 //! model (through `LeadForm`) are both built from what this module
@@ -323,6 +324,130 @@ pub(crate) const HEADER: HeaderDefaults = HeaderDefaults {
     shroud_floor_ratio: 0.35,
     shroud_post_recess: 0.8,
 };
+
+/// `bga` generator defaults.
+pub(crate) mod bga {
+    /// Generator defaults used only when the datasheet doesn't supply a
+    /// value -- implementation details for a geometric approximation, not
+    /// facts about any specific part (same policy as every other family's
+    /// own defaults). BGA balls/pads are much smaller than a perimeter
+    /// package's gull-wing leads, so these are distinct, smaller constants.
+    pub const BODY_HEIGHT: f64 = 1.2;
+    pub const PAD_DIAMETER: f64 = 0.4;
+    pub const LEAD_HEIGHT: f64 = 0.3;
+}
+
+/// `axial` generator defaults.
+pub(crate) mod axial {
+    /// Drill diameter and pad size, both taken directly from a real KiCad
+    /// reference footprint (`Diode_THT.pretty/
+    /// D_DO-41_SOD81_P10.16mm_Horizontal.kicad_mod`, `KiCad/kicad-footprints`):
+    /// `(pad ... (size 2.2 2.2) (drill 1.1) ...)` -- not invented.
+    pub const DRILL_DIAMETER: f64 = 1.1;
+    pub const PAD_DIAMETER: f64 = 2.2;
+    pub const LEAD_HEIGHT: f64 = 3.0;
+}
+
+/// `sip` generator defaults.
+pub(crate) mod sip {
+    /// Drill diameter and pad size, both taken directly from a real KiCad
+    /// reference footprint (`Package_SIP.pretty/SIP-8_19x3mm_P2.54mm.kicad_mod`,
+    /// `KiCad/kicad-footprints`): `(pad ... (size 1.45 1.45) (drill 0.85) ...)`
+    /// -- not invented.
+    pub const DRILL_DIAMETER: f64 = 0.85;
+    pub const PAD_DIAMETER: f64 = 1.45;
+    pub const LEAD_HEIGHT: f64 = 3.0;
+    /// Generator default when the datasheet doesn't supply a body height --
+    /// same policy as every other family's own defaults, not a fact about
+    /// any specific part.
+    pub const BODY_HEIGHT: f64 = 3.0;
+}
+
+/// `chip` generator defaults.
+pub(crate) mod chip {
+    /// Generator default: typical end-termination length for a small
+    /// 2-terminal chip component, used when the package states no
+    /// `lead_length`. Not a datasheet fact -- an approximation, same policy
+    /// as `defaults.rs`.
+    pub const TERMINATION_LENGTH: f64 = 0.3;
+    pub const BODY_HEIGHT: f64 = 0.45;
+}
+
+/// `tact` generator defaults.
+pub(crate) mod tact {
+    /// THT pin length below the board (3D only).
+    pub const TAIL_LENGTH: f64 = 3.0;
+    /// Annular ring around a THT tact-switch drill when no land is given.
+    pub const THT_RING: f64 = 0.4;
+    /// Lead thickness when unstated (SMD feet), drawing only.
+    pub const SMD_LEAD_T: f64 = 0.25;
+}
+
+/// `diode` generator defaults.
+pub(crate) mod diode {
+    /// Lead-width cap as a fraction of the body width, when unstated.
+    pub const SOD_LEAD_RATIO: f64 = 0.4;
+    pub const DO214_LEAD_RATIO: f64 = 0.55;
+}
+
+/// `dip` generator defaults.
+pub(crate) mod dip {
+    /// Drill diameter and pad size, both taken directly from a real KiCad
+    /// reference footprint (`Package_DIP.pretty/DIP-8_W7.62mm.kicad_mod`,
+    /// `KiCad/kicad-footprints`): `(pad ... (size 1.6 1.6) (drill 0.8) ...)`
+    /// -- not invented.
+    pub const DRILL_DIAMETER: f64 = 0.8;
+    pub const PAD_DIAMETER: f64 = 1.6;
+    pub const LEAD_HEIGHT: f64 = 3.0;
+    /// Generator default when the datasheet doesn't supply a body height --
+    /// same policy as every other family's own defaults, not a fact about
+    /// any specific part.
+    pub const BODY_HEIGHT: f64 = 3.3;
+}
+
+/// `usb_c` generator defaults.
+pub(crate) mod usb_c {
+    /// Shell tabs below the board, and shell sheet thickness (3D only).
+    pub const TAIL_LENGTH: f64 = 1.0;
+    pub const SHELL_THICKNESS: f64 = 0.2;
+    /// Copper thickness drawn for an SMD pad (3D only).
+    pub const PAD_T: f64 = 0.1;
+}
+
+/// `radial` generator defaults.
+pub(crate) mod radial {
+    /// Engineering defaults used only when the datasheet doesn't supply a
+    /// value -- generator implementation details for a geometric
+    /// approximation, never written back into Canonical Data as a fact
+    /// (same policy as this crate's other generators' defaults).
+    ///
+    /// Electrolytic can heights vary hugely by capacitance/voltage (a few
+    /// mm to 30+ mm); this is a rough mid-range fallback, not a
+    /// representative "typical" value.
+    pub const BODY_HEIGHT: f64 = 11.0;
+    /// Drill diameter and pad size, both taken directly from a real
+    /// official KiCad footprint (`Capacitor_THT.pretty/
+    /// CP_Radial_D5.0mm_P2.00mm.kicad_mod`, `KiCad/kicad-footprints`):
+    /// `(pad ... (size 1.6 1.6) (drill 0.8) ...)` -- not invented.
+    pub const DRILL_DIAMETER: f64 = 0.8;
+    pub const PAD_DIAMETER: f64 = 1.6;
+    pub const LEAD_HEIGHT: f64 = 3.0;
+}
+
+/// `to92` generator defaults.
+pub(crate) mod to92 {
+    /// Engineering defaults used only when the datasheet doesn't supply a
+    /// value -- same policy as every other generator's own defaults, not a
+    /// fact about any specific part.
+    pub const BODY_HEIGHT: f64 = 4.6;
+    /// Drill diameter and pad size, both taken directly from a real KiCad
+    /// reference footprint (`Package_TO_SOT_THT.pretty/TO-92.kicad_mod`,
+    /// `KiCad/kicad-footprints`): `(pad ... (size 1.3 1.3) (drill 0.75) ...)`
+    /// -- not invented.
+    pub const DRILL_DIAMETER: f64 = 0.75;
+    pub const PAD_DIAMETER: f64 = 1.3;
+    pub const LEAD_HEIGHT: f64 = 3.0;
+}
 
 /// The value a generator uses for an optional dimension: the stated
 /// nominal, else the middle of a stated min..max range (many outline

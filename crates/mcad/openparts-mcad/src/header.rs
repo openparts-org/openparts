@@ -27,7 +27,7 @@
 
 use crate::defaults::{self, stated, HEADER};
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
-use openparts_core::Package;
+use openparts_core::{Package, PackageFamily as F};
 
 /// The header families' shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,12 +87,12 @@ pub struct HeaderFeatures {
 }
 
 fn kind(package: &Package) -> Result<HeaderKind, McadError> {
-    match package.family.to_ascii_lowercase().as_str() {
-        "header" => Ok(HeaderKind::Pin),
-        "socket" => Ok(HeaderKind::Socket),
-        "shrouded_header" => Ok(HeaderKind::Shrouded),
-        "right_angle_header" => Ok(HeaderKind::RightAngle),
-        _ => Err(McadError::UnsupportedFamily(package.family.clone())),
+    match package.family {
+        F::Header => Ok(HeaderKind::Pin),
+        F::Socket => Ok(HeaderKind::Socket),
+        F::ShroudedHeader => Ok(HeaderKind::Shrouded),
+        F::RightAngleHeader => Ok(HeaderKind::RightAngle),
+        other => Err(McadError::UnsupportedFamily(other)),
     }
 }
 
@@ -101,7 +101,7 @@ fn kind(package: &Package) -> Result<HeaderKind, McadError> {
 fn layout(package: &Package, kind: HeaderKind) -> Result<(u32, u32), McadError> {
     let Some(layout) = package.lead_layout.as_deref() else {
         return Err(McadError::MissingLeadLayout {
-            family: package.family.clone(),
+            family: package.family,
         });
     };
     let max_rows = if kind == HeaderKind::RightAngle { 1 } else { 2 };
@@ -190,11 +190,6 @@ fn row_xs(f: &HeaderFeatures) -> impl Iterator<Item = f64> + '_ {
 /// header or right-angle header (see the module docs).
 pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadError> {
     kind(package)?;
-    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !package.family.eq_ignore_ascii_case(generator) {
-            return Err(McadError::UnsupportedGenerator(generator.clone()));
-        }
-    }
     let f = header_features(package)?;
     let d = &package.dimensions;
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
@@ -294,6 +289,9 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
     // undimensioned one (the footprint's square pad 1 marks it on the
     // board).
     Ok(MechanicalGeometry {
+        family: package.family,
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::Header(f),
         body,
         leads,
         markers: vec![],
@@ -323,7 +321,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/HEADER-TEST"),
-            family: "header".into(),
+            family: openparts_core::PackageFamily::Header,
             lead_count: 10,
             pitch: mm(2.54),
             dimensions: PackageDimensions {
@@ -484,7 +482,7 @@ mod tests {
         assert!(close(f.pin_width, 0.64) && close(f.mating_length, 6.0));
         assert!(close(f.tail_length, 3.0) && close(f.standoff, 0.0));
         let mut p = wrphd_2x5();
-        p.family = "socket".into();
+        p.family = openparts_core::PackageFamily::Socket;
         p.pitch = mm(2.0);
         p.dimensions.row_spacing = Some(mm(2.0));
         p.dimensions.hole_diameter = Some(mm(0.8));
@@ -500,7 +498,7 @@ mod tests {
         assert!(close(g.body.size.z, 8.5 * 2.0 / 2.54));
         assert!(crate::generate(&p).is_ok(), "socket dispatched");
         assert!(crate::generate(&wrphd_2x5()).is_ok(), "header dispatched");
-        p.family = "dip".into();
+        p.family = openparts_core::PackageFamily::Dip;
         assert!(matches!(
             generate_header(&p),
             Err(McadError::UnsupportedFamily(_))
@@ -511,7 +509,7 @@ mod tests {
     /// row 2.35 from the lock-side (+X) face: centre at -0.525.
     fn xh_4() -> Package {
         let mut p = wrphd_2x5();
-        p.family = "shrouded_header".into();
+        p.family = openparts_core::PackageFamily::ShroudedHeader;
         p.lead_count = 4;
         p.lead_layout = Some(vec![1, 4]);
         p.pitch = mm(2.5);
@@ -555,7 +553,7 @@ mod tests {
     /// pins, its back face 1.5 from the holes (centre at 1.5 + 1.27).
     fn wrphd_ra_4() -> Package {
         let mut p = wrphd_2x5();
-        p.family = "right_angle_header".into();
+        p.family = openparts_core::PackageFamily::RightAngleHeader;
         p.lead_count = 4;
         p.lead_layout = Some(vec![1, 4]);
         p.dimensions.row_spacing = None;
@@ -602,7 +600,7 @@ mod tests {
             generator: Some("header".into()),
         });
         assert!(matches!(
-            generate_header(&p),
+            crate::generate(&p),
             Err(McadError::UnsupportedGenerator(_))
         ));
     }

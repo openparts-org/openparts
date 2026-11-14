@@ -2,13 +2,6 @@ use crate::defaults;
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
-/// Generator default: typical end-termination length for a small
-/// 2-terminal chip component, used when the package states no
-/// `lead_length`. Not a datasheet fact -- an approximation, same policy
-/// as `defaults.rs`.
-const DEFAULT_TERMINATION_LENGTH_MM: f64 = 0.3;
-const DEFAULT_BODY_HEIGHT_MM: f64 = 0.45;
-
 /// Generates Mechanical Geometry for a 2-terminal chip component
 /// (resistor, capacitor, ...): a rectangular body with a wrap-around
 /// terminal at each end. `dimensions.body_length` is the long axis
@@ -16,9 +9,6 @@ const DEFAULT_BODY_HEIGHT_MM: f64 = 0.45;
 /// (Y). Terminals are keyed `"1"`/`"2"` -- passive 2-terminal parts have
 /// no meaningful polarity/pin-1 orientation, so no marker is emitted.
 pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("chip") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
     if package.lead_count != 2 {
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
@@ -31,8 +21,8 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
         &package.dimensions.body_width,
         "dimensions.body_width.nominal",
     )?;
-    let body_h =
-        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let body_h = defaults::stated(&package.dimensions.body_height)
+        .unwrap_or(crate::defaults::chip::BODY_HEIGHT);
 
     let body = Body {
         position: Point3 {
@@ -49,7 +39,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
     };
 
     let term_len = defaults::value(&package.dimensions.lead_length)
-        .unwrap_or(DEFAULT_TERMINATION_LENGTH_MM)
+        .unwrap_or(crate::defaults::chip::TERMINATION_LENGTH)
         .min(body_len / 2.0);
     let term_size = Size3 {
         x: term_len,
@@ -85,6 +75,11 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
     ];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers: vec![],
@@ -103,7 +98,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/CHIP-0603-TEST"),
-            family: "chip".into(),
+            family: openparts_core::PackageFamily::Chip,
             lead_count: 2,
             pitch: Dimension {
                 nominal: None,

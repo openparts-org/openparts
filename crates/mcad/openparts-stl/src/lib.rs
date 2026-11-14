@@ -56,7 +56,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: PackageId::from("standards/CHIP0603-TEST"),
-            family: "chip".into(),
+            family: openparts_core::PackageFamily::Chip,
             lead_count: 2,
             pitch: Dimension {
                 nominal: None,

@@ -342,11 +342,10 @@ fn check_package_aux_pads(entity: &str, package: &Package) -> Vec<Diagnostic> {
 /// generator never guesses either), and a right-angle header's housing
 /// position.
 fn check_package_header(entity: &str, package: &Package) -> Vec<Diagnostic> {
-    let family = package.family.to_ascii_lowercase();
-    if !["header", "socket", "shrouded_header", "right_angle_header"].contains(&family.as_str()) {
+    if !package.family.is_header() {
         return vec![];
     }
-    let right_angle = family == "right_angle_header";
+    let right_angle = package.family == openparts_core::PackageFamily::RightAngleHeader;
     let max_rows = if right_angle { 1 } else { 2 };
     let mut out = Vec::new();
     let rows = match package.lead_layout.as_deref() {
@@ -633,7 +632,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/PKG1"),
-            family: "lqfp".into(),
+            family: openparts_core::PackageFamily::Lqfp,
             lead_count: 4,
             pitch: Dimension {
                 nominal: Some(0.5),
@@ -905,7 +904,7 @@ mod tests {
     #[test]
     fn tab_needs_provenance_width_and_real_trimmed_leads() {
         let mut package = base_package();
-        package.family = "dpak".into();
+        package.family = openparts_core::PackageFamily::Dpak;
         package.lead_count = 3;
         package.tab = Some(openparts_core::PackageTab {
             number: "2".into(),
@@ -941,7 +940,7 @@ mod tests {
     #[test]
     fn aux_pads_need_distinct_numbers_their_row_and_provenance() {
         let mut package = base_package();
-        package.family = "module".into();
+        package.family = openparts_core::PackageFamily::Module;
         package.aux_pads = vec!["D1".into(), "D1".into(), "3".into()];
         package.dimensions.aux_pad_width = mm(1.6);
         cite(&mut package, "/dimensions/aux_pad_width");
@@ -990,7 +989,7 @@ mod tests {
     #[test]
     fn headers_need_their_grid_drill_and_provenance() {
         let mut package = base_package();
-        package.family = "header".into();
+        package.family = openparts_core::PackageFamily::Header;
         package.lead_layout = Some(vec![2, 3]);
         package.dimensions.tail_length = mm(3.0);
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
@@ -1034,13 +1033,13 @@ mod tests {
         package.dimensions.row_spacing = None;
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
         assert!(paths(&diags, "header.invalid").is_empty());
-        package.family = "lqfp".into();
+        package.family = openparts_core::PackageFamily::Lqfp;
         package.lead_layout = None;
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
         assert!(paths(&diags, "header.invalid").is_empty());
 
         // A right-angle header: one row, and where its housing lies.
-        package.family = "right_angle_header".into();
+        package.family = openparts_core::PackageFamily::RightAngleHeader;
         package.lead_layout = Some(vec![2, 2]);
         package.dimensions.row_spacing = mm(2.54);
         package.dimensions.body_offset = mm(2.77);
@@ -1058,7 +1057,7 @@ mod tests {
             vec!["/dimensions/body_offset"]
         );
         // A shrouded header may be centred (no offset stated).
-        package.family = "shrouded_header".into();
+        package.family = openparts_core::PackageFamily::ShroudedHeader;
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
         assert!(paths(&diags, "header.invalid").is_empty());
     }

@@ -37,7 +37,7 @@ pub fn sod_flat(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError
     };
     let rows = common::perimeter_rows(g);
     if rows.len() != 2 {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     common::body_params(s, g)?;
     common::molded_body(s, 0.0, FLAT_PARTING, DRAFT_DEG)?;
@@ -70,7 +70,7 @@ pub fn do214(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     };
     let rows = common::perimeter_rows(g);
     if rows.len() != 2 {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     common::body_params(s, g)?;
     // The body sits on the folded feet.
@@ -99,11 +99,11 @@ pub fn do214(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     band(s, input, thickness, DO214_PARTING, DRAFT_DEG)
 }
 
-fn no_form(input: &ModelInput<'_>, form: &str) -> ModelError {
-    ModelError::UnsupportedFamily(format!(
-        "{} (geometry has no {form} lead form)",
-        input.package.family
-    ))
+fn no_form(input: &ModelInput<'_>, expected: &'static str) -> ModelError {
+    ModelError::LeadForm {
+        family: input.geometry.family,
+        expected,
+    }
 }
 
 /// The cathode band at the marked terminal's end, for diodes (and any

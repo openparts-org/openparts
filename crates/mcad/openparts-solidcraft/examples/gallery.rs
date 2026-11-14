@@ -119,7 +119,7 @@ fn package(
         schema_version: "0.1".into(),
         kind: Kind::Package,
         id: PackageId::from(id),
-        family: family.into(),
+        family: family.parse().unwrap(),
         lead_count: leads,
         pitch: dim(pitch),
         dimensions: PackageDimensions {

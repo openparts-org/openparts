@@ -14,7 +14,7 @@ use openparts_core::PackageConstruction;
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let leads = &input.geometry.leads;
     let Some(pin1) = leads.first() else {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     };
     let body = &input.geometry.body;
     let glass = input.package.construction == Some(PackageConstruction::Glass);

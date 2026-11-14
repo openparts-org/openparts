@@ -5,18 +5,6 @@ use crate::{
 };
 use openparts_core::Package;
 
-/// Drill diameter and pad size, both taken directly from a real KiCad
-/// reference footprint (`Package_DIP.pretty/DIP-8_W7.62mm.kicad_mod`,
-/// `KiCad/kicad-footprints`): `(pad ... (size 1.6 1.6) (drill 0.8) ...)`
-/// -- not invented.
-const DEFAULT_DRILL_DIAMETER_MM: f64 = 0.8;
-const DEFAULT_PAD_DIAMETER_MM: f64 = 1.6;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
-/// Generator default when the datasheet doesn't supply a body height --
-/// same policy as every other family's own defaults, not a fact about
-/// any specific part.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 3.3;
-
 /// Generates Mechanical Geometry for a DIP-style through-hole package:
 /// a rectangular body with `lead_count / 2` leads evenly spaced at
 /// `pitch` on each of the 2 long sides -- structurally identical to
@@ -30,17 +18,6 @@ const DEFAULT_BODY_HEIGHT_MM: f64 = 3.3;
 /// project's other THT families already rely on
 /// (`openparts_pcbcad::build_footprint`).
 pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("dip") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("dip") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
-
     let lead_count = package.lead_count;
     if lead_count == 0 || !lead_count.is_multiple_of(2) {
         return Err(McadError::InvalidLeadCount(lead_count));
@@ -56,8 +33,8 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
         &package.dimensions.body_length,
         "dimensions.body_length.nominal",
     )?;
-    let body_h =
-        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let body_h = defaults::stated(&package.dimensions.body_height)
+        .unwrap_or(crate::defaults::dip::BODY_HEIGHT);
 
     let body = Body {
         position: Point3 {
@@ -77,9 +54,9 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
     let half_span = span / 2.0;
 
     let pad_size = Size3 {
-        x: DEFAULT_PAD_DIAMETER_MM,
-        y: DEFAULT_PAD_DIAMETER_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: crate::defaults::dip::PAD_DIAMETER,
+        y: crate::defaults::dip::PAD_DIAMETER,
+        z: crate::defaults::dip::LEAD_HEIGHT,
     };
 
     let mut leads = Vec::with_capacity(lead_count as usize);
@@ -97,7 +74,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
         });
         pin_num += 1;
@@ -115,7 +92,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
         });
         pin_num += 1;
@@ -131,6 +108,11 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -149,7 +131,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/DIP8-TEST"),
-            family: "dip".into(),
+            family: openparts_core::PackageFamily::Dip,
             lead_count: 8,
             pitch: Dimension {
                 nominal: Some(2.54),
@@ -221,7 +203,7 @@ mod tests {
         let geometry = generate_dip(&dip8()).unwrap();
         for lead in &geometry.leads {
             assert_eq!(lead.mounting, Mounting::ThroughHole);
-            assert_eq!(lead.drill, Some(DEFAULT_DRILL_DIAMETER_MM));
+            assert_eq!(lead.drill, Some(crate::defaults::dip::DRILL_DIAMETER));
         }
     }
 
@@ -240,14 +222,6 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_dip(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_dip_family() {
-        let mut package = dip8();
-        package.family = "soic".into();
-        let err = generate_dip(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 
     #[test]

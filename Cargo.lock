@@ -525,7 +525,6 @@ dependencies = [
 name = "openparts-client"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "openparts-core",
  "serde",
  "serde_json",
@@ -539,6 +538,7 @@ name = "openparts-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_yaml",
  "thiserror",
 ]
 

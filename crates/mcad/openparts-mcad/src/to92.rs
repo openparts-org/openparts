@@ -2,18 +2,6 @@ use crate::defaults;
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
-/// Engineering defaults used only when the datasheet doesn't supply a
-/// value -- same policy as every other generator's own defaults, not a
-/// fact about any specific part.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 4.6;
-/// Drill diameter and pad size, both taken directly from a real KiCad
-/// reference footprint (`Package_TO_SOT_THT.pretty/TO-92.kicad_mod`,
-/// `KiCad/kicad-footprints`): `(pad ... (size 1.3 1.3) (drill 0.75) ...)`
-/// -- not invented.
-const DEFAULT_DRILL_DIAMETER_MM: f64 = 0.75;
-const DEFAULT_PAD_DIAMETER_MM: f64 = 1.3;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
-
 /// Generates Mechanical Geometry for a TO-92-style through-hole
 /// transistor package: a box-approximated body (this generator's own
 /// "not photorealistic" simplification of TO-92's real D-shaped/
@@ -37,16 +25,6 @@ const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
 /// pin1-vs-rest rule), pin 2 the recessed middle pin, pin 3 on the
 /// right.
 pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("to92") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("to92") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
     if package.lead_count != 3 {
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
@@ -60,8 +38,8 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
         &package.dimensions.body_length,
         "dimensions.body_length.nominal",
     )?;
-    let body_h =
-        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let body_h = defaults::stated(&package.dimensions.body_height)
+        .unwrap_or(crate::defaults::to92::BODY_HEIGHT);
 
     let body = Body {
         position: Point3 {
@@ -78,9 +56,9 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
     };
 
     let pad_size = Size3 {
-        x: DEFAULT_PAD_DIAMETER_MM,
-        y: DEFAULT_PAD_DIAMETER_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: crate::defaults::to92::PAD_DIAMETER,
+        y: crate::defaults::to92::PAD_DIAMETER,
+        z: crate::defaults::to92::LEAD_HEIGHT,
     };
     let leads = vec![
         Lead {
@@ -92,7 +70,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
         },
         Lead {
@@ -104,7 +82,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
         },
         Lead {
@@ -116,12 +94,17 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
         },
     ];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers: vec![],
@@ -140,7 +123,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/TO92-TEST"),
-            family: "to92".into(),
+            family: openparts_core::PackageFamily::To92,
             lead_count: 3,
             pitch: Dimension {
                 nominal: Some(1.27),
@@ -210,7 +193,7 @@ mod tests {
         assert_eq!(geometry.leads.len(), 3);
         for lead in &geometry.leads {
             assert_eq!(lead.mounting, Mounting::ThroughHole);
-            assert_eq!(lead.drill, Some(DEFAULT_DRILL_DIAMETER_MM));
+            assert_eq!(lead.drill, Some(crate::defaults::to92::DRILL_DIAMETER));
         }
     }
 
@@ -247,14 +230,6 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_to92(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_to92_family() {
-        let mut package = to92_test();
-        package.family = "sot".into();
-        let err = generate_to92(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 
     #[test]

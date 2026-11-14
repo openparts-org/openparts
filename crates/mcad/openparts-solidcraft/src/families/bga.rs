@@ -14,7 +14,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         .find(|l| l.number == "A1")
         .or(g.leads.first())
     else {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     };
     let (rows, cols) = match input.package.lead_layout.as_deref() {
         Some([r, c]) => (*r, *c),
@@ -24,7 +24,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     s.fragment(
         fragment!("bga"),
         &vars!(
-            pitch = mm(input.package.pitch.nominal.unwrap_or(0.8)),
+            pitch = mm(input.geometry.pitch.unwrap_or(0.8)),
             rows = rows,
             cols = cols,
             ball_d = mm(a1.size.x * 1.25),

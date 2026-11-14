@@ -5,23 +5,6 @@ use crate::{
 };
 use openparts_core::Package;
 
-/// Engineering defaults used only when the datasheet doesn't supply a
-/// value -- generator implementation details for a geometric
-/// approximation, never written back into Canonical Data as a fact
-/// (same policy as this crate's other generators' defaults).
-///
-/// Electrolytic can heights vary hugely by capacitance/voltage (a few
-/// mm to 30+ mm); this is a rough mid-range fallback, not a
-/// representative "typical" value.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 11.0;
-/// Drill diameter and pad size, both taken directly from a real
-/// official KiCad footprint (`Capacitor_THT.pretty/
-/// CP_Radial_D5.0mm_P2.00mm.kicad_mod`, `KiCad/kicad-footprints`):
-/// `(pad ... (size 1.6 1.6) (drill 0.8) ...)` -- not invented.
-const DEFAULT_DRILL_DIAMETER_MM: f64 = 0.8;
-const DEFAULT_PAD_DIAMETER_MM: f64 = 1.6;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
-
 /// Generates Mechanical Geometry for a radial electrolytic capacitor:
 /// a cylindrical can (`BodyShape::Cylinder`, not an axis-aligned box --
 /// see `MechanicalGeometry::Body`'s docs for why the exact shape is
@@ -38,16 +21,6 @@ const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
 /// `openparts_pcbcad::build_footprint` (first lead of a through-hole
 /// part is squared), not hardcoded here.
 pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("radial") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("radial") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
     if package.lead_count != 2 {
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
@@ -61,8 +34,8 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
         &package.dimensions.body_width,
         "dimensions.body_width.nominal",
     )?;
-    let body_h =
-        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let body_h = defaults::stated(&package.dimensions.body_height)
+        .unwrap_or(crate::defaults::radial::BODY_HEIGHT);
 
     let body = Body {
         position: Point3 {
@@ -79,9 +52,9 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
     };
 
     let pad_size = Size3 {
-        x: DEFAULT_PAD_DIAMETER_MM,
-        y: DEFAULT_PAD_DIAMETER_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: crate::defaults::radial::PAD_DIAMETER,
+        y: crate::defaults::radial::PAD_DIAMETER,
+        z: crate::defaults::radial::LEAD_HEIGHT,
     };
     let leads = vec![
         Lead {
@@ -93,7 +66,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::radial::DRILL_DIAMETER),
             slot: None,
         },
         Lead {
@@ -105,7 +78,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::radial::DRILL_DIAMETER),
             slot: None,
         },
     ];
@@ -120,6 +93,11 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -138,7 +116,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/RADIAL-D5.0-P2.00-TEST"),
-            family: "radial".into(),
+            family: openparts_core::PackageFamily::Radial,
             lead_count: 2,
             pitch: Dimension {
                 nominal: Some(2.0),
@@ -208,7 +186,7 @@ mod tests {
         assert_eq!(geometry.leads.len(), 2);
         for lead in &geometry.leads {
             assert_eq!(lead.mounting, Mounting::ThroughHole);
-            assert_eq!(lead.drill, Some(DEFAULT_DRILL_DIAMETER_MM));
+            assert_eq!(lead.drill, Some(crate::defaults::radial::DRILL_DIAMETER));
         }
     }
 
@@ -236,14 +214,6 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_radial(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_radial_family() {
-        let mut package = radial_d5();
-        package.family = "chip".into();
-        let err = generate_radial(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 
     #[test]

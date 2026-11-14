@@ -1609,6 +1609,9 @@ mod tests {
     fn footprint_pad_count_matches_lead_count() {
         use openparts_mcad::{Body, BodyShape, Lead, MechanicalGeometry, Mounting, Point3, Size3};
         let geometry = MechanicalGeometry {
+            family: openparts_mcad::PackageFamily::Qfn,
+            pitch: None,
+            details: openparts_mcad::Details::None,
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1669,6 +1672,9 @@ mod tests {
             slot: None,
         };
         let geometry = MechanicalGeometry {
+            family: openparts_mcad::PackageFamily::Qfn,
+            pitch: None,
+            details: openparts_mcad::Details::None,
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1713,6 +1719,9 @@ mod tests {
             slot: None,
         };
         let geometry = MechanicalGeometry {
+            family: openparts_mcad::PackageFamily::Qfn,
+            pitch: None,
+            details: openparts_mcad::Details::None,
             body: Body {
                 position: Point3 {
                     x: 0.0,
@@ -1749,6 +1758,9 @@ mod tests {
     fn build_footprint_references_the_sibling_step_by_default() {
         use openparts_mcad::{Body, BodyShape, MechanicalGeometry, Point3, Size3};
         let geometry = MechanicalGeometry {
+            family: openparts_mcad::PackageFamily::Qfn,
+            pitch: None,
+            details: openparts_mcad::Details::None,
             body: Body {
                 position: Point3 {
                     x: 0.0,

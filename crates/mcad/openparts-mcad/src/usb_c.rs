@@ -15,18 +15,7 @@ use crate::defaults::{self, value};
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
-/// Copper thickness drawn for an SMD pad (3D only).
-const PAD_T: f64 = 0.1;
-
 pub fn generate_usb_c(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("usb_c") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(g) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !g.eq_ignore_ascii_case("usb_c") {
-            return Err(McadError::UnsupportedGenerator(g.clone()));
-        }
-    }
     if package.pads.is_empty() {
         return Err(McadError::MissingDimension("pads"));
     }
@@ -79,12 +68,20 @@ pub fn generate_usb_c(package: &Package) -> Result<MechanicalGeometry, McadError
             position: Point3 {
                 x: p.x,
                 y: p.y,
-                z: if tht { 0.0 } else { PAD_T / 2.0 },
+                z: if tht {
+                    0.0
+                } else {
+                    crate::defaults::usb_c::PAD_T / 2.0
+                },
             },
             size: Size3 {
                 x: p.width,
                 y: p.length,
-                z: if tht { standoff } else { PAD_T },
+                z: if tht {
+                    standoff
+                } else {
+                    crate::defaults::usb_c::PAD_T
+                },
             },
             mounting: if tht {
                 Mounting::ThroughHole
@@ -97,6 +94,11 @@ pub fn generate_usb_c(package: &Package) -> Result<MechanicalGeometry, McadError
     }
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::UsbC(usb_c_features(package)),
         body: Body {
             position: Point3 {
                 x: 0.0,
@@ -127,8 +129,8 @@ pub struct UsbCFeatures {
 
 pub fn usb_c_features(package: &Package) -> UsbCFeatures {
     UsbCFeatures {
-        shell_thickness: 0.2,
-        tail_length: value(&package.dimensions.tail_length).unwrap_or(1.0),
+        shell_thickness: crate::defaults::usb_c::SHELL_THICKNESS,
+        tail_length: value(&package.dimensions.tail_length).unwrap_or(crate::defaults::usb_c::TAIL_LENGTH),
     }
 }
 

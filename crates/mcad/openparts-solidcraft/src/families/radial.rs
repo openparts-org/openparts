@@ -11,7 +11,7 @@ use openparts_mcad::{Lead, MarkerKind};
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let leads: Vec<&Lead> = input.geometry.leads.iter().collect();
     if leads.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     let b = input.geometry.body.size;
     match input.category {

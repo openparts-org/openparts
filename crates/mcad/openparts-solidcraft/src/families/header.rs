@@ -24,20 +24,21 @@ use crate::common::{self};
 use crate::script::{looks, mm};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
-use openparts_mcad::{header_features, HeaderKind};
+use openparts_mcad::{Details, HeaderKind};
 
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
-    let package = input.package;
-    let f = header_features(package)
-        .map_err(|e| ModelError::UnsupportedFamily(format!("{} ({e})", package.family)))?;
+    let _package = input.package;
+    let Details::Header(f) = g.details else {
+        return Err(ModelError::MissingDetails(g.family));
+    };
     let Some(first) = g.leads.first() else {
-        return Err(ModelError::NoLeads(package.family.clone()));
+        return Err(ModelError::NoLeads(g.family));
     };
     let pitch = if f.pins_per_row > 1 {
         first.position.y - g.leads[f.rows as usize].position.y
     } else {
-        package.pitch.nominal.unwrap_or(2.54)
+        g.pitch.unwrap_or(2.54)
     };
 
     common::body_params(s, g)?;
@@ -83,9 +84,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             Some("standoff + body_h - entry_d - cavity_d")
         }
         HeaderKind::Shrouded => {
-            let shroud = f
-                .shroud
-                .ok_or_else(|| ModelError::UnsupportedFamily(package.family.clone()))?;
+            let shroud = f.shroud.ok_or(ModelError::MissingDetails(g.family))?;
             s.fragment(
                 fragment!("shroud_cavity"),
                 &vars!(

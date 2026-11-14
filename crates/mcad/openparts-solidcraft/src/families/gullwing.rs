@@ -89,12 +89,12 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
     let g = input.geometry;
     let rows = common::perimeter_rows(g);
     if rows.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     let form = lead_form(input)?;
     body(s, input, family, form)?;
     lead_params(s, input, &rows, family, form)?;
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
     let leads = rows_of(s, &rows, &layouts, "lead_w")?;
     s.paint(&["Body".into()], looks::MOLD);
     s.paint(&leads, looks::TIN);
@@ -109,10 +109,10 @@ pub fn lead_form(input: &ModelInput<'_>) -> Result<(f64, f64, f64), ModelError> 
             foot_length,
             standoff,
         }) => Ok((thickness, foot_length, standoff)),
-        _ => Err(ModelError::UnsupportedFamily(format!(
-            "{} (geometry has no gull-wing lead form)",
-            input.package.family
-        ))),
+        _ => Err(ModelError::LeadForm {
+            family: input.geometry.family,
+            expected: "gull-wing",
+        }),
     }
 }
 

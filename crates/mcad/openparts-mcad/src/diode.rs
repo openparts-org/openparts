@@ -12,11 +12,7 @@ use crate::defaults::{self, value, Axis, GullWing, GullWingDefaults};
 use crate::{
     Body, BodyShape, Lead, LeadForm, McadError, MechanicalGeometry, Mounting, Point3, Size3,
 };
-use openparts_core::Package;
-
-/// Lead-width cap as a fraction of the body width, when unstated.
-const SOD_LEAD_RATIO: f64 = 0.4;
-const DO214_LEAD_RATIO: f64 = 0.55;
+use openparts_core::{Package, PackageFamily as F};
 
 /// Generates Mechanical Geometry for an SOD-class package: family `sod`
 /// (gull-wing leads bent down to the board, SOD-123/323/523) or
@@ -24,18 +20,21 @@ const DO214_LEAD_RATIO: f64 = 0.55;
 /// SOD-123F/FL, SOD-323F). Lead toes land at `overall_length / 2`;
 /// unstated lead dimensions fall back to `defaults::SOD` / `SOD_FLAT`.
 pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    let flat = match package.family.to_ascii_lowercase().as_str() {
-        "sod" => false,
-        "sod_flat" => true,
-        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    let flat = match package.family {
+        F::Sod => false,
+        F::SodFlat => true,
+        other => return Err(McadError::UnsupportedFamily(other)),
     };
-    check_generator(package, &["sod", "sod_flat"])?;
     let family_defaults = if flat {
         &defaults::SOD_FLAT
     } else {
         &defaults::SOD
     };
-    let (body, shape, reach) = resolve(package, family_defaults, SOD_LEAD_RATIO)?;
+    let (body, shape, reach) = resolve(
+        package,
+        family_defaults,
+        crate::defaults::diode::SOD_LEAD_RATIO,
+    )?;
     let half = body.size.x / 2.0;
     let t = shape.thickness;
     let leads = terminals(|sign| Lead {
@@ -60,6 +59,9 @@ pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> 
         shape.lead_form()
     };
     Ok(MechanicalGeometry {
+        family: package.family,
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::None,
         body,
         leads,
         markers: vec![],
@@ -73,11 +75,11 @@ pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> 
 /// `lead_length` (L) in from `overall_length / 2`. The body sits on the
 /// folded leads (its underside at the lead thickness).
 pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("do214") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    check_generator(package, &["do214"])?;
-    let (mut body, shape, reach) = resolve(package, &defaults::DO214, DO214_LEAD_RATIO)?;
+    let (mut body, shape, reach) = resolve(
+        package,
+        &defaults::DO214,
+        crate::defaults::diode::DO214_LEAD_RATIO,
+    )?;
     let t = shape.thickness;
     let half = body.size.x / 2.0;
     let end = half + reach;
@@ -107,6 +109,9 @@ pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError
         slot: None,
     });
     Ok(MechanicalGeometry {
+        family: package.family,
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::None,
         body,
         leads,
         markers: vec![],
@@ -115,15 +120,6 @@ pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError
             foot_length: foot,
         }),
     })
-}
-
-fn check_generator(package: &Package, accepted: &[&str]) -> Result<(), McadError> {
-    match package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        Some(g) if !accepted.iter().any(|a| g.eq_ignore_ascii_case(a)) => {
-            Err(McadError::UnsupportedGenerator(g.clone()))
-        }
-        _ => Ok(()),
-    }
 }
 
 /// The body (X = body_length), the resolved lead shape and the reach
@@ -237,7 +233,7 @@ mod tests {
     #[test]
     fn sod_flat_has_flat_leads_and_small_bodies_get_narrow_default_leads() {
         let mut p = sod123();
-        p.family = "sod_flat".into();
+        p.family = openparts_core::PackageFamily::SodFlat;
         p.dimensions.lead_width = None;
         p.dimensions.body_width = openparts_core::Dimension {
             nominal: Some(0.8),
@@ -285,10 +281,6 @@ mod tests {
         assert!(matches!(
             generate_do214(&p),
             Err(McadError::InconsistentDimensions(_))
-        ));
-        assert!(matches!(
-            generate_do214(&sod123()),
-            Err(McadError::UnsupportedFamily(_))
         ));
     }
 }

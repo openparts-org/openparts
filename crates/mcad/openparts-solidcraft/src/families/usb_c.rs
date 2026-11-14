@@ -11,9 +11,11 @@ use openparts_mcad::Mounting;
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     if g.leads.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
-    let f = openparts_mcad::usb_c_features(input.package);
+    let openparts_mcad::Details::UsbC(f) = g.details else {
+        return Err(ModelError::MissingDetails(g.family));
+    };
     let b = &g.body;
     let (w, h, y) = (b.size.x, b.size.z, b.position.y);
     let standoff = b.position.z - h / 2.0;

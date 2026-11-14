@@ -9,7 +9,7 @@ use crate::{ModelError, ModelInput, Script};
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     if g.leads.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
     let body = &g.body;
     common::body_params(s, g)?;

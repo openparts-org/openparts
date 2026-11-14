@@ -8,9 +8,11 @@ use crate::{ModelError, ModelInput, Script};
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     if g.leads.is_empty() {
-        return Err(ModelError::NoLeads(input.package.family.clone()));
+        return Err(ModelError::NoLeads(input.geometry.family));
     }
-    let f = openparts_mcad::to220_features(input.package);
+    let openparts_mcad::Details::To220(f) = g.details else {
+        return Err(ModelError::MissingDetails(g.family));
+    };
     let b = &g.body;
     crate::common::body_params(s, g)?;
     s.fragment(

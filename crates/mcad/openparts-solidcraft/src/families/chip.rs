@@ -57,7 +57,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let term = g
         .leads
         .first()
-        .ok_or_else(|| ModelError::NoLeads(input.package.family.clone()))?;
+        .ok_or(ModelError::NoLeads(input.geometry.family))?;
     let b = g.body.size;
     common::body_params(s, g)?;
     // The footprint's terminal length, but never more than 30 % of the

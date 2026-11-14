@@ -3,7 +3,7 @@ use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
 };
-use openparts_core::Package;
+use openparts_core::{Package, PackageFamily as F};
 
 /// Generates Mechanical Geometry for a QFN/DFN-style leadframe package:
 /// a rectangular body with `lead_count / 4` bottom-side contact pads
@@ -31,22 +31,12 @@ use openparts_core::Package;
 /// each side centred at `pitch`; `dimensions.lead_inset` sets the
 /// terminals in from the body edge.
 pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    let family = package.family.to_ascii_lowercase();
-    let kind = match family.as_str() {
-        "qfn" => Kind::Qfn,
-        "dfn" | "son" => Kind::TwoSided,
-        "lga" => Kind::Lga,
-        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    let kind = match package.family {
+        F::Qfn => Kind::Qfn,
+        F::Dfn | F::Son => Kind::TwoSided,
+        F::Lga => Kind::Lga,
+        other => return Err(McadError::UnsupportedFamily(other)),
     };
-    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        let g = generator.to_ascii_lowercase();
-        let ok = g == "qfn"
-            || (kind == Kind::TwoSided && (g == "dfn" || g == "son"))
-            || (kind == Kind::Lga && g == "lga");
-        if !ok {
-            return Err(McadError::UnsupportedGenerator(generator.clone()));
-        }
-    }
 
     let n = package.lead_count;
     // Terminals per side: [left, bottom, right, top].
@@ -58,7 +48,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 .lead_layout
                 .as_ref()
                 .ok_or(McadError::MissingLeadLayout {
-                    family: package.family.clone(),
+                    family: package.family,
                 })?;
             match layout.as_slice() {
                 [l, b, r, t] if l + b + r + t == n && n > 0 => [*l, *b, *r, *t],
@@ -197,6 +187,11 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -222,7 +217,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/QFN8-TEST"),
-            family: "qfn".into(),
+            family: openparts_core::PackageFamily::Qfn,
             lead_count: 8,
             pitch: Dimension {
                 nominal: Some(0.5),
@@ -328,7 +323,7 @@ mod tests {
     #[test]
     fn dfn_has_two_rows_numbered_like_soic() {
         let mut package = qfn8_with_ep();
-        package.family = "dfn".into();
+        package.family = openparts_core::PackageFamily::Dfn;
         let g = generate_qfn(&package).unwrap();
         let pos = |n: &str| g.leads.iter().find(|l| l.number == n).unwrap().position;
         assert_eq!(g.leads.len(), 9);
@@ -338,7 +333,7 @@ mod tests {
         assert!((pos("5").y + 0.75).abs() < 1e-9, "right edge upward");
         assert!((pos("8").y - 0.75).abs() < 1e-9);
         package.lead_count = 6;
-        package.family = "son".into();
+        package.family = openparts_core::PackageFamily::Son;
         assert_eq!(generate_qfn(&package).unwrap().leads.len(), 7);
         package.lead_count = 7;
         assert!(generate_qfn(&package).is_err());
@@ -347,7 +342,7 @@ mod tests {
     #[test]
     fn lga_uses_per_side_counts_and_insets_its_terminals() {
         let mut package = qfn8_with_ep();
-        package.family = "lga".into();
+        package.family = openparts_core::PackageFamily::Lga;
         package.dimensions.exposed_pad = None;
         assert!(matches!(
             generate_qfn(&package),

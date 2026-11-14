@@ -46,7 +46,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: PackageId::from("standards/SOIC8-TEST"),
-            family: "soic".into(),
+            family: openparts_core::PackageFamily::Soic,
             lead_count: 8,
             pitch: dim(1.27),
             dimensions: PackageDimensions {

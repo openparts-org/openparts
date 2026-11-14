@@ -3,7 +3,7 @@ use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
 };
-use openparts_core::Package;
+use openparts_core::{Package, PackageFamily as F};
 
 /// Generates Mechanical Geometry for a SOIC/SOP-style package (and
 /// TSSOP/SSOP/MSOP, see below): a
@@ -21,24 +21,15 @@ use openparts_core::Package;
 ///
 /// The same two-row layout serves TSSOP (JEDEC MO-153), SSOP (MO-150) and
 /// MSOP/VSSOP (MO-187): `family` picks only the defaults used for
-/// dimensions the package doesn't state. Their `geometry.generator` may
-/// name the family itself or `soic`.
+/// dimensions the package doesn't state.
 pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    let family = package.family.to_ascii_lowercase();
-    let family_defaults = match family.as_str() {
-        "soic" => &defaults::SOIC,
-        "tssop" => &defaults::TSSOP,
-        "ssop" => &defaults::SSOP,
-        "msop" => &defaults::MSOP,
-        _ => return Err(McadError::UnsupportedFamily(package.family.clone())),
+    let family_defaults = match package.family {
+        F::Soic => &defaults::SOIC,
+        F::Tssop => &defaults::TSSOP,
+        F::Ssop => &defaults::SSOP,
+        F::Msop => &defaults::MSOP,
+        other => return Err(McadError::UnsupportedFamily(other)),
     };
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("soic") && !generator.eq_ignore_ascii_case(&family) {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
 
     let lead_count = package.lead_count;
     if lead_count == 0 || !lead_count.is_multiple_of(2) {
@@ -131,6 +122,11 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -149,7 +145,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/SOIC8-TEST"),
-            family: "soic".into(),
+            family: openparts_core::PackageFamily::Soic,
             lead_count: 8,
             pitch: Dimension {
                 nominal: Some(1.27),
@@ -254,14 +250,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_soic_family() {
-        let mut package = soic8();
-        package.family = "qfn".into();
-        let err = generate_soic(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
-    }
-
-    #[test]
     fn rejects_odd_lead_count() {
         let mut package = soic8();
         package.lead_count = 7;
@@ -280,7 +268,7 @@ mod tests {
 
     fn tssop20() -> Package {
         let mut package = soic8();
-        package.family = "tssop".into();
+        package.family = openparts_core::PackageFamily::Tssop;
         package.lead_count = 20;
         package.pitch.nominal = Some(0.65);
         package.dimensions.body_width.nominal = Some(4.4);
@@ -356,7 +344,7 @@ mod tests {
     #[test]
     fn ssop_and_msop_have_their_own_defaults() {
         let mut ssop = tssop20();
-        ssop.family = "ssop".into();
+        ssop.family = openparts_core::PackageFamily::Ssop;
         ssop.dimensions.body_width.nominal = Some(5.3);
         let toe = |p: &Package| {
             let g = generate_soic(p).unwrap();
@@ -364,7 +352,7 @@ mod tests {
         };
         assert!((toe(&ssop) + 7.8 / 2.0).abs() < 1e-9);
         let mut msop = soic8();
-        msop.family = "msop".into();
+        msop.family = openparts_core::PackageFamily::Msop;
         msop.pitch.nominal = Some(0.65);
         msop.dimensions.body_width.nominal = Some(3.0);
         msop.dimensions.body_length.nominal = Some(3.0);
@@ -372,14 +360,14 @@ mod tests {
     }
 
     #[test]
-    fn generator_may_name_the_family_or_soic_but_nothing_else() {
+    fn generator_must_name_the_package_family() {
         let mut package = tssop20();
-        for (generator, ok) in [("tssop", true), ("soic", true), ("lqfp", false)] {
+        for (generator, ok) in [("tssop", true), ("TSSOP", true), ("soic", false)] {
             package.geometry = Some(openparts_core::PackageGeometrySpec {
                 geometry_type: openparts_core::GeometryType::Parametric,
                 generator: Some(generator.into()),
             });
-            assert_eq!(generate_soic(&package).is_ok(), ok, "{generator}");
+            assert_eq!(crate::generate(&package).is_ok(), ok, "{generator}");
         }
         package.geometry = None;
         package.pitch.nominal = None;

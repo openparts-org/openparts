@@ -5,14 +5,6 @@ use crate::{
 };
 use openparts_core::Package;
 
-/// Drill diameter and pad size, both taken directly from a real KiCad
-/// reference footprint (`Diode_THT.pretty/
-/// D_DO-41_SOD81_P10.16mm_Horizontal.kicad_mod`, `KiCad/kicad-footprints`):
-/// `(pad ... (size 2.2 2.2) (drill 1.1) ...)` -- not invented.
-const DEFAULT_DRILL_DIAMETER_MM: f64 = 1.1;
-const DEFAULT_PAD_DIAMETER_MM: f64 = 2.2;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
-
 /// Generates Mechanical Geometry for an axial-leaded through-hole part
 /// (the classic DO-41-style diode shape): a cylindrical can
 /// (`BodyShape::CylinderX` -- lying horizontally, axis along X, unlike
@@ -33,16 +25,6 @@ const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
 /// convention -- a real, deliberate difference between the two real
 /// reference footprints, not an inconsistency to "fix".
 pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("axial") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("axial") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
     if package.lead_count != 2 {
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
@@ -78,9 +60,9 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
     };
 
     let pad_size = Size3 {
-        x: DEFAULT_PAD_DIAMETER_MM,
-        y: DEFAULT_PAD_DIAMETER_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: crate::defaults::axial::PAD_DIAMETER,
+        y: crate::defaults::axial::PAD_DIAMETER,
+        z: crate::defaults::axial::LEAD_HEIGHT,
     };
     let leads = vec![
         Lead {
@@ -92,7 +74,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
         },
         Lead {
@@ -104,7 +86,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             },
             size: pad_size,
             mounting: Mounting::ThroughHole,
-            drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+            drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
         },
     ];
@@ -120,6 +102,11 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -138,7 +125,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/AXIAL-DO41-TEST"),
-            family: "axial".into(),
+            family: openparts_core::PackageFamily::Axial,
             lead_count: 2,
             pitch: Dimension {
                 nominal: Some(10.16),
@@ -208,7 +195,7 @@ mod tests {
         assert_eq!(geometry.leads.len(), 2);
         for lead in &geometry.leads {
             assert_eq!(lead.mounting, Mounting::ThroughHole);
-            assert_eq!(lead.drill, Some(DEFAULT_DRILL_DIAMETER_MM));
+            assert_eq!(lead.drill, Some(crate::defaults::axial::DRILL_DIAMETER));
         }
     }
 
@@ -248,14 +235,6 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_axial(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_axial_family() {
-        let mut package = do41_test();
-        package.family = "radial".into();
-        let err = generate_axial(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 
     #[test]

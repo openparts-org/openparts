@@ -12,7 +12,7 @@ use crate::common::{self, Row, Side};
 use crate::script::{looks, mm, Look};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
-use openparts_mcad::{module_features, Lead, ModuleFeatures};
+use openparts_mcad::{Details, Lead, ModuleFeatures};
 
 /// Solder mask over FR-4.
 const SOLDER_MASK: Look = Look {
@@ -25,8 +25,9 @@ const SOLDER_MASK: Look = Look {
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
     let package = input.package;
-    let features = module_features(package)
-        .map_err(|e| ModelError::UnsupportedFamily(format!("{} ({e})", package.family)))?;
+    let Details::Module(features) = g.details else {
+        return Err(ModelError::MissingDetails(g.family));
+    };
     let is_aux = |number: &str| package.aux_pads.iter().any(|a| a == number);
 
     // The edge pins only (an extra pad row can sit anywhere on the
@@ -45,7 +46,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         })
         .collect();
     if rows.len() != 2 {
-        return Err(ModelError::NoLeads(package.family.clone()));
+        return Err(ModelError::NoLeads(g.family));
     }
     let half_w = g.body.size.x / 2.0;
     let (pad_len, pad_w) = rows[0].lead_size();
@@ -57,7 +58,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         fragment!("module_board"),
         &vars!(pad_w = mm(pad_w), edge_pad = mm(edge_pad)),
     )?;
-    let layouts = common::row_layouts(s, &rows, package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, g.pitch);
 
     let ModuleFeatures {
         holes,
@@ -141,7 +142,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             let n = aux.len() as u32;
             if n > 1 {
                 let spacing = aux[1].position.x - aux[0].position.x;
-                let spacing = match package.pitch.nominal {
+                let spacing = match g.pitch {
                     Some(p) if (p - spacing).abs() < 1e-6 => "pitch".to_string(),
                     _ => mm(spacing),
                 };

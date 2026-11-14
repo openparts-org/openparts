@@ -31,14 +31,6 @@ use openparts_core::Package;
 /// docs). Every pad dimension is required: modules have no JEDEC outline
 /// a default could come from.
 pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("module") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !generator.eq_ignore_ascii_case("module") {
-            return Err(McadError::UnsupportedGenerator(generator.clone()));
-        }
-    }
     let lead_count = package.lead_count;
     if lead_count == 0 || lead_count % 2 != 0 {
         return Err(McadError::InvalidLeadCount(lead_count));
@@ -147,6 +139,9 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
         },
     }];
     Ok(MechanicalGeometry {
+        family: package.family,
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::Module(module_features(package)?),
         body,
         leads,
         markers,
@@ -254,7 +249,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/MODULE-TEST"),
-            family: "module".into(),
+            family: openparts_core::PackageFamily::Module,
             lead_count: 40,
             pitch: mm(2.54),
             dimensions: PackageDimensions {
@@ -419,12 +414,6 @@ mod tests {
         assert!(matches!(
             generate_module(&p),
             Err(McadError::InconsistentDimensions(_))
-        ));
-        let mut p = pico();
-        p.family = "dip".into();
-        assert!(matches!(
-            generate_module(&p),
-            Err(McadError::UnsupportedFamily(_))
         ));
         assert!(crate::generate(&pico()).is_ok(), "dispatched by family");
     }

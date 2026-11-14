@@ -22,33 +22,34 @@ use openparts_mcad::Lead;
 
 pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
     let mut s = Script::new();
-    match input.package.family.to_ascii_lowercase().as_str() {
-        "lqfp" | "tqfp" => gullwing::build(&mut s, input, &gullwing::QFP)?,
-        "soic" => gullwing::build(&mut s, input, &gullwing::SOIC)?,
-        "tssop" | "msop" => gullwing::build(&mut s, input, &gullwing::THIN_SOP)?,
-        "ssop" => gullwing::build(&mut s, input, &gullwing::SSOP)?,
-        "sot223" => tabbed::sot223(&mut s, input)?,
-        "dpak" | "to252" | "d2pak" | "to263" => tabbed::dpak(&mut s, input)?,
-        "sod" => diode::sod(&mut s, input)?,
-        "sod_flat" => diode::sod_flat(&mut s, input)?,
-        "do214" => diode::do214(&mut s, input)?,
-        "to220" => to220::build(&mut s, input)?,
-        "tact_switch_smd" | "tact_switch_tht" => switch::build(&mut s, input)?,
-        "usb_c" => usb_c::build(&mut s, input)?,
-        "sot" => gullwing::build(&mut s, input, &gullwing::SOT)?,
-        "qfn" | "dfn" | "son" | "lga" => qfn::build(&mut s, input)?,
-        "chip" => chip::build(&mut s, input)?,
-        "radial" => radial::build(&mut s, input)?,
-        "axial" => axial::build(&mut s, input)?,
-        "to92" => to92::build(&mut s, input)?,
-        "dip" => dip::dip(&mut s, input)?,
-        "sip" => dip::sip(&mut s, input)?,
-        "bga" => bga::build(&mut s, input)?,
-        "module" => module::build(&mut s, input)?,
-        "header" | "socket" | "shrouded_header" | "right_angle_header" => {
+    use openparts_mcad::PackageFamily as F;
+    // Exhaustive: a new family needs a model builder before this compiles.
+    match input.geometry.family {
+        F::Lqfp => gullwing::build(&mut s, input, &gullwing::QFP)?,
+        F::Soic => gullwing::build(&mut s, input, &gullwing::SOIC)?,
+        F::Tssop | F::Msop => gullwing::build(&mut s, input, &gullwing::THIN_SOP)?,
+        F::Ssop => gullwing::build(&mut s, input, &gullwing::SSOP)?,
+        F::Sot => gullwing::build(&mut s, input, &gullwing::SOT)?,
+        F::Sot223 => tabbed::sot223(&mut s, input)?,
+        F::Dpak | F::D2pak => tabbed::dpak(&mut s, input)?,
+        F::Sod => diode::sod(&mut s, input)?,
+        F::SodFlat => diode::sod_flat(&mut s, input)?,
+        F::Do214 => diode::do214(&mut s, input)?,
+        F::To220 => to220::build(&mut s, input)?,
+        F::TactSwitchSmd | F::TactSwitchTht => switch::build(&mut s, input)?,
+        F::UsbC => usb_c::build(&mut s, input)?,
+        F::Qfn | F::Dfn | F::Son | F::Lga => qfn::build(&mut s, input)?,
+        F::Chip => chip::build(&mut s, input)?,
+        F::Radial => radial::build(&mut s, input)?,
+        F::Axial => axial::build(&mut s, input)?,
+        F::To92 => to92::build(&mut s, input)?,
+        F::Dip => dip::dip(&mut s, input)?,
+        F::Sip => dip::sip(&mut s, input)?,
+        F::Bga => bga::build(&mut s, input)?,
+        F::Module => module::build(&mut s, input)?,
+        F::Header | F::Socket | F::ShroudedHeader | F::RightAngleHeader => {
             header::build(&mut s, input)?
         }
-        other => return Err(ModelError::UnsupportedFamily(other.to_string())),
     }
     Ok(s)
 }

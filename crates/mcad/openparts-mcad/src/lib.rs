@@ -24,53 +24,49 @@ mod to220;
 mod to92;
 mod usb_c;
 
-pub use axial::generate_axial;
-pub use bga::generate_bga;
-pub use chip::generate_chip;
-pub use diode::{generate_do214, generate_sod};
-pub use dip::generate_dip;
-pub use header::{generate_header, header_features, HeaderFeatures, HeaderKind, Shroud};
-pub use lqfp::generate_lqfp;
-pub use module::{generate_module, module_features, ModuleFeatures, ModuleHoles, MountingHoles};
-pub use qfn::generate_qfn;
-pub use radial::generate_radial;
-pub use sip::generate_sip;
-pub use soic::generate_soic;
-pub use sot::generate_sot;
-pub use tab::{generate_d2pak, generate_dpak, generate_sot223};
-pub use tact::{generate_tact_switch, switch_features, SwitchFeatures};
-pub use to220::{generate_to220, to220_features, To220Features};
-pub use to92::generate_to92;
-pub use usb_c::{generate_usb_c, usb_c_features, UsbCFeatures};
+pub use header::{HeaderFeatures, HeaderKind, Shroud};
+pub use module::{ModuleFeatures, ModuleHoles, MountingHoles};
+pub use openparts_core::PackageFamily;
+pub use tact::SwitchFeatures;
+pub use to220::To220Features;
+pub use usb_c::UsbCFeatures;
 
 use openparts_core::Package;
 
-/// Dispatches to the generator matching `package.family`, so callers
-/// (CLI, tests) don't need to know which generator a given Package uses.
+/// Generates `package`'s Mechanical Geometry with its family's
+/// generator. The match is exhaustive: a family added to
+/// [`PackageFamily`] needs a generator here before the crate compiles.
 pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    match package.family.to_ascii_lowercase().as_str() {
-        "lqfp" => generate_lqfp(package),
-        "qfn" | "dfn" | "son" | "lga" => generate_qfn(package),
-        "chip" => generate_chip(package),
-        "soic" | "tssop" | "ssop" | "msop" => generate_soic(package),
-        "sot223" => generate_sot223(package),
-        "dpak" | "to252" => generate_dpak(package),
-        "d2pak" | "to263" => generate_d2pak(package),
-        "sod" | "sod_flat" => generate_sod(package),
-        "do214" => generate_do214(package),
-        "to220" => generate_to220(package),
-        "tact_switch_smd" | "tact_switch_tht" => generate_tact_switch(package),
-        "usb_c" => generate_usb_c(package),
-        "sot" => generate_sot(package),
-        "radial" => generate_radial(package),
-        "axial" => generate_axial(package),
-        "to92" => generate_to92(package),
-        "dip" => generate_dip(package),
-        "sip" => generate_sip(package),
-        "bga" => generate_bga(package),
-        "module" => generate_module(package),
-        "header" | "socket" | "shrouded_header" | "right_angle_header" => generate_header(package),
-        _ => Err(McadError::UnsupportedFamily(package.family.clone())),
+    use PackageFamily as F;
+    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
+        if !package.family.is_named(generator) {
+            return Err(McadError::UnsupportedGenerator(generator.clone()));
+        }
+    }
+    match package.family {
+        F::Lqfp => lqfp::generate_lqfp(package),
+        F::Qfn | F::Dfn | F::Son | F::Lga => qfn::generate_qfn(package),
+        F::Soic | F::Tssop | F::Ssop | F::Msop => soic::generate_soic(package),
+        F::Sot => sot::generate_sot(package),
+        F::Sot223 => tab::generate_sot223(package),
+        F::Dpak => tab::generate_dpak(package),
+        F::D2pak => tab::generate_d2pak(package),
+        F::Sod | F::SodFlat => diode::generate_sod(package),
+        F::Do214 => diode::generate_do214(package),
+        F::To220 => to220::generate_to220(package),
+        F::Chip => chip::generate_chip(package),
+        F::Radial => radial::generate_radial(package),
+        F::Axial => axial::generate_axial(package),
+        F::To92 => to92::generate_to92(package),
+        F::Dip => dip::generate_dip(package),
+        F::Sip => sip::generate_sip(package),
+        F::Bga => bga::generate_bga(package),
+        F::Module => module::generate_module(package),
+        F::Header | F::Socket | F::ShroudedHeader | F::RightAngleHeader => {
+            header::generate_header(package)
+        }
+        F::TactSwitchSmd | F::TactSwitchTht => tact::generate_tact_switch(package),
+        F::UsbC => usb_c::generate_usb_c(package),
     }
 }
 
@@ -198,8 +194,28 @@ pub enum LeadForm {
     },
 }
 
+/// What a family's detailed 3D model needs beyond the body and leads,
+/// resolved here (datasheet value, else this crate's default) so the 3D
+/// builder never reads the Package's dimensions itself.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Details {
+    None,
+    Header(HeaderFeatures),
+    Module(ModuleFeatures),
+    To220(To220Features),
+    Switch(SwitchFeatures),
+    UsbC(UsbCFeatures),
+    /// TO-252/TO-263: lead positions cut short at the body, as (lead
+    /// number, Y position).
+    TrimmedLeads(Vec<(u32, f64)>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MechanicalGeometry {
+    pub family: PackageFamily,
+    /// The lead pitch the geometry was drawn at, when the package has one.
+    pub pitch: Option<f64>,
+    pub details: Details,
     pub body: Body,
     pub leads: Vec<Lead>,
     pub markers: Vec<Marker>,
@@ -210,10 +226,10 @@ pub struct MechanicalGeometry {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum McadError {
-    #[error(
-        "package family \"{0}\" has no supported generator (lqfp, qfn, dfn, son, lga, chip, soic, tssop, ssop, msop, sot, sot223, dpak, d2pak, sod, sod_flat, do214, to220, tact_switch_smd, tact_switch_tht, usb_c, radial, axial, to92, dip, sip, bga, module, header, socket, shrouded_header, right_angle_header are implemented)"
-    )]
-    UnsupportedFamily(String),
+    /// A generator was handed a family it doesn't draw (an internal
+    /// dispatch error).
+    #[error("this generator does not draw package family \"{0}\"")]
+    UnsupportedFamily(PackageFamily),
     #[error("package.geometry.generator \"{0}\" does not match this package's family")]
     UnsupportedGenerator(String),
     #[error("missing required dimension: {0}")]
@@ -225,7 +241,7 @@ pub enum McadError {
     /// `sot223`/`dpak`: the package has no `tab`, so the tab's pad number
     /// (which vendors assign differently) is unknown.
     #[error("family \"{family}\" requires a tab (its pad number as the source gives it)")]
-    MissingTab { family: String },
+    MissingTab { family: PackageFamily },
     #[error("invalid package tab: {0}")]
     InvalidTab(String),
     #[error("lead_count ({0}) is not valid for this package family")]
@@ -238,7 +254,7 @@ pub enum McadError {
         "family \"{family}\" requires an explicit lead_layout (its physical pin-to-side \
          assignment isn't derivable from lead_count alone)"
     )]
-    MissingLeadLayout { family: String },
+    MissingLeadLayout { family: PackageFamily },
     /// Reused by both `sot` (where `layout` must sum to `lead_count`)
     /// and `bga` (where `layout` is `[rows, cols]` and must multiply to
     /// `lead_count`) -- the message stays generic across both meanings.

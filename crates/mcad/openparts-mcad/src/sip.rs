@@ -2,18 +2,6 @@ use crate::defaults;
 use crate::{Body, BodyShape, Lead, McadError, MechanicalGeometry, Mounting, Point3, Size3};
 use openparts_core::Package;
 
-/// Drill diameter and pad size, both taken directly from a real KiCad
-/// reference footprint (`Package_SIP.pretty/SIP-8_19x3mm_P2.54mm.kicad_mod`,
-/// `KiCad/kicad-footprints`): `(pad ... (size 1.45 1.45) (drill 0.85) ...)`
-/// -- not invented.
-const DEFAULT_DRILL_DIAMETER_MM: f64 = 0.85;
-const DEFAULT_PAD_DIAMETER_MM: f64 = 1.45;
-const DEFAULT_LEAD_HEIGHT_MM: f64 = 3.0;
-/// Generator default when the datasheet doesn't supply a body height --
-/// same policy as every other family's own defaults, not a fact about
-/// any specific part.
-const DEFAULT_BODY_HEIGHT_MM: f64 = 3.0;
-
 /// Generates Mechanical Geometry for a SIP-style through-hole package:
 /// a rectangular body with all `lead_count` leads in a single straight
 /// row on one edge, evenly spaced by `pitch` -- unlike
@@ -27,17 +15,6 @@ const DEFAULT_BODY_HEIGHT_MM: f64 = 3.0;
 ///
 /// Numbering: pin 1 at the leftmost position, increasing left to right.
 pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("sip") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("sip") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
-
     let lead_count = package.lead_count;
     if lead_count == 0 {
         return Err(McadError::InvalidLeadCount(lead_count));
@@ -52,8 +29,8 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
         &package.dimensions.body_length,
         "dimensions.body_length.nominal",
     )?;
-    let body_h =
-        defaults::stated(&package.dimensions.body_height).unwrap_or(DEFAULT_BODY_HEIGHT_MM);
+    let body_h = defaults::stated(&package.dimensions.body_height)
+        .unwrap_or(crate::defaults::sip::BODY_HEIGHT);
 
     let body = Body {
         position: Point3 {
@@ -72,9 +49,9 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
     let half_span = (lead_count as f64 - 1.0) * pitch / 2.0;
 
     let pad_size = Size3 {
-        x: DEFAULT_PAD_DIAMETER_MM,
-        y: DEFAULT_PAD_DIAMETER_MM,
-        z: DEFAULT_LEAD_HEIGHT_MM,
+        x: crate::defaults::sip::PAD_DIAMETER,
+        y: crate::defaults::sip::PAD_DIAMETER,
+        z: crate::defaults::sip::LEAD_HEIGHT,
     };
 
     let leads = (0..lead_count)
@@ -85,13 +62,18 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 position: Point3 { x, y: 0.0, z: 0.0 },
                 size: pad_size,
                 mounting: Mounting::ThroughHole,
-                drill: Some(DEFAULT_DRILL_DIAMETER_MM),
+                drill: Some(crate::defaults::sip::DRILL_DIAMETER),
                 slot: None,
             }
         })
         .collect();
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers: vec![],
@@ -110,7 +92,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/SIP8-TEST"),
-            family: "sip".into(),
+            family: openparts_core::PackageFamily::Sip,
             lead_count: 8,
             pitch: Dimension {
                 nominal: Some(2.54),
@@ -182,7 +164,7 @@ mod tests {
         let geometry = generate_sip(&sip8()).unwrap();
         for lead in &geometry.leads {
             assert_eq!(lead.mounting, Mounting::ThroughHole);
-            assert_eq!(lead.drill, Some(DEFAULT_DRILL_DIAMETER_MM));
+            assert_eq!(lead.drill, Some(crate::defaults::sip::DRILL_DIAMETER));
         }
     }
 
@@ -203,14 +185,6 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_sip(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_sip_family() {
-        let mut package = sip8();
-        package.family = "dip".into();
-        let err = generate_sip(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 
     #[test]

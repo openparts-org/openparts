@@ -16,7 +16,7 @@ fn split_tab(
     let mut leads = input.geometry.clone();
     match leads.leads.pop() {
         Some(tab) if !leads.leads.is_empty() => Ok((leads, tab)),
-        _ => Err(ModelError::NoLeads(input.package.family.clone())),
+        _ => Err(ModelError::NoLeads(input.geometry.family)),
     }
 }
 
@@ -28,7 +28,7 @@ pub fn sot223(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> 
     gullwing::body(s, input, family, form)?;
     let rows = common::perimeter_rows(&lead_geometry);
     gullwing::lead_params(s, input, &rows, family, form)?;
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
     let mut metal = gullwing::rows_of(s, &rows, &layouts, "lead_w")?;
 
     s.param("tab_w", mm(tab.size.y), "tab width (b2)");
@@ -54,21 +54,17 @@ pub fn dpak(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     gullwing::body(s, input, family, form)?;
     let rows = common::perimeter_rows(&lead_geometry);
     gullwing::lead_params(s, input, &rows, family, form)?;
-    let layouts = common::row_layouts(s, &rows, input.package.pitch.nominal);
+    let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
     let mut metal = gullwing::rows_of(s, &rows, &layouts, "lead_w")?;
 
-    // Trimmed leads: where the package says, at the lead positions the
-    // geometry left without a pad.
-    let package = input.package;
-    if let (Some(tab_spec), Some(pitch)) = (&package.tab, package.pitch.nominal) {
-        let half_span = (package.lead_count as f64 - 1.0) * pitch / 2.0;
-        for n in tab_spec
-            .trimmed_leads
-            .iter()
-            .filter_map(|l| l.parse::<u32>().ok())
-        {
-            let y = half_span - (n - 1) as f64 * pitch;
-            s.fragment(fragment!("lead_stub"), &vars!(n = n.to_string(), y = mm(y)))?;
+    // Trimmed leads: stubs at the lead positions the geometry left
+    // without a pad.
+    if let openparts_mcad::Details::TrimmedLeads(trimmed) = &input.geometry.details {
+        for (n, y) in trimmed {
+            s.fragment(
+                fragment!("lead_stub"),
+                &vars!(n = n.to_string(), y = mm(*y)),
+            )?;
             metal.push(format!("Stub{n}"));
         }
     }

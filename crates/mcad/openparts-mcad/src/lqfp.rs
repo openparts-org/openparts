@@ -17,17 +17,6 @@ use openparts_core::Package;
 /// left-to-right along the bottom, then up the right edge, then
 /// right-to-left along the top, ending just short of pin 1.
 pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("lqfp") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(geometry) = &package.geometry {
-        if let Some(generator) = &geometry.generator {
-            if !generator.eq_ignore_ascii_case("lqfp") {
-                return Err(McadError::UnsupportedGenerator(generator.clone()));
-            }
-        }
-    }
-
     let lead_count = package.lead_count;
     if lead_count == 0 || !lead_count.is_multiple_of(4) {
         return Err(McadError::InvalidLeadCount(lead_count));
@@ -159,6 +148,11 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::None,
         body,
         leads,
         markers,
@@ -178,7 +172,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: Kind::Package,
             id: openparts_core::PackageId::from("standards/LQFP8-TEST"),
-            family: "lqfp".into(),
+            family: openparts_core::PackageFamily::Lqfp,
             lead_count: 8,
             pitch: Dimension {
                 nominal: Some(0.5),
@@ -317,13 +311,5 @@ mod tests {
         package.dimensions.body_width.nominal = None;
         let err = generate_lqfp(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
-    }
-
-    #[test]
-    fn rejects_non_lqfp_family() {
-        let mut package = lqfp8();
-        package.family = "qfn".into();
-        let err = generate_lqfp(&package).unwrap_err();
-        assert!(matches!(err, McadError::UnsupportedFamily(_)));
     }
 }

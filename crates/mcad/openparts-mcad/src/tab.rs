@@ -16,7 +16,7 @@ use crate::{
     Body, BodyShape, Lead, Marker, MarkerKind, McadError, MechanicalGeometry, Mounting, Point3,
     Size3,
 };
-use openparts_core::Package;
+use openparts_core::{Package, PackageFamily as F};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
@@ -55,27 +55,21 @@ pub fn generate_d2pak(package: &Package) -> Result<MechanicalGeometry, McadError
 }
 
 fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, McadError> {
-    let family = package.family.to_ascii_lowercase();
-    let accepted: &[&str] = match kind {
-        Kind::Sot223 => &["sot223"],
-        Kind::Dpak => &["dpak", "to252"],
-        Kind::D2pak => &["d2pak", "to263"],
+    let expected = match kind {
+        Kind::Sot223 => F::Sot223,
+        Kind::Dpak => F::Dpak,
+        Kind::D2pak => F::D2pak,
     };
-    if !accepted.contains(&family.as_str()) {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !accepted.iter().any(|a| generator.eq_ignore_ascii_case(a)) {
-            return Err(McadError::UnsupportedGenerator(generator.clone()));
-        }
+    if package.family != expected {
+        return Err(McadError::UnsupportedFamily(package.family));
     }
 
     let lead_count = package.lead_count;
     if lead_count == 0 {
         return Err(McadError::InvalidLeadCount(lead_count));
     }
-    let tab = package.tab.as_ref().ok_or_else(|| McadError::MissingTab {
-        family: package.family.clone(),
+    let tab = package.tab.as_ref().ok_or(McadError::MissingTab {
+        family: package.family,
     })?;
     if tab.number.trim().is_empty() {
         return Err(McadError::InvalidTab("tab.number is empty".into()));
@@ -217,6 +211,16 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
     }];
 
     Ok(MechanicalGeometry {
+        family: package.family,
+
+        pitch: crate::defaults::required(&package.pitch),
+
+        details: crate::Details::TrimmedLeads(
+            trimmed
+                .iter()
+                .map(|&n| (n, half_span - (n - 1) as f64 * pitch))
+                .collect(),
+        ),
         body,
         leads,
         markers,
@@ -253,7 +257,7 @@ mod tests {
             schema_version: "0.1".into(),
             kind: DocKind::Package,
             id: openparts_core::PackageId::from("standards/SOT223-TEST"),
-            family: "sot223".into(),
+            family: openparts_core::PackageFamily::Sot223,
             lead_count: 3,
             pitch: mm(2.3),
             dimensions: PackageDimensions {
@@ -303,7 +307,7 @@ mod tests {
     /// TI NDP0003B-like TO-252, centre lead trimmed, tab numbered "2".
     fn dpak() -> Package {
         let mut p = sot223();
-        p.family = "dpak".into();
+        p.family = openparts_core::PackageFamily::Dpak;
         p.pitch = mm(2.285);
         p.dimensions.body_width = mm(6.1);
         p.dimensions.body_length = mm(6.54);
@@ -421,7 +425,7 @@ mod tests {
     #[test]
     fn d2pak_uses_the_dpak_layout_with_to263_defaults() {
         let mut p = dpak();
-        p.family = "d2pak".into();
+        p.family = openparts_core::PackageFamily::D2pak;
         p.pitch = mm(2.54);
         p.dimensions.body_width = range(8.38, 9.65).unwrap();
         p.dimensions.body_length = range(9.65, 10.67).unwrap();
@@ -459,7 +463,7 @@ mod tests {
             Err(McadError::UnsupportedFamily(_))
         ));
         let mut p = dpak();
-        p.family = "to252".into();
+        p.family = openparts_core::PackageFamily::Dpak;
         assert!(generate_dpak(&p).is_ok());
     }
 }

@@ -19,14 +19,6 @@ use openparts_core::Package;
 /// the KiCad footprint's 0.95 mm), and `standoff` above the board (else
 /// on it).
 pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.family.eq_ignore_ascii_case("to220") {
-        return Err(McadError::UnsupportedFamily(package.family.clone()));
-    }
-    if let Some(generator) = package.geometry.as_ref().and_then(|g| g.generator.as_ref()) {
-        if !generator.eq_ignore_ascii_case("to220") {
-            return Err(McadError::UnsupportedGenerator(generator.clone()));
-        }
-    }
     let n = package.lead_count;
     if !(2..=15).contains(&n) {
         return Err(McadError::InvalidLeadCount(n));
@@ -86,6 +78,9 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
         })
         .collect();
     Ok(MechanicalGeometry {
+        family: package.family,
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::To220(to220_features(package)),
         body,
         leads,
         markers: vec![],
