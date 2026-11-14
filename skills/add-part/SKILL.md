@@ -271,6 +271,24 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
   permission classifier; that needs the user's approval -- don't work
   around it, report it.
 
+- Diodes Inc.: when `/assets/Datasheets/<part>.pdf` is a 404 page, try
+  `diodes.com/datasheet/download/<part>.pdf` ("Datasheet not found" in
+  plain text means none). SMA tables use old letters (A width, B length,
+  C b, D c, E span, G standoff, H foot, J height); SMB tables may use
+  JEDEC letters for the same numbers; SMA "J" differs between datasheets.
+- onsemi SOD-523 (case 502) has flat leads: `sod_flat`, not `sod`.
+- 2-row DFN axes: Microchip and Richtek put D along the terminal rows
+  (D = body_length, E = body_width); Winbond WSON is the other way round.
+  Microchip's encoded-font pages are a Caesar shift (+29 per character)
+  -- enough to find the drawing pages before rendering them.
+- TI TO-263 (KTT) drawings give no separate tab width (the tab spans body
+  width E; record that and say so); KTT0003B has no trimmed centre lead.
+  Old TI TO-220-5 drawings (NDH/NEB) have bent, staggered leads: not
+  `to220`. The side-view "(0.x) TYP" on TI SON/QFN drawings is side-wall
+  metal thickness, not A3 -- leave `lead_thickness` out.
+- PowerDI-123 has a large cathode pad under the body that `sod_flat`
+  cannot draw: flag it in the package header.
+
 ### Manufacturer access notes (as of 2026-11)
 
 | reachable directly | blocked with curl (retry once with WebFetch) / unavailable (don't work around) |

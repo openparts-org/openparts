@@ -281,16 +281,24 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
             geometry.leads.iter().map(hi).fold(f64::MIN, f64::max)
                 - geometry.leads.iter().map(lo).fold(f64::MAX, f64::min)
         };
+        // The two-terminal `sod` frame runs its lead span (overall_length)
+        // along X, like `chip`; every other gull-wing family along Y.
+        let terminal_axis_x = package.family.eq_ignore_ascii_case("sod");
+        let (x_span, y_span) = if terminal_axis_x {
+            (&dims.overall_length, &dims.overall_width)
+        } else {
+            (&dims.overall_width, &dims.overall_length)
+        };
         for (span, outer) in [
             (
-                &dims.overall_width,
+                x_span,
                 extent(
                     |l| l.position.x - l.size.x / 2.0,
                     |l| l.position.x + l.size.x / 2.0,
                 ),
             ),
             (
-                &dims.overall_length,
+                y_span,
                 extent(
                     |l| l.position.y - l.size.y / 2.0,
                     |l| l.position.y + l.size.y / 2.0,
