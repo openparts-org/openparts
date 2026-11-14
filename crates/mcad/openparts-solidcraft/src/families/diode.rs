@@ -176,7 +176,7 @@ mod tests {
             let name = format!("{}-{}.png", package.family, package.lead_count);
             std::fs::write(std::path::Path::new(&dir).join(name), png).unwrap();
         }
-        let solids = crate::available().then(|| {
+        let solids = crate::available_for_test(module_path!()).then(|| {
             let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
             String::from_utf8(step)
                 .unwrap()

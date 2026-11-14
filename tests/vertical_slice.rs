@@ -94,8 +94,7 @@ fn full_pipeline_generates_semantically_correct_kicad_and_step_for_rp2040() {
         assert!((pad.y - lead.position.y).abs() < 1e-9);
     }
 
-    if !openparts_solidcraft::available() {
-        eprintln!("SolidCraft is not installed; skipping the 3D model checks");
+    if !openparts_solidcraft::available_for_test(module_path!()) {
         return;
     }
     let input = openparts_step::ModelInput {
@@ -180,8 +179,7 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
     let parsed_pads = openparts_kicad::parse_footprint_pads(&footprint_text);
     assert_eq!(parsed_pads.len(), 2);
 
-    if !openparts_solidcraft::available() {
-        eprintln!("SolidCraft is not installed; skipping the 3D model checks");
+    if !openparts_solidcraft::available_for_test(module_path!()) {
         return;
     }
     let input = openparts_step::ModelInput {

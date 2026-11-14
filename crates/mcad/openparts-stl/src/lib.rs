@@ -48,8 +48,7 @@ mod tests {
 
     #[test]
     fn produces_a_well_formed_binary_stl() {
-        if !openparts_solidcraft::available() {
-            eprintln!("SolidCraft is not installed; skipping");
+        if !openparts_solidcraft::available_for_test(module_path!()) {
             return;
         }
         let package = Package {

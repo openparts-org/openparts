@@ -205,7 +205,7 @@ mod tests {
         ] {
             assert!(names.contains(&p), "{p} in {names:?}");
         }
-        if crate::available() {
+        if crate::available_for_test(module_path!()) {
             let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
             let step = String::from_utf8(step).unwrap();
             assert_eq!(step.matches("MANIFOLD_SOLID_BREP(").count(), 11);
@@ -226,7 +226,7 @@ mod tests {
         ] {
             let script = script(&header(family, layout));
             assert_eq!(painted(&script).iter().sum::<usize>(), bodies);
-            if crate::available() {
+            if crate::available_for_test(module_path!()) {
                 let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
                 let step = String::from_utf8(step).unwrap();
                 assert_eq!(

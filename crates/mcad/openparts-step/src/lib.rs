@@ -67,8 +67,7 @@ mod tests {
     }
 
     fn step_of(package: &Package) -> Option<String> {
-        if !openparts_solidcraft::available() {
-            eprintln!("SolidCraft is not installed; skipping");
+        if !openparts_solidcraft::available_for_test(module_path!()) {
             return None;
         }
         let geometry = openparts_mcad::generate(package).unwrap();

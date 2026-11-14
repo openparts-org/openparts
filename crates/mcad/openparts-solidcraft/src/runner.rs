@@ -238,10 +238,24 @@ pub fn version() -> Result<String, RunError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Whether a SolidCraft CLI can be found (tests that need one skip
-/// themselves without it).
+/// Whether a SolidCraft CLI can be found.
 pub fn available() -> bool {
     cli().is_ok()
+}
+
+/// For tests that need SolidCraft: whether to run. Without SolidCraft
+/// the test is skipped (and says so) -- unless `OPENPARTS_REQUIRE_SOLIDCRAFT`
+/// is set, where a missing SolidCraft fails the test instead of letting
+/// it pass without checking anything.
+pub fn available_for_test(test: &str) -> bool {
+    if available() {
+        return true;
+    }
+    if std::env::var_os("OPENPARTS_REQUIRE_SOLIDCRAFT").is_some() {
+        panic!("{test}: SolidCraft is required (OPENPARTS_REQUIRE_SOLIDCRAFT) but not found");
+    }
+    eprintln!("{test}: SolidCraft not found; skipping the 3D checks");
+    false
 }
 
 #[cfg(test)]
@@ -258,7 +272,7 @@ mod tests {
     /// whose model part carries the per-body colours.
     #[test]
     fn exports_every_3d_format_in_one_run() {
-        if !available() {
+        if !available_for_test(module_path!()) {
             eprintln!("SolidCraft is not installed; skipping");
             return;
         }

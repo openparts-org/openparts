@@ -147,7 +147,7 @@ mod tests {
             .flat_map(|c| c["params"]["bodies"].as_array().unwrap().clone())
             .map(|b| b.as_str().unwrap().to_string())
             .collect();
-        let solids = crate::available().then(|| {
+        let solids = crate::available_for_test(module_path!()).then(|| {
             let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
             String::from_utf8(step)
                 .unwrap()

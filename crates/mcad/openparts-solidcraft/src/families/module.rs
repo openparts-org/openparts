@@ -228,7 +228,7 @@ mod tests {
         for p in ["pitch", "leads_per_side", "hole_d", "row_span", "mount_d"] {
             assert!(names.contains(&p), "{p} in {names:?}");
         }
-        if crate::available() {
+        if crate::available_for_test(module_path!()) {
             let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
             let step = String::from_utf8(step).unwrap();
             assert_eq!(step.matches("MANIFOLD_SOLID_BREP(").count(), 44);
