@@ -37,7 +37,9 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
         .ok_or(McadError::MissingDimension("dimensions.body_width"))?;
     let body_t = defaults::required(&d.body_length)
         .ok_or(McadError::MissingDimension("dimensions.body_length"))?;
-    let body_h = defaults::body_height(package, 0.0, defaults::TO220.body_height);
+    // `overall_height` is the tab top here, never the molding: only a
+    // stated body_height counts.
+    let body_h = defaults::stated(&d.body_height).unwrap_or(defaults::TO220.body_height);
     let standoff = value(&d.standoff).unwrap_or(0.0);
     let offset = value(&d.body_offset).unwrap_or(defaults::TO220.body_offset);
     let span = (n - 1) as f64 * pitch;
@@ -108,7 +110,7 @@ pub struct To220Features {
 pub fn to220_features(package: &Package) -> To220Features {
     let d = &package.dimensions;
     let t = &defaults::TO220;
-    let body_h = defaults::body_height(package, 0.0, t.body_height);
+    let body_h = defaults::stated(&d.body_height).unwrap_or(t.body_height);
     let overall = defaults::stated(&d.overall_height)
         .filter(|h| *h > body_h)
         .unwrap_or(t.overall_height.max(body_h + 4.0));

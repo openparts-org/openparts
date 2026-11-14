@@ -286,6 +286,11 @@ pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
   Old TI TO-220-5 drawings (NDH/NEB) have bent, staggered leads: not
   `to220`. The side-view "(0.x) TYP" on TI SON/QFN drawings is side-wall
   metal thickness, not A3 -- leave `lead_thickness` out.
+- `to220`: give `body_height` (the molding); without it the default
+  9.0 is drawn (`overall_height` is the tab top). AOS outlines are at
+  aosmd.com `/sites/default/files/res/packaging_information/TO220.pdf`;
+  product pages embed `product_status` ("Last Time Buy" = eol_announced)
+  and product URLs are in `sitemap.xml?page=1..3`.
 - PowerDI-123 has a large cathode pad under the body that `sod_flat`
   cannot draw: flag it in the package header.
 
