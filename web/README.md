@@ -30,7 +30,7 @@ openparts/
    bun dev
    ```
 
-   Open `http://localhost:4321/openparts-web/` (`base` is set for GitHub Pages).
+   Open `http://localhost:4321/openparts/` (`base` is set for GitHub Pages).
 
 `openparts-server` has no CORS middleware, so the Vite dev proxy in `astro.config.mjs` forwards
 `/api/*` to it, keeping the browser same-origin. Override the API base with

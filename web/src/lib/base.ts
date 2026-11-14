@@ -1,11 +1,11 @@
 import type { Lang } from "./i18n";
 
 // GitHub Pages project sites are served under a subpath
-// (https://openparts-org.github.io/openparts-web/), configured as
+// (https://openparts-org.github.io/openparts/), configured as
 // `base` in astro.config.mjs. Internal links must be prefixed with it,
 // or they resolve against the domain root instead of the deployed site.
 // import.meta.env.BASE_URL does not reliably carry a trailing slash
-// (observed as "/openparts-web" -- verified in the built output), so
+// (observed as "/openparts" -- verified in the built output), so
 // join explicitly rather than assuming one.
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 

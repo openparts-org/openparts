@@ -32,7 +32,7 @@ use openparts_core::Package;
 /// a default could come from.
 pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadError> {
     let lead_count = package.lead_count;
-    if lead_count == 0 || lead_count % 2 != 0 {
+    if lead_count == 0 || !lead_count.is_multiple_of(2) {
         return Err(McadError::InvalidLeadCount(lead_count));
     }
 
