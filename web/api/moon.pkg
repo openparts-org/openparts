@@ -1,0 +1,13 @@
+import {
+  "moonbitlang/core/json",
+}
+
+// derive and trait impls warn about method promotion on this compiler.
+
+options(
+  warnings: "-implicit_impl_as_method",
+)
+
+import {
+  "openparts/site/api",
+} for "test"

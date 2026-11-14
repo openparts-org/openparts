@@ -1,30 +1,20 @@
 {
   "name": "openparts-web",
+  "private": true,
   "type": "module",
-  "version": "0.0.1",
-  "engines": {
-    "node": ">=22.12.0"
-  },
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro"
+    "dev": "moon build --target js --release && vite",
+    "build": "moon build --target js --release && vite build",
+    "preview": "vite preview",
+    "test": "moon test --target js",
+    "gen-api-types": "./scripts/gen-api-types.sh"
   },
   "dependencies": {
-    "@astrojs/preact": "^6.0.5",
-    "astro": "^7.3.4",
-    "fflate": "^0.8.3",
-    "preact": "^10.29.8",
-    "three": "^0.186.0"
-  },
-  "allowScripts": {
-    "esbuild": true
+    "@mizchi/three-mbt": "file:./.mooncakes/mizchi/three/js",
+    "three": "0.185.1"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
-    "@types/node": "^22.20.5",
-    "@types/three": "^0.186.0",
-    "typescript": "6"
+    "vite": "^7.1.0",
+    "vite-plugin-moonbit": "0.5.1"
   }
 }

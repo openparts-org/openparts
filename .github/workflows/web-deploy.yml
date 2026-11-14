@@ -25,9 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - run: moon install
 
       - run: bun install --frozen-lockfile
 
@@ -40,8 +47,13 @@ jobs:
           # static content (landing, KiCad plugin, contributing pages)
           # still works. Set the OPENPARTS_API_BASE repository variable
           # once a server is live, e.g. https://api.openparts.example.
-          PUBLIC_OPENPARTS_API_BASE: ${{ vars.OPENPARTS_API_BASE || '/api' }}
-        run: bun run build
+          VITE_OPENPARTS_API_BASE: ${{ vars.OPENPARTS_API_BASE || '/api' }}
+          # The project site's path.
+          OPENPARTS_BASE: /openparts/
+        run: |
+          bun run build
+          # Deep links (/openparts/parts?...) land on 404.html: the same app.
+          cp dist/index.html dist/404.html
 
       - uses: actions/configure-pages@v5
 

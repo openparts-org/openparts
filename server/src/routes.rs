@@ -70,7 +70,7 @@ struct SearchQuery {
     category: Option<openparts_core::ComponentCategory>,
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct PartSummary {
     manufacturer: String,
@@ -165,7 +165,7 @@ async fn get_package(
     Ok(Json(resolve_package(&store, &id)?.clone()))
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct ProvenanceResponse {
     part: ProvenanceMap,
@@ -188,7 +188,7 @@ async fn get_provenance(
     }))
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct PartSource {
     source: Source,
@@ -240,7 +240,7 @@ async fn get_sources(
     Ok(Json(out))
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct RevisionSummary {
     id: String,
@@ -266,7 +266,7 @@ async fn get_revisions(
     Ok(Json(revisions))
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct ArtifactsResponse {
     #[serde(rename = "kicad-symbol")]
@@ -425,3 +425,31 @@ artifact_route!(artifact_footprint_svg, ArtifactKind::FootprintSvg);
 artifact_route!(artifact_step, ArtifactKind::Step);
 artifact_route!(artifact_stl, ArtifactKind::Stl);
 artifact_route!(artifact_3mf, ArtifactKind::ThreeMf);
+
+/// Writes the JSON Schema of every document the API returns (the
+/// openparts-core documents and the responses above) to
+/// `$OPENPARTS_SCHEMA_OUT`, one `$defs` map -- web/scripts/gen-api-types.sh
+/// turns it into the site's MoonBit types.
+#[cfg(all(test, feature = "schema"))]
+mod schema_export {
+    use super::*;
+
+    #[test]
+    fn export_schemas() {
+        let Ok(out) = std::env::var("OPENPARTS_SCHEMA_OUT") else {
+            return;
+        };
+        let mut gen = schemars::generate::SchemaSettings::draft2020_12().into_generator();
+        gen.subschema_for::<Part>();
+        gen.subschema_for::<Device>();
+        gen.subschema_for::<Package>();
+        gen.subschema_for::<PartSummary>();
+        gen.subschema_for::<PartSource>();
+        gen.subschema_for::<RevisionSummary>();
+        gen.subschema_for::<ArtifactsResponse>();
+        gen.subschema_for::<ProvenanceResponse>();
+        crate::error::subschemas(&mut gen);
+        let defs = serde_json::Value::Object(gen.definitions().clone());
+        std::fs::write(out, serde_json::to_string_pretty(&defs).unwrap()).unwrap();
+    }
+}

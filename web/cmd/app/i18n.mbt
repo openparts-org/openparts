@@ -1,0 +1,379 @@
+// Every string the site shows, in Japanese (the default, unprefixed
+// URLs) and English (under /en/).
+
+///|
+#derive(Eq)
+enum Lang {
+  Ja
+  En
+}
+
+///|
+fn Lang::code(self : Lang) -> String {
+  match self {
+    Ja => "ja"
+    En => "en"
+  }
+}
+
+///|
+struct Feature {
+  title : String
+  body : String
+}
+
+///|
+struct Copy {
+  // nav / footer
+  nav_search : String
+  nav_kicad : String
+  nav_contributing : String
+  open_source : String
+  // home
+  home_title : String
+  home_lead : String
+  home_cta_search : String
+  home_cta_kicad : String
+  features : Array[Feature]
+  // KiCad plugin
+  kicad_title : String
+  kicad_intro : String
+  kicad_quick_install : String
+  kicad_auto_detect : String
+  kicad_restart : String
+  kicad_good_to_know : String
+  kicad_session : String
+  // contributing
+  contrib_title : String
+  contrib_intro : String
+  contrib_report_heading : String
+  contrib_report_before : String
+  contrib_report_link : String
+  contrib_report_after : String
+  contrib_pr_heading : String
+  // [before, link 1, after, link 2, after 2] per step; "" = absent
+  contrib_steps : Array[Array[String]]
+  contrib_specs_heading : String
+  // search
+  search_title : String
+  search_placeholder : String
+  loading : String
+  search_failed : String
+  no_results : String
+  all : String
+  // part
+  not_found_title : String
+  not_found_before : String
+  not_found_link : String
+  not_found_after : String
+  load_failed : String
+  artifacts_failed : String
+  download : String
+  zip_building : String
+  zip_button : String
+  stl_button : String
+  zip_failed : String
+  preview3d : String
+  model_load_failed : String
+  report_issue : String
+  pin_number : String
+  pin_name : String
+  pin_type : String
+  pin_alt : String
+  revisions : String
+  family : String
+  lead_count : String
+  pitch : String
+  body_width : String
+  body_length : String
+  body_height : String
+  footprint : String
+  footprint_legend : String
+  sources_heading : String
+  sources_note : String
+  source_cited_by : String
+  sources_none : String
+}
+
+///|
+let ja : Copy = {
+  nav_search: "部品を探す",
+  nav_kicad: "KiCadプラグイン",
+  nav_contributing: "コントリビュート",
+  open_source: "OpenParts is open source.",
+  home_title: "オープンで、出典のたどれる電子部品データ",
+  home_lead: "OpenPartsは、電子部品のCADアセット(KiCadシンボル/フットプリント、STEP/STLモデル)を既製ファイルとして配布するのではなく、検証可能な正規データから再現可能に生成するプラットフォームです。",
+  home_cta_search: "部品を探す",
+  home_cta_kicad: "KiCadプラグインを入れる",
+  features: [
+    {
+      title: "オープンな部品データ",
+      body: "電子部品のピン配置・パッケージ寸法・リビジョン情報を、誰でも閲覧・検証・修正できる正規YAMLデータとして公開しています。",
+    },
+    {
+      title: "Provenance(出典)追跡",
+      body: "すべてのフィールドがデータシート等の出典に紐づいています。「なぜそう書かれているか」を常にたどれます。",
+    },
+    {
+      title: "再現可能なCAD生成",
+      body: "既製のシンボル/フットプリント/3Dモデルを配布するのではなく、正規データから都度生成します。データを直せば、生成物も追従します。",
+    },
+  ],
+  kicad_title: "KiCadプラグイン",
+  kicad_intro: "KiCadのツールバーから直接OpenPartsレジストリを検索し、部品のSymbol / Footprint / STEPモデルをプロジェクトのローカルライブラリにインストールできる、小さなネイティブGUIアプリです。スキーマティックやボードへの配置は行いません。インストール後はKiCad標準のSymbol/Footprintピッカーからいつも通り使ってください。",
+  kicad_quick_install: "クイックインストール",
+  kicad_auto_detect: "どちらのスクリプトもKiCadのプラグインディレクトリを自動検出しようとします。検出できない場合はKiCadの「Tools > External Plugins > Open Plugin Directory」で場所を確認し、--plugin-dir(Linux)/ -PluginDir(Windows)で明示的に指定して再実行してください。",
+  kicad_restart: "インストール後はKiCadを再起動するか、「Tools > External Plugins > Refresh Plugins」を実行し、PCBエディタのツールバーに現れる「OpenParts」ボタンを探してください。Plugin and Content Managerの「Installed」一覧には表示されません。",
+  kicad_good_to_know: "知っておくとよいこと",
+  kicad_session: "あるKiCadセッションで初めて部品をインストールした直後は、Symbol Editor / Footprint Editor / 3Dビューアのウィンドウを一度閉じて開き直してください。KiCadはこれらのウィンドウを開いた時点でライブラリテーブルを読み込み、開いている間はライブラリテーブルの変更をホットリロードしないためです(KiCad自体の仕様です)。",
+  contrib_title: "コントリビュート",
+  contrib_intro: "OpenPartsの部品データは openparts-data リポジトリの正規YAMLとして管理されています。ピン配置や寸法などの誤りに気づいた場合や、新しい部品を追加したい場合は、誰でもPull Requestを送ることができます。",
+  contrib_report_heading: "個別データの問題を報告する",
+  contrib_report_before: "自分で直す時間が無い場合は、まず",
+  contrib_report_link: "部品を探し",
+  contrib_report_after: "、詳細ページのピン表にある「このデータの問題を報告」リンクから openparts-data へIssueを作成してください。対象の部品・デバイスIDが自動的に入力されます。",
+  contrib_pr_heading: "新規部品を追加する / 既存データを修正する(Pull Request)",
+  contrib_steps: [
+    [
+      "openparts-data を", "フォーク", "します。検証コマンドのビルドに openparts(コアリポジトリ)が必要なので、兄弟ディレクトリとして",
+      "openparts", "もcloneしてください。",
+    ],
+    [
+      "", "Canonical Data Specification", "(特にRepository Layoutの節)に従い、parts/・devices/・packages/・manufacturers/・sources/配下にYAMLを追加/編集します。",
+      "", "",
+    ],
+    [
+      "openparts-data のリポジトリルートで ./scripts/validate.sh を実行し、Part/Device/Package/Sourcesの参照整合性とバリデーションが通ることを確認します(このスクリプトは兄弟の ../openparts をビルドして使います)。",
+      "", "", "", "",
+    ],
+    [
+      "openparts-data へPull Requestを作成します。作成後はCI上の validate ワークフローが同じ検証を自動実行します。",
+      "", "", "", "",
+    ],
+  ],
+  contrib_specs_heading: "関連する仕様書",
+  search_title: "部品を探す",
+  search_placeholder: "MPNまたはメーカー名で検索(例: nRF52840)",
+  loading: "読み込み中...",
+  search_failed: "検索に失敗しました。",
+  no_results: "該当する部品が見つかりませんでした。",
+  all: "すべて",
+  not_found_title: "部品が見つかりません",
+  not_found_before: "指定された部品は見つかりませんでした。",
+  not_found_link: "検索",
+  not_found_after: "からお探しください。",
+  load_failed: "読み込みに失敗しました。",
+  artifacts_failed: "CAD成果物の情報を取得できませんでした。",
+  download: "ダウンロード",
+  zip_building: "zip作成中...",
+  zip_button: "KiCad用一式をダウンロード(.zip)",
+  stl_button: "STLをダウンロード",
+  zip_failed: "ダウンロードに失敗しました。",
+  preview3d: "3Dプレビュー",
+  model_load_failed: "3Dモデルを表示できませんでした。",
+  report_issue: "このデータの問題を報告",
+  pin_number: "ピン番号",
+  pin_name: "名前",
+  pin_type: "種別",
+  pin_alt: "代替機能",
+  revisions: "リビジョン",
+  family: "ファミリー",
+  lead_count: "リード数",
+  pitch: "ピッチ",
+  body_width: "本体幅",
+  body_length: "本体長",
+  body_height: "本体高さ",
+  footprint: "フットプリント",
+  footprint_legend: "金: 銅パッド　白: シルク　灰: 部品外形　桃: コートヤード",
+  sources_heading: "出典",
+  sources_note: "この部品のデータは次の文書から読み取っています。リンク先は各メーカーのサイトで、版が更新されている場合があります。",
+  source_cited_by: "根拠にしている項目",
+  sources_none: "出典が登録されていません。",
+}
+
+///|
+let en : Copy = {
+  nav_search: "Search",
+  nav_kicad: "KiCad Plugin",
+  nav_contributing: "Contributing",
+  open_source: "OpenParts is open source.",
+  home_title: "Open electronic component data, with sources you can trace",
+  home_lead: "OpenParts generates CAD assets (KiCad symbols/footprints, STEP/STL models) reproducibly from verifiable canonical data, instead of distributing pre-made files.",
+  home_cta_search: "Search parts",
+  home_cta_kicad: "Install the KiCad plugin",
+  features: [
+    {
+      title: "Open part data",
+      body: "Pin assignments, package dimensions, and revision info are published as canonical YAML data anyone can view, verify, or fix.",
+    },
+    {
+      title: "Provenance tracking",
+      body: "Every field is tied to a datasheet or other source, so you can always trace why it's written the way it is.",
+    },
+    {
+      title: "Reproducible CAD generation",
+      body: "Symbols, footprints, and 3D models aren't distributed pre-made -- they're generated from canonical data each time. Fix the data, and the generated output follows.",
+    },
+  ],
+  kicad_title: "KiCad Plugin",
+  kicad_intro: "A small native GUI app that searches the OpenParts registry and installs a part's Symbol / Footprint / STEP model into your project's local libraries, right from KiCad's toolbar. It doesn't place anything on the schematic or board -- use KiCad's own Symbol/Footprint picker as usual after installing.",
+  kicad_quick_install: "Quick install",
+  kicad_auto_detect: "Both scripts try to auto-detect your KiCad plugin directory. If they can't, find it via KiCad's Tools > External Plugins > Open Plugin Directory, then re-run with --plugin-dir (Linux) / -PluginDir (Windows) set explicitly.",
+  kicad_restart: "Afterwards, restart KiCad (or Tools > External Plugins > Refresh Plugins) and look for the new \"OpenParts\" button in the PCB editor toolbar -- not in the Plugin and Content Manager's own \"Installed\" list.",
+  kicad_good_to_know: "Good to know",
+  kicad_session: "Right after installing a part for the first time in a KiCad session, close and reopen the Symbol Editor / Footprint Editor / 3D viewer windows. KiCad reads library tables once when each window opens and doesn't hot-reload them while it's open -- this is KiCad's own behavior.",
+  contrib_title: "Contributing",
+  contrib_intro: "OpenParts' component data is maintained as canonical YAML in the openparts-data repository. If you spot an error in a pin assignment or dimension, or want to add a new part, anyone can send a Pull Request.",
+  contrib_report_heading: "Report a problem with existing data",
+  contrib_report_before: "If you don't have time to fix it yourself, ",
+  contrib_report_link: "search for the part",
+  contrib_report_after: ", then use the \"Report a problem with this data\" link on its pin table to open an Issue against openparts-data -- the part and device IDs are pre-filled.",
+  contrib_pr_heading: "Add a new part / fix existing data (Pull Request)",
+  contrib_steps: [
+    [
+      "", "Fork openparts-data", ". The validation command needs openparts (the core repo), so also clone ",
+      "openparts", " as a sibling directory.",
+    ],
+    [
+      "Add or edit YAML under parts/, devices/, packages/, manufacturers/, sources/, following the ",
+      "Canonical Data Specification", " (especially the Repository Layout section).",
+      "", "",
+    ],
+    [
+      "Run ./scripts/validate.sh from openparts-data's repo root to confirm Part/Device/Package/Sources references resolve and validation passes (it builds the sibling ../openparts to do so).",
+      "", "", "", "",
+    ],
+    [
+      "Open a Pull Request against openparts-data. The validate workflow runs the same checks in CI once it's up.",
+      "", "", "", "",
+    ],
+  ],
+  contrib_specs_heading: "Related specifications",
+  search_title: "Search parts",
+  search_placeholder: "Search by MPN or manufacturer (e.g. nRF52840)",
+  loading: "Loading...",
+  search_failed: "Search failed.",
+  no_results: "No matching parts found.",
+  all: "All",
+  not_found_title: "Part not found",
+  not_found_before: "The requested part could not be found. Try ",
+  not_found_link: "searching",
+  not_found_after: " instead.",
+  load_failed: "Failed to load.",
+  artifacts_failed: "Could not fetch CAD artifact info.",
+  download: "Download",
+  zip_building: "Building zip...",
+  zip_button: "Download KiCad bundle (.zip)",
+  stl_button: "Download STL",
+  zip_failed: "Download failed.",
+  preview3d: "3D preview",
+  model_load_failed: "Could not display the 3D model.",
+  report_issue: "Report a problem with this data",
+  pin_number: "Pin",
+  pin_name: "Name",
+  pin_type: "Type",
+  pin_alt: "Alternate functions",
+  revisions: "Revisions",
+  family: "Family",
+  lead_count: "Lead count",
+  pitch: "Pitch",
+  body_width: "Body width",
+  body_length: "Body length",
+  body_height: "Body height",
+  footprint: "Footprint",
+  footprint_legend: "Gold: copper pads · White: silkscreen · Grey: body outline · Pink: courtyard",
+  sources_heading: "Sources",
+  sources_note: "This part's data was read from the documents below. Links go to each manufacturer's site, which may now serve a newer revision.",
+  source_cited_by: "Used for",
+  sources_none: "No sources are recorded.",
+}
+
+///|
+fn Lang::copy(self : Lang) -> Copy {
+  match self {
+    Ja => ja
+    En => en
+  }
+}
+
+///|
+fn pins_heading(lang : Lang, device_id : String) -> String {
+  match lang {
+    Ja => "ピン配置 (\{device_id})"
+    En => "Pinout (\{device_id})"
+  }
+}
+
+///|
+fn pins_show(lang : Lang, n : Int32) -> String {
+  match lang {
+    Ja => "\{n}ピンを表示"
+    En => "Show \{n} pins"
+  }
+}
+
+///|
+fn package_heading(lang : Lang, id : String) -> String {
+  match lang {
+    Ja => "パッケージ (\{id})"
+    En => "Package (\{id})"
+  }
+}
+
+///|
+fn footprint_alt(lang : Lang, mpn : String) -> String {
+  match lang {
+    Ja => "\{mpn} のフットプリント（上面図）"
+    En => "Footprint of \{mpn} (top view)"
+  }
+}
+
+///|
+fn source_revision(lang : Lang, rev : String, date : String) -> String {
+  match lang {
+    Ja => "Rev \{rev}（\{date}）"
+    En => "Rev \{rev} (\{date})"
+  }
+}
+
+///|
+fn source_retrieved(lang : Lang, date : String) -> String {
+  match lang {
+    Ja => "\{date} 取得"
+    En => "retrieved \{date}"
+  }
+}
+
+///|
+fn cited_by_label(lang : Lang, by : String) -> String {
+  match (lang, by) {
+    (Ja, "part") => "部品"
+    (Ja, "device") => "ピン配置"
+    (Ja, "package") => "パッケージ寸法"
+    (En, "device") => "pinout"
+    (En, "package") => "package dimensions"
+    _ => by
+  }
+}
+
+///|
+fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
+  match (lang, c) {
+    (Ja, Microcontroller) => "マイコン"
+    (Ja, Capacitor) => "コンデンサ"
+    (Ja, Resistor) => "抵抗"
+    (Ja, Inductor) => "インダクタ"
+    (Ja, Diode) => "ダイオード"
+    (Ja, Transistor) => "トランジスタ"
+    (Ja, Led) => "LED"
+    (Ja, Crystal) => "水晶発振子"
+    (Ja, Fuse) => "ヒューズ"
+    (Ja, Connector) => "コネクタ"
+    (Ja, Other) => "その他"
+    (En, Led) => "LED"
+    (En, c) => {
+      let w = c.wire()
+      w[:1].to_owned().to_upper() + w[1:].to_owned()
+    }
+  }
+}

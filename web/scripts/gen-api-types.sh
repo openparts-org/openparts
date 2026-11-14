@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Regenerates src/lib/api/*.ts -- the TypeScript types of every JSON
-# document openparts-server returns -- from the Rust types themselves
-# (ts-rs), so the site and the API cannot drift apart. CI runs this and
-# fails if the committed files differ.
+# Regenerates api/types.mbt -- the MoonBit types of every JSON document
+# openparts-server returns -- from the Rust types themselves (schemars
+# JSON Schema -> gen_api_types.py), so the site and the API cannot drift
+# apart. CI runs this and fails if the committed file differs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="$ROOT/src/lib/api"
-rm -rf "$OUT"
-# The documents (openparts-core) and the server's own responses.
-for crate in openparts-core openparts-server; do
-  TS_RS_EXPORT_DIR="$OUT" cargo test -q --manifest-path "$ROOT/../Cargo.toml" \
-    -p "$crate" --features ts export_bindings >/dev/null
-done
-echo "wrote $(ls "$OUT" | wc -l) files to $OUT"
+SCHEMA="$(mktemp)"
+trap 'rm -f "$SCHEMA"' EXIT
+OPENPARTS_SCHEMA_OUT="$SCHEMA" cargo test -q --manifest-path "$ROOT/../Cargo.toml" \
+  -p openparts-server --features schema --lib export_schemas >/dev/null
+python3 "$ROOT/scripts/gen_api_types.py" "$SCHEMA" "$ROOT/api/types.mbt"
+(cd "$ROOT" && moon fmt api >/dev/null)
+echo "wrote $ROOT/api/types.mbt"

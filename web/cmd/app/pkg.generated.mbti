@@ -1,0 +1,40 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "openparts/site/cmd/app"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Copy
+
+type Feature
+
+#derive(Eq)
+type Fetch[T]
+
+type JsResponse
+
+#derive(Eq)
+type Lang
+
+#derive(Eq)
+type Model
+
+type Msg
+
+#derive(Eq)
+type PartData
+
+#derive(Eq)
+type Route
+
+#derive(Eq)
+type SearchState
+
+#derive(Eq)
+type ZipState
+
+// Type aliases
+
+// Traits

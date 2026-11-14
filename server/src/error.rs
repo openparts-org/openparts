@@ -16,7 +16,7 @@ pub enum ApiError {
     Unavailable(String),
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct DiagnosticBody {
     rule_id: &'static str,
@@ -38,7 +38,7 @@ impl From<&openparts_validator::Diagnostic> for DiagnosticBody {
     }
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct ErrorBody {
     error: String,
@@ -80,4 +80,9 @@ impl IntoResponse for ApiError {
         };
         (status, Json(body)).into_response()
     }
+}
+
+#[cfg(all(test, feature = "schema"))]
+pub(crate) fn subschemas(gen: &mut schemars::SchemaGenerator) {
+    gen.subschema_for::<ErrorBody>();
 }

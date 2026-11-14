@@ -14,17 +14,19 @@ use std::path::Path;
 use std::sync::Arc;
 use tower_http::services::{ServeDir, ServeFile};
 
-/// The API at `/` and `/api`, plus `web_dir` (an `astro build` output)
-/// as the fallback for every other path when given.
+/// The API at `/` and `/api`, plus `web_dir` (the web site's `vite
+/// build` output) as the fallback for every other path when given. The
+/// site is a single-page app: a path with no file behind it (`/parts`,
+/// `/en/search`) gets its `index.html` and routes on the client.
 pub fn build_app(store: Arc<Store>, web_dir: Option<&Path>) -> Router {
     let api = routes::build_router(store);
     let mut app = Router::new().nest("/api", api.clone()).merge(api);
     if let Some(dir) = web_dir {
-        let not_found = dir.join("404.html");
+        let index = dir.join("index.html");
         app = app.fallback_service(
             ServeDir::new(dir)
                 .append_index_html_on_directories(true)
-                .not_found_service(ServeFile::new(not_found)),
+                .fallback(ServeFile::new(index)),
         );
     }
     app.layer(middleware::from_fn(cache_headers))
@@ -33,7 +35,7 @@ pub fn build_app(store: Arc<Store>, web_dir: Option<&Path>) -> Router {
 /// How long a response may be cached, by what it is:
 /// - artifacts (`.../artifacts/<kind>`): a day; their `x-content-hash`
 ///   becomes the ETag, so a changed dataset revalidates cleanly;
-/// - Astro's content-hashed assets (`/_astro/`): a year, immutable;
+/// - Vite's content-hashed assets (`/assets/`): a year, immutable;
 /// - other API JSON: five minutes;
 /// - web pages: one minute.
 async fn cache_headers(req: Request<Body>, next: Next) -> Response {
@@ -43,7 +45,7 @@ async fn cache_headers(req: Request<Body>, next: Next) -> Response {
         return res;
     }
     let api = path.starts_with("/api/") || path.starts_with("/v1/");
-    let policy = if path.starts_with("/_astro/") {
+    let policy = if path.starts_with("/assets/") {
         "public, max-age=31536000, immutable"
     } else if api && path.contains("/artifacts/") {
         if let Some(hash) = res.headers().get("x-content-hash").cloned() {

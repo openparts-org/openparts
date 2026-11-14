@@ -35,7 +35,7 @@ see "Prebuilt artifacts" below for `bundle`.
 
 ```text
 server/                  openparts-server: REST API + bundled artifacts
-web/                     openparts-web: the Astro site (src/lib/api is
+web/                     openparts-web: the MoonBit (rabbita) site (api/types.mbt is
                          generated from the Rust types: web/scripts/gen-api-types.sh)
 kicad-plugin/            KiCad plugin (library sync GUI + launcher)
 crates/

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Canonical Data Specification section 11. Never duplicates Device
 /// pinout or Package dimensions — only references them.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Part {

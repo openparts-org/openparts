@@ -1,59 +1,40 @@
 # openparts-web
 
-The [OpenParts](https://github.com/openparts-org/openparts) website: a landing page plus a parts
-search/browse UI backed by `openparts-server`'s REST API (fetched client-side, not baked in at
-build time). Astro + Preact islands, TypeScript, [bun](https://bun.sh). Japanese (default, `/...`)
-and English (`/en/...`).
+The OpenParts web site: a single-page app written in
+[MoonBit](https://www.moonbitlang.com) with
+[rabbita](https://github.com/moonbit-community/rabbita), built with Vite.
 
-## Local development
+- `cmd/app/` -- the app: routing (`route.mbt`, English pages under `/en/`),
+  API calls (`api.mbt`), pages (`view.mbt`), the 3D preview
+  (`viewer.mbt`, three.js through `mizchi/three`), strings (`i18n.mbt`)
+  and the few browser calls (`ffi.mbt`). The KiCad bundle zip is built
+  in the browser with `bobzhang/zip`.
+- `api/` -- MoonBit types of every JSON document openparts-server
+  returns. `api/types.mbt` is **generated** from the Rust types
+  (schemars JSON Schema -> `scripts/gen_api_types.py`); never edit it,
+  run `scripts/gen-api-types.sh`. CI fails when it is stale.
+  `api/decode_test.mbt` decodes real responses with them.
 
-Clone as a sibling of `openparts-server` and `openparts-data`:
+## Develop
 
-```
-openparts/
-├── openparts-web/      (this repo)
-├── openparts-server/
-└── openparts-data/
-```
-
-1. Start the API server:
-
-   ```sh
-   cd ../openparts-server
-   OPENPARTS_DATA_DIR=../openparts-data cargo run
-   ```
-
-2. Install and run this site:
-
-   ```sh
-   bun install
-   bun dev
-   ```
-
-   Open `http://localhost:4321/openparts/` (`base` is set for GitHub Pages).
-
-`openparts-server` has no CORS middleware, so the Vite dev proxy in `astro.config.mjs` forwards
-`/api/*` to it, keeping the browser same-origin. Override the API base with
-`PUBLIC_OPENPARTS_API_BASE` (see `.env.example`).
-
-## Build
+Needs `moon` and `bun` (or npm).
 
 ```sh
-bun build
-bun preview
+moon install            # MoonBit dependencies (into .mooncakes/)
+bun install             # Vite, three.js and the three.js bindings' JS
+bun run dev             # http://localhost:5173, /api proxied to :8080
+bun run test            # moon test --target js
+bun run build           # dist/
 ```
 
-The dev proxy only applies to `bun dev` -- `bun preview` serves the static build as-is, so live API
-calls need `PUBLIC_OPENPARTS_API_BASE` pointed at a reachable, same-origin API.
+Run openparts-server on port 8080 for the API (`/api` is proxied in
+dev and preview; the server has no CORS).
 
-## Deploy (GitHub Pages)
+## Deploy
 
-`.github/workflows/deploy.yml` builds and deploys on push to `main` (requires Pages "Source" set to
-GitHub Actions in repo Settings). `openparts-server` isn't deployed anywhere yet, so search/part
-detail/3D preview/downloads show their error states until one exists -- once it does, set the
-`OPENPARTS_API_BASE` repo variable to its URL and CORS support will need adding there too if it's on
-a different origin.
-
-## Contributing
-
-Part data lives in `openparts-data`. See this site's [`/contributing`](http://localhost:4321/contributing) page.
+- Behind openparts-server: build with the default base `/` and point
+  `OPENPARTS_WEB_DIR` at `dist/`; the server serves `index.html` for
+  every path that isn't a file or the API, and the app routes.
+- GitHub Pages: `OPENPARTS_BASE=/openparts/` (the project site's path);
+  `dist/404.html` is a copy of `index.html` so deep links work.
+  `VITE_OPENPARTS_API_BASE` sets the API's URL (default `/api`).

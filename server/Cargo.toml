@@ -23,11 +23,11 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-ts-rs = { version = "11", optional = true, features = ["no-serde-warnings"] }
+schemars = { version = "1", optional = true }
 
 [features]
-# Exports the API response types as TypeScript (openparts-web).
-ts = ["dep:ts-rs", "openparts-core/ts"]
+# MoonBit API types for openparts-web (from the JSON Schemas).
+schema = ["dep:schemars", "openparts-core/schema"]
 
 [dev-dependencies]
 openparts-stl = { path = "../crates/mcad/openparts-stl" }

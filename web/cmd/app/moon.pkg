@@ -1,0 +1,23 @@
+import {
+  "moonbit-community/rabbita",
+  "moonbit-community/rabbita/html",
+  "moonbit-community/rabbita/nav",
+  "moonbit-community/rabbita/sub",
+  "moonbit-community/rabbita/url",
+  "moonbitlang/async/js_async",
+  "moonbitlang/core/json",
+  "mizchi/three",
+  "bobzhang/zip",
+  "bobzhang/zip/file",
+  "bobzhang/zip/member",
+  "openparts/site/api",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js"
+
+options(
+  link: { "js": { "format": "esm" } },
+  warnings: "-implicit_impl_as_method",
+)

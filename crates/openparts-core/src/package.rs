@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// (QFN, DFN, ...) -- a physical package fact from the datasheet's
 /// package outline drawing, independent of which Device pin (if any) is
 /// bonded to it. `None` means the package has no exposed pad.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExposedPadDimensions {
@@ -27,7 +27,7 @@ pub struct ExposedPadDimensions {
 /// field the datasheet doesn't state stays `None` -- the generator then
 /// falls back to its own documented family default, which is never
 /// written back here (section 7).
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackageDimensions {
@@ -202,7 +202,7 @@ impl PackageDimensions {
 /// construction, as the source document states it -- a closed vocabulary
 /// of facts that change how the part looks (and is handled), never a
 /// guess from its size or name. Absent when the source doesn't say.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PackageConstruction {
@@ -227,7 +227,7 @@ pub enum PackageConstruction {
 /// pin 2), which is why it is recorded here rather than derived; packages
 /// whose outline is identical but whose tab is numbered differently are
 /// separate Packages (as KiCad's `SOT-223-3_TabPin2` / `_TabPin4`).
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackageTab {
@@ -247,7 +247,7 @@ pub struct PackageTab {
 /// the pad along X, `length` along Y. A plated hole has a `drill`
 /// diameter; a slotted hole also a `drill_length` (the slot's overall
 /// length, along the pad's longer side).
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackagePad {
@@ -276,7 +276,7 @@ fn is_plated(p: &bool) -> bool {
 }
 
 /// Canonical Data Specification section 21.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GeometryType {
@@ -287,7 +287,7 @@ pub enum GeometryType {
     None,
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackageGeometrySpec {
@@ -299,14 +299,13 @@ pub struct PackageGeometrySpec {
     pub generator: Option<String>,
 }
 
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
     pub schema_version: String,
     pub kind: Kind,
     pub id: PackageId,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub family: crate::family::PackageFamily,
     pub lead_count: u32,
     pub pitch: Dimension,

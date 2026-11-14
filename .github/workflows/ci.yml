@@ -54,10 +54,16 @@ jobs:
       - name: The whole dataset validates
         run: cargo run -q -p openparts-cli -- validate --data ../openparts-data
 
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
       - name: The web site's API types are up to date
         run: |
+          (cd web && moon install)
           web/scripts/gen-api-types.sh
-          git diff --exit-code -- web/src/lib/api
+          git diff --exit-code -- web/api
 
   web:
     runs-on: ubuntu-latest
@@ -66,9 +72,15 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - run: moon install
       - run: bun install --frozen-lockfile
-      - run: bunx astro check
+      - run: moon check --target js --deny-warn
+      - run: moon test --target js
       - run: bun run build

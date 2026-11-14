@@ -1,0 +1,436 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "openparts/site/api"
+
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+#derive(Eq)
+pub(all) struct ArtifactsResponse {
+  x3mf : String
+  footprint_svg : String
+  kicad_footprint : String
+  kicad_symbol : String
+  step : String
+  stl : String
+}
+pub impl @json.FromJson for ArtifactsResponse
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ComponentCategory {
+  Microcontroller
+  Capacitor
+  Resistor
+  Inductor
+  Diode
+  Transistor
+  Led
+  Crystal
+  Fuse
+  Connector
+  Other
+}
+pub fn ComponentCategory::all() -> Array[Self]
+pub fn ComponentCategory::wire(Self) -> String
+pub impl @json.FromJson for ComponentCategory
+
+#derive(Eq)
+pub(all) struct Device {
+  category : ComponentCategory
+  family : String?
+  id : String
+  kind : Kind
+  manufacturer : String
+  pins : Map[String, Pin]
+  provenance : Map[String, Array[ProvenanceEntry]]
+  revisions : Map[String, DeviceRevision]
+  schema_version : String
+}
+pub impl @json.FromJson for Device
+
+#derive(Eq)
+pub(all) struct DeviceOverrides {
+  pins : Map[String, PinOverride]
+}
+pub impl @json.FromJson for DeviceOverrides
+
+#derive(Eq)
+pub(all) struct DeviceRevision {
+  detection : Array[RevisionDetection]
+  manufacturer_revision : String
+  overrides : DeviceOverrides?
+}
+pub impl @json.FromJson for DeviceRevision
+
+#derive(Eq)
+pub(all) struct DiagnosticBody {
+  entity : String
+  field_path : String?
+  message : String
+  rule_id : String
+  severity : String
+}
+pub impl @json.FromJson for DiagnosticBody
+
+#derive(Eq)
+pub(all) struct Dimension {
+  max : Double?
+  min : Double?
+  nominal : Double?
+  unit : String
+}
+pub impl @json.FromJson for Dimension
+
+#derive(Eq, @debug.Debug)
+pub(all) enum DocumentType {
+  Datasheet
+  ReferenceManual
+  Errata
+  ApplicationNote
+  PackageDrawing
+  ProductPage
+  Pcn
+  EolNotice
+  Other
+}
+pub fn DocumentType::all() -> Array[Self]
+pub fn DocumentType::wire(Self) -> String
+pub impl @json.FromJson for DocumentType
+
+#derive(Eq)
+pub(all) struct ErrorBody {
+  diagnostics : Array[DiagnosticBody]
+  error : String
+}
+pub impl @json.FromJson for ErrorBody
+
+#derive(Eq)
+pub(all) struct Existence {
+  status : ExistenceStatus
+}
+pub impl @json.FromJson for Existence
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ExistenceStatus {
+  Unverified
+  Probable
+  Verified
+  HistoricalVerified
+  Rejected
+}
+pub fn ExistenceStatus::all() -> Array[Self]
+pub fn ExistenceStatus::wire(Self) -> String
+pub impl @json.FromJson for ExistenceStatus
+
+#derive(Eq)
+pub(all) struct ExposedPadDimensions {
+  length : Dimension
+  width : Dimension
+}
+pub impl @json.FromJson for ExposedPadDimensions
+
+#derive(Eq, @debug.Debug)
+pub(all) enum GeometryType {
+  Parametric
+  Procedural
+  Handcrafted
+  External
+  None
+}
+pub fn GeometryType::all() -> Array[Self]
+pub fn GeometryType::wire(Self) -> String
+pub impl @json.FromJson for GeometryType
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Kind {
+  Manufacturer
+  Part
+  Device
+  Package
+  Source
+  Erratum
+  Rejected
+}
+pub fn Kind::all() -> Array[Self]
+pub fn Kind::wire(Self) -> String
+pub impl @json.FromJson for Kind
+
+#derive(Eq)
+pub(all) struct Lifecycle {
+  replacement : Array[String]
+  status : LifecycleStatus
+}
+pub impl @json.FromJson for Lifecycle
+
+#derive(Eq, @debug.Debug)
+pub(all) enum LifecycleStatus {
+  PreRelease
+  Active
+  Nrnd
+  EolAnnounced
+  Obsolete
+  Unknown
+}
+pub fn LifecycleStatus::all() -> Array[Self]
+pub fn LifecycleStatus::wire(Self) -> String
+pub impl @json.FromJson for LifecycleStatus
+
+#derive(Eq)
+pub(all) struct Package {
+  aux_pads : Array[String]?
+  construction : PackageConstruction?
+  dimensions : PackageDimensions
+  family : PackageFamily
+  geometry : PackageGeometrySpec?
+  id : String
+  kind : Kind
+  lead_count : Int32
+  lead_layout : Array[Int32]?
+  pad_order : Array[String]?
+  pads : Array[PackagePad]?
+  pitch : Dimension
+  provenance : Map[String, Array[ProvenanceEntry]]
+  schema_version : String
+  tab : PackageTab?
+}
+pub impl @json.FromJson for Package
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PackageConstruction {
+  Molded
+  TantalumMolded
+  Glass
+  Ceramic
+  MetalCan
+}
+pub fn PackageConstruction::all() -> Array[Self]
+pub fn PackageConstruction::wire(Self) -> String
+pub impl @json.FromJson for PackageConstruction
+
+#derive(Eq)
+pub(all) struct PackageDimensions {
+  actuator_diameter : Dimension?
+  aux_pad_length : Dimension?
+  aux_pad_width : Dimension?
+  aux_row_x : Dimension?
+  aux_row_y : Dimension?
+  body_height : Dimension?
+  body_length : Dimension
+  body_offset : Dimension?
+  body_width : Dimension
+  exposed_pad : ExposedPadDimensions?
+  hole_diameter : Dimension?
+  lead_inset : Dimension?
+  lead_length : Dimension?
+  lead_thickness : Dimension?
+  lead_width : Dimension?
+  mating_length : Dimension?
+  mounting_hole_diameter : Dimension?
+  mounting_hole_inset : Dimension?
+  mounting_hole_spacing : Dimension?
+  overall_height : Dimension?
+  overall_length : Dimension?
+  overall_width : Dimension?
+  pad_diameter : Dimension?
+  row_spacing : Dimension?
+  standoff : Dimension?
+  tab_length : Dimension?
+  tab_width : Dimension?
+  tail_length : Dimension?
+}
+pub impl @json.FromJson for PackageDimensions
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PackageFamily {
+  Lqfp
+  Qfn
+  Dfn
+  Son
+  Lga
+  Soic
+  Tssop
+  Ssop
+  Msop
+  Sot
+  Sot223
+  Dpak
+  D2pak
+  Sod
+  SodFlat
+  Do214
+  To220
+  Chip
+  Radial
+  Axial
+  To92
+  Dip
+  Sip
+  Bga
+  Module
+  Header
+  Socket
+  ShroudedHeader
+  RightAngleHeader
+  TactSwitchSmd
+  TactSwitchTht
+  UsbC
+}
+pub fn PackageFamily::all() -> Array[Self]
+pub fn PackageFamily::wire(Self) -> String
+pub impl @json.FromJson for PackageFamily
+
+#derive(Eq)
+pub(all) struct PackageGeometrySpec {
+  generator : String?
+  type_ : GeometryType
+}
+pub impl @json.FromJson for PackageGeometrySpec
+
+#derive(Eq)
+pub(all) struct PackagePad {
+  drill : Double?
+  drill_length : Double?
+  length : Double
+  number : String
+  plated : Bool?
+  width : Double
+  x : Double
+  y : Double
+}
+pub impl @json.FromJson for PackagePad
+
+#derive(Eq)
+pub(all) struct PackageTab {
+  number : String
+  trimmed_leads : Array[String]?
+}
+pub impl @json.FromJson for PackageTab
+
+#derive(Eq)
+pub(all) struct Part {
+  device : String
+  existence : Existence
+  id : String
+  kind : Kind
+  lifecycle : Lifecycle
+  manufacturer : String
+  mpn : String
+  package_ : String
+  provenance : Map[String, Array[ProvenanceEntry]]
+  schema_version : String
+  sources : Array[String]
+}
+pub impl @json.FromJson for Part
+
+#derive(Eq)
+pub(all) struct PartSource {
+  cited_by : Array[String]
+  source : Source
+}
+pub impl @json.FromJson for PartSource
+
+#derive(Eq)
+pub(all) struct PartSummary {
+  category : ComponentCategory?
+  existence : ExistenceStatus
+  lifecycle : LifecycleStatus
+  manufacturer : String
+  mpn : String
+}
+pub impl @json.FromJson for PartSummary
+
+#derive(Eq)
+pub(all) struct Pin {
+  alternate_functions : Array[String]
+  connected_to : String?
+  name : String
+  type_ : PinType
+}
+pub impl @json.FromJson for Pin
+
+#derive(Eq)
+pub(all) struct PinOverride {
+  alternate_functions : Array[String]?
+  connected_to : String?
+  name : String?
+  type_ : PinType?
+}
+pub impl @json.FromJson for PinOverride
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PinType {
+  Ground
+  Input
+  Output
+  Io
+  Analog
+  Reset
+  Nc
+  Reserved
+  Passive
+  Unknown
+  Power
+  PowerOut
+  Clock
+  ClockOut
+}
+pub fn PinType::all() -> Array[Self]
+pub fn PinType::wire(Self) -> String
+pub impl @json.FromJson for PinType
+
+#derive(Eq)
+pub(all) struct ProvenanceEntry {
+  locator : String?
+  page : Int32?
+  source : String
+}
+pub impl @json.FromJson for ProvenanceEntry
+
+#derive(Eq)
+pub(all) struct ProvenanceResponse {
+  device : Map[String, Array[ProvenanceEntry]]
+  package_ : Map[String, Array[ProvenanceEntry]]
+  part : Map[String, Array[ProvenanceEntry]]
+}
+pub impl @json.FromJson for ProvenanceResponse
+
+#derive(Eq)
+pub(all) struct RevisionDetection {
+  mask : String?
+  method_ : String
+  register_ : String?
+  value : String?
+}
+pub impl @json.FromJson for RevisionDetection
+
+#derive(Eq)
+pub(all) struct RevisionSummary {
+  id : String
+  manufacturer_revision : String
+}
+pub impl @json.FromJson for RevisionSummary
+
+#derive(Eq)
+pub(all) struct Source {
+  date : String
+  document_id : String
+  document_type : DocumentType
+  id : String
+  kind : Kind
+  publisher : String
+  retrieved : String?
+  revision : String
+  schema_version : String
+  url : String
+}
+pub impl @json.FromJson for Source
+
+// Type aliases
+
+// Traits

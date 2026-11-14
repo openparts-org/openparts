@@ -3,7 +3,7 @@ use std::fmt;
 
 macro_rules! newtype_id {
     ($name:ident) => {
-        #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, optional_fields = nullable))]
+        #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[serde(transparent)]
         pub struct $name(pub String);

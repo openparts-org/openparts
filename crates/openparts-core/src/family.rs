@@ -129,6 +129,17 @@ impl<'de> Deserialize<'de> for PackageFamily {
     }
 }
 
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for PackageFamily {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "PackageFamily".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let names: Vec<&str> = PackageFamily::ALL.iter().map(|f| f.name()).collect();
+        schemars::json_schema!({ "type": "string", "enum": names })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
