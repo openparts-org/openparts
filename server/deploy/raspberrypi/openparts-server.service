@@ -1,0 +1,30 @@
+# systemd unit for openparts-server on a Raspberry Pi behind Cloudflare
+# Tunnel. Installed by setup-pi.sh to /etc/systemd/system/.
+#
+# The server only reads /srv/openparts (dataset, prebuilt artifact bundle,
+# web site) and listens on localhost; cloudflared publishes it.
+[Unit]
+Description=OpenParts server (API, prebuilt artifacts, web site)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/srv/openparts/openparts.env
+ExecStart=/srv/openparts/bin/openparts-server
+Restart=on-failure
+RestartSec=5
+
+# Least privilege: a throwaway user, read-only filesystem.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadOnlyPaths=/srv/openparts
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
