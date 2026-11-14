@@ -7,15 +7,14 @@ use openparts_mcad::MechanicalGeometry;
 /// XY plane. Lead size/position from the generator already encode the
 /// correct per-side orientation, so no rotation is needed here.
 ///
-/// Pad shape: an SMD lead always gets `Rect` (unchanged from before
-/// through-hole support existed). A through-hole lead's shape marks
-/// polarity the same way a real KiCad footprint does -- confirmed
-/// directly against `KiCad/kicad-footprints`'
-/// `Capacitor_THT.pretty/CP_Radial_D5.0mm_P2.00mm.kicad_mod`: pin "1"
-/// (positive) is `rect`, every other pin is `circle`. Applied
-/// generically here (any through-hole part's pin 1, not hardcoded to
-/// radial capacitors specifically), matching how `MarkerKind::Pin1Dot`
-/// is already a generic, family-agnostic concept.
+/// Pads are the package's stated land pattern when it has one
+/// (`MechanicalGeometry::lands`), else the leads' outlines.
+///
+/// Pad shape: SMD pads are `Rect`. A square through-hole pad marks pin 1
+/// as KiCad's own footprints do (`Capacitor_THT.pretty/
+/// CP_Radial_D5.0mm_P2.00mm.kicad_mod`): pin "1" `rect`, the others
+/// `circle`; a longer-than-wide through-hole pad (a slotted tab) is
+/// `Oval`.
 ///
 /// The footprint carries a 3D model reference by default:
 /// [`default_model_path`]`(name)` with the identity transform, i.e. the

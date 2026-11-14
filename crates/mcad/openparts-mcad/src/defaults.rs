@@ -342,7 +342,7 @@ pub(crate) mod axial {
     /// Drill diameter and pad size, both taken directly from a real KiCad
     /// reference footprint (`Diode_THT.pretty/
     /// D_DO-41_SOD81_P10.16mm_Horizontal.kicad_mod`, `KiCad/kicad-footprints`):
-    /// `(pad ... (size 2.2 2.2) (drill 1.1) ...)` -- not invented.
+    /// `(pad ... (size 2.2 2.2) (drill 1.1) ...)`.
     pub const DRILL_DIAMETER: f64 = 1.1;
     pub const PAD_DIAMETER: f64 = 2.2;
     pub const LEAD_HEIGHT: f64 = 3.0;
@@ -353,7 +353,7 @@ pub(crate) mod sip {
     /// Drill diameter and pad size, both taken directly from a real KiCad
     /// reference footprint (`Package_SIP.pretty/SIP-8_19x3mm_P2.54mm.kicad_mod`,
     /// `KiCad/kicad-footprints`): `(pad ... (size 1.45 1.45) (drill 0.85) ...)`
-    /// -- not invented.
+    ///.
     pub const DRILL_DIAMETER: f64 = 0.85;
     pub const PAD_DIAMETER: f64 = 1.45;
     pub const LEAD_HEIGHT: f64 = 3.0;
@@ -395,7 +395,7 @@ pub(crate) mod dip {
     /// Drill diameter and pad size, both taken directly from a real KiCad
     /// reference footprint (`Package_DIP.pretty/DIP-8_W7.62mm.kicad_mod`,
     /// `KiCad/kicad-footprints`): `(pad ... (size 1.6 1.6) (drill 0.8) ...)`
-    /// -- not invented.
+    ///.
     pub const DRILL_DIAMETER: f64 = 0.8;
     pub const PAD_DIAMETER: f64 = 1.6;
     pub const LEAD_HEIGHT: f64 = 3.0;
@@ -432,7 +432,7 @@ pub(crate) mod radial {
     /// Drill diameter and pad size, both taken directly from a real
     /// official KiCad footprint (`Capacitor_THT.pretty/
     /// CP_Radial_D5.0mm_P2.00mm.kicad_mod`, `KiCad/kicad-footprints`):
-    /// `(pad ... (size 1.6 1.6) (drill 0.8) ...)` -- not invented.
+    /// `(pad ... (size 1.6 1.6) (drill 0.8) ...)`.
     pub const DRILL_DIAMETER: f64 = 0.8;
     pub const PAD_DIAMETER: f64 = 1.6;
     pub const LEAD_HEIGHT: f64 = 3.0;
@@ -447,7 +447,7 @@ pub(crate) mod to92 {
     /// Drill diameter and pad size, both taken directly from a real KiCad
     /// reference footprint (`Package_TO_SOT_THT.pretty/TO-92.kicad_mod`,
     /// `KiCad/kicad-footprints`): `(pad ... (size 1.3 1.3) (drill 0.75) ...)`
-    /// -- not invented.
+    ///.
     pub const DRILL_DIAMETER: f64 = 0.75;
     pub const PAD_DIAMETER: f64 = 1.3;
     pub const LEAD_HEIGHT: f64 = 3.0;

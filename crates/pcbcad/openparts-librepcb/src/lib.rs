@@ -244,9 +244,9 @@ fn render_package(
         // LibrePCB has no separate "circle" pad shape -- a pad is
         // always `roundrect`, and `radius` (a 0.0-1.0 "how rounded"
         // scale, per LibrePCB/librepcb-parts-generator's own
-        // `ShapeRadius`) controls how round it looks: 0.0 for a sharp
-        // `PadShape::Rect` (today's behavior, unchanged), 1.0 (fully
-        // rounded) for `PadShape::Circle`.
+        // `ShapeRadius`) controls how round it looks: 0.0 for
+        // `PadShape::Rect`, 1.0 (fully rounded: a circle, or an obround
+        // on a non-square pad) for `Circle` and `Oval`.
         let radius = match pad.shape {
             openparts_pcbcad::PadShape::Rect => 0.0,
             openparts_pcbcad::PadShape::Circle | openparts_pcbcad::PadShape::Oval => 1.0,
@@ -313,9 +313,8 @@ fn pad_numbers(footprint: &PcbFootprint) -> Vec<&str> {
 
 /// LibrePCB's real `AssemblyType` enum (`none | tht | smt | mixed |
 /// other | auto`, per LibrePCB/librepcb-parts-generator's
-/// `entities/package.py`) -- this project doesn't yet have a mixed-
-/// mounting family, so `tht`/`smt` cover every real case today and
-/// `mixed` is future-proofing, not exercised yet.
+/// `entities/package.py`): `mixed` for SMD contacts with plated tabs
+/// (USB-C receptacles). Non-plated holes don't count.
 fn assembly_type(footprint: &PcbFootprint) -> &'static str {
     let (mut has_smd, mut has_tht) = (false, false);
     for pad in &footprint.pads {
