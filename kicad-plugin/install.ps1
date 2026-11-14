@@ -1,7 +1,7 @@
 # Installs openparts-kicad-plugin (Windows) and registers its KiCad
 # toolbar launcher plugin. Usage:
 #
-#   irm https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/openparts-org/openparts/main/kicad-plugin/install.ps1 | iex
 #
 # Everything needed is fetched from GitHub Releases -- this script does
 # not assume it's run from inside a clone of the repo.
@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "openparts-org/openparts-kicad-plugin"
+$Repo = "openparts-org/openparts"
 $Asset = "openparts-kicad-plugin-windows-x86_64.zip"
 $InstallDir = Join-Path $env:LOCALAPPDATA "openparts-kicad-plugin"
 $ConfigDir = Join-Path $env:APPDATA "openparts-kicad-plugin"
@@ -36,9 +36,11 @@ $testZip = $env:OPENPARTS_KICAD_PLUGIN_TEST_ZIP
 if ($testZip) {
     $zipPath = $testZip
 } else {
-    Write-Host "Fetching latest release info for $Repo..."
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-    $downloadUrl = ($release.assets | Where-Object { $_.name -eq $Asset } | Select-Object -First 1).browser_download_url
+    # The repository also releases other things: the newest release that
+    # carries this asset is the plugin's latest (tags kicad-plugin-v*).
+    Write-Host "Fetching release info for $Repo..."
+    $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases"
+    $downloadUrl = ($releases | ForEach-Object { $_.assets } | Where-Object { $_.name -eq $Asset } | Select-Object -First 1).browser_download_url
 
     if (-not $downloadUrl) {
         Write-Error "Could not find a released asset named $Asset. Has a release been published yet? See: https://github.com/$Repo/releases"

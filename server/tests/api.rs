@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn data_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../openparts-data")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openparts-data")
 }
 
 fn app() -> axum::Router {

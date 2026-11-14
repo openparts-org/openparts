@@ -2,13 +2,13 @@
 # Installs openparts-kicad-plugin (Linux) and registers its KiCad toolbar
 # launcher plugin. Usage:
 #
-#   curl -fsSL https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/openparts-org/openparts/main/kicad-plugin/install.sh | bash
 #
 # Everything needed is fetched from GitHub Releases -- this script does
 # not assume it's run from inside a clone of the repo.
 set -euo pipefail
 
-REPO="openparts-org/openparts-kicad-plugin"
+REPO="openparts-org/openparts"
 INSTALL_DIR="${OPENPARTS_KICAD_PLUGIN_INSTALL_DIR:-$HOME/.local/share/openparts-kicad-plugin}"
 CONFIG_DIR="$HOME/.config/openparts-kicad-plugin"
 
@@ -52,8 +52,10 @@ else
   trap 'rm -f "$tmp_archive"' EXIT
   archive="$tmp_archive"
 
-  echo "Fetching latest release info for $REPO..."
-  release_json="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")"
+  # The repository also releases other things: the newest release that
+  # carries this asset is the plugin's latest (tags kicad-plugin-v*).
+  echo "Fetching release info for $REPO..."
+  release_json="$(curl -fsSL "https://api.github.com/repos/$REPO/releases")"
   download_url="$(printf '%s' "$release_json" | grep -o "\"browser_download_url\": *\"[^\"]*${asset}\"" | head -n1 | sed -E 's/.*"(https[^"]+)"/\1/')"
 
   if [ -z "$download_url" ]; then

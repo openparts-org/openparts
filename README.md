@@ -1,13 +1,16 @@
 # openparts
 
-Core libraries, validators, generators, client, and CLI for OpenParts --
-an open, provenance-tracked data platform for electronic components that
-generates reproducible EDA/MCAD assets from Canonical Data instead of
-distributing pre-made CAD files.
+OpenParts -- an open, provenance-tracked data platform for electronic
+components that generates reproducible EDA/MCAD assets from Canonical
+Data instead of distributing pre-made CAD files. This repository holds
+all of its code: the core libraries, validators, generators and CLI
+(`crates/`), the distribution API server (`server/`), the web site
+(`web/`) and the KiCad plugin (`kicad-plugin/`).
 
 See [`docs/spec/`](docs/spec/) for the full specification set. Component
-data lives in the sibling `openparts-data` repository; the distribution
-API/database lives in `openparts-server`.
+data lives in the `openparts-data` repository, checked out next to this
+one (`../openparts-data`): tests, `openparts validate --data` and the
+server read it from there.
 
 ## Status
 
@@ -31,7 +34,12 @@ see "Prebuilt artifacts" below for `bundle`.
 ## Layout
 
 ```text
+server/                  openparts-server: REST API + bundled artifacts
+web/                     openparts-web: the Astro site (src/lib/api is
+                         generated from the Rust types: web/scripts/gen-api-types.sh)
+kicad-plugin/            KiCad plugin (library sync GUI + launcher)
 crates/
+├── openparts-artifacts  Part -> every artifact; the bundle manifest schema
 ├── openparts-core        Canonical Rust data model
 ├── openparts-data         YAML <-> core model
 ├── openparts-validator     cross-entity validation

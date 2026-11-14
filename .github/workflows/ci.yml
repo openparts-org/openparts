@@ -1,7 +1,6 @@
-# Code PR CI (Testing and Quality Specification section 12): formatting,
-# static checks, and the unit/integration test suite, including a
-# representative CAD-generation smoke check against the real RP2040
-# fixture in the sibling openparts-data repository.
+# Code CI (Testing and Quality Specification section 12) for the whole
+# repository: the Rust workspace (crates, server, KiCad plugin) against
+# the real openparts-data fixtures, and the web site.
 name: ci
 
 on:
@@ -10,22 +9,29 @@ on:
   pull_request:
 
 jobs:
-  test:
+  rust:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out openparts
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Check out openparts-data (sibling fixture data)
+      - name: Check out openparts-data (fixtures, next to this repository)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/openparts-data
           path: openparts-data-checkout
 
-      - name: Use sibling layout expected by tests/CLI
+      - name: Use the sibling layout the tests expect
         run: |
           rm -rf ../openparts-data
           mv openparts-data-checkout ../openparts-data
+
+      # The KiCad plugin's GUI (eframe) links against GTK3/X11/Wayland;
+      # no display is needed to build or test.
+      - name: Install eframe Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-0 \
+            libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libgl1-mesa-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -40,22 +46,29 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # SolidCraft isn't available here: tests that need it say so and
+      # skip (set OPENPARTS_REQUIRE_SOLIDCRAFT where it is installed).
       - name: cargo test
         run: cargo test --workspace
 
-      - name: Representative CAD generation smoke check
+      - name: The whole dataset validates
+        run: cargo run -q -p openparts-cli -- validate --data ../openparts-data
+
+      - name: The web site's API types are up to date
         run: |
-          cargo run -p openparts-cli -- validate \
-            --part ../openparts-data/parts/raspberrypi/rp2040/RP2040.yaml \
-            --device ../openparts-data/devices/raspberrypi/RP2040.yaml \
-            --package ../openparts-data/packages/standards/qfn/QFN56-RP2040.yaml \
-            --source ../openparts-data/sources/raspberrypi/RP-008371-DS.yaml
-          cargo run -p openparts-cli -- generate \
-            --part ../openparts-data/parts/raspberrypi/rp2040/RP2040.yaml \
-            --device ../openparts-data/devices/raspberrypi/RP2040.yaml \
-            --package ../openparts-data/packages/standards/qfn/QFN56-RP2040.yaml \
-            --source ../openparts-data/sources/raspberrypi/RP-008371-DS.yaml \
-            --out /tmp/openparts-ci-out
-          test -s /tmp/openparts-ci-out/RP2040.kicad_sym
-          test -s /tmp/openparts-ci-out/RP2040.kicad_mod
-          test -s /tmp/openparts-ci-out/RP2040.step
+          web/scripts/gen-api-types.sh
+          git diff --exit-code -- web/src/lib/api
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx astro check
+      - run: bun run build

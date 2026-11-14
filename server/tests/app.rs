@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn store() -> Arc<openparts_server::store::Store> {
-    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../openparts-data");
+    let data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../openparts-data");
     Arc::new(openparts_server::store::discover_and_load(&data).unwrap())
 }
 

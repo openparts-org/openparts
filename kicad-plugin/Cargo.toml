@@ -20,8 +20,8 @@ path = "src/main.rs"
 kicad-ipc = ["dep:kicad-ipc-rs"]
 
 [dependencies]
-openparts-client = { path = "../openparts/crates/openparts-client" }
-openparts-core = { path = "../openparts/crates/openparts-core" }
+openparts-client = { path = "../crates/openparts-client" }
+openparts-core = { path = "../crates/openparts-core" }
 
 eframe = "0.29"
 thiserror = "1"

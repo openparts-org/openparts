@@ -1,34 +1,24 @@
-# Builds Linux and Windows release binaries and publishes them, plus
-# the KiCad launcher plugin, as a GitHub Release -- what install.sh and
-# install.ps1 download.
-name: release
+# Builds the KiCad plugin's Linux and Windows release binaries and
+# publishes them, plus the KiCad launcher plugin, as a GitHub Release
+# (tags kicad-plugin-v*) -- what kicad-plugin/install.sh and install.ps1
+# download.
+name: kicad-plugin-release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["kicad-plugin-v*"]
   workflow_dispatch:
 
 jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out openparts-kicad-plugin
-        uses: actions/checkout@v4
-        with:
-          path: openparts-kicad-plugin
-
-      - name: Check out openparts (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/openparts
-          path: openparts
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: openparts-kicad-plugin
 
       - name: Install eframe Linux build dependencies
         run: |
@@ -45,14 +35,13 @@ jobs:
             libgl1-mesa-dev
 
       - name: cargo build --release
-        working-directory: openparts-kicad-plugin
-        run: cargo build --release
+        run: cargo build --release -p openparts-kicad-plugin
 
       - name: Package
         run: |
           mkdir -p dist
-          cp openparts-kicad-plugin/target/release/openparts-kicad-plugin dist/
-          cp openparts-kicad-plugin/kicad-integration/openparts_launcher.py dist/
+          cp target/release/openparts-kicad-plugin dist/
+          cp kicad-plugin/kicad-integration/openparts_launcher.py dist/
           tar -czf openparts-kicad-plugin-linux-x86_64.tar.gz -C dist .
 
       - uses: actions/upload-artifact@v4
@@ -63,34 +52,22 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Check out openparts-kicad-plugin
-        uses: actions/checkout@v4
-        with:
-          path: openparts-kicad-plugin
-
-      - name: Check out openparts (path dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/openparts
-          path: openparts
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: openparts-kicad-plugin
 
       - name: cargo build --release
-        working-directory: openparts-kicad-plugin
-        run: cargo build --release
+        run: cargo build --release -p openparts-kicad-plugin
 
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item openparts-kicad-plugin\target\release\openparts-kicad-plugin.exe dist\
-          Copy-Item openparts-kicad-plugin\kicad-integration\openparts_launcher.py dist\
+          Copy-Item target\release\openparts-kicad-plugin.exe dist\
+          Copy-Item kicad-plugin\kicad-integration\openparts_launcher.py dist\
           Compress-Archive -Path dist\* -DestinationPath openparts-kicad-plugin-windows-x86_64.zip
 
       - uses: actions/upload-artifact@v4

@@ -46,12 +46,12 @@ for you -- no Rust toolchain needed.
 
 **Linux:**
 ```sh
-curl -fsSL https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openparts-org/openparts/main/kicad-plugin/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/openparts-org/openparts-kicad-plugin/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/openparts-org/openparts/main/kicad-plugin/install.ps1 | iex
 ```
 Both scripts try to auto-detect your KiCad plugin directory; if they can't, they'll tell you how to
 find it via KiCad's own Tools > External Plugins > Open Plugin Directory and re-run with an explicit

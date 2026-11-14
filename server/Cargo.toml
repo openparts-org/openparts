@@ -6,11 +6,11 @@ publish = false
 description = "OpenParts distribution API server (Architecture Specification section 20)."
 
 [dependencies]
-openparts-core = { path = "../openparts/crates/openparts-core" }
-openparts-data = { path = "../openparts/crates/openparts-data" }
-openparts-validator = { path = "../openparts/crates/openparts-validator" }
-openparts-solidcraft = { path = "../openparts/crates/mcad/openparts-solidcraft" }
-openparts-artifacts = { path = "../openparts/crates/openparts-artifacts" }
+openparts-core = { path = "../crates/openparts-core" }
+openparts-data = { path = "../crates/openparts-data" }
+openparts-validator = { path = "../crates/openparts-validator" }
+openparts-solidcraft = { path = "../crates/mcad/openparts-solidcraft" }
+openparts-artifacts = { path = "../crates/openparts-artifacts" }
 
 axum = "0.7"
 tower-http = { version = "0.6", features = ["fs"] }
@@ -30,6 +30,6 @@ ts-rs = { version = "11", optional = true, features = ["no-serde-warnings"] }
 ts = ["dep:ts-rs", "openparts-core/ts"]
 
 [dev-dependencies]
-openparts-stl = { path = "../openparts/crates/mcad/openparts-stl" }
+openparts-stl = { path = "../crates/mcad/openparts-stl" }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
