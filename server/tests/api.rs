@@ -1086,3 +1086,49 @@ async fn search_finds_structure_by_free_text() {
         .iter()
         .all(|i| i["gender"] == "male"));
 }
+
+/// An MPN with `/` in it (Kingbright "APT1608QBC/D", in the real data)
+/// is one `:mpn` segment sent as `%2F`: every part route finds it, at
+/// `/` and under `/api`, and the artifact index links stay encoded.
+#[tokio::test]
+async fn an_mpn_containing_a_slash_is_one_percent_encoded_segment() {
+    let base = "/v1/parts/kingbright/APT1608QBC%2FD";
+    let app = app();
+    let response = get(app.clone(), base).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let part: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    assert_eq!(part["mpn"], "APT1608QBC/D");
+
+    for sub in [
+        "/sources",
+        "/provenance",
+        "/revisions",
+        "/placement",
+        "/documents",
+        "/alternatives",
+        "/artifacts/kicad-symbol",
+        "/artifacts/kicad-footprint",
+        "/artifacts/footprint-svg",
+    ] {
+        let response = get(app.clone(), &format!("{base}{sub}")).await;
+        assert_eq!(response.status(), StatusCode::OK, "{base}{sub}");
+    }
+    let response = get(app.clone(), &format!("{base}/artifacts")).await;
+    let index: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    assert_eq!(
+        index["kicad-footprint"],
+        "/v1/parts/kingbright/APT1608QBC%2FD/artifacts/kicad-footprint"
+    );
+    // The link it gives works as is.
+    let link = index["kicad-symbol"].as_str().unwrap().to_string();
+    assert_eq!(get(app, &link).await.status(), StatusCode::OK);
+
+    // The deployed app (the API under /api too).
+    let store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+    let deployed = openparts_server::app::build_app(Arc::new(store), None);
+    let response = get(deployed.clone(), &format!("/api{base}")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    // An unencoded `/` is a different (unknown) route.
+    let response = get(deployed, "/api/v1/parts/kingbright/APT1608QBC/D").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

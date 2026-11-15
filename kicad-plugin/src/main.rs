@@ -482,8 +482,12 @@ mod tests {
             h.update(content.as_bytes());
             h.finalize().iter().map(|b| format!("{b:02x}")).collect()
         };
+        // The client's cache layout: percent-encoded segments (an MPN's
+        // `/` stays in one file name).
         let pointer_path = cache_dir.join(format!(
-            "metadata/artifact-pointers/{manufacturer}/{mpn}/{kind}.hash"
+            "metadata/artifact-pointers/{}/{}/{kind}.hash",
+            openparts_client::percent_encode(manufacturer),
+            openparts_client::percent_encode(mpn)
         ));
         std::fs::create_dir_all(pointer_path.parent().unwrap()).unwrap();
         std::fs::write(&pointer_path, &hash).unwrap();

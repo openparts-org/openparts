@@ -322,7 +322,13 @@ async fn list_artifacts(
     Path((manufacturer, mpn)): Path<(String, String)>,
 ) -> Result<Json<ArtifactsResponse>, ApiError> {
     resolve_part(&store, &manufacturer, &mpn)?;
-    let base = format!("/v1/parts/{manufacturer}/{mpn}/artifacts");
+    // An MPN may contain `/` ("APT1608QBC/D"): each segment is
+    // percent-encoded so the link stays one `:mpn` segment.
+    let base = format!(
+        "/v1/parts/{}/{}/artifacts",
+        encode_segment(&manufacturer),
+        encode_segment(&mpn)
+    );
     Ok(Json(ArtifactsResponse {
         kicad_symbol: format!("{base}/kicad-symbol"),
         kicad_footprint: format!("{base}/kicad-footprint"),
@@ -331,6 +337,20 @@ async fn list_artifacts(
         stl: format!("{base}/stl"),
         three_mf: format!("{base}/3mf"),
     }))
+}
+
+/// RFC 3986 percent-encoding of a path segment (everything but the
+/// unreserved characters, byte by byte).
+pub(crate) fn encode_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 #[derive(Deserialize)]

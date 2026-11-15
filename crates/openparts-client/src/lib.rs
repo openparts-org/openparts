@@ -151,8 +151,8 @@ impl Client {
 
     /// `GET /v1/parts/{manufacturer}/{mpn}`
     pub fn get_part(&self, manufacturer: &str, mpn: &str) -> Result<Part, ClientError> {
-        let cache_key = cache::metadata_key("parts", &format!("{manufacturer}/{mpn}"));
-        self.fetch_json(&format!("/v1/parts/{manufacturer}/{mpn}"), &cache_key)
+        let cache_key = cache::metadata_key("parts", &part_segments(manufacturer, mpn));
+        self.fetch_json(&part_path(manufacturer, mpn), &cache_key)
     }
 
     /// `GET /v1/devices/{id}`
@@ -180,7 +180,12 @@ impl Client {
         kind: ArtifactKind,
         revision: Option<&str>,
     ) -> Result<Artifact, ClientError> {
-        let pointer_key = cache::artifact_pointer_key(manufacturer, mpn, kind.as_str(), revision);
+        let pointer_key = cache::artifact_pointer_key(
+            &percent_encode(manufacturer),
+            &percent_encode(mpn),
+            kind.as_str(),
+            revision.map(percent_encode).as_deref(),
+        );
 
         if self.offline {
             let hash = cache::read(&self.cache_dir, &pointer_key)
@@ -191,7 +196,11 @@ impl Client {
             return Ok(Artifact { content, hash });
         }
 
-        let mut path = format!("/v1/parts/{manufacturer}/{mpn}/artifacts/{}", kind.as_str());
+        let mut path = format!(
+            "{}/artifacts/{}",
+            part_path(manufacturer, mpn),
+            kind.as_str()
+        );
         if let Some(rev) = revision {
             path.push_str(&format!("?silicon_revision={}", percent_encode(rev)));
         }
@@ -254,16 +263,32 @@ fn sanitize_for_filename(s: &str) -> String {
         .collect()
 }
 
-fn percent_encode(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
-                c.to_string()
-            } else {
-                format!("%{:02X}", c as u32)
-            }
-        })
-        .collect()
+/// `/v1/parts/{manufacturer}/{mpn}` with each segment percent-encoded:
+/// an MPN may contain `/` ("APT1608QBC/D"), which must reach the server
+/// as `%2F` inside the one `:mpn` segment rather than as a separator.
+pub fn part_path(manufacturer: &str, mpn: &str) -> String {
+    format!("/v1/parts/{}", part_segments(manufacturer, mpn))
+}
+
+/// `{manufacturer}/{mpn}`, each percent-encoded (also the cache path,
+/// so an MPN's `/` doesn't become a directory).
+fn part_segments(manufacturer: &str, mpn: &str) -> String {
+    format!("{}/{}", percent_encode(manufacturer), percent_encode(mpn))
+}
+
+/// RFC 3986 percent-encoding of everything but the unreserved
+/// characters, byte by byte (UTF-8): safe for a path segment and a
+/// query value.
+pub fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -343,6 +368,64 @@ mod tests {
             .get_artifact("raspberrypi", "RP2040", ArtifactKind::KicadSymbol, None)
             .unwrap_err();
         assert!(matches!(err, ClientError::HashMismatch { .. }));
+    }
+
+    #[test]
+    fn part_paths_percent_encode_each_segment() {
+        assert_eq!(
+            part_path("raspberrypi", "RP2040"),
+            "/v1/parts/raspberrypi/RP2040"
+        );
+        assert_eq!(
+            part_path("kingbright", "APT1608QBC/D"),
+            "/v1/parts/kingbright/APT1608QBC%2FD"
+        );
+        assert_eq!(
+            part_path("everlight", "19-217/R6C-P1Q2/6T"),
+            "/v1/parts/everlight/19-217%2FR6C-P1Q2%2F6T"
+        );
+        assert_eq!(
+            part_path("ti", "LM1117MPX-3.3/NOPB"),
+            "/v1/parts/ti/LM1117MPX-3.3%2FNOPB"
+        );
+        // Space, '#', '?', '%' and non-ASCII (UTF-8 bytes).
+        assert_eq!(percent_encode("a b#?%"), "a%20b%23%3F%25");
+        assert_eq!(percent_encode("Ω"), "%CE%A9");
+    }
+
+    #[test]
+    fn artifact_request_sends_the_encoded_mpn() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let body = "x";
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            );
+            request.lines().next().unwrap_or_default().to_string()
+        });
+        let cache_dir = temp_cache_dir("slash-mpn");
+        let client = Client::new(format!("http://{addr}")).with_cache_dir(&cache_dir);
+        let a = client
+            .get_artifact("kingbright", "APT1608QBC/D", ArtifactKind::Step, None)
+            .unwrap();
+        assert_eq!(a.content, "x");
+        assert_eq!(
+            seen.join().unwrap(),
+            "GET /v1/parts/kingbright/APT1608QBC%2FD/artifacts/step HTTP/1.1"
+        );
+        // The cache keeps the MPN in one file name, not a directory.
+        assert!(cache_dir
+            .join("metadata/artifact-pointers/kingbright/APT1608QBC%2FD/step.hash")
+            .is_file());
     }
 
     #[test]
