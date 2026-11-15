@@ -1,0 +1,143 @@
+{
+ "schema_version": "0.1",
+ "kind": "package",
+ "id": "standards/QFN56-RP2040",
+ "family": "qfn",
+ "lead_count": 56,
+ "pitch": {
+  "nominal": 0.4,
+  "min": null,
+  "max": null,
+  "unit": "mm"
+ },
+ "dimensions": {
+  "body_width": {
+   "nominal": 7.0,
+   "min": null,
+   "max": null,
+   "unit": "mm"
+  },
+  "body_length": {
+   "nominal": 7.0,
+   "min": null,
+   "max": null,
+   "unit": "mm"
+  },
+  "body_height": null,
+  "exposed_pad": {
+   "width": {
+    "nominal": 3.1,
+    "min": 3.0,
+    "max": 3.2,
+    "unit": "mm"
+   },
+   "length": {
+    "nominal": 3.1,
+    "min": 3.0,
+    "max": 3.2,
+    "unit": "mm"
+   }
+  },
+  "standoff": {
+   "nominal": null,
+   "min": 0.0,
+   "max": 0.05,
+   "unit": "mm"
+  },
+  "lead_width": {
+   "nominal": 0.18,
+   "min": 0.13,
+   "max": 0.23,
+   "unit": "mm"
+  },
+  "lead_length": {
+   "nominal": 0.4,
+   "min": 0.3,
+   "max": 0.5,
+   "unit": "mm"
+  },
+  "lead_thickness": {
+   "nominal": 0.203,
+   "min": null,
+   "max": null,
+   "unit": "mm"
+  }
+ },
+ "lead_layout": null,
+ "geometry": {
+  "type": "parametric",
+  "generator": "qfn"
+ },
+ "provenance": {
+  "/dimensions/body_length": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": null,
+    "locator": "\"QFN-56 7x7mm (reduced ePad size)\""
+   }
+  ],
+  "/dimensions/body_width": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": null,
+    "locator": "\"QFN-56 7x7mm (reduced ePad size)\""
+   }
+  ],
+  "/dimensions/exposed_pad/length": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"E2\" (3.00/3.100/3.200)"
+   }
+  ],
+  "/dimensions/exposed_pad/width": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"D2\" (3.00/3.100/3.200; drawn along X in the bottom view)"
+   }
+  ],
+  "/dimensions/lead_length": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"L\""
+   }
+  ],
+  "/dimensions/lead_thickness": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"A3\" (0.203 REF)"
+   }
+  ],
+  "/dimensions/lead_width": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"b\""
+   }
+  ],
+  "/dimensions/standoff": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": 608,
+    "locator": "Section 5.1 Package, Figure 166 dimension table, symbol \"A1\" (no nom)"
+   }
+  ],
+  "/lead_count": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": null,
+    "locator": "Section 5.5.2 package description"
+   }
+  ],
+  "/pitch": [
+   {
+    "source": "raspberrypi/RP-008371-DS@rev1",
+    "page": null,
+    "locator": "Section 5.5.2, \"standard 0.4mm QFN-56 footprints\""
+   }
+  ]
+ }
+}

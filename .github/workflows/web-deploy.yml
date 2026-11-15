@@ -4,7 +4,8 @@ name: web-deploy
 on:
   push:
     branches: [main]
-    paths: ["web/**"]
+    # The part viewer is Rust (crates/viewer) built into the site.
+    paths: ["web/**", "crates/**", "Cargo.lock"]
   workflow_dispatch:
 
 permissions:
@@ -34,8 +35,19 @@ jobs:
         with:
           bun-version: latest
 
-      # Fetches the MoonBit dependencies into .mooncakes/ (bun install
-      # links the three.js bindings' JS from there).
+      # The part viewer (crates/viewer/openparts-viewer) is Rust compiled
+      # to wasm: bun run build runs scripts/build-wasm.sh, which needs the
+      # wasm32 target and wasm-bindgen-cli at the Cargo.lock version.
+      - name: Install Rust (wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install wasm-bindgen-cli (the Cargo.lock version)
+        run: cargo binstall -y --force "wasm-bindgen-cli@$(scripts/build-wasm.sh --bindgen-version)"
+
+      # Fetches the MoonBit dependencies into .mooncakes/.
       - run: moon update && moon check --target js
 
       - run: bun install --frozen-lockfile

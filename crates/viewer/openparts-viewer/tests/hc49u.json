@@ -1,0 +1,69 @@
+{
+ "schema_version": "0.1",
+ "kind": "package",
+ "id": "standards/RADIAL-HC49U-AB",
+ "family": "radial",
+ "lead_count": 2,
+ "pitch": {
+  "nominal": 4.88,
+  "min": 4.68,
+  "max": 5.08,
+  "unit": "mm"
+ },
+ "dimensions": {
+  "body_width": {
+   "nominal": null,
+   "min": null,
+   "max": 11.5,
+   "unit": "mm"
+  },
+  "body_length": {
+   "nominal": null,
+   "min": null,
+   "max": 5.0,
+   "unit": "mm"
+  },
+  "body_height": {
+   "nominal": null,
+   "min": null,
+   "max": 13.46,
+   "unit": "mm"
+  },
+  "exposed_pad": null
+ },
+ "lead_layout": null,
+ "geometry": {
+  "type": "parametric",
+  "generator": "radial"
+ },
+ "provenance": {
+  "/dimensions/body_height": [
+   {
+    "source": "abracon/ab-hc49u",
+    "page": 1,
+    "locator": "Per-page dimension summary box \"11.5 x 5.0 x 13.46mm\" -- can height (max only, no min/nominal given)"
+   }
+  ],
+  "/dimensions/body_length": [
+   {
+    "source": "abracon/ab-hc49u",
+    "page": 1,
+    "locator": "Per-page dimension summary box \"11.5 x 5.0 x 13.46mm\" -- short axis of the oval can, 5.0mm (max only, no min/nominal given)"
+   }
+  ],
+  "/dimensions/body_width": [
+   {
+    "source": "abracon/ab-hc49u",
+    "page": 1,
+    "locator": "Per-page dimension summary box \"11.5 x 5.0 x 13.46mm\" -- long axis of the oval can (max only, no min/nominal given); see comment above"
+   }
+  ],
+  "/pitch": [
+   {
+    "source": "abracon/ab-hc49u",
+    "page": 3,
+    "locator": "Outline drawing, lead pitch \"0.192in +/- 0.008in\" (4.88mm +/- 0.20mm)"
+   }
+  ]
+ }
+}

@@ -3,15 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "moon build --target js --release && vite",
-    "build": "moon build --target js --release && vite build",
+    "build:wasm": "./scripts/build-wasm.sh",
+    "dev": "./scripts/build-wasm.sh && moon build --target js --release && vite",
+    "build": "./scripts/build-wasm.sh && moon build --target js --release && vite build",
     "preview": "vite preview",
     "test": "moon test --target js",
     "gen-api-types": "./scripts/gen-api-types.sh"
-  },
-  "dependencies": {
-    "@mizchi/three-mbt": "file:./.mooncakes/mizchi/three/js",
-    "three": "0.185.1"
   },
   "devDependencies": {
     "vite": "^7.1.0",

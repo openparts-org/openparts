@@ -6,7 +6,6 @@ import {
   "moonbit-community/rabbita/url",
   "moonbitlang/async/js_async",
   "moonbitlang/core/json",
-  "mizchi/three",
   "bobzhang/zip",
   "bobzhang/zip/file",
   "bobzhang/zip/member",

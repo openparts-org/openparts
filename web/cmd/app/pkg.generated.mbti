@@ -39,6 +39,8 @@ type PartData
 #derive(Eq)
 type Route
 
+type ViewerMount
+
 #derive(Eq)
 type ZipState
 

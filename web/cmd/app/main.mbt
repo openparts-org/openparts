@@ -62,6 +62,10 @@ fn enter(
   set_document_lang(lang.code())
   set_document_title(title_of(lang, route))
   let model = { ..model, lang, route, }
+  if !(route is Part(_, _)) {
+    // Off the part page: the viewer's views (and listeners) go too.
+    (stop_viewer.val)()
+  }
   match route {
     Search(q) => catalog_enter(model, q, emit)
     Part(m, p) => {
@@ -69,7 +73,7 @@ fn enter(
       if key == model.part_key && !(model.part is Failed(_)) {
         // Back to the same part: the 3D view has to be drawn again.
         if model.part is Got(_) {
-          return (model, viewer_cmd(m, p, emit))
+          return (model, viewer_cmd(lang, m, p, emit))
         }
         return (model, @rabbita.none)
       }
@@ -93,12 +97,13 @@ fn enter(
 
 ///|
 fn viewer_cmd(
+  lang : Lang,
   m : String,
   p : String,
   emit : @rabbita.Emit[Msg],
 ) -> @rabbita.Cmd {
   @rabbita.perform(e => emit(ViewerDone(e)), async fn() noraise {
-    show_model(m, p)
+    show_model(lang, m, p)
   })
 }
 
@@ -131,7 +136,7 @@ fn update(
       guard key == model.part_key else { (model, @rabbita.none) }
       let model = { ..model, part: result, }
       match result {
-        Got(_) => (model, viewer_cmd(key.0, key.1, emit))
+        Got(_) => (model, viewer_cmd(model.lang, key.0, key.1, emit))
         _ => (model, @rabbita.none)
       }
     }

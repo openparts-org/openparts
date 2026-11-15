@@ -153,7 +153,7 @@ td {
 .model-viewer-canvas {
   position: relative;
   width: 100%;
-  height: 360px;
+  height: 420px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-bg);
@@ -166,13 +166,194 @@ td {
   height: 100%;
 }
 
-.model-viewer-overlay {
+.viewer-controls {
+  font-size: 0.85em;
+  margin: var(--space-1) 0 0;
+}
+
+/* The wasm part viewer (crates/viewer/openparts-viewer): its 3D view
+   (.opv-root) and footprint view (.opv-fp). */
+.opv-root {
+  touch-action: none;
+  user-select: none;
+}
+.opv-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+.opv-measuring .opv-canvas,
+.opv-measuring .opv-fp-svg {
+  cursor: crosshair;
+}
+.opv-labels {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.opv-labels > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.opv-dim {
+  pointer-events: auto;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  padding: 1px 5px;
+  border: 1px solid #a9c1ec;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0b3d91;
+  cursor: pointer;
+}
+.opv-dim:hover,
+.opv-dim:focus-visible {
+  border-color: #0b3d91;
+}
+.opv-dim-name {
+  color: var(--color-text-muted);
+}
+.opv-dim-model {
+  border-style: dashed;
+  color: #4a5568;
+}
+.opv-snap,
+.opv-point {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.opv-snap {
+  border: 2px solid #e8590c;
+}
+.opv-snap::after {
+  content: attr(data-kind);
+  position: absolute;
+  left: 12px;
+  top: -16px;
+  font-size: 11px;
+  color: #e8590c;
+  white-space: nowrap;
+}
+.opv-point {
+  background: #e8590c;
+}
+.opv-measure-label {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #e8590c;
+  color: #fff;
+  white-space: nowrap;
+  translate: -50% -140%;
+}
+.opv-toolbar {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.opv-fp .opv-toolbar {
+  position: static;
+  margin-bottom: var(--space-2);
+}
+.opv-button {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.opv-button[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+.opv-readout {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  max-width: calc(100% - 2 * var(--space-2));
+  font-size: 13px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(26, 26, 30, 0.85);
+  color: #fff;
+}
+.opv-fp-readout {
+  position: static;
+  display: inline-block;
+  margin-top: var(--space-2);
+}
+.opv-popup {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: min(340px, calc(100% - 2 * var(--space-2)));
+  max-height: calc(100% - 2 * var(--space-2));
+  overflow: auto;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+}
+.opv-popup-title {
+  margin: 0 var(--space-4) var(--space-2) 0;
+}
+.opv-popup-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: none;
+  background: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.opv-popup dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+.opv-popup dt {
+  color: var(--color-text-muted);
+}
+.opv-popup dd {
   margin: 0;
+  overflow-wrap: anywhere;
+}
+.opv-message {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+}
+.opv-fp-holder {
+  max-width: 720px;
+}
+.opv-fp-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 560px;
+  border-radius: 6px;
+  background: #0b1a12;
 }
 
 .artifact-buttons {

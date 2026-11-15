@@ -1,4 +1,5 @@
-// The few browser calls the site makes outside rabbita and three.js.
+// The few browser calls the site makes outside rabbita (and the wasm
+// part viewer, src/viewer.js).
 
 ///|
 /// Where the site is served from, with a trailing slash ("/openparts/"
@@ -105,21 +106,46 @@ extern "js" fn element_exists(id : String) -> Bool =
   #|(id) => document.getElementById(id) !== null
 
 ///|
-/// Puts `canvas` into the element `id`, replacing what is there.
-extern "js" fn mount_canvas(id : String, canvas : @three.Canvas) -> Unit =
-  #|(id, c) => { const el = document.getElementById(id); el.replaceChildren(c); }
+/// A mounted part viewer (crates/viewer/openparts-viewer), or why it
+/// couldn't be mounted.
+#external
+type ViewerMount
 
 ///|
-extern "js" fn element_width(id : String) -> Int32 =
-  #|(id) => document.getElementById(id)?.clientWidth ?? 0
+/// Mounts the wasm part viewer: the 3D view into the element `model_id`,
+/// the footprint view into `footprint_id`. `options` is its JSON options
+/// (API base, part, UI strings). Never rejects: a failure (the wasm
+/// not loading, the part not found) comes back as `error`.
+extern "js" fn viewer_mount(
+  model_id : String,
+  footprint_id : String,
+  options : String,
+) -> @js_async.Promise[ViewerMount] =
+  #|async (m, f, o) => {
+  #|  try {
+  #|    const lib = await globalThis.openpartsViewer();
+  #|    const model = document.getElementById(m);
+  #|    if (!model) return { error: "" };
+  #|    const fp = document.getElementById(f) ?? undefined;
+  #|    return { handle: await lib.mount(model, fp, o) };
+  #|  } catch (e) {
+  #|    return { error: String(e?.message ?? e) };
+  #|  }
+  #|}
 
 ///|
-extern "js" fn element_height(id : String) -> Int32 =
-  #|(id) => document.getElementById(id)?.clientHeight ?? 0
+extern "js" fn ViewerMount::mounted(self : ViewerMount) -> Bool =
+  #|(v) => v.handle !== undefined
 
 ///|
-extern "js" fn device_pixel_ratio() -> Double =
-  #|() => window.devicePixelRatio || 1
+/// Why it didn't mount ("" when there's no message).
+extern "js" fn ViewerMount::error(self : ViewerMount) -> String =
+  #|(v) => v.error ?? ""
+
+///|
+/// Tears the viewer down (idempotent).
+extern "js" fn ViewerMount::destroy(self : ViewerMount) -> Unit =
+  #|(v) => { if (v.handle) { v.handle.destroy(); v.handle.free(); v.handle = undefined; } }
 
 ///|
 extern "js" fn scroll_top() -> Unit =

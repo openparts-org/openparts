@@ -7,3 +7,6 @@ target/
 node_modules/
 .env
 .DS_Store
+
+# the viewer's wasm-bindgen output (scripts/build-wasm.sh)
+src/viewer-pkg/

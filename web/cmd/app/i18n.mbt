@@ -74,6 +74,7 @@ struct Copy {
   zip_failed : String
   preview3d : String
   model_load_failed : String
+  viewer_controls : String
   report_issue : String
   pin_number : String
   pin_name : String
@@ -169,6 +170,7 @@ let ja : Copy = {
   zip_failed: "ダウンロードに失敗しました。",
   preview3d: "3Dプレビュー",
   model_load_failed: "3Dモデルを表示できませんでした。",
+  viewer_controls: "ドラッグ: 回転　右ドラッグ/Shift+ドラッグ: 移動　ホイール: ズーム　寸法ラベルをクリック: 出典",
   report_issue: "このデータの問題を報告",
   pin_number: "ピン番号",
   pin_name: "名前",
@@ -265,6 +267,7 @@ let en : Copy = {
   zip_failed: "Download failed.",
   preview3d: "3D preview",
   model_load_failed: "Could not display the 3D model.",
+  viewer_controls: "Drag: rotate · Right-drag/Shift+drag: pan · Wheel: zoom · Click a dimension label: its source",
   report_issue: "Report a problem with this data",
   pin_number: "Pin",
   pin_name: "Name",
@@ -689,5 +692,85 @@ fn pitch_chip(lang : Lang, mm : String) -> String {
   match lang {
     Ja => "ピッチ \{mm} mm"
     En => "\{mm} mm pitch"
+  }
+}
+
+///|
+/// The part viewer's UI strings (crates/viewer/openparts-viewer
+/// src/labels.rs has the same keys; it falls back to English).
+fn viewer_labels(lang : Lang) -> Json {
+  match lang {
+    Ja =>
+      {
+        "dimensions": "寸法",
+        "measure": "計測",
+        "reset_view": "視点リセット",
+        "measure_hint": "2点をクリック(頂点・辺の中点・パッド中心にスナップ)。Escでクリア。",
+        "distance": "距離",
+        "source": "出典",
+        "page": "ページ",
+        "locator": "箇所",
+        "open_source": "文書を開く",
+        "model_value": "データシートに記載がないため、生成モデル上で測った値です。",
+        "computed": "OpenPartsが計算した値(IPC-7351Bランドパターン)で、データシートの値ではありません。",
+        "close": "閉じる",
+        "model_failed": "3Dモデルを読み込めませんでした。",
+        "no_gpu": "3DプレビューにはWebGPUかWebGL2が必要ですが、このブラウザでは使えません。",
+        "footprint_failed": "フットプリントを描画できませんでした。",
+        "snap_vertex": "頂点",
+        "snap_edge": "辺の中点",
+        "snap_pad": "パッド中心",
+        "snap_surface": "表面",
+        "body_width": "本体幅",
+        "body_length": "本体長",
+        "body_height": "高さ",
+        "overall_width": "全幅",
+        "overall_length": "全長",
+        "overall_height": "全高",
+        "pitch": "ピッチ",
+        "lead_width": "リード幅",
+        "lead_length": "リード長",
+        "pad_size": "パッド",
+        "pad_span_x": "パッド間 X",
+        "pad_span_y": "パッド間 Y",
+        "courtyard_x": "コートヤード X",
+        "courtyard_y": "コートヤード Y",
+      }
+    En =>
+      {
+        "dimensions": "Dimensions",
+        "measure": "Measure",
+        "reset_view": "Reset view",
+        "measure_hint": "Click two points (snaps to vertices, edge midpoints and pad centres). Esc clears.",
+        "distance": "Distance",
+        "source": "Source",
+        "page": "Page",
+        "locator": "Where",
+        "open_source": "Open the document",
+        "model_value": "Not stated by the datasheet: measured on the generated model.",
+        "computed": "Computed by OpenParts (IPC-7351B land pattern), not a datasheet value.",
+        "close": "Close",
+        "model_failed": "The 3D model could not be loaded.",
+        "no_gpu": "The 3D preview needs WebGPU or WebGL2, which this browser doesn't offer.",
+        "footprint_failed": "The footprint could not be drawn.",
+        "snap_vertex": "vertex",
+        "snap_edge": "edge midpoint",
+        "snap_pad": "pad centre",
+        "snap_surface": "surface",
+        "body_width": "Body width",
+        "body_length": "Body length",
+        "body_height": "Height",
+        "overall_width": "Overall width",
+        "overall_length": "Overall length",
+        "overall_height": "Overall height",
+        "pitch": "Pitch",
+        "lead_width": "Lead width",
+        "lead_length": "Lead length",
+        "pad_size": "Pad",
+        "pad_span_x": "Pad span X",
+        "pad_span_y": "Pad span Y",
+        "courtyard_x": "Courtyard X",
+        "courtyard_y": "Courtyard Y",
+      }
   }
 }

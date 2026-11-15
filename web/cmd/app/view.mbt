@@ -386,14 +386,22 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       p(class="text-muted", if e.is_empty() { c.artifacts_failed } else { e }),
     )
   }
-  // 3D: the canvas goes into the empty #model-viewer (viewer.mbt).
+  // 3D and footprint: the wasm viewer fills the empty #model-viewer and
+  // #footprint-viewer (viewer.mbt). Without it, the footprint artifact's
+  // plain SVG.
   let viewer : Array[Html] = [
     div(id=VIEWER_ID, class="model-viewer-canvas", nodes([])),
+    p(class="text-muted viewer-controls", c.viewer_controls),
   ]
   if model.viewer_error is Some(e) {
     viewer.push(
       p(class="text-muted", if e.is_empty() { c.model_load_failed } else { e }),
     )
+  }
+  let footprint_view = if model.viewer_error is Some(_) {
+    img(src=artifact_url(m, mpn, "footprint-svg"), alt=footprint_alt(lang, mpn))
+  } else {
+    div(id=FOOTPRINT_ID, class="footprint-viewer", nodes([]))
   }
   // Pins
   let device = data.device
@@ -420,10 +428,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     section(class="section", [
       h3(c.footprint),
       figure(class="footprint-preview", [
-        img(
-          src=artifact_url(m, mpn, "footprint-svg"),
-          alt=footprint_alt(lang, mpn),
-        ),
+        footprint_view,
         figcaption(class="text-muted", c.footprint_legend),
       ]),
     ]),

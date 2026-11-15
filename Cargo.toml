@@ -21,6 +21,7 @@ members = [
     "crates/mcad/openparts-step",
     "crates/mcad/openparts-stl",
     "crates/mcad/openparts-solidcraft",
+    "crates/viewer/openparts-viewer",
     "server",
     "kicad-plugin",
 ]
