@@ -1,6 +1,7 @@
 //! The model's triangles: parsed from the server's 3MF (one colour per
 //! body, SolidCraft's materials) or, failing that, its binary/ASCII STL,
-//! in the artifacts' frame (millimetres, Z up, the footprint origin).
+//! in the generator's frame (millimetres, Z up; `frame.rs` moves it
+//! into the Placement Model's, the footprint's).
 
 use glam::Vec3;
 use std::collections::HashMap;

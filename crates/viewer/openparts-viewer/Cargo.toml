@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 openparts-core = { path = "../../openparts-core" }
 openparts-mcad = { path = "../../mcad/openparts-mcad" }
 openparts-pcbcad = { path = "../../pcbcad/openparts-pcbcad" }
+openparts-placement = { path = "../../pcbcad/openparts-placement" }
 serde = { workspace = true }
 glam = "0.34"
 roxmltree = "0.21"

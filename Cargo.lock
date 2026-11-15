@@ -2980,6 +2980,7 @@ dependencies = [
  "openparts-core",
  "openparts-mcad",
  "openparts-pcbcad",
+ "openparts-placement",
  "roxmltree",
  "serde",
  "serde_json",

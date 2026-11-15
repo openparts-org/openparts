@@ -9,9 +9,10 @@ use super::{
     Listener, Options, PartInfo,
 };
 use crate::camera::{OrbitCamera, StandardView};
-use crate::dims::{self, Annotation};
+use crate::dims::Annotation;
 use crate::footprint::esc;
 use crate::format::number;
+use crate::frame::{self, Scene};
 use crate::gizmo;
 use crate::labels::Labels;
 use crate::measure::{self, Constrained, Lock, AXES, AXIS_COLORS, AXIS_CSS};
@@ -150,18 +151,22 @@ pub(crate) async fn mount_model(
         .map_err(|e| format!("{} ({e})", labels.no_gpu))?;
     canvas.set_attribute("data-backend", gpu.backend).ok();
     canvas.set_attribute("tabindex", "0").ok();
+    // The Placement Model's frame, the footprint view's: the mesh, its
+    // dimensions and snap points turned and moved by the model3d
+    // alignment (frame.rs), so X / Y / Z mean the same in both views.
+    let Scene {
+        mesh,
+        bounds,
+        annotations,
+        snaps,
+        ..
+    } = frame::scene(mesh, &info.package, geometry);
     gpu.set_mesh(&mesh);
 
-    let bounds = mesh
-        .bounds()
-        .unwrap_or((Vec3::splat(-1.0), Vec3::splat(1.0)));
-    let annotations = geometry
-        .map(|g| dims::annotations(&info.package, g, Some(bounds)))
-        .unwrap_or_default();
+    let bounds = bounds.unwrap_or((Vec3::splat(-1.0), Vec3::splat(1.0)));
     let grid_center = ((bounds.0 + bounds.1) * 0.5).truncate();
     let grid_footprint = (bounds.1 - bounds.0).truncate().max_element().max(0.5);
     let camera = OrbitCamera::fit(bounds.0, bounds.1);
-    let snaps = snap::candidates(&mesh, geometry);
 
     let layer = element("div", "opv-labels");
     let leaders = super::document()

@@ -13,7 +13,10 @@
 //!   cursor, zoom toward it, standard views, fit, perspective or
 //!   orthographic, and a navigation gizmo;
 //! - the footprint (`footprint`): openparts-pcbcad's SVG with pad size,
-//!   pitch, pad span and courtyard dimensions, and the measure tool.
+//!   pitch, pad span and courtyard dimensions, and the measure tool;
+//! - one frame for both (`frame`): the Placement Model's (land-pattern
+//!   centroid origin, IPC-7351B Level A orientation), the 3D model
+//!   moved into it by the model's `model3d` alignment.
 //!
 //! Everything but `web` (the browser side) is plain Rust and tested
 //! natively; `web` exists only on wasm32.
@@ -22,6 +25,7 @@ pub mod camera;
 pub mod dims;
 pub mod footprint;
 pub mod format;
+pub mod frame;
 pub mod gizmo;
 pub mod labels;
 pub mod measure;
