@@ -28,6 +28,121 @@ pub impl @json.FromJson for ArtifactsResponse with fn from_json(json, path) {
 }
 
 ///|
+#derive(Eq)
+pub(all) struct CatalogFacets {
+  body_height : RangeFacet
+  body_length : RangeFacet
+  body_width : RangeFacet
+  category : Array[FacetValue]
+  existence : Array[FacetValue]
+  lifecycle : Array[FacetValue]
+  manufacturer : Array[FacetValue]
+  mounting : Array[FacetValue]
+  package_family : Array[FacetValue]
+  pins : Array[FacetValue]
+  pitch : Array[FacetValue]
+  size : Array[FacetValue]
+}
+
+///|
+pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CatalogFacets object"))
+  }
+  {
+    body_height: field(obj, "body_height", path),
+    body_length: field(obj, "body_length", path),
+    body_width: field(obj, "body_width", path),
+    category: field(obj, "category", path),
+    existence: field(obj, "existence", path),
+    lifecycle: field(obj, "lifecycle", path),
+    manufacturer: field(obj, "manufacturer", path),
+    mounting: field(obj, "mounting", path),
+    package_family: field(obj, "package_family", path),
+    pins: field(obj, "pins", path),
+    pitch: field(obj, "pitch", path),
+    size: field(obj, "size", path),
+  }
+}
+
+///|
+/// One row of the catalog: the Part with the Device and Package facts
+/// a parametric table shows. Dimensions are in mm; `None` where the
+/// dataset doesn't state the value.
+#derive(Eq)
+pub(all) struct CatalogItem {
+  body_height : Double?
+  body_length : Double?
+  body_width : Double?
+  category : ComponentCategory?
+  device : String
+  existence : ExistenceStatus
+  lead_count : Int32?
+  lifecycle : LifecycleStatus
+  manufacturer : String
+  manufacturer_name : String
+  mounting : Mounting?
+  mpn : String
+  package_ : String
+  package_family : PackageFamily?
+  pitch : Double?
+  size_code : String?
+  size_code_metric : String?
+}
+
+///|
+pub impl @json.FromJson for CatalogItem with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CatalogItem object"))
+  }
+  {
+    body_height: opt_field(obj, "body_height", path),
+    body_length: opt_field(obj, "body_length", path),
+    body_width: opt_field(obj, "body_width", path),
+    category: opt_field(obj, "category", path),
+    device: field(obj, "device", path),
+    existence: field(obj, "existence", path),
+    lead_count: opt_field(obj, "lead_count", path),
+    lifecycle: field(obj, "lifecycle", path),
+    manufacturer: field(obj, "manufacturer", path),
+    manufacturer_name: field(obj, "manufacturer_name", path),
+    mounting: opt_field(obj, "mounting", path),
+    mpn: field(obj, "mpn", path),
+    package_: field(obj, "package", path),
+    package_family: opt_field(obj, "package_family", path),
+    pitch: opt_field(obj, "pitch", path),
+    size_code: opt_field(obj, "size_code", path),
+    size_code_metric: opt_field(obj, "size_code_metric", path),
+  }
+}
+
+///|
+/// `GET /v1/catalog`'s answer: `total` matching parts, the
+/// `offset..offset+limit` page of them, and the facets.
+#derive(Eq)
+pub(all) struct CatalogResponse {
+  facets : CatalogFacets
+  items : Array[CatalogItem]
+  limit : Int32
+  offset : Int32
+  total : Int32
+}
+
+///|
+pub impl @json.FromJson for CatalogResponse with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CatalogResponse object"))
+  }
+  {
+    facets: field(obj, "facets", path),
+    items: field(obj, "items", path),
+    limit: field(obj, "limit", path),
+    offset: field(obj, "offset", path),
+    total: field(obj, "total", path),
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum ComponentCategory {
   Microcontroller
@@ -372,6 +487,31 @@ pub impl @json.FromJson for ExposedPadDimensions with fn from_json(json, path) {
 }
 
 ///|
+/// One option of a facet. `value` is what the filter parameter takes
+/// (stable, lowercase); `label` is an English display form, which
+/// clients may localise by `value`.
+#derive(Eq)
+pub(all) struct FacetValue {
+  count : Int32
+  label : String
+  selected : Bool
+  value : String
+}
+
+///|
+pub impl @json.FromJson for FacetValue with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a FacetValue object"))
+  }
+  {
+    count: field(obj, "count", path),
+    label: field(obj, "label", path),
+    selected: field(obj, "selected", path),
+    value: field(obj, "value", path),
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum GeometryType {
   Parametric
@@ -515,6 +655,40 @@ pub impl @json.FromJson for LifecycleStatus with fn from_json(json, path) {
     String("obsolete") => Obsolete
     String("unknown") => Unknown
     _ => raise @json.JsonDecodeError((path, "expected a LifecycleStatus"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum Mounting {
+  Smd
+  Tht
+  Mixed
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Mounting::wire(self : Mounting) -> String {
+  match self {
+    Smd => "smd"
+    Tht => "tht"
+    Mixed => "mixed"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Mounting::all() -> Array[Mounting] {
+  [Smd, Tht, Mixed]
+}
+
+///|
+pub impl @json.FromJson for Mounting with fn from_json(json, path) {
+  match json {
+    String("smd") => Smd
+    String("tht") => Tht
+    String("mixed") => Mixed
+    _ => raise @json.JsonDecodeError((path, "expected a Mounting"))
   }
 }
 
@@ -1162,6 +1336,23 @@ pub impl @json.FromJson for ProvenanceResponse with fn from_json(json, path) {
     package_: field(obj, "package", path),
     part: field(obj, "part", path),
   }
+}
+
+///|
+/// The span of a dimension over the parts that pass every other
+/// filter (`None` when none of them states it).
+#derive(Eq)
+pub(all) struct RangeFacet {
+  max : Double?
+  min : Double?
+}
+
+///|
+pub impl @json.FromJson for RangeFacet with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a RangeFacet object"))
+  }
+  { max: opt_field(obj, "max", path), min: opt_field(obj, "min", path), }
 }
 
 ///|

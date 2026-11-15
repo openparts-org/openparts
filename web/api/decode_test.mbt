@@ -977,3 +977,166 @@ test "decode Package 8" {
   let json = @json.parse(text)
   let _ : @api.Package = @json.from_json(json)
 }
+
+///|
+test "decode CatalogResponse" {
+  let text =
+    #|{
+    #| "total": 7,
+    #| "offset": 0,
+    #| "limit": 1,
+    #| "items": [
+    #|  {
+    #|   "manufacturer": "murata",
+    #|   "manufacturer_name": "Murata Manufacturing Co., Ltd.",
+    #|   "mpn": "GRM188R60J106ME47D",
+    #|   "category": "capacitor",
+    #|   "device": "murata/GRM188-X5R",
+    #|   "package": "standards/CHIP0603-GRM188",
+    #|   "package_family": "chip",
+    #|   "lead_count": 2,
+    #|   "pitch": null,
+    #|   "body_width": 0.8,
+    #|   "body_length": 1.6,
+    #|   "body_height": 0.8,
+    #|   "size_code": "0603",
+    #|   "size_code_metric": "1608",
+    #|   "mounting": "smd",
+    #|   "lifecycle": "unknown",
+    #|   "existence": "verified"
+    #|  }
+    #| ],
+    #| "facets": {
+    #|  "category": [
+    #|   {
+    #|    "value": "capacitor",
+    #|    "label": "Capacitor",
+    #|    "count": 7,
+    #|    "selected": true
+    #|   },
+    #|   {
+    #|    "value": "inductor",
+    #|    "label": "Inductor",
+    #|    "count": 1,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "manufacturer": [
+    #|   {
+    #|    "value": "samsung",
+    #|    "label": "Samsung Electro-Mechanics",
+    #|    "count": 9,
+    #|    "selected": false
+    #|   },
+    #|   {
+    #|    "value": "murata",
+    #|    "label": "Murata Manufacturing Co., Ltd.",
+    #|    "count": 7,
+    #|    "selected": true
+    #|   },
+    #|   {
+    #|    "value": "kemet",
+    #|    "label": "KEMET Electronics Corporation (a YAGEO Group brand)",
+    #|    "count": 4,
+    #|    "selected": false
+    #|   },
+    #|   {
+    #|    "value": "wurth",
+    #|    "label": "Würth Elektronik eiSos GmbH & Co. KG",
+    #|    "count": 2,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "package_family": [
+    #|   {
+    #|    "value": "chip",
+    #|    "label": "Chip",
+    #|    "count": 7,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "size": [
+    #|   {
+    #|    "value": "0402",
+    #|    "label": "0402 (1005)",
+    #|    "count": 5,
+    #|    "selected": false
+    #|   },
+    #|   {
+    #|    "value": "0603",
+    #|    "label": "0603 (1608)",
+    #|    "count": 7,
+    #|    "selected": true
+    #|   },
+    #|   {
+    #|    "value": "0805",
+    #|    "label": "0805 (2012)",
+    #|    "count": 1,
+    #|    "selected": false
+    #|   },
+    #|   {
+    #|    "value": "1206",
+    #|    "label": "1206 (3216)",
+    #|    "count": 1,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "pins": [
+    #|   {
+    #|    "value": "2",
+    #|    "label": "2",
+    #|    "count": 7,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "pitch": [],
+    #|  "mounting": [
+    #|   {
+    #|    "value": "smd",
+    #|    "label": "SMD",
+    #|    "count": 7,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "lifecycle": [
+    #|   {
+    #|    "value": "obsolete",
+    #|    "label": "Obsolete",
+    #|    "count": 1,
+    #|    "selected": false
+    #|   },
+    #|   {
+    #|    "value": "unknown",
+    #|    "label": "Unknown",
+    #|    "count": 6,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "existence": [
+    #|   {
+    #|    "value": "verified",
+    #|    "label": "Verified",
+    #|    "count": 7,
+    #|    "selected": false
+    #|   }
+    #|  ],
+    #|  "body_width": {
+    #|   "min": 0.8,
+    #|   "max": 0.8
+    #|  },
+    #|  "body_length": {
+    #|   "min": 1.6,
+    #|   "max": 1.6
+    #|  },
+    #|  "body_height": {
+    #|   "min": 0.8,
+    #|   "max": 0.8
+    #|  }
+    #| }
+    #|}
+  let json = @json.parse(text)
+  let r : @api.CatalogResponse = @json.from_json(json)
+  assert_eq(r.items.length(), 1)
+  assert_eq(r.items[0].size_code, Some("0603"))
+  assert_eq(r.items[0].mounting, Some(@api.Mounting::Smd))
+}

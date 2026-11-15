@@ -13,6 +13,8 @@ pub struct Store {
     pub bundle: Option<crate::bundle::Bundle>,
     /// `GET /v1/search`'s index over `dataset.parts`.
     pub search: crate::search::SearchIndex,
+    /// `GET /v1/catalog`'s facets over `dataset.parts`.
+    pub catalog: crate::catalog::CatalogIndex,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +48,7 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
     );
     Ok(Store {
         search: crate::search::SearchIndex::build(&dataset),
+        catalog: crate::catalog::CatalogIndex::build(&dataset),
         dataset,
         bundle: None,
     })

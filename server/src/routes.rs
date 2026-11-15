@@ -5,7 +5,7 @@
 
 use crate::error::ApiError;
 use crate::store::Store;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -20,6 +20,7 @@ pub fn build_router(store: Arc<Store>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/v1/search", get(search))
+        .route("/v1/catalog", get(catalog))
         .route("/v1/parts/:manufacturer/:mpn", get(get_part))
         .route(
             "/v1/parts/:manufacturer/:mpn/provenance",
@@ -123,6 +124,25 @@ async fn search(
         })
         .collect();
     Json(results)
+}
+
+/// `GET /v1/catalog?q=&category=&manufacturer=&family=&size=&pins=&pitch=&mounting=&lifecycle=&existence=&width_min=&width_max=&length_min=&length_max=&height_min=&height_max=&sort=&order=&offset=&limit=`
+///
+/// Faceted search (`crate::catalog`): multi-select filters take
+/// comma-separated values or repeat; ranges are mm. Answers
+/// `{ total, offset, limit, items, facets }`.
+async fn catalog(
+    State(store): State<Arc<Store>>,
+    RawQuery(raw): RawQuery,
+) -> Result<Json<crate::catalog::CatalogResponse>, ApiError> {
+    let pairs: Vec<(String, String)> = serde_urlencoded::from_str(raw.as_deref().unwrap_or(""))
+        .map_err(|e| ApiError::BadRequest(format!("malformed query: {e}")))?;
+    let query = crate::catalog::CatalogQuery::from_pairs(
+        pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    )
+    .map_err(ApiError::BadRequest)?;
+    let hits = store.search.search(&query.q);
+    Ok(Json(store.catalog.query(&hits, &query)))
 }
 
 fn resolve_part<'s>(store: &'s Store, manufacturer: &str, mpn: &str) -> Result<&'s Part, ApiError> {
@@ -452,6 +472,7 @@ mod schema_export {
         gen.subschema_for::<Device>();
         gen.subschema_for::<Package>();
         gen.subschema_for::<PartSummary>();
+        gen.subschema_for::<crate::catalog::CatalogResponse>();
         gen.subschema_for::<PartSource>();
         gen.subschema_for::<RevisionSummary>();
         gen.subschema_for::<ArtifactsResponse>();

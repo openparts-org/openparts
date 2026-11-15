@@ -4,6 +4,8 @@ use axum::Json;
 use serde::Serialize;
 
 pub enum ApiError {
+    /// A malformed request parameter.
+    BadRequest(String),
     NotFound(String),
     /// openparts-validator diagnostics blocked the request.
     ValidationFailed(Vec<openparts_validator::Diagnostic>),
@@ -49,6 +51,13 @@ struct ErrorBody {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, body) = match self {
+            ApiError::BadRequest(msg) => (
+                StatusCode::BAD_REQUEST,
+                ErrorBody {
+                    error: msg,
+                    diagnostics: vec![],
+                },
+            ),
             ApiError::NotFound(msg) => (
                 StatusCode::NOT_FOUND,
                 ErrorBody {

@@ -564,3 +564,161 @@ async fn search_matches_package_and_japanese_category() {
     let hits = search_mpns("ldo").await;
     assert!(hits.iter().all(|(_, c)| c != "diode"));
 }
+
+async fn catalog(query: &str) -> serde_json::Value {
+    let response = get(app(), &format!("/v1/catalog?{query}")).await;
+    assert_eq!(response.status(), StatusCode::OK, "{query}");
+    serde_json::from_str(&body_string(response).await).unwrap()
+}
+
+fn facet<'a>(body: &'a serde_json::Value, name: &str) -> &'a Vec<serde_json::Value> {
+    body["facets"][name].as_array().unwrap()
+}
+
+fn count_of(body: &serde_json::Value, name: &str, value: &str) -> u64 {
+    facet(body, name)
+        .iter()
+        .find(|v| v["value"] == value)
+        .map_or(0, |v| v["count"].as_u64().unwrap())
+}
+
+fn facet_sum(body: &serde_json::Value, name: &str) -> u64 {
+    facet(body, name)
+        .iter()
+        .map(|v| v["count"].as_u64().unwrap())
+        .sum()
+}
+
+#[tokio::test]
+async fn catalog_narrows_to_0603_capacitors() {
+    let body = catalog("category=capacitor&size=0603&limit=500").await;
+    let items = body["items"].as_array().unwrap();
+    assert!(!items.is_empty());
+    assert_eq!(body["total"].as_u64().unwrap(), items.len() as u64);
+    for it in items {
+        assert_eq!(it["category"], "capacitor", "{it}");
+        assert_eq!(it["size_code"], "0603", "{it}");
+        assert_eq!(it["size_code_metric"], "1608", "{it}");
+        assert_eq!(it["package_family"], "chip");
+        assert_eq!(it["mounting"], "smd");
+    }
+    // The metric code selects the same parts.
+    let metric = catalog("category=capacitor&size=1608&limit=500").await;
+    assert_eq!(metric["total"], body["total"]);
+    // Picked options stay listed, and so do their siblings.
+    let sizes = facet(&body, "size");
+    let picked = sizes.iter().find(|v| v["value"] == "0603").unwrap();
+    assert_eq!(picked["selected"], true);
+    assert_eq!(picked["count"], body["total"]);
+    assert!(sizes
+        .iter()
+        .any(|v| v["value"] == "0402" && v["count"].as_u64() > Some(0)));
+    assert!(count_of(&body, "category", "resistor") > 0);
+}
+
+#[tokio::test]
+async fn catalog_facet_counts_apply_the_other_filters() {
+    let all = catalog("limit=0").await;
+    let total = all["total"].as_u64().unwrap();
+    assert!(total > 500 && all["items"].as_array().unwrap().is_empty());
+    // Every part has one category and one lifecycle: the counts add up.
+    assert_eq!(facet_sum(&all, "category"), total);
+    assert_eq!(facet_sum(&all, "lifecycle"), total);
+    // A category filter doesn't change the category facet's counts.
+    let caps = catalog("category=capacitor&limit=0").await;
+    let counts = |b: &serde_json::Value| -> Vec<(String, u64)> {
+        facet(b, "category")
+            .iter()
+            .map(|v| {
+                (
+                    v["value"].as_str().unwrap().to_string(),
+                    v["count"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(counts(&caps), counts(&all));
+    assert_eq!(
+        caps["total"].as_u64().unwrap(),
+        count_of(&all, "category", "capacitor")
+    );
+    assert_eq!(
+        facet_sum(&caps, "package_family"),
+        caps["total"].as_u64().unwrap()
+    );
+    // Each option's count is what selecting it would give.
+    for v in facet(&caps, "size") {
+        let value = v["value"].as_str().unwrap();
+        let picked = catalog(&format!("category=capacitor&size={value}&limit=0")).await;
+        assert_eq!(picked["total"], v["count"], "size {value}");
+    }
+    // Two values of one facet are OR'd; repeated and comma forms agree.
+    let either = catalog("category=capacitor,resistor&limit=0").await;
+    let repeated = catalog("category=capacitor&category=resistor&limit=0").await;
+    assert_eq!(either["total"], repeated["total"]);
+    assert_eq!(
+        either["total"].as_u64().unwrap(),
+        count_of(&all, "category", "capacitor") + count_of(&all, "category", "resistor")
+    );
+}
+
+#[tokio::test]
+async fn catalog_height_range_and_sort() {
+    let all = catalog("limit=0").await;
+    let body = catalog("height_max=1.0&sort=height&order=desc&limit=500").await;
+    let items = body["items"].as_array().unwrap();
+    assert!(!items.is_empty());
+    assert!(body["total"].as_u64() < all["total"].as_u64());
+    let heights: Vec<f64> = items
+        .iter()
+        .map(|i| i["body_height"].as_f64().unwrap())
+        .collect();
+    assert!(heights.iter().all(|&h| h <= 1.0));
+    assert!(heights.windows(2).all(|w| w[0] >= w[1]), "tallest first");
+    // The height facet still spans every height (its own range is not applied).
+    assert_eq!(body["facets"]["body_height"], all["facets"]["body_height"]);
+    // Ranges compose with the other filters.
+    let tiny = catalog("category=resistor&width_max=0.6&length_max=1.1&limit=500").await;
+    assert!(tiny["total"].as_u64() > Some(0));
+    for it in tiny["items"].as_array().unwrap() {
+        assert!(it["body_width"].as_f64().unwrap() <= 0.6);
+        assert!(it["body_length"].as_f64().unwrap() <= 1.1);
+    }
+}
+
+#[tokio::test]
+async fn catalog_connectors_by_pitch_paged() {
+    let query = "category=connector&pitch=2.54&mounting=tht&sort=pins&limit=5";
+    let body = catalog(query).await;
+    let total = body["total"].as_u64().unwrap();
+    assert!(total > 5);
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 5);
+    let pins: Vec<u64> = items
+        .iter()
+        .map(|i| i["lead_count"].as_u64().unwrap())
+        .collect();
+    assert!(pins.windows(2).all(|w| w[0] <= w[1]));
+    let mut seen = 0;
+    let mut offset = 0;
+    while offset < total {
+        let page = catalog(&format!("{query}&offset={offset}")).await;
+        for it in page["items"].as_array().unwrap() {
+            assert_eq!(it["pitch"].as_f64(), Some(2.54));
+            seen += 1;
+        }
+        offset += 5;
+    }
+    assert_eq!(seen, total);
+    // Text narrows too, through the search index.
+    let q = catalog("q=RP2040&limit=5").await;
+    assert_eq!(q["items"][0]["mpn"], "RP2040");
+}
+
+#[tokio::test]
+async fn catalog_rejects_bad_numbers() {
+    let response = get(app(), "/v1/catalog?width_min=wide").await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = get(app(), "/v1/catalog?sort=price").await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
