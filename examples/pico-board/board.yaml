@@ -13,18 +13,19 @@ board:
   width: 51.0
   height: 21.0
   layers: 2
-  rules:
-    # 0.15 mm tracks leave more room in the RP2040's fan-out to both
-    # headers (well within common 2-layer fab rules).
-    track: 0.15
-    clearance: 0.15
-    via_diameter: 0.6
-    via_drill: 0.3
-  net_classes:
-    # Only VBUS stays clear of the RP2040's 0.4 mm-pitch QFN; the supply
-    # nets that reach its pins get a track that fits between them.
-    Power: {track: 0.4, nets: [VBUS]}
-    Supply: {track: 0.15, nets: [GND, 3V3, 1V1]}
+  # The fab's published limits and the design values used (track,
+  # clearance, via): tools/kicad-board/fab/<preset>.yaml, with its source.
+  # Every routing width follows from it, the nets' currents (IPC-2221)
+  # and the parts' Placement Models (escape widths, diff pairs).
+  fab: {preset: jlcpcb-2layer-standard}
+  # Currents the design budgets per supply net (A). VBUS: 1 A from the
+  # USB-C receptacle; 3V3: the RP2040 and flash plus 300 mA for the
+  # header's 3V3 pin; 1V1: the RP2040's core supply. GND returns them
+  # through the pours (no current declared: pour nets are not tracks).
+  nets:
+    VBUS: {current: 1.0}
+    3V3: {current: 0.3}
+    1V1: {current: 0.1}
   # Copper pours on both layers.
   zones: [GND]
 
@@ -75,10 +76,10 @@ nets:
         C1.1, C2.1, C3.1, C4.1, C5.1, C6.1, C7.1, C8.1, C9.1, C12.1,
         J3.15, J3.16]
   1V1: [U1.45, U1.23, U1.50, C10.1, C11.1, C13.1]
-  USB_CONN_DP: [J1.A6, J1.B6, R1.1]
-  USB_CONN_DM: [J1.A7, J1.B7, R2.1]
-  USB_DP: [R1.2, U1.47]
-  USB_DM: [R2.2, U1.46]
+  USB_CONN_D+: [J1.A6, J1.B6, R1.1]
+  USB_CONN_D-: [J1.A7, J1.B7, R2.1]
+  USB_D+: [R1.2, U1.47]
+  USB_D-: [R2.2, U1.46]
   CC1: [J1.A5, R5.1]
   CC2: [J1.B5, R6.1]
   XIN: [U1.20, Y1.1, C16.1]

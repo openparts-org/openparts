@@ -1,0 +1,46 @@
+# JLCPCB, 2-layer FR-4, 1.6 mm, 1 oz finished outer copper, standard
+# (no-surcharge) options.
+#
+# `min_*` are the fab's published limits; `design` holds the values the
+# board tool uses by default, kept above them with margin (the page
+# itself says to "stay well above" the minimum pad-to-track clearance).
+source:
+  publisher: JLCPCB
+  title: PCB Manufacturing & Assembly Capabilities
+  url: https://jlcpcb.com/capabilities/pcb-capabilities
+  retrieved: "2026-11-15"
+  notes: >-
+    "Min. track width and spacing (1 oz) ... 1- and 2-layer: 0.10 / 0.10 mm
+    (4 / 4 mil)"; "Min. Via hole size/diameter 0.15/0.25mm"; "Via diameter
+    should be 0.1mm (0.15mm preferred) larger than Via hole size"; "0.2mm or
+    0.25mm hole size with via diameter less than 0.45mm, will cost more";
+    "Via Hole-to-Hole Spacing 0.2mm"; "Finished Outer Layer Copper 2-layer:
+    1 oz / 2 oz ..."; "FR-4 Dielectric Constants 4.5 (2-Layer PCB)";
+    thickness 1.6 mm among "0.4/0.6/0.8/1.0/1.2/1.6/2.0 mm"; "Copper
+    clearance from routed board edges: >= 0.2 mm".
+layers: 2
+min_track: 0.10
+min_clearance: 0.10
+min_via_drill: 0.15
+min_via_diameter: 0.25
+# Via diameter - drill >= 0.10 mm ("0.1mm (0.15mm preferred) larger").
+min_annular_ring: 0.05
+min_hole_clearance: 0.20
+min_edge_clearance: 0.20
+copper:
+  outer_oz: 1.0
+  inner_oz: null
+# A top-layer trace's dielectric to its reference plane (on two layers:
+# the bottom layer) and its relative permittivity.
+stackup:
+  thickness: 1.6
+  # 1.6 mm less the two 35 um (1 oz) foils: an estimate, the page gives
+  # the finished thickness only.
+  dielectric: 1.53
+  er: 4.5
+design:
+  track: 0.15
+  clearance: 0.15
+  # 0.25 mm drill / 0.45 mm via: the smallest via at the standard price.
+  via_drill: 0.25
+  via_diameter: 0.45

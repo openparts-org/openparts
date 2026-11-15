@@ -1,0 +1,34 @@
+# A generic 6 mil / 6 mil, 10 mil drill, 2-layer 1.6 mm FR-4 service: the
+# common low-cost "6/6" class. The values are OSH Park's published 2-layer
+# specification, taken as the representative of that class.
+source:
+  publisher: OSH Park
+  title: 2 Layer Prototype Service
+  url: https://docs.oshpark.com/services/two-layer/
+  retrieved: "2026-11-15"
+  notes: >-
+    "Trace Spacing 6mil (0.1524mm)"; "Trace Width 6mil (0.1524mm)";
+    "Annular Ring 5mil (0.127mm)"; "Minimum Drill Size 10mil (0.254mm)";
+    "Board Edge Keepout 15mil (0.381) from nominal board edge"; stackup
+    "1.4 mil (0.0356mm) 1 oz copper", "60 mil (1.5240mm) core"; "Dielectric
+    4.5 at 10Mhz".
+layers: 2
+min_track: 0.1524
+min_clearance: 0.1524
+min_via_drill: 0.254
+min_via_diameter: 0.508
+min_annular_ring: 0.127
+min_hole_clearance: 0.25
+min_edge_clearance: 0.381
+copper:
+  outer_oz: 1.0
+  inner_oz: null
+stackup:
+  thickness: 1.6
+  dielectric: 1.524
+  er: 4.5
+design:
+  track: 0.1524
+  clearance: 0.1524
+  via_drill: 0.254
+  via_diameter: 0.508

@@ -71,6 +71,20 @@ jobs:
           web/scripts/gen-api-types.sh
           git diff --exit-code -- web/api
 
+  # The board tool's pure-Python routing rules (tools/kicad-board/rules.py:
+  # fab profiles, IPC-2221 widths, microstrip, escape widths, .kicad_dru,
+  # fan-out). The pcbnew half needs KiCad and is not run here.
+  kicad-board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml ruff
+      - run: ruff check --select F,E9 tools
+      - run: pytest -q tools/kicad-board/tests
+
   web:
     runs-on: ubuntu-latest
     defaults:

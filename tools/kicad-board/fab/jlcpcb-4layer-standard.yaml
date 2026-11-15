@@ -1,0 +1,36 @@
+# JLCPCB, 4-layer FR-4, 1.6 mm, JLC04161H-7628 stackup: 1 oz finished
+# outer copper, 0.5 oz inner, one 7628 prepreg between each outer layer
+# and its neighbouring inner layer.
+source:
+  publisher: JLCPCB
+  title: PCB Manufacturing & Assembly Capabilities; Controlled Impedance PCB Layer Stackup
+  url: https://jlcpcb.com/capabilities/pcb-capabilities
+  url_stackup: https://jlcpcb.com/impedance
+  retrieved: "2026-11-15"
+  notes: >-
+    "Multilayer: 0.09 / 0.09 mm (3.5 / 3.5 mil)" (1 oz); "Multilayer: 0.15 mm
+    hole size / 0.25 mm via diameter"; "Finished copper weight of inner
+    layer is 0.5oz by default"; JLC04161H-7628 Stackup: Top Layer Copper
+    0.035mm, Prepreg 7628*1 0.21040mm, Inner Layer L2 Copper 0.0152mm, Core
+    1.065mm; "Prepreg dielectric constant: 7628 4.4".
+layers: 4
+min_track: 0.09
+min_clearance: 0.09
+min_via_drill: 0.15
+min_via_diameter: 0.25
+min_annular_ring: 0.05
+min_hole_clearance: 0.20
+min_edge_clearance: 0.20
+copper:
+  outer_oz: 1.0
+  inner_oz: 0.5
+stackup:
+  thickness: 1.6
+  # Top layer to L2 (the ground plane): one 7628 prepreg.
+  dielectric: 0.2104
+  er: 4.4
+design:
+  track: 0.15
+  clearance: 0.15
+  via_drill: 0.25
+  via_diameter: 0.45

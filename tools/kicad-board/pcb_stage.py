@@ -15,6 +15,7 @@ dsn  exports <name>.dsn for Freerouting from the unrouted board (its
      unlocked tracks removed), the pours as planes on both sides
 dsn-from BOARD DSN [top|inner]  the DSN of a board, its pours as planes
      (`top`: not on the bottom; `inner`: inner layers only)
+tracks  prints the board's tracks as JSON (build.py's checks)
 ses  [SES OUT_PCB] imports Freerouting's session, drops vias left
      dangling, refills zones, stitches the pours (a via wherever a pour
      fragment on one side overlaps one on the other and they are not
@@ -139,6 +140,7 @@ def build():
                 pad.SetThermalSpokeAngleDegrees(45)
 
     prewire(board, placement.get("prewire") or [], net)
+    place_fanout(board, PLAN.get("fanout") or [], net)
     tie_pads_in_footprints(board)
     bridge_pads_in_footprints(board)
     fitted = save_board_variants(board, clip_silk_to_board(board, w, h))
@@ -208,6 +210,32 @@ def prewire(board, items, net):
             board.Add(t)
     if items:
         print(f"prewired: {len(items)} item(s)")
+
+
+def place_fanout(board, items, net):
+    """build.py's fan-out (rules.fanout), locked: escape stubs from the
+    fine-pitch pads to just outside their courtyards, dog-bone and
+    thermal vias, coupled diff-pair paths."""
+    layers = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
+    for item in items:
+        netinfo = net(item["net"])
+        if item["kind"] == "via":
+            via = pcbnew.PCB_VIA(board)
+            via.SetPosition(to_board(*item["at"]))
+            via.SetWidth(mm(item["diameter"]))
+            via.SetDrill(mm(item["drill"]))
+            via.SetNet(netinfo)
+            via.SetLocked(True)
+            board.Add(via)
+            continue
+        t = pcbnew.PCB_TRACK(board)
+        t.SetStart(to_board(*item["a"]))
+        t.SetEnd(to_board(*item["b"]))
+        t.SetWidth(mm(item["width"]))
+        t.SetLayer(layers[item["layer"]])
+        t.SetNet(netinfo)
+        t.SetLocked(True)
+        board.Add(t)
 
 
 SILK_EDGE = 0.25    # KiCad's silk-to-edge check uses the copper edge clearance
@@ -731,6 +759,44 @@ def prune_dangling_vias(board):
     if removed:
         board.BuildConnectivity()
         print("dangling vias removed:", " ".join(removed))
+    prune_dangling_stubs(board)
+
+
+def prune_dangling_stubs(board):
+    """Locked fan-out tracks of a signal net with an end that meets
+    nothing of its net (a dog-bone the router did not use, after its
+    via went), repeatedly, back to where the net continues."""
+    pours = set(PLAN["board"].get("zones", []))
+    dropped = 0
+    while True:
+        doomed = []
+        tracks = [t for t in board.GetTracks() if t.GetClass() == "PCB_TRACK"]
+        for t in tracks:
+            if not t.IsLocked() or t.GetNetname() in pours:
+                continue
+            net, layer = t.GetNetname(), t.GetLayer()
+            # Something joining it part-way along (a T) keeps it.
+            if any(o is not t and o.GetNetname() == net and o.IsOnLayer(layer)
+                   and any(t.HitTest(q, 0) for q in ((o.GetStart(), o.GetEnd()) if o.GetClass() == "PCB_TRACK"
+                                                    else (o.GetPosition(),)))
+                   and not o.HitTest(t.GetStart(), 0) and not o.HitTest(t.GetEnd(), 0)
+                   for o in board.GetTracks()):
+                continue
+            for end in (t.GetStart(), t.GetEnd()):
+                others = [o for o in list(board.GetTracks()) + list(board.GetPads())
+                          if o is not t and o.GetNetname() == net and o.IsOnLayer(layer)
+                          and o.HitTest(end, t.GetWidth() // 2)]
+                if not others:
+                    doomed.append(t)
+                    break
+        if not doomed:
+            break
+        for t in doomed:
+            board.Delete(t)
+        dropped += len(doomed)
+    if dropped:
+        board.BuildConnectivity()
+        print(f"dangling fan-out tracks removed: {dropped}")
 
 
 def fix_thermals(board):
@@ -1082,4 +1148,20 @@ def id_of(pad):
     return (pad.GetParentFootprint().GetReference(), pad.GetNumber(), pad.GetPosition().x, pad.GetPosition().y)
 
 
-{"pcb": build, "dsn": export_dsn, "dsn-from": export_dsn_from, "ses": import_ses}[MODE]()
+def dump_tracks():
+    """tracks: every track as JSON (board mm, Y up; layer outer/inner),
+    for build.py's width and diff-pair checks."""
+    board = pcbnew.LoadBoard(str(PCB))
+    out = []
+    for t in board.GetTracks():
+        if t.GetClass() != "PCB_TRACK":
+            continue
+        a, b = t.GetStart(), t.GetEnd()
+        out.append({"net": t.GetNetname(), "layer": "outer" if t.GetLayer() in (pcbnew.F_Cu, pcbnew.B_Cu) else "inner",
+                    "layer_name": board.GetLayerName(t.GetLayer()), "width": pcbnew.ToMM(t.GetWidth()),
+                    "a": [pcbnew.ToMM(a.x) - ORIGIN, ORIGIN - pcbnew.ToMM(a.y)],
+                    "b": [pcbnew.ToMM(b.x) - ORIGIN, ORIGIN - pcbnew.ToMM(b.y)], "locked": t.IsLocked()})
+    print(json.dumps(out))
+
+
+{"pcb": build, "dsn": export_dsn, "dsn-from": export_dsn_from, "ses": import_ses, "tracks": dump_tracks}[MODE]()

@@ -37,11 +37,16 @@ Stages (each needs the ones before it):
   check  ERC, DRC with schematic parity, and renders under DIR/out/
   preview  `pcb` plus an unrouted render and DRC's placement findings
 
-Net classes: `board.net_classes: {Name: {track: mm, nets: [...]}}`
-(the older `board.power_nets: {track, nets}` is the class "Power").
-Keep nets that reach a fine-pitch part (0.4 mm QFN) at a track that
-fits between its pads: Freerouting's automatic neck-down is turned off,
-so no track is ever narrower than its class.
+Routing rules (rules.py, README.md): `board.fab` names a fab profile
+(fab/*.yaml: the fab's published limits and the design values used),
+`board.nets: {NET: {current: A}}` the supply currents. The pcb stage
+derives the IPC-2221 width per net, the escape width per fine-pitch pad,
+the diff pairs' width and gap, writes them as net classes and as
+<name>.kicad_dru (neck-down inside each fine-pitch courtyard), and places
+the fan-out (escape stubs, dog-bone and thermal vias, coupled diff
+pairs) before routing; Freerouting's own neck-down stays off. `check`
+also compares the tracks with the current widths and reports the diff
+pairs' skew.
 
 The netlist is the board description, so the schematic and the board
 are built from the same data and agree by construction (DRC's parity
@@ -59,6 +64,8 @@ import uuid
 from pathlib import Path
 
 import yaml
+
+import rules
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
@@ -141,14 +148,7 @@ def placement_models(spec, out):
     return models
 
 
-def place(p, pt):
-    """A part-frame point on the board: T · R(rot) · M."""
-    x, y = pt
-    if p.get("side", "top") == "bottom":
-        x = -x
-    t = math.radians(float(p.get("rot", 0.0)))
-    c, s = math.cos(t), math.sin(t)
-    return (p.get("x", 0.0) + c * x - s * y, p.get("y", 0.0) + s * x + c * y)
+place = rules.place
 
 
 def normalize(deg):
@@ -327,12 +327,51 @@ def check_placement(spec, models, plan):
     return problems
 
 
-def net_classes(spec):
-    """{class name: (track, [nets])} from the board spec."""
+def apply_fab(spec, preset=None):
+    """The fab profile (board.fab, `--fab` overriding its preset) checked
+    and put in spec["fab"]; board.rules becomes its design values (the
+    track, clearance and via the pcb stage uses)."""
     board = spec["board"]
-    classes = {n: (c["track"], list(c.get("nets", []))) for n, c in (board.get("net_classes") or {}).items()}
-    if board.get("power_nets"):
-        classes.setdefault("Power", (board["power_nets"]["track"], list(board["power_nets"].get("nets", []))))
+    if preset:
+        board["fab"] = {**(board.get("fab") or {}), "preset": preset}
+    if not board.get("fab"):
+        sys.exit("board.fab is required: a fab profile (tools/kicad-board/fab/*.yaml), e.g. "
+                 "`fab: {preset: jlcpcb-2layer-standard}`")
+    try:
+        fab = rules.load_fab(board)
+    except ValueError as e:
+        sys.exit(str(e))
+    if fab.get("layers") and fab["layers"] != board.get("layers", 2):
+        sys.exit(f"fab profile {fab.get('preset')} is for {fab['layers']} layers, the board has "
+                 f"{board.get('layers', 2)} (pick another with --fab)")
+    d = fab["design"]
+    board["rules"] = {"track": d["track"], "clearance": d["clearance"],
+                      "via_diameter": d["via_diameter"], "via_drill": d["via_drill"]}
+    spec["fab"] = fab
+
+
+def routing_of(spec, out):
+    """The routing rules the pcb stage derived (out/routing.json), or
+    those from the declared currents alone (before it ran)."""
+    f = out / "routing.json"
+    if f.exists():
+        return json.loads(f.read_text())
+    widths = rules.net_widths(spec["fab"], rules.net_currents(spec["board"]))
+    return {"widths": widths, "pairs": []}
+
+
+def net_classes(spec, routing):
+    """{class name: {track, nets, [diff_pair_width, diff_pair_gap]}}:
+    one class per net with a current (its IPC-2221 width) and one per
+    diff pair (its width and gap)."""
+    classes = {}
+    for net, w in sorted(routing["widths"].items()):
+        classes[f"I_{net}"] = {"track": w["track"], "nets": [net]}
+    for p in routing.get("pairs", []):
+        g = p.get("geometry")
+        if g:
+            classes[f"DP_{p['p']}"] = {"track": g["width"], "nets": [p["p"], p["n"]],
+                                       "diff_pair_width": g["width"], "diff_pair_gap": g["gap"]}
     return classes
 
 
@@ -567,23 +606,25 @@ def pwr_flag_lib():
 
 
 def write_project(spec, out):
-    """The project file: design rules and net classes from the board spec."""
+    """The project file: the fab's minimums as the board constraints, the
+    design values as the default net class, the current and diff-pair
+    classes (the router's widths; DRC's are in <name>.kicad_dru)."""
     pro = out / f"{spec['name']}.kicad_pro"
     r = spec["board"]["rules"]
-    classes = net_classes(spec)
-    widths = [r["track"]] + [t for t, _ in classes.values()]
+    fab = spec["fab"]
+    classes = net_classes(spec, routing_of(spec, out))
 
-    def netclass(name, track):
+    def netclass(name, c):
         return {
             "name": name,
             "clearance": r["clearance"],
-            "track_width": track,
+            "track_width": c["track"],
             "via_diameter": r["via_diameter"],
             "via_drill": r["via_drill"],
             "microvia_diameter": 0.3,
             "microvia_drill": 0.1,
-            "diff_pair_width": r["track"],
-            "diff_pair_gap": r["clearance"],
+            "diff_pair_width": c.get("diff_pair_width", r["track"]),
+            "diff_pair_gap": c.get("diff_pair_gap", r["clearance"]),
             "diff_pair_via_gap": 0.25,
             "wire_width": 6,
             "bus_width": 12,
@@ -596,24 +637,27 @@ def write_project(spec, out):
         "board": {
             "design_settings": {
                 "rules": {
-                    "min_clearance": r["clearance"],
-                    # No track narrower than the narrowest class (and
-                    # Freerouting is told not to neck down below it).
-                    "min_track_width": min(widths),
-                    "min_via_diameter": r["via_diameter"] - 0.1,
-                    "min_through_hole_diameter": r["via_drill"],
-                    "min_copper_edge_clearance": 0.25,
-                    "min_hole_clearance": 0.25,
+                    # The fab's limits (a narrower escape inside a
+                    # fine-pitch courtyard is the custom rules' business).
+                    "min_clearance": fab["min_clearance"],
+                    "min_track_width": fab["min_track"],
+                    "min_via_diameter": fab["min_via_diameter"],
+                    "min_via_annular_width": fab.get("min_annular_ring", 0.05),
+                    "min_through_hole_diameter": fab["min_via_drill"],
+                    # KiCad's silk-to-edge check uses the copper edge
+                    # clearance: not below 0.25 mm.
+                    "min_copper_edge_clearance": max(0.25, fab.get("min_edge_clearance", 0.25)),
+                    "min_hole_clearance": max(0.25, fab.get("min_hole_clearance", 0.25)),
                 }
             }
         },
         "meta": {"filename": pro.name, "version": 3},
         "net_settings": {
-            "classes": [netclass("Default", r["track"])]
-            + [netclass(name, track) for name, (track, _) in classes.items()],
+            "classes": [netclass("Default", {"track": r["track"]})]
+            + [netclass(name, c) for name, c in classes.items()],
             "meta": {"version": 4},
             "netclass_patterns": [
-                {"netclass": name, "pattern": n} for name, (_, nets) in classes.items() for n in nets
+                {"netclass": name, "pattern": n} for name, c in classes.items() for n in c["nets"]
             ],
         },
     }
@@ -623,7 +667,7 @@ def write_project(spec, out):
 # ------------------------------------------------------------------ pcb
 
 
-def kicad_python(script, *args, capture=False):
+def kicad_python(script, *args, capture=False, quiet=False):
     """Runs `script` with KiCad's own Python (pcbnew), in its Flatpak;
     returns its output when `capture` (it is echoed either way)."""
     cmd = " ".join(["python3", sh_quote(str(script))] + [sh_quote(str(a)) for a in args])
@@ -634,7 +678,8 @@ def kicad_python(script, *args, capture=False):
     )
     if capture:
         out = "\n".join(l for l in run.stdout.splitlines() if not l.startswith("swig/python detected"))
-        print(out, flush=True)
+        if not quiet:
+            print(out, flush=True)
         return out
     return None
 
@@ -662,15 +707,102 @@ def unconnected_nets(spec, out):
     return nets
 
 
+def derived_currents(spec, models, nets, declared):
+    """Currents for nets with none declared, from the parts' data: a net
+    driven by a `power_out` pin of a part stating `output_current` (a
+    regulator's rated output) carries at most that. Only an existing
+    parameter is used; nothing is assumed."""
+    from urllib.parse import quote
+    from urllib.request import urlopen
+
+    out, cache = {}, {}
+    for ref, part in spec["components"].items():
+        for pad in models[part]["pads"]:
+            net = nets.get((ref, pad["number"]))
+            if not net or net in declared or net in out or (pad.get("pin") or {}).get("type") != "power_out":
+                continue
+            if part not in cache:
+                mfr, mpn = part.split("/", 1)
+                with urlopen(f"{spec['registry']}/v1/parts/{quote(mfr, safe='')}/{quote(mpn, safe='')}") as r:
+                    cache[part] = json.loads(r.read()).get("parameters") or {}
+            amps = rules.current_from_parameter(cache[part].get("output_current"))
+            if amps:
+                out[net] = (amps, f"{ref} output_current")
+    return out
+
+
+def routing_rules(spec, models, placement, out):
+    """Derives the routing rules (rules.py) and writes them: routing.json,
+    <name>.kicad_dru and the fan-out for plan.json. Exits on a pad no
+    escape fits."""
+    fab = spec["fab"]
+    nets = pin_refs(spec)
+    layers = spec["board"].get("layers", 2)
+    declared = rules.net_currents(spec["board"])
+    currents = rules.net_currents(spec["board"], derived_currents(spec, models, nets, declared))
+    widths = rules.net_widths(fab, currents)
+    escapes, errors = rules.escape_plan(spec, models, placement, nets, fab, widths)
+    pairs = rules.diff_pairs(spec, models, nets)
+    for p in pairs:
+        pins = [(ref, pad) for ref, pp, nn in p["ends"] for pad in (pp, nn)]
+        fit = [escapes[ref]["pads"][pad]["width"] for ref, pad in pins
+               if ref in escapes and pad in escapes[ref]["pads"]]
+        pitch = min((models[spec["components"][ref]].get("pitch") or 9.0) for ref, _ in pins)
+        p["geometry"] = rules.pair_geometry(fab, p["standard"], min(fit) if fit else fab["design"]["track"],
+                                            pitch if pitch < 9.0 else None)
+    src = fab.get("source") or {}
+    print(f"fab: {fab.get('preset', 'inline')} ({src.get('publisher')}, {src.get('url')}, "
+          f"retrieved {src.get('retrieved')}): min track/clearance {fab['min_track']}/{fab['min_clearance']} mm, "
+          f"via {fab['min_via_drill']}/{fab['min_via_diameter']} mm; design track {fab['design']['track']}, "
+          f"clearance {fab['design']['clearance']}, via {fab['design']['via_drill']}/{fab['design']['via_diameter']}")
+    for net, w in sorted(widths.items()):
+        inner = f", inner {w['inner']:.3f}" if w["inner"] is not None else ""
+        print(f"current: {net} {w['current']:g} A ({w['from']}): IPC-2221 outer {w['outer']:.3f}{inner} mm "
+              f"-> class track {w['track']:.3f} mm")
+    for ref, e in sorted(escapes.items()):
+        ws = {}
+        for num, pad in e["pads"].items():
+            ws.setdefault(round(pad["width"], 3), []).append(num)
+        print(f"escape: {ref} (clearance {e['clearance']}): "
+              + "; ".join(f"{w:.3f} mm x {len(n)}" for w, n in sorted(ws.items())))
+    for p in pairs:
+        g = p["geometry"]
+        print(f"diff pair: {p['p']}/{p['n']} ({p['standard']}, "
+              f"{', '.join(f'{r}.{a}/{b}' for r, a, b in p['ends'])}): {g['note']}")
+    (out / f"{spec['name']}.kicad_dru").write_text(rules.dru_text(fab, widths, escapes, pairs, layers))
+    items, report = rules.fanout(spec, models, placement, nets, fab, widths, escapes, pairs,
+                                 placement.get("fanout") or {}, layers)
+    if NO_FANOUT:
+        items, report = [], ["fan-out: none (--no-fanout)"]
+    for line in report:
+        print(line)
+    routing = {
+        "fab": {k: v for k, v in fab.items() if k != "source"},
+        "widths": widths,
+        "escapes": escapes,
+        "pairs": pairs,
+        "errors": errors,
+    }
+    (out / "routing.json").write_text(json.dumps(routing, indent=1, default=list))
+    for e in errors:
+        print("escape error:", e)
+    if errors:
+        sys.exit(f"{len(errors)} pad(s) cannot escape within the fab's limits")
+    return [{**{k: v for k, v in i.items() if k not in ("layers", "hole")},
+             "layer": next(iter(i["layers"])) if i["kind"] == "track" else None}
+            for i in items]
+
+
 def stage_pcb(spec, out):
-    write_project(spec, out)
-    for old in (out / f"{spec['name']}.kicad_pcb", out / f"{spec['name']}.ses"):
+    for old in (out / f"{spec['name']}.kicad_pcb", out / f"{spec['name']}.ses", out / "routing.json"):
         old.unlink(missing_ok=True)
     placement = {}
     pfile = out / "placement.yaml"
     if pfile.exists():
         placement = yaml.safe_load(pfile.read_text()) or {}
     models = placement_models(spec, out)
+    fanout = routing_rules(spec, models, placement, out)
+    write_project(spec, out)
     parts = placement_plan(spec, models, placement)
     plan = {
         "name": spec["name"],
@@ -683,6 +815,9 @@ def stage_pcb(spec, out):
         # the pads on the board (checked against pcbnew's), the courtyard
         # box and the model hash (checked against the footprint's).
         "parts": parts,
+        # Locked escape stubs, dog-bone and thermal vias, coupled diff
+        # pairs (rules.fanout).
+        "fanout": fanout,
     }
     (out / "plan.json").write_text(json.dumps(plan, indent=1))
     kicad_python(HERE / "pcb_stage.py", out, "pcb")
@@ -734,6 +869,8 @@ ROUTER_JOBS = 8
 # --evaluate-all: import and score every routing result (for measuring
 # how robust a placement routes), not only until a complete one.
 EVALUATE_ALL = False
+# --no-fanout: the pcb stage places no fan-out (to measure what it buys).
+NO_FANOUT = False
 # --sweep N: only the first N cost settings (a quicker, reduced sweep).
 SWEEP = len(ROUTER_VARIANTS)
 
@@ -885,6 +1022,36 @@ def stage_check(spec, out):
             key = (v.get("severity"), v.get("type"))
             counts[key] = counts.get(key, 0) + 1
         print(f"{kind}:", ", ".join(f"{n} x {t} ({s})" for (s, t), n in sorted(counts.items())) or "clean")
+    check_routing(spec, out)
+
+
+def check_routing(spec, out):
+    """After routing: every track at least its net's current width
+    (outside the neck-down zones; inside, its pad share's), and each diff
+    pair's lengths and skew. Writes out/routing-check.json."""
+    routing_file = out / "routing.json"
+    if not routing_file.exists():
+        return
+    routing = json.loads(routing_file.read_text())
+    text = kicad_python(HERE / "pcb_stage.py", out, "tracks", capture=True, quiet=True)
+    tracks = json.loads(text[text.index("["):])
+    zones = rules.zone_boxes(routing["escapes"])
+    bad = rules.check_widths(tracks, routing["widths"], zones, routing["escapes"])
+    for v in bad:
+        print(f"current width: {v['net']} track {v['width']:.3f} mm < {v['need']:.3f} mm ({v['where']}) "
+              f"at ({v['a'][0]:.2f}, {v['a'][1]:.2f})-({v['b'][0]:.2f}, {v['b'][1]:.2f})")
+    print(f"current-width violations: {len(bad)}")
+    pairs = []
+    lengths = rules.pair_lengths(tracks, routing["pairs"])
+    for p in routing["pairs"]:
+        lp, ln = lengths[(p["p"], p["n"])]
+        skew = abs(lp - ln)
+        ps = rules.skew_ps(skew, spec["fab"], p["geometry"]["width"])
+        print(f"diff pair {p['p']}/{p['n']}: {lp:.2f} / {ln:.2f} mm of track, skew {skew:.3f} mm "
+              f"(about {ps:.1f} ps on the outer layer)")
+        pairs.append({"p": p["p"], "n": p["n"], "length_p": lp, "length_n": ln, "skew_mm": skew, "skew_ps": ps})
+    (out / "out" / "routing-check.json").write_text(
+        json.dumps({"width_violations": bad, "pairs": pairs}, indent=1))
 
 
 def stage_preview(spec, out):
@@ -914,6 +1081,7 @@ STAGES = ["fetch", "sch", "pcb", "route", "check"]
 
 
 def main():
+    global EVALUATE_ALL, SWEEP, NO_FANOUT, ROUTER_ROUNDS
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("board")
     ap.add_argument("--out", required=True)
@@ -922,12 +1090,18 @@ def main():
     ap.add_argument("--registry", help="the OpenParts registry URL, overriding the board file's")
     ap.add_argument("--layers", type=int, choices=(2, 4),
                     help="copper layers, overriding the board file (4: the pour nets also fill both inner layers)")
+    ap.add_argument("--fab", help="fab profile preset (tools/kicad-board/fab/NAME.yaml), overriding the board file's")
+    ap.add_argument("--no-fanout", action="store_true",
+                    help="pcb: no pre-placed escape stubs, vias or diff-pair paths (for comparing)")
     ap.add_argument("--evaluate-all", action="store_true",
                     help="route: score every router configuration and report how many complete")
+    ap.add_argument("--rounds", type=int, metavar="N",
+                    help="route: at most N sweeps (default %d)" % ROUTER_ROUNDS)
     ap.add_argument("--sweep", type=int, metavar="N",
                     help="route: try only the first N router cost settings (of %d)" % len(ROUTER_VARIANTS))
     a = ap.parse_args()
-    global EVALUATE_ALL, SWEEP
+    NO_FANOUT = a.no_fanout
+    ROUTER_ROUNDS = a.rounds or ROUTER_ROUNDS
     EVALUATE_ALL = a.evaluate_all
     SWEEP = a.sweep or SWEEP
     spec = load_spec(a.board)
@@ -935,6 +1109,7 @@ def main():
         spec["registry"] = a.registry.rstrip("/")
     if a.layers:
         spec["board"]["layers"] = a.layers
+    apply_fab(spec, a.fab)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     stages = STAGES if a.stage == "all" else [a.stage]
