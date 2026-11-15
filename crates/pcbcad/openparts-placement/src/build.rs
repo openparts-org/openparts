@@ -347,6 +347,7 @@ fn make(
         tail_length: r4(match (&g.details, stated_tail) {
             (Details::Header(f), _) => f.tail_length,
             (Details::UsbC(f), _) => f.tail_length,
+            (Details::Connector(f), _) => f.tail_length,
             (_, Some(d)) => stated(d).unwrap_or(0.0),
             _ => lands
                 .iter()
@@ -818,8 +819,18 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
         ),
         F::TactSwitchSmd | F::TactSwitchTht => ("tactile switch", "pad 1 upper left"),
         F::UsbC => ("USB-C receptacle", "contact A1 upper left: the opening faces −Y"),
+        F::CardSocket | F::BarrelJack | F::FpcConnector | F::RfCoax | F::MicroUsbB => (
+            "connector",
+            "contact 1 upper left; the mating face (+Y in the source frame) turns with it",
+        ),
+        F::TerminalBlock => (
+            "terminal block",
+            "poles in a row along X, pole 1 on the left; the wire entry faces +Y",
+        ),
     }
 }
 
+#[cfg(test)]
+mod connector_tests;
 #[cfg(test)]
 mod tests;

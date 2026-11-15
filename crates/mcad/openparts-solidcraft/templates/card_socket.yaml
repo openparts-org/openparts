@@ -1,0 +1,16 @@
+# Card socket: a moulded frame under a metal shell, the card slot open
+# at the +Y face (under the shell). Vars: shell_t.
+- params:
+    shell_t: ["{{shell_t}}", shell sheet thickness]
+    frame_h: [body_h - shell_t, moulded frame height]
+- solid.box:
+    {length: body_w, width: body_l, height: frame_h, center: [0 mm, 0 mm, standoff + frame_h / 2],
+     body_name: Housing, name: Housing}
+- solid.box:
+    {length: body_w, width: body_l, height: shell_t, center: [0 mm, 0 mm, standoff + frame_h + shell_t / 2],
+     operation: new, body_name: Shell, name: Shell}
+- solid.box:
+    {length: body_w * 0.8, width: body_l * 0.75, height: frame_h * 0.6,
+     center: [0 mm, body_l * 0.125 + 0.05 mm, standoff + frame_h * 0.7 + 0.05 mm],
+     operation: new, body_name: Slot, name: Slot}
+- solid.combine: {target: Housing, tools: [Slot], operation: cut, keep_tools: false}

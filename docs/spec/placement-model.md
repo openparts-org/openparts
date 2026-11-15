@@ -118,7 +118,9 @@ frame turned by a multiple of 90° about the land-pattern centroid. The
 generator's own turn is kept when pin 1 (pad `1`, else `A1`, else the first
 plated pad) already lies upper left of the centroid (x ≤ 0, y ≥ 0, not at
 it). Otherwise the turn is the first of −90°, 180°, +90° that puts it
-there. A test checks every package of the dataset.
+there. When pin 1 is the centroid itself (an RF connector's centre contact
+between symmetric ground pads), no turn places it and the generator's frame is
+kept. A test checks every package of the dataset.
 
 | Families | At θ = 0 |
 | --- | --- |
@@ -133,6 +135,8 @@ there. A test checks every package of the dataset.
 | `right_angle_header` | Pins in a column along Y, pin 1 at the top; mating side +X. |
 | `tact_switch_smd`, `tact_switch_tht` | Pad 1 upper left. A vendor numbering that puts it lower right turns 180°. |
 | `usb_c` | Contact A1 upper left: the opening (mating face) faces −Y. The family's source frame has it facing +Y, so receptacles turn 180°. |
+| `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
+| `terminal_block` | Poles in a row along X, pole 1 on the left; the wire entry faces +Y (the family frame already has it so). |
 
 The model reports the rule (`frame.zero_orientation`: rule, family row,
 convention, pin-1 pad). The turn and the move from the generator's frame are

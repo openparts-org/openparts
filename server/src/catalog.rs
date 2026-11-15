@@ -25,9 +25,9 @@
 
 use crate::search::{chip_codes, CHIP_SIZES};
 use openparts_core::{
-    conditions_label, effective_parameters, parameter_spec, parse_value, ComponentCategory,
-    Dimension, ExistenceStatus, Gender, LifecycleStatus, Normalized, Orientation, Package,
-    PackageFamily, ParameterShape, PARAMETERS,
+    conditions_label, effective_parameters, parameter_spec, parse_value, CardMechanism,
+    ComponentCategory, ConnectorInterface, ContactSide, Dimension, ExistenceStatus, Gender,
+    LifecycleStatus, Normalized, Orientation, Package, PackageFamily, ParameterShape, PARAMETERS,
 };
 use openparts_data::Dataset;
 use serde::Serialize;
@@ -100,6 +100,12 @@ pub struct CatalogItem {
     pub shrouded: Option<bool>,
     /// IC packages: an exposed (thermal) pad or not.
     pub exposed_pad: Option<bool>,
+    /// Card sockets: push-push, push-pull, hinged.
+    pub mechanism: Option<CardMechanism>,
+    /// FPC connectors: top, bottom or dual contact.
+    pub contact_side: Option<ContactSide>,
+    /// Card sockets and RF connectors: the mating interface.
+    pub interface: Option<ConnectorInterface>,
     pub lifecycle: LifecycleStatus,
     pub existence: ExistenceStatus,
     /// Which of the part, its device and its package are reviewed.
@@ -221,6 +227,12 @@ pub struct CatalogFacets {
     pub shrouded: Vec<FacetValue>,
     /// `yes`, `no`.
     pub exposed_pad: Vec<FacetValue>,
+    /// `push_push`, `push_pull`, `hinged`.
+    pub mechanism: Vec<FacetValue>,
+    /// `top`, `bottom`, `dual`.
+    pub contact_side: Vec<FacetValue>,
+    /// `micro_sd`, `sd`, `sma`, `mcx`, ...
+    pub interface: Vec<FacetValue>,
     pub body_width: RangeFacet,
     pub body_length: RangeFacet,
     pub body_height: RangeFacet,
@@ -261,9 +273,13 @@ enum Group {
     Orientation,
     Shrouded,
     ExposedPad,
+    /// Connector facts (`Package::connector`).
+    Mechanism,
+    ContactSide,
+    Interface,
 }
 
-const GROUP_COUNT: usize = 15;
+const GROUP_COUNT: usize = 18;
 
 const GROUPS: [Group; GROUP_COUNT] = [
     Group::Category,
@@ -281,6 +297,9 @@ const GROUPS: [Group; GROUP_COUNT] = [
     Group::Orientation,
     Group::Shrouded,
     Group::ExposedPad,
+    Group::Mechanism,
+    Group::ContactSide,
+    Group::Interface,
 ];
 
 impl Group {
@@ -302,6 +321,9 @@ impl Group {
             Group::Orientation => &["orientation"],
             Group::Shrouded => &["shrouded"],
             Group::ExposedPad => &["exposed_pad"],
+            Group::Mechanism => &["mechanism"],
+            Group::ContactSide => &["contact_side", "contacts"],
+            Group::Interface => &["interface"],
         }
     }
 
@@ -335,6 +357,9 @@ impl Group {
                 "right_angle" | "rightangle" | "horizontal" | "angled" => "right_angle".into(),
                 _ => lower,
             },
+            Group::Mechanism | Group::ContactSide | Group::Interface => {
+                lower.replace(['-', ' ', '.'], "_")
+            }
             Group::Shrouded | Group::ExposedPad => match lower.as_str() {
                 "yes" | "true" | "1" => "yes".into(),
                 "no" | "false" | "0" => "no".into(),
@@ -722,6 +747,9 @@ impl CatalogIndex {
                 orientation: structure.orientation,
                 shrouded: structure.shrouded,
                 exposed_pad: structure.exposed_pad,
+                mechanism: structure.mechanism,
+                contact_side: structure.contact_side,
+                interface: structure.interface,
                 lifecycle: p.lifecycle.status,
                 existence: p.existence.status,
                 review: crate::documents::ReviewSummary::of(p, device, pkg),
@@ -797,6 +825,25 @@ impl CatalogIndex {
                     Group::ExposedPad => structure
                         .exposed_pad
                         .map(|b| yes_no(b, "Exposed pad", "No exposed pad")),
+                    Group::Mechanism => structure.mechanism.map(|m| {
+                        let label = match m {
+                            CardMechanism::PushPush => "Push-push",
+                            CardMechanism::PushPull => "Push-pull",
+                            CardMechanism::Hinged => "Hinged",
+                        };
+                        (wire(&m), label.to_string(), m as u8 as f64)
+                    }),
+                    Group::ContactSide => structure.contact_side.map(|c| {
+                        let label = match c {
+                            ContactSide::Top => "Top contact",
+                            ContactSide::Bottom => "Bottom contact",
+                            ContactSide::Dual => "Dual contact",
+                        };
+                        (wire(&c), label.to_string(), c as u8 as f64)
+                    }),
+                    Group::Interface => structure
+                        .interface
+                        .map(|i| (wire(&i), interface_label(i).to_string(), i as u8 as f64)),
                 };
                 if let Some((key, label, order)) = opt {
                     index.options[i]
@@ -1109,6 +1156,9 @@ impl CatalogIndex {
                 orientation: next(),
                 shrouded: next(),
                 exposed_pad: next(),
+                mechanism: next(),
+                contact_side: next(),
+                interface: next(),
                 body_width: range(),
                 body_length: range(),
                 body_height: range(),
@@ -1210,7 +1260,14 @@ fn mounting(pkg: &Package) -> Option<Mounting> {
                 | F::ShroudedHeader
                 | F::RightAngleHeader
                 | F::TactSwitchTht => tht = true,
-                F::UsbC | F::Module => return None,
+                F::UsbC
+                | F::Module
+                | F::CardSocket
+                | F::BarrelJack
+                | F::TerminalBlock
+                | F::FpcConnector
+                | F::RfCoax
+                | F::MicroUsbB => return None,
                 _ => smd = true,
             }
         }
@@ -1322,6 +1379,12 @@ fn family_label(f: PackageFamily) -> String {
         F::TactSwitchSmd => "Tact switch (SMD)".into(),
         F::TactSwitchTht => "Tact switch (THT)".into(),
         F::UsbC => "USB-C".into(),
+        F::CardSocket => "Card socket".into(),
+        F::BarrelJack => "DC barrel jack".into(),
+        F::TerminalBlock => "Terminal block".into(),
+        F::FpcConnector => "FPC/FFC connector".into(),
+        F::RfCoax => "RF coaxial".into(),
+        F::MicroUsbB => "Micro-USB B".into(),
         F::SodFlat => "SOD (flat)".into(),
         F::Sot223 => "SOT-223".into(),
         F::Do214 => "DO-214".into(),
@@ -1329,6 +1392,21 @@ fn family_label(f: PackageFamily) -> String {
         F::To92 => "TO-92".into(),
         F::D2pak => "D2PAK".into(),
         other => other.name().to_uppercase(),
+    }
+}
+
+fn interface_label(i: ConnectorInterface) -> &'static str {
+    use ConnectorInterface as I;
+    match i {
+        I::MicroSd => "microSD",
+        I::Sd => "SD",
+        I::Sma => "SMA",
+        I::RpSma => "RP-SMA",
+        I::Smb => "SMB",
+        I::Mcx => "MCX",
+        I::Mmcx => "MMCX",
+        I::UFl => "U.FL",
+        I::Bnc => "BNC",
     }
 }
 
@@ -1458,6 +1536,59 @@ mod tests {
                 .and_then(|s| s.split(']').next())
                 .is_some_and(|s| s.contains(&format!("\"{}\"", spec.key)));
             assert_eq!(enumerated, listed, "enum_param_keys and {}", spec.key);
+        }
+    }
+
+    /// Connector facet values normalise to their wire names, and the web
+    /// labels the connector families and every connector facet value.
+    #[test]
+    fn connector_facets_normalise_and_the_web_labels_them() {
+        let q = parse(&[
+            ("mechanism", "Push-Push"),
+            ("contacts", "bottom"),
+            ("interface", "micro-SD"),
+        ]);
+        let set = |g: Group| {
+            let i = GROUPS.iter().position(|x| *x == g).unwrap();
+            q.filters[i].iter().cloned().collect::<Vec<_>>()
+        };
+        assert_eq!(set(Group::Mechanism), ["push_push"]);
+        assert_eq!(set(Group::ContactSide), ["bottom"]);
+        assert_eq!(set(Group::Interface), ["micro_sd"]);
+        let i18n = include_str!("../../web/cmd/app/i18n.mbt");
+        let catalog = include_str!("../../web/cmd/app/catalog.mbt");
+        for f in PackageFamily::ALL
+            .iter()
+            .filter(|f| openparts_core::is_connector_family(**f))
+        {
+            assert!(i18n.contains(&format!("(Ja, \"{}\")", f.name())), "{f}");
+            assert!(i18n.contains(&format!("(En, \"{}\")", f.name())), "{f}");
+        }
+        let pairs = [
+            ("mechanism", wire(&CardMechanism::PushPush)),
+            ("mechanism", wire(&CardMechanism::PushPull)),
+            ("mechanism", wire(&CardMechanism::Hinged)),
+            ("contact_side", wire(&ContactSide::Top)),
+            ("contact_side", wire(&ContactSide::Bottom)),
+            ("contact_side", wire(&ContactSide::Dual)),
+        ];
+        use ConnectorInterface as I;
+        let interfaces = [
+            I::MicroSd,
+            I::Sd,
+            I::Sma,
+            I::RpSma,
+            I::Smb,
+            I::Mcx,
+            I::Mmcx,
+            I::UFl,
+            I::Bnc,
+        ];
+        let interfaces = interfaces.iter().map(|i| ("interface", wire(i)));
+        for (key, v) in pairs.into_iter().chain(interfaces) {
+            assert!(catalog.contains(&format!(r#""{key}""#)), "{key}");
+            let option = format!(r#""{key}", "{v}")"#);
+            assert!(i18n.contains(&option), "{option}");
         }
     }
 

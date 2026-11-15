@@ -1,0 +1,3 @@
+# Connector families: where the body starts. Vars: z0.
+- params:
+    standoff: ["{{z0}}", "body underside above the board (negative: an edge-mount body reaching below it)"]

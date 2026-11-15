@@ -5,11 +5,11 @@
 //! `None` where the package doesn't decide it -- never guessed.
 
 use crate::{Package, PackageFamily as F};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Connector gender.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Gender {
     /// Pins: a pin header, a plug.
@@ -20,7 +20,7 @@ pub enum Gender {
 
 /// Which way a connector mates.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Orientation {
     /// Straight up from the board.
@@ -41,6 +41,13 @@ pub struct PackageStructure {
     /// IC packages that can have one: whether this one has an exposed
     /// pad (`dimensions.exposed_pad`).
     pub exposed_pad: Option<bool>,
+    /// Card sockets: push-push, push-pull, hinged (`connector.mechanism`).
+    pub mechanism: Option<crate::CardMechanism>,
+    /// FPC connectors: the contact side (`connector.contact_side`).
+    pub contact_side: Option<crate::ContactSide>,
+    /// Card sockets and RF connectors: the mating interface
+    /// (`connector.interface`).
+    pub interface: Option<crate::ConnectorInterface>,
 }
 
 impl Package {
@@ -60,16 +67,25 @@ impl Package {
         };
         let gender = match self.family {
             F::Header | F::ShroudedHeader | F::RightAngleHeader => Some(Gender::Male),
-            // `usb_c` is the receptacle family.
-            F::Socket | F::UsbC => Some(Gender::Female),
+            // `usb_c` is the receptacle family, and so are the
+            // connector families that take a card, a plug or a cable.
+            F::Socket
+            | F::UsbC
+            | F::CardSocket
+            | F::BarrelJack
+            | F::FpcConnector
+            | F::MicroUsbB => Some(Gender::Female),
             _ => None,
         };
+        let connector = self.connector.as_ref();
+        let gender = gender.or(connector.and_then(|c| c.gender));
         let orientation = match self.family {
             F::Header | F::Socket | F::ShroudedHeader => Some(Orientation::Vertical),
             // Its generator draws the horizontal (mid/top-mount)
             // receptacle: opening parallel to the board.
             F::RightAngleHeader | F::UsbC => Some(Orientation::RightAngle),
-            _ => None,
+            // Connector families: as the source states it.
+            _ => connector.and_then(|c| c.orientation),
         };
         let shrouded = match self.family {
             F::ShroudedHeader => Some(true),
@@ -87,6 +103,9 @@ impl Package {
             orientation,
             shrouded,
             exposed_pad,
+            mechanism: connector.and_then(|c| c.mechanism),
+            contact_side: connector.and_then(|c| c.contact_side),
+            interface: connector.and_then(|c| c.interface),
         }
     }
 }
@@ -151,5 +170,30 @@ mod tests {
             (s.gender, s.orientation),
             (Some(Gender::Female), Some(Orientation::RightAngle))
         );
+    }
+
+    #[test]
+    fn connector_families_read_their_connector_record() {
+        let s = pkg("family: card_socket\nlead_count: 9\n\
+                     connector: { mechanism: push_push, interface: micro_sd }")
+        .structure();
+        assert_eq!(s.gender, Some(Gender::Female));
+        assert_eq!(s.mechanism, Some(crate::CardMechanism::PushPush));
+        assert_eq!(s.interface, Some(crate::ConnectorInterface::MicroSd));
+        assert_eq!(s.orientation, None);
+        let s = pkg("family: rf_coax\nlead_count: 3\n\
+                     connector: { gender: female, orientation: vertical, interface: sma }")
+        .structure();
+        assert_eq!(
+            (s.gender, s.orientation),
+            (Some(Gender::Female), Some(Orientation::Vertical))
+        );
+        let s = pkg("family: fpc_connector\nlead_count: 6\n\
+                     connector: { contact_side: bottom, orientation: right_angle }")
+        .structure();
+        assert_eq!(s.contact_side, Some(crate::ContactSide::Bottom));
+        // Without a record the search knows only what the family fixes.
+        let s = pkg("family: terminal_block\nlead_count: 2").structure();
+        assert_eq!(s, PackageStructure::default());
     }
 }

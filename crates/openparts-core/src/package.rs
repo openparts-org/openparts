@@ -150,6 +150,14 @@ pub struct PackageDimensions {
     /// Switches: diameter of the round actuator (plunger) on top.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_diameter: Option<Dimension>,
+    /// Connectors with a round mating interface: the outer diameter of
+    /// an RF connector's coupling barrel (SMA thread, MCX body), a barrel
+    /// jack's plug opening. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mating_diameter: Option<Dimension>,
+    /// `barrel_jack`: diameter of the centre pin (2.0, 2.1, 2.5 mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin_diameter: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -192,6 +200,8 @@ impl PackageDimensions {
             ("/dimensions/body_offset", &self.body_offset),
             ("/dimensions/lead_inset", &self.lead_inset),
             ("/dimensions/actuator_diameter", &self.actuator_diameter),
+            ("/dimensions/mating_diameter", &self.mating_diameter),
+            ("/dimensions/pin_diameter", &self.pin_diameter),
         ];
         out.extend(
             optional
@@ -563,6 +573,10 @@ pub struct Package {
     /// `None` when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub construction: Option<PackageConstruction>,
+    /// How the connector mates, as the source states it (connector
+    /// families, section 20.6); `None` when not recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector: Option<crate::connector::PackageConnector>,
     /// The part sits at the board edge, when the source says so (a
     /// connector whose layout draws the PCB edge line, a module that is
     /// to be placed on the edge). Section 20.3; absent: no such statement.

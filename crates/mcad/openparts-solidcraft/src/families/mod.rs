@@ -4,6 +4,7 @@
 mod axial;
 mod bga;
 mod chip;
+mod connector;
 mod diode;
 mod dip;
 mod gullwing;
@@ -39,6 +40,12 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         F::To220 => to220::build(&mut s, input)?,
         F::TactSwitchSmd | F::TactSwitchTht => switch::build(&mut s, input)?,
         F::UsbC => usb_c::build(&mut s, input)?,
+        F::CardSocket
+        | F::BarrelJack
+        | F::TerminalBlock
+        | F::FpcConnector
+        | F::RfCoax
+        | F::MicroUsbB => connector::build(&mut s, input)?,
         F::Qfn | F::Dfn | F::Son | F::Lga => qfn::build(&mut s, input)?,
         F::Chip => chip::build(&mut s, input)?,
         F::Radial => radial::build(&mut s, input)?,

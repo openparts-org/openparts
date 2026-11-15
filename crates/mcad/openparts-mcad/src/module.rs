@@ -446,6 +446,7 @@ mod tests {
             tab: None,
             aux_pads: vec!["D1".into(), "D2".into(), "D3".into()],
             pad_order: vec![],
+            connector: None,
             edge: None,
             keepouts: vec![],
             pad_rows: vec![],

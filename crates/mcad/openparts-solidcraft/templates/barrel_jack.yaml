@@ -1,0 +1,17 @@
+# DC barrel jack: the housing with the plug opening bored in from the +Y
+# face and the centre pin inside. Vars: bore_d, pin_d.
+- params:
+    bore_d: ["{{bore_d}}", plug opening diameter]
+    pin_d: ["{{pin_d}}", centre pin diameter]
+    axis_z: [standoff + body_h / 2, "plug axis height (generator default: the body's middle)"]
+    bore_depth: [body_l * 0.8, plug opening depth]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: bore_d, height: bore_depth + 0.1 mm, axis: Y, base: [0 mm, body_l / 2 - bore_depth, axis_z],
+     operation: new, body_name: Bore, name: Bore}
+- solid.combine: {target: Housing, tools: [Bore], operation: cut, keep_tools: false}
+- solid.cylinder:
+    {diameter: pin_d, height: bore_depth * 0.85, axis: Y, base: [0 mm, body_l / 2 - bore_depth - 0.1 mm, axis_z],
+     operation: new, body_name: Pin, name: Pin}

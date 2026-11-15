@@ -460,6 +460,9 @@ struct CatalogCopy {
   f_orientation : String
   f_shrouded : String
   f_exposed_pad : String
+  f_mechanism : String
+  f_contact_side : String
+  f_interface : String
   f_width : String
   f_length : String
   f_height : String
@@ -516,6 +519,9 @@ let catalog_ja : CatalogCopy = {
   f_orientation: "向き",
   f_shrouded: "シュラウド",
   f_exposed_pad: "露出パッド",
+  f_mechanism: "カード挿抜方式",
+  f_contact_side: "接点位置",
+  f_interface: "インターフェース",
   f_width: "本体幅 W (mm)",
   f_length: "本体長 L (mm)",
   f_height: "本体高さ H (mm)",
@@ -570,6 +576,9 @@ let catalog_en : CatalogCopy = {
   f_orientation: "Orientation",
   f_shrouded: "Shroud",
   f_exposed_pad: "Exposed pad",
+  f_mechanism: "Card mechanism",
+  f_contact_side: "Contact side",
+  f_interface: "Interface",
   f_width: "Body width W (mm)",
   f_length: "Body length L (mm)",
   f_height: "Body height H (mm)",
@@ -660,6 +669,12 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (Ja, "tact_switch_smd") => "タクトスイッチ(SMD)"
     (Ja, "tact_switch_tht") => "タクトスイッチ(挿入)"
     (Ja, "sod_flat") => "SOD(フラットリード)"
+    (Ja, "card_socket") => "カードソケット"
+    (Ja, "barrel_jack") => "DCジャック"
+    (Ja, "terminal_block") => "端子台"
+    (Ja, "fpc_connector") => "FPC/FFCコネクタ"
+    (Ja, "rf_coax") => "同軸コネクタ"
+    (Ja, "micro_usb_b") => "マイクロUSB B"
     (En, "chip") => "Chip"
     (En, "radial") => "Radial lead"
     (En, "axial") => "Axial lead"
@@ -671,6 +686,12 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (En, "tact_switch_smd") => "Tact switch (SMD)"
     (En, "tact_switch_tht") => "Tact switch (THT)"
     (En, "sod_flat") => "SOD (flat lead)"
+    (En, "card_socket") => "Card socket"
+    (En, "barrel_jack") => "DC barrel jack"
+    (En, "terminal_block") => "Terminal block"
+    (En, "fpc_connector") => "FPC/FFC connector"
+    (En, "rf_coax") => "RF coaxial"
+    (En, "micro_usb_b") => "Micro-USB B"
     (_, "usb_c") => "USB Type-C"
     (_, "sot223") => "SOT-223"
     (_, "do214") => "DO-214"
@@ -714,6 +735,27 @@ fn structure_label(lang : Lang, key : String, value : String) -> String? {
     (Ja, "exposed_pad", "no") => "なし"
     (En, "exposed_pad", "yes") => "Yes"
     (En, "exposed_pad", "no") => "No"
+    (Ja, "mechanism", "push_push") => "プッシュ・プッシュ"
+    (Ja, "mechanism", "push_pull") => "プッシュ・プル"
+    (Ja, "mechanism", "hinged") => "ヒンジ"
+    (En, "mechanism", "push_push") => "Push-push"
+    (En, "mechanism", "push_pull") => "Push-pull"
+    (En, "mechanism", "hinged") => "Hinged"
+    (Ja, "contact_side", "top") => "上接点"
+    (Ja, "contact_side", "bottom") => "下接点"
+    (Ja, "contact_side", "dual") => "両面接点"
+    (En, "contact_side", "top") => "Top contact"
+    (En, "contact_side", "bottom") => "Bottom contact"
+    (En, "contact_side", "dual") => "Dual contact"
+    (_, "interface", "micro_sd") => "microSD"
+    (_, "interface", "sd") => "SD"
+    (_, "interface", "sma") => "SMA"
+    (_, "interface", "rp_sma") => "RP-SMA"
+    (_, "interface", "smb") => "SMB"
+    (_, "interface", "mcx") => "MCX"
+    (_, "interface", "mmcx") => "MMCX"
+    (_, "interface", "u_fl") => "U.FL"
+    (_, "interface", "bnc") => "BNC"
     _ => return None
   }
   Some(label)

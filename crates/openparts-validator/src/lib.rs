@@ -17,6 +17,7 @@
 mod circuit;
 #[cfg(test)]
 mod circuit_tests;
+mod connector;
 mod cross;
 mod device;
 mod diagnostic;
@@ -136,6 +137,10 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "edge.invalid",
         meaning: "a package's `edge.pcb_edge` (the PCB edge line its source draws) is not a number, or a land reaches past it",
+    },
+    Rule {
+        id: "connector.invalid",
+        meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height`, or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
     },
     Rule {
         id: "keepout.invalid",
@@ -343,6 +348,7 @@ pub fn validate_part(
     out.extend(check_package_edge(&package_entity, package));
     out.extend(check_package_keepouts(&package_entity, package));
     out.extend(check_package_pad_layout(&package_entity, package));
+    out.extend(connector::check_package_connector(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,
@@ -393,6 +399,7 @@ mod tests {
             include_str!("parameter.rs"),
             include_str!("review.rs"),
             include_str!("circuit.rs"),
+            include_str!("connector.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
@@ -507,6 +514,7 @@ mod tests {
             tab: None,
             aux_pads: vec![],
             pad_order: vec![],
+            connector: None,
             edge: None,
             keepouts: vec![],
             pad_rows: vec![],

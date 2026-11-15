@@ -614,6 +614,7 @@ fn top_level_order(map: Mapping, kind: &str, default: Option<String>) -> Mapping
             "lead_layout",
             "pitch",
             "construction",
+            "connector",
             "tab",
             "aux_pads",
             "pad_order",

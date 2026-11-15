@@ -9,6 +9,7 @@
 let facet_keys : Array[String] = [
   "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
   "existence", "review", "rows", "gender", "orientation", "shrouded", "exposed_pad",
+  "mechanism", "contact_side", "interface",
 ]
 
 ///|
@@ -21,7 +22,8 @@ fn build_pick_keys() -> Array[String] {
   let out = [
     "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
     "existence", "review", "rows", "gender", "orientation", "shrouded", "exposed_pad",
-    "width_min", "width_max", "length_min", "length_max", "height_min", "height_max",
+    "mechanism", "contact_side", "interface", "width_min", "width_max", "length_min",
+    "length_max", "height_min", "height_max",
   ]
   for p in param_names {
     out.push(p.0)
@@ -479,8 +481,13 @@ fn option_label(
     "lifecycle" => lifecycle_label(lang, value)
     "existence" => existence_label(lang, value)
     "review" => review_option_label(lang, value)
-    "gender" | "orientation" | "shrouded" | "exposed_pad" =>
-      structure_label(lang, key, value).unwrap_or(fallback)
+    "gender"
+    | "orientation"
+    | "shrouded"
+    | "exposed_pad"
+    | "mechanism"
+    | "contact_side"
+    | "interface" => structure_label(lang, key, value).unwrap_or(fallback)
     k if enum_param_keys.contains(k) => param_value_label(lang, k, value)
     _ => fallback
   }
@@ -504,6 +511,9 @@ fn group_title(k : CatalogCopy, key : String) -> String {
     "orientation" => k.f_orientation
     "shrouded" => k.f_shrouded
     "exposed_pad" => k.f_exposed_pad
+    "mechanism" => k.f_mechanism
+    "contact_side" => k.f_contact_side
+    "interface" => k.f_interface
     "width" => k.f_width
     "length" => k.f_length
     _ => k.f_height
@@ -527,6 +537,9 @@ fn facet_values(f : @api.CatalogFacets, key : String) -> Array[@api.FacetValue] 
     "orientation" => f.orientation
     "shrouded" => f.shrouded
     "exposed_pad" => f.exposed_pad
+    "mechanism" => f.mechanism
+    "contact_side" => f.contact_side
+    "interface" => f.interface
     _ => f.existence
   }
 }
@@ -1084,7 +1097,11 @@ fn sidebar(
   if !f.rows.is_empty() {
     out.push(group("rows", facet_chips(emit, "rows", f.rows)))
   }
-  for key in ["gender", "orientation", "shrouded", "exposed_pad"] {
+  for
+    key in [
+      "gender", "orientation", "shrouded", "exposed_pad", "interface", "mechanism",
+      "contact_side",
+    ] {
     let values = facet_values(f, key)
     if !values.is_empty() {
       out.push(group(key, facet_checks(lang, s, emit, key, values, 8)))

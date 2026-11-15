@@ -278,6 +278,43 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
         if st.exposed_pad == Some(true) {
             add(Field::Package, "exposed_pad thermal_pad epad");
         }
+        if let Some(m) = st.mechanism {
+            add(
+                Field::Package,
+                match m {
+                    openparts_core::CardMechanism::PushPush => "push_push",
+                    openparts_core::CardMechanism::PushPull => "push_pull",
+                    openparts_core::CardMechanism::Hinged => "hinged",
+                },
+            );
+        }
+        if let Some(c) = st.contact_side {
+            add(
+                Field::Package,
+                match c {
+                    openparts_core::ContactSide::Top => "top_contact",
+                    openparts_core::ContactSide::Bottom => "bottom_contact",
+                    openparts_core::ContactSide::Dual => "dual_contact",
+                },
+            );
+        }
+        if let Some(i) = st.interface {
+            use openparts_core::ConnectorInterface as I;
+            add(
+                Field::Package,
+                match i {
+                    I::MicroSd => "micro_sd microsd tf",
+                    I::Sd => "sd sd_card",
+                    I::Sma => "sma",
+                    I::RpSma => "rp_sma rpsma",
+                    I::Smb => "smb",
+                    I::Mcx => "mcx",
+                    I::Mmcx => "mmcx",
+                    I::UFl => "u_fl ufl ipex",
+                    I::Bnc => "bnc",
+                },
+            );
+        }
     }
     Entry {
         mpn: normalize(&p.mpn).replace(" ", ""),
@@ -376,6 +413,20 @@ fn category_name(c: ComponentCategory) -> &'static str {
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
     ("ライトアングル", "right_angle"),
+    ("マイクロsdカード", "micro_sd"),
+    ("マイクロsd", "micro_sd"),
+    ("sdカード", "card_socket"),
+    ("カードソケット", "card_socket"),
+    ("dcジャック", "barrel_jack"),
+    ("電源ジャック", "barrel_jack"),
+    ("ターミナルブロック", "terminal_block"),
+    ("端子台", "terminal_block"),
+    ("fpcコネクタ", "fpc_connector"),
+    ("ffcコネクタ", "fpc_connector"),
+    ("同軸コネクタ", "rf_coax"),
+    ("マイクロusb", "micro_usb_b"),
+    ("プッシュプッシュ", "push_push"),
+    ("プッシュプル", "push_pull"),
     ("シュラウド付き", "shrouded"),
     ("シュラウド", "shrouded"),
     ("ボックスヘッダー", "shrouded"),

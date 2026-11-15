@@ -69,6 +69,18 @@ families! {
     TactSwitchSmd: "tact_switch_smd",
     TactSwitchTht: "tact_switch_tht",
     UsbC: "usb_c",
+    /// Memory card sockets (microSD, SD), push-push or push-pull.
+    CardSocket: "card_socket",
+    /// DC power barrel jacks (THT or SMT).
+    BarrelJack: "barrel_jack" | "dc_jack",
+    /// PCB terminal blocks (screw, spring or lever clamps).
+    TerminalBlock: "terminal_block",
+    /// FPC/FFC connectors.
+    FpcConnector: "fpc_connector" | "ffc_connector",
+    /// RF coaxial connectors (SMA, MCX, MMCX, U.FL...).
+    RfCoax: "rf_coax",
+    /// Micro-USB B receptacles.
+    MicroUsbB: "micro_usb_b",
 }
 
 impl PackageFamily {

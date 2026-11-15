@@ -338,7 +338,18 @@ fn every_dataset_package_is_level_a() {
             continue;
         };
         let m = build(p, None, &g, Density::N);
-        assert!(upper_left(&m), "{}: pin 1 at {:?}", p.id.0, m.pin1);
+        // Pin 1 at the centroid (an RF connector's centre contact): no
+        // turn places it, the generator's turn is kept.
+        let at_centroid = m
+            .pin1
+            .as_ref()
+            .is_some_and(|q| q.position.x.abs() < 1e-6 && q.position.y.abs() < 1e-6);
+        assert!(
+            upper_left(&m) || at_centroid,
+            "{}: pin 1 at {:?}",
+            p.id.0,
+            m.pin1
+        );
         assert!(centred(&m), "{}", p.id.0);
         assert_3d_alignment(&g, &m);
         n += 1;

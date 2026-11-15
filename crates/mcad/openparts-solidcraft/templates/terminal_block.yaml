@@ -1,0 +1,5 @@
+# Terminal block housing (each pole's openings are cut by
+# terminal_entry_side or terminal_entry_top).
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}

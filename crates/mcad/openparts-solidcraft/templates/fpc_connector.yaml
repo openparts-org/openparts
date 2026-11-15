@@ -1,0 +1,16 @@
+# FPC/FFC connector: the moulded housing with the cable slot open at the
+# +Y face and the actuator (lock) along the top of the rear half.
+- params:
+    housing_h: [body_h * 0.75, housing height under the actuator]
+- solid.box:
+    {length: body_w, width: body_l, height: housing_h, center: [0 mm, 0 mm, standoff + housing_h / 2],
+     body_name: Housing, name: Housing}
+- solid.box:
+    {length: body_w * 0.85, width: body_l * 0.6, height: housing_h * 0.35,
+     center: [0 mm, body_l * 0.2 + 0.05 mm, standoff + housing_h * 0.55],
+     operation: new, body_name: Slot, name: Slot}
+- solid.combine: {target: Housing, tools: [Slot], operation: cut, keep_tools: false}
+- solid.box:
+    {length: body_w * 0.95, width: body_l * 0.45, height: body_h - housing_h,
+     center: [0 mm, -body_l * 0.275, standoff + housing_h + (body_h - housing_h) / 2],
+     operation: new, body_name: Actuator, name: Actuator}

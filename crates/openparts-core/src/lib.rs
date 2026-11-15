@@ -7,6 +7,7 @@
 pub mod category;
 pub mod circuit;
 pub mod condition;
+pub mod connector;
 pub mod device;
 pub mod dimension;
 pub mod effective_model;
@@ -38,6 +39,9 @@ pub use circuit::{
 pub use condition::{
     condition_symbol, conditions_label, Condition, ConditionError, ConditionSymbol, Conditions,
     CONDITION_SYMBOLS,
+};
+pub use connector::{
+    is_connector_family, CardMechanism, ConnectorInterface, ContactSide, PackageConnector,
 };
 pub use device::{Device, DeviceOverrides, DeviceRevision, RevisionDetection};
 pub use dimension::Dimension;

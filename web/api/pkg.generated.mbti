@@ -130,6 +130,16 @@ pub(all) struct BomSummary {
 }
 pub impl @json.FromJson for BomSummary
 
+#derive(Eq, @debug.Debug)
+pub(all) enum CardMechanism {
+  PushPush
+  PushPull
+  Hinged
+}
+pub fn CardMechanism::all() -> Array[Self]
+pub fn CardMechanism::wire(Self) -> String
+pub impl @json.FromJson for CardMechanism
+
 #derive(Eq)
 pub(all) struct CatalogFacets {
   body_height : RangeFacet
@@ -137,11 +147,14 @@ pub(all) struct CatalogFacets {
   body_width : RangeFacet
   category : Array[FacetValue]
   category_tree : Array[CategoryNode]
+  contact_side : Array[FacetValue]
   existence : Array[FacetValue]
   exposed_pad : Array[FacetValue]
   gender : Array[FacetValue]
+  interface : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
+  mechanism : Array[FacetValue]
   mounting : Array[FacetValue]
   orientation : Array[FacetValue]
   package_family : Array[FacetValue]
@@ -161,14 +174,17 @@ pub(all) struct CatalogItem {
   body_length : Double?
   body_width : Double?
   category : ComponentCategory?
+  contact_side : ContactSide?
   device : String
   existence : ExistenceStatus
   exposed_pad : Bool?
   gender : Gender?
+  interface : ConnectorInterface?
   lead_count : Int32?
   lifecycle : LifecycleStatus
   manufacturer : String
   manufacturer_name : String
+  mechanism : CardMechanism?
   mounting : Mounting?
   mpn : String
   orientation : Orientation?
@@ -378,6 +394,32 @@ pub(all) struct Condition {
   value : Double?
 }
 pub impl @json.FromJson for Condition
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ConnectorInterface {
+  Sma
+  Smb
+  Mcx
+  Mmcx
+  Bnc
+  MicroSd
+  Sd
+  RpSma
+  UFl
+}
+pub fn ConnectorInterface::all() -> Array[Self]
+pub fn ConnectorInterface::wire(Self) -> String
+pub impl @json.FromJson for ConnectorInterface
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ContactSide {
+  Top
+  Bottom
+  Dual
+}
+pub fn ContactSide::all() -> Array[Self]
+pub fn ContactSide::wire(Self) -> String
+pub impl @json.FromJson for ContactSide
 
 #derive(Eq)
 pub(all) struct Coverage {
@@ -769,6 +811,7 @@ pub impl @json.FromJson for Orientation
 #derive(Eq)
 pub(all) struct Package {
   aux_pads : Array[String]?
+  connector : PackageConnector?
   construction : PackageConstruction?
   dimensions : PackageDimensions
   edge : PackageEdge?
@@ -792,6 +835,17 @@ pub(all) struct Package {
   tab : PackageTab?
 }
 pub impl @json.FromJson for Package
+
+#derive(Eq)
+pub(all) struct PackageConnector {
+  contact_side : ContactSide?
+  edge_mount : Bool?
+  gender : Gender?
+  interface : ConnectorInterface?
+  mechanism : CardMechanism?
+  orientation : Orientation?
+}
+pub impl @json.FromJson for PackageConnector
 
 #derive(Eq, @debug.Debug)
 pub(all) enum PackageConstruction {
@@ -822,6 +876,7 @@ pub(all) struct PackageDimensions {
   lead_length : Dimension?
   lead_thickness : Dimension?
   lead_width : Dimension?
+  mating_diameter : Dimension?
   mating_length : Dimension?
   mounting_hole_diameter : Dimension?
   mounting_hole_inset : Dimension?
@@ -830,6 +885,7 @@ pub(all) struct PackageDimensions {
   overall_length : Dimension?
   overall_width : Dimension?
   pad_diameter : Dimension?
+  pin_diameter : Dimension?
   row_spacing : Dimension?
   standoff : Dimension?
   tab_length : Dimension?
@@ -880,6 +936,12 @@ pub(all) enum PackageFamily {
   TactSwitchSmd
   TactSwitchTht
   UsbC
+  CardSocket
+  BarrelJack
+  TerminalBlock
+  FpcConnector
+  RfCoax
+  MicroUsbB
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String

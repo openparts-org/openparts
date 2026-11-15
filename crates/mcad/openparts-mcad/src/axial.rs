@@ -155,6 +155,7 @@ mod tests {
             tab: None,
             aux_pads: vec![],
             pad_order: vec![],
+            connector: None,
             edge: None,
             keepouts: vec![],
             pad_rows: vec![],

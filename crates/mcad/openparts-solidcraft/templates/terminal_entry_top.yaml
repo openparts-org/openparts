@@ -1,0 +1,11 @@
+# One pole of a terminal block with top (vertical) wire entry: the wire
+# opening and the release opening beside it, as one tool body.
+# Vars: name, x, w (opening width along X).
+- solid.box:
+    {length: "{{w}}", width: "{{w}}", height: body_h * 0.6 + 0.1 mm,
+     center: ["{{x}}", body_l * 0.2, standoff + body_h * 0.7 + 0.05 mm],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}
+- solid.box:
+    {length: "{{w}}", width: body_l * 0.2, height: body_h * 0.2 + 0.1 mm,
+     center: ["{{x}}", -body_l * 0.2, standoff + body_h * 0.9 + 0.05 mm],
+     operation: join, targets: ["{{name}}"], name: "{{name}}Release"}

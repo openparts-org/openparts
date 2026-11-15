@@ -1167,6 +1167,9 @@ test "decode CatalogResponse" {
     #|  "orientation": [],
     #|  "shrouded": [],
     #|  "exposed_pad": [],
+    #|  "mechanism": [],
+    #|  "contact_side": [],
+    #|  "interface": [],
     #|  "body_width": {
     #|   "min": 0.8,
     #|   "max": 0.8

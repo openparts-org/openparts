@@ -1,0 +1,16 @@
+# Micro-USB B receptacle: a metal shell open at the +Y face, the
+# moulded tongue inside. Vars: shell_t.
+- params:
+    shell_t: ["{{shell_t}}", shell sheet thickness]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Shell, name: Shell}
+- solid.box:
+    {length: body_w - 2 * shell_t, width: body_l, height: body_h - 2 * shell_t,
+     center: [0 mm, shell_t + 0.05 mm, standoff + body_h / 2],
+     operation: new, body_name: Cavity, name: Cavity}
+- solid.combine: {target: Shell, tools: [Cavity], operation: cut, keep_tools: false}
+- solid.box:
+    {length: (body_w - 2 * shell_t) * 0.7, width: body_l * 0.7, height: (body_h - 2 * shell_t) * 0.35,
+     center: [0 mm, -body_l * 0.15, standoff + body_h * 0.6],
+     operation: new, body_name: Tongue, name: Tongue}

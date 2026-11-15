@@ -1,0 +1,10 @@
+# One pole of a terminal block with side wire entry: the wire opening in
+# the +Y face and the clamp's recess in the top, as one tool body.
+# Vars: name, x, w (opening width along X).
+- solid.box:
+    {length: "{{w}}", width: body_l * 0.6, height: body_h * 0.35,
+     center: ["{{x}}", body_l * 0.2 + 0.05 mm, standoff + body_h * 0.35],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}
+- solid.cylinder:
+    {diameter: "{{w}}", height: body_h * 0.3 + 0.1 mm, base: ["{{x}}", -body_l * 0.15, standoff + body_h * 0.7],
+     operation: join, targets: ["{{name}}"], name: "{{name}}Screw"}

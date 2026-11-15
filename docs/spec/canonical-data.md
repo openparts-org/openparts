@@ -1104,6 +1104,71 @@ centred terminal numbered `EP`. `exposed_pad.land_width`/`land_length` record
 the source's recommended thermal land when it differs from the pad (the 3D slug
 keeps the pad size).
 
+## 20.6 Connector Families
+
+Six families describe board connectors whose land pattern is too irregular
+for a parametric generator. Each takes its footprint from an explicit land
+pattern (`pads`, required), exactly as the source's recommended PCB layout
+draws it: signal contacts, shield and hold-down pads, plated (often slotted)
+tabs, and non-plated peg holes (`plated: false`).
+
+| Family | What | Typical source facts |
+|---|---|---|
+| `card_socket` | microSD / SD card sockets | contacts, card-detect switch, shell pads, push-push or push-pull |
+| `barrel_jack` (alias `dc_jack`) | DC power barrel jacks, THT or SMT | slotted tabs, centre pin diameter |
+| `terminal_block` | PCB terminal blocks (screw, spring, lever) | one hole per pole at the pitch, wire entry side or top |
+| `fpc_connector` (alias `ffc_connector`) | FPC/FFC connectors | contacts at 0.5/1.0 mm, solder tabs, top or bottom contact |
+| `rf_coax` | RF coaxial connectors (SMA, MCX, MMCX, U.FL) | centre and ground pads or holes; vertical, right angle or edge mount |
+| `micro_usb_b` | Micro-USB B receptacles | five contacts, shell tabs (SMT pads or plated slots), pegs |
+
+Frame (all six): top view, X right, Y up, **origin at the centre of the body
+outline** `body_width` (X) × `body_length` (Y); the mating face (card slot,
+plug opening, cable or wire entry, a right-angle RF connector's barrel)
+toward +Y. When the source dimensions the layout from a pin or a datum
+instead, convert the coordinates and write the arithmetic in the locator or a
+comment. `body_height` (required) is the body's height above the board, as
+the side view gives it. `lead_count` is the number of plated pads (non-plated
+holes don't count); a number may repeat (shield pads numbered alike).
+`pitch` is the contact pitch where the source gives one.
+
+What a body is, per family: the card socket's outline (frame and shell), the
+barrel jack's housing, the terminal block's housing, the FPC connector's
+housing including its actuator, the RF connector's base or flange (its
+coupling barrel is drawn beyond it from `mating_diameter`/`mating_length`),
+the micro-USB shell.
+
+`connector` (optional record, provenance `/connector`) holds what the source
+states about how the part mates:
+
+| Field | Values | Family |
+|---|---|---|
+| `gender` | `male`, `female` | any; families that fix it (card socket, barrel jack, FPC, micro-USB: female) ignore it |
+| `orientation` | `vertical`, `right_angle` (mating direction to the board; a terminal block's wire entry) | any connector family |
+| `mechanism` | `push_push`, `push_pull`, `hinged` | `card_socket` (required) |
+| `contact_side` | `top`, `bottom`, `dual` (the cable face the contacts touch) | `fpc_connector` (required) |
+| `interface` | `micro_sd`, `sd` / `sma`, `rp_sma`, `smb`, `mcx`, `mmcx`, `u_fl`, `bnc` | `card_socket` (card, required), `rf_coax` (RF, required, with `orientation`) |
+| `edge_mount` | `true` | `rf_coax`: the part straddles the board edge; `edge` with `pcb_edge` is then required |
+
+```yaml
+family: rf_coax
+lead_count: 3
+connector: { gender: female, orientation: right_angle, interface: sma, edge_mount: true, src: p1 "Title; -EM1: EDGE MOUNT" }
+edge: { side: +y, pcb_edge: -0.865, src: p1 "RECOMMENDED PCB LAYOUT, PCB EDGE" }
+```
+
+Two optional dimensions serve the 3D model only: `mating_diameter` (an RF
+connector's coupling barrel, a barrel jack's plug opening) and `pin_diameter`
+(a barrel jack's centre pin, 2.0/2.1/2.5 mm). Both need provenance. The
+generator's defaults for anything unstated (tails 1.5 mm below the board,
+shell sheet 0.2 mm, barrel 0.7 × the body's smaller cross dimension and
+1.5 diameters long, bore 0.6 ×, centre pin 0.33 × the bore, a 1.6 mm board
+under an edge-mount part) are drawing defaults and are never written back.
+
+Rule `connector.invalid`: a connector family without `pads`, with a
+`lead_count` other than its plated pad count, or without `body_height`; a
+missing required `connector` field; a `connector` field outside its family; an
+`edge_mount` part without `edge.pcb_edge`.
+
 ---
 
 # 21. Package Geometry

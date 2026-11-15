@@ -309,6 +309,40 @@ pub impl @json.FromJson for BomSummary with fn from_json(json, path) {
 }
 
 ///|
+#derive(Eq, Debug)
+pub(all) enum CardMechanism {
+  PushPush
+  PushPull
+  Hinged
+}
+
+///|
+/// The wire (JSON) string.
+pub fn CardMechanism::wire(self : CardMechanism) -> String {
+  match self {
+    PushPush => "push_push"
+    PushPull => "push_pull"
+    Hinged => "hinged"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn CardMechanism::all() -> Array[CardMechanism] {
+  [PushPush, PushPull, Hinged]
+}
+
+///|
+pub impl @json.FromJson for CardMechanism with fn from_json(json, path) {
+  match json {
+    String("push_push") => PushPush
+    String("push_pull") => PushPull
+    String("hinged") => Hinged
+    _ => raise @json.JsonDecodeError((path, "expected a CardMechanism"))
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct CatalogFacets {
   body_height : RangeFacet
@@ -316,11 +350,14 @@ pub(all) struct CatalogFacets {
   body_width : RangeFacet
   category : Array[FacetValue]
   category_tree : Array[CategoryNode]
+  contact_side : Array[FacetValue]
   existence : Array[FacetValue]
   exposed_pad : Array[FacetValue]
   gender : Array[FacetValue]
+  interface : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
+  mechanism : Array[FacetValue]
   mounting : Array[FacetValue]
   orientation : Array[FacetValue]
   package_family : Array[FacetValue]
@@ -344,11 +381,14 @@ pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
     body_width: field(obj, "body_width", path),
     category: field(obj, "category", path),
     category_tree: field(obj, "category_tree", path),
+    contact_side: field(obj, "contact_side", path),
     existence: field(obj, "existence", path),
     exposed_pad: field(obj, "exposed_pad", path),
     gender: field(obj, "gender", path),
+    interface: field(obj, "interface", path),
     lifecycle: field(obj, "lifecycle", path),
     manufacturer: field(obj, "manufacturer", path),
+    mechanism: field(obj, "mechanism", path),
     mounting: field(obj, "mounting", path),
     orientation: field(obj, "orientation", path),
     package_family: field(obj, "package_family", path),
@@ -372,14 +412,17 @@ pub(all) struct CatalogItem {
   body_length : Double?
   body_width : Double?
   category : ComponentCategory?
+  contact_side : ContactSide?
   device : String
   existence : ExistenceStatus
   exposed_pad : Bool?
   gender : Gender?
+  interface : ConnectorInterface?
   lead_count : Int32?
   lifecycle : LifecycleStatus
   manufacturer : String
   manufacturer_name : String
+  mechanism : CardMechanism?
   mounting : Mounting?
   mpn : String
   orientation : Orientation?
@@ -404,14 +447,17 @@ pub impl @json.FromJson for CatalogItem with fn from_json(json, path) {
     body_length: opt_field(obj, "body_length", path),
     body_width: opt_field(obj, "body_width", path),
     category: opt_field(obj, "category", path),
+    contact_side: opt_field(obj, "contact_side", path),
     device: field(obj, "device", path),
     existence: field(obj, "existence", path),
     exposed_pad: opt_field(obj, "exposed_pad", path),
     gender: opt_field(obj, "gender", path),
+    interface: opt_field(obj, "interface", path),
     lead_count: opt_field(obj, "lead_count", path),
     lifecycle: field(obj, "lifecycle", path),
     manufacturer: field(obj, "manufacturer", path),
     manufacturer_name: field(obj, "manufacturer_name", path),
+    mechanism: opt_field(obj, "mechanism", path),
     mounting: opt_field(obj, "mounting", path),
     mpn: field(obj, "mpn", path),
     orientation: opt_field(obj, "orientation", path),
@@ -1020,6 +1066,92 @@ pub impl @json.FromJson for Condition with fn from_json(json, path) {
     min: opt_field(obj, "min", path),
     unit: field(obj, "unit", path),
     value: opt_field(obj, "value", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ConnectorInterface {
+  Sma
+  Smb
+  Mcx
+  Mmcx
+  Bnc
+  MicroSd
+  Sd
+  RpSma
+  UFl
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ConnectorInterface::wire(self : ConnectorInterface) -> String {
+  match self {
+    Sma => "sma"
+    Smb => "smb"
+    Mcx => "mcx"
+    Mmcx => "mmcx"
+    Bnc => "bnc"
+    MicroSd => "micro_sd"
+    Sd => "sd"
+    RpSma => "rp_sma"
+    UFl => "u_fl"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ConnectorInterface::all() -> Array[ConnectorInterface] {
+  [Sma, Smb, Mcx, Mmcx, Bnc, MicroSd, Sd, RpSma, UFl]
+}
+
+///|
+pub impl @json.FromJson for ConnectorInterface with fn from_json(json, path) {
+  match json {
+    String("sma") => Sma
+    String("smb") => Smb
+    String("mcx") => Mcx
+    String("mmcx") => Mmcx
+    String("bnc") => Bnc
+    String("micro_sd") => MicroSd
+    String("sd") => Sd
+    String("rp_sma") => RpSma
+    String("u_fl") => UFl
+    _ => raise @json.JsonDecodeError((path, "expected a ConnectorInterface"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ContactSide {
+  Top
+  Bottom
+  Dual
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ContactSide::wire(self : ContactSide) -> String {
+  match self {
+    Top => "top"
+    Bottom => "bottom"
+    Dual => "dual"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ContactSide::all() -> Array[ContactSide] {
+  [Top, Bottom, Dual]
+}
+
+///|
+pub impl @json.FromJson for ContactSide with fn from_json(json, path) {
+  match json {
+    String("top") => Top
+    String("bottom") => Bottom
+    String("dual") => Dual
+    _ => raise @json.JsonDecodeError((path, "expected a ContactSide"))
   }
 }
 
@@ -2245,6 +2377,7 @@ pub impl @json.FromJson for Orientation with fn from_json(json, path) {
 #derive(Eq)
 pub(all) struct Package {
   aux_pads : Array[String]?
+  connector : PackageConnector?
   construction : PackageConstruction?
   dimensions : PackageDimensions
   edge : PackageEdge?
@@ -2275,6 +2408,7 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
   }
   {
     aux_pads: opt_field(obj, "aux_pads", path),
+    connector: opt_field(obj, "connector", path),
     construction: opt_field(obj, "construction", path),
     dimensions: field(obj, "dimensions", path),
     edge: opt_field(obj, "edge", path),
@@ -2296,6 +2430,33 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     shield: opt_field(obj, "shield", path),
     smt: opt_field(obj, "smt", path),
     tab: opt_field(obj, "tab", path),
+  }
+}
+
+///|
+/// `Package::connector`.
+#derive(Eq)
+pub(all) struct PackageConnector {
+  contact_side : ContactSide?
+  edge_mount : Bool?
+  gender : Gender?
+  interface : ConnectorInterface?
+  mechanism : CardMechanism?
+  orientation : Orientation?
+}
+
+///|
+pub impl @json.FromJson for PackageConnector with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackageConnector object"))
+  }
+  {
+    contact_side: opt_field(obj, "contact_side", path),
+    edge_mount: opt_field(obj, "edge_mount", path),
+    gender: opt_field(obj, "gender", path),
+    interface: opt_field(obj, "interface", path),
+    mechanism: opt_field(obj, "mechanism", path),
+    orientation: opt_field(obj, "orientation", path),
   }
 }
 
@@ -2367,6 +2528,7 @@ pub(all) struct PackageDimensions {
   lead_length : Dimension?
   lead_thickness : Dimension?
   lead_width : Dimension?
+  mating_diameter : Dimension?
   mating_length : Dimension?
   mounting_hole_diameter : Dimension?
   mounting_hole_inset : Dimension?
@@ -2375,6 +2537,7 @@ pub(all) struct PackageDimensions {
   overall_length : Dimension?
   overall_width : Dimension?
   pad_diameter : Dimension?
+  pin_diameter : Dimension?
   row_spacing : Dimension?
   standoff : Dimension?
   tab_length : Dimension?
@@ -2403,6 +2566,7 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     lead_length: opt_field(obj, "lead_length", path),
     lead_thickness: opt_field(obj, "lead_thickness", path),
     lead_width: opt_field(obj, "lead_width", path),
+    mating_diameter: opt_field(obj, "mating_diameter", path),
     mating_length: opt_field(obj, "mating_length", path),
     mounting_hole_diameter: opt_field(obj, "mounting_hole_diameter", path),
     mounting_hole_inset: opt_field(obj, "mounting_hole_inset", path),
@@ -2411,6 +2575,7 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     overall_length: opt_field(obj, "overall_length", path),
     overall_width: opt_field(obj, "overall_width", path),
     pad_diameter: opt_field(obj, "pad_diameter", path),
+    pin_diameter: opt_field(obj, "pin_diameter", path),
     row_spacing: opt_field(obj, "row_spacing", path),
     standoff: opt_field(obj, "standoff", path),
     tab_length: opt_field(obj, "tab_length", path),
@@ -2476,6 +2641,12 @@ pub(all) enum PackageFamily {
   TactSwitchSmd
   TactSwitchTht
   UsbC
+  CardSocket
+  BarrelJack
+  TerminalBlock
+  FpcConnector
+  RfCoax
+  MicroUsbB
 }
 
 ///|
@@ -2514,6 +2685,12 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     TactSwitchSmd => "tact_switch_smd"
     TactSwitchTht => "tact_switch_tht"
     UsbC => "usb_c"
+    CardSocket => "card_socket"
+    BarrelJack => "barrel_jack"
+    TerminalBlock => "terminal_block"
+    FpcConnector => "fpc_connector"
+    RfCoax => "rf_coax"
+    MicroUsbB => "micro_usb_b"
   }
 }
 
@@ -2553,6 +2730,12 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     TactSwitchSmd,
     TactSwitchTht,
     UsbC,
+    CardSocket,
+    BarrelJack,
+    TerminalBlock,
+    FpcConnector,
+    RfCoax,
+    MicroUsbB,
   ]
 }
 
@@ -2591,6 +2774,12 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("tact_switch_smd") => TactSwitchSmd
     String("tact_switch_tht") => TactSwitchTht
     String("usb_c") => UsbC
+    String("card_socket") => CardSocket
+    String("barrel_jack") => BarrelJack
+    String("terminal_block") => TerminalBlock
+    String("fpc_connector") => FpcConnector
+    String("rf_coax") => RfCoax
+    String("micro_usb_b") => MicroUsbB
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }

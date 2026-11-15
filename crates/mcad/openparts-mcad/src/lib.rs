@@ -7,6 +7,7 @@
 mod axial;
 mod bga;
 mod chip;
+mod connector;
 mod defaults;
 mod diode;
 mod dip;
@@ -26,9 +27,10 @@ mod to220;
 mod to92;
 mod usb_c;
 
+pub use connector::ConnectorFeatures;
 pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
 pub use module::{ModuleFeatures, ModuleHoles, ModuleShield, MountingHoles};
-pub use openparts_core::PackageFamily;
+pub use openparts_core::{Orientation, PackageFamily};
 pub use tact::SwitchFeatures;
 pub use to220::To220Features;
 pub use usb_c::UsbCFeatures;
@@ -69,9 +71,19 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         }
         F::TactSwitchSmd | F::TactSwitchTht => tact::generate_tact_switch(package),
         F::UsbC => usb_c::generate_usb_c(package),
+        F::CardSocket
+        | F::BarrelJack
+        | F::TerminalBlock
+        | F::FpcConnector
+        | F::RfCoax
+        | F::MicroUsbB => connector::generate_connector(package),
     }?;
     renumber(&mut geometry, package)?;
-    if !package.pads.is_empty() && package.family != F::UsbC {
+    // `usb_c` and the connector families draw their leads from the pads.
+    if !package.pads.is_empty()
+        && package.family != F::UsbC
+        && !openparts_core::is_connector_family(package.family)
+    {
         geometry.lands = land::from_pads(package)?;
     } else if let Some(lands) = ipc::lands(package, &geometry) {
         geometry.lands = lands;
@@ -275,6 +287,8 @@ pub enum Details {
     To220(To220Features),
     Switch(SwitchFeatures),
     UsbC(UsbCFeatures),
+    /// The connector families (`connector.rs`).
+    Connector(ConnectorFeatures),
     /// TO-252/TO-263: lead positions cut short at the body, as (lead
     /// number, Y position).
     TrimmedLeads(Vec<(u32, f64)>),

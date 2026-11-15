@@ -1,0 +1,19 @@
+# Vertical RF connector: the base (flange) with the coupling barrel up
+# from its top, the barrel's bore and the insulator. Vars: barrel_d,
+# barrel_l.
+- params:
+    barrel_d: ["{{barrel_d}}", coupling barrel diameter]
+    barrel_l: ["{{barrel_l}}", barrel length above the base]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Base, name: Base}
+- solid.cylinder:
+    {diameter: barrel_d, height: barrel_l, base: [0 mm, 0 mm, standoff + body_h],
+     operation: new, body_name: Barrel, name: Barrel}
+- solid.cylinder:
+    {diameter: barrel_d * 0.7, height: barrel_l * 0.8, base: [0 mm, 0 mm, standoff + body_h + barrel_l * 0.2 + 0.05 mm],
+     operation: new, body_name: Bore, name: Bore}
+- solid.combine: {target: Barrel, tools: [Bore], operation: cut, keep_tools: false}
+- solid.cylinder:
+    {diameter: barrel_d * 0.7, height: barrel_l * 0.6, base: [0 mm, 0 mm, standoff + body_h + barrel_l * 0.2],
+     operation: new, body_name: Insulator, name: Insulator}

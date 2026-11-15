@@ -476,6 +476,27 @@ pub(crate) mod usb_c {
     pub const SHELL_THICKNESS: f64 = 0.2;
 }
 
+/// Connector families' generator defaults (3D only: the footprint is the
+/// stated land pattern).
+pub(crate) mod connector {
+    /// Plated pins and tabs below the board's top surface.
+    pub const TAIL_LENGTH: f64 = 1.5;
+    /// Metal shell sheet (card sockets, micro-USB).
+    pub const SHELL_THICKNESS: f64 = 0.2;
+    /// An RF connector's barrel diameter, of the body's smaller cross
+    /// dimension (width or height), when no `mating_diameter` is stated.
+    pub const BARREL_RATIO: f64 = 0.7;
+    /// A barrel jack's plug opening, of the same.
+    pub const BORE_RATIO: f64 = 0.6;
+    /// An RF barrel's length beyond the body, in barrel diameters.
+    pub const BARREL_LENGTH_RATIO: f64 = 1.5;
+    /// A barrel jack's centre pin, of the opening.
+    pub const PIN_RATIO: f64 = 0.33;
+    /// The board an edge-mount connector straddles (its axis on the
+    /// board's mid-plane): 1.6 mm, the common FR-4 thickness.
+    pub const EDGE_BOARD_THICKNESS: f64 = 1.6;
+}
+
 /// `radial` generator defaults.
 pub(crate) mod radial {
     /// Engineering defaults used only when the datasheet doesn't supply a

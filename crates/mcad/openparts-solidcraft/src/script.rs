@@ -204,6 +204,8 @@ pub mod looks {
     pub const CHIP_INDUCTOR: Look = Look::dielectric("#c9c4b8", 0.6);
     /// An LED die seen through the lens.
     pub const DIE: Look = Look::dielectric("#3a3f4a", 0.4);
+    /// Green polyamide terminal-block housing.
+    pub const TERMINAL_BLOCK: Look = Look::dielectric("#2f7d4a", 0.6);
     /// Generic grey body for anything without a better guess.
     pub const NEUTRAL: Look = Look::dielectric("#6d7178", 0.6);
 }
