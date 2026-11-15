@@ -6,18 +6,25 @@
 //!   map) -- what the board tool expands;
 //! - `GET /v1/parts/{manufacturer}/{mpn}/circuits`: the circuits whose
 //!   host is the part's device, as display rows ([`CircuitView`]) for
-//!   the part page.
+//!   the part page, each with its schematic ([`crate::circuit_diagram`]);
+//! - `GET /v1/circuits/{publisher}/{name}/diagram.svg`: the schematic
+//!   on its own (on its host device, or on the pin names a generic
+//!   host must have).
 
+use crate::circuit_diagram::{self, Connection, Element, End, Scene, Sym};
 use crate::error::ApiError;
 use crate::store::Store;
 use axum::extract::{Path, State};
+use axum::http::{header, HeaderValue};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use openparts_core::circuit::{target, Target};
+use openparts_core::circuit::{target, NetKind, Role, Target};
 use openparts_core::{
-    parameter_spec, Circuit, CircuitHost, DocumentType, FormulaInput, Level, LevelValue,
-    ParameterValue, ProvenanceEntry, Requirement,
+    parameter_spec, Circuit, CircuitHost, ComponentCategory, Device, DocumentType, FormulaInput,
+    Level, LevelValue, ParameterValue, ProvenanceEntry, Requirement,
 };
+use openparts_data::format::pin_order;
 use openparts_data::Dataset;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -27,6 +34,10 @@ pub fn router() -> Router<Arc<Store>> {
     Router::new()
         .route("/v1/circuits", get(list_circuits))
         .route("/v1/circuits/:publisher/:name", get(get_circuit))
+        .route(
+            "/v1/circuits/:publisher/:name/diagram.svg",
+            get(circuit_diagram),
+        )
         .route("/v1/parts/:manufacturer/:mpn/circuits", get(part_circuits))
 }
 
@@ -122,6 +133,9 @@ pub struct CircuitView {
     pub includes: Vec<String>,
     /// The board.yaml `use:` entry (`host:` to fill in).
     pub use_line: String,
+    /// The schematic (SVG, styled by the page it is inlined in);
+    /// `None` when there is nothing to draw.
+    pub diagram: Option<String>,
 }
 
 fn host_label(h: &CircuitHost) -> String {
@@ -191,11 +205,7 @@ async fn part_circuits(
     Ok(Json(
         circuits
             .into_iter()
-            .map(|c| {
-                view(ds, c, |name| {
-                    device.pins.values().filter(|p| p.name == name).count()
-                })
-            })
+            .map(|c| view(ds, c, device, &part.mpn))
             .collect(),
     ))
 }
@@ -306,7 +316,283 @@ fn literal_label(v: &ParameterValue) -> String {
     .to_string()
 }
 
-pub fn view(ds: &Dataset, c: &Circuit, pins_named: impl Fn(&str) -> usize) -> CircuitView {
+/// `GET /v1/circuits/{publisher}/{name}/diagram.svg`
+async fn circuit_diagram(
+    State(store): State<Arc<Store>>,
+    Path((publisher, name)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let id = format!("{publisher}/{name}");
+    let ds = &store.dataset;
+    let c = ds
+        .circuits
+        .get(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("no circuit {id}")))?;
+    let device = match &c.host {
+        CircuitHost::Device(d) => ds.devices.get(&d.0),
+        CircuitHost::Match(m) => m.devices.first().and_then(|d| ds.devices.get(&d.0)),
+    };
+    let scene = match device {
+        Some(device) => {
+            let label = device.id.0.rsplit('/').next().unwrap_or_default();
+            scene(ds, c, device, label)
+        }
+        // A generic host: the pin names it must have, without numbers.
+        None => {
+            let CircuitHost::Match(m) = &c.host else {
+                return Err(ApiError::NotFound(format!("no host device for {id}")));
+            };
+            let pins: serde_json::Map<String, serde_json::Value> = m
+                .has_pins
+                .iter()
+                .enumerate()
+                .map(|(k, p)| {
+                    (
+                        format!("{k:03}"),
+                        serde_json::json!({ "name": p, "type": "passive" }),
+                    )
+                })
+                .collect();
+            let device: Device = serde_json::from_value(serde_json::json!({
+                "schema_version": "0.2",
+                "kind": "device",
+                "id": "generic/host",
+                "manufacturer": "generic",
+                "category": "other",
+                "pins": pins,
+            }))
+            .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
+            let label = m.category.map_or("host", |c| c.name()).replace('_', " ");
+            let mut s = scene(ds, c, &device, &label);
+            for p in &mut s.pins {
+                p.0.clear();
+            }
+            s
+        }
+    };
+    let svg = circuit_diagram::render(&scene, true);
+    if svg.is_empty() {
+        return Err(ApiError::NotFound(format!("nothing to draw for {id}")));
+    }
+    let mut res = svg.into_response();
+    res.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("image/svg+xml; charset=utf-8"),
+    );
+    Ok(res)
+}
+
+/// The symbol a role is drawn with: from its category (or its named
+/// part's device category); parts with other than two pins are boxes.
+fn symbol_of(ds: &Dataset, r: &Role) -> Sym {
+    let mut cats: Vec<ComponentCategory> = r
+        .requires
+        .category
+        .as_ref()
+        .map(|c| c.list())
+        .unwrap_or_default();
+    if let Some((m, mpn)) = r.requires.part.as_ref().and_then(|p| p.0.split_once('/')) {
+        if let Some(dev) = ds.part(m, mpn).and_then(|p| ds.devices.get(&p.device.0)) {
+            cats.push(dev.category);
+        }
+    }
+    let Some(c) = cats.first().copied() else {
+        return Sym::Block;
+    };
+    let sym = if c.is_within(ComponentCategory::Crystal) {
+        return Sym::Crystal;
+    } else if c.is_within(ComponentCategory::Capacitor) {
+        Sym::Capacitor
+    } else if c.is_within(ComponentCategory::Resistor) {
+        Sym::Resistor
+    } else if c.is_within(ComponentCategory::Inductor) {
+        Sym::Inductor
+    } else if c.is_within(ComponentCategory::Diode) || c == ComponentCategory::Led {
+        Sym::Diode
+    } else if c.is_within(ComponentCategory::Switch) || c == ComponentCategory::Connector {
+        Sym::Switch
+    } else {
+        Sym::Block
+    };
+    if r.pins.len() == 2 {
+        sym
+    } else {
+        Sym::Block
+    }
+}
+
+/// `Switching regulator`
+fn category_title(r: &Role) -> Option<String> {
+    let c = r.requires.category.as_ref()?.list().into_iter().next()?;
+    let name = c.name().replace('_', " ");
+    let mut chars = name.chars();
+    Some(chars.next()?.to_uppercase().collect::<String>() + chars.as_str())
+}
+
+/// What a role's symbol is labelled with: its value, a named part's
+/// MPN (and a crystal's frequency), a box's category.
+fn value_lines(r: &Role, sym: Sym) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(p) = &r.requires.part {
+        out.push(p.0.rsplit('/').next().unwrap_or(&p.0).to_string());
+        if let Some(f) = r.expects.get("frequency") {
+            out.push(value_label("frequency", f));
+        }
+        return out;
+    }
+    if sym == Sym::Block {
+        out.extend(category_title(r));
+    }
+    if !r.requires.parameters.is_empty() {
+        // One line per parameter: `≥ 4.7 µF` / `ESR 33 mΩ–2.2 Ω`.
+        for line in requirement_label(&r.requires).split(", ") {
+            out.push(match line.strip_prefix("esr ") {
+                Some(rest) => format!("ESR {rest}"),
+                None => line.to_string(),
+            });
+        }
+    }
+    out
+}
+
+/// `C_IOVDD · 100 nF ×6` and `should · p152` on the next line.
+fn tip_of(ds: &Dataset, c: &Circuit, name: &str, r: &Role, count: usize) -> String {
+    let at = format!("/roles/{}", esc(name));
+    let cite = cite_at(ds, c, &format!("{at}/level"))
+        .or_else(|| cite_at(ds, c, &format!("{at}/requires")));
+    let mut value = requirement_label(&r.requires);
+    if count > 1 {
+        value.push_str(&format!(" ×{count}"));
+    }
+    let word = r
+        .level
+        .word
+        .clone()
+        .unwrap_or_else(|| r.level.value.as_str().to_string());
+    let page = cite
+        .and_then(|c| c.page)
+        .map(|p| format!(" · p{p}"))
+        .unwrap_or_default();
+    format!("{name} · {value}\n{word}{page}")
+}
+
+/// Adds circuit `c`'s nets, connections and roles (but `skip`) on host
+/// `device`, its nets renamed by `rename`.
+fn add_to_scene(
+    s: &mut Scene,
+    ds: &Dataset,
+    c: &Circuit,
+    device: &Device,
+    rename: &BTreeMap<String, String>,
+    skip: Option<&str>,
+) {
+    let net = |n: &str| rename.get(n).cloned().unwrap_or_else(|| n.to_string());
+    for (name, k) in &c.nets {
+        match k.kind {
+            NetKind::Ground => {
+                s.ground.insert(net(name));
+            }
+            NetKind::Power => {
+                s.power.insert(net(name));
+            }
+            NetKind::Local => {
+                s.local.insert(net(name));
+            }
+            NetKind::Signal => {}
+        }
+    }
+    for (pin, k) in &c.connect {
+        let to = if k.no_connect {
+            None
+        } else {
+            k.net.as_deref().map(net)
+        };
+        let word = k
+            .level
+            .as_ref()
+            .and_then(|l| l.word.clone())
+            .unwrap_or_else(|| k.level().as_str().to_string());
+        let page = cite_at(ds, c, &format!("/connect/{}", esc(pin)))
+            .and_then(|c| c.page)
+            .map(|p| format!(" · p{p}"))
+            .unwrap_or_default();
+        s.connects.push(Connection {
+            pin: pin.clone(),
+            tip: format!("{pin} → {}\n{word}{page}", to.as_deref().unwrap_or("NC")),
+            net: to,
+            level: k.level(),
+        });
+    }
+    let pins_named = |name: &str| device.pins.values().filter(|p| p.name == name).count();
+    for (name, r) in &c.roles {
+        if Some(name.as_str()) == skip {
+            continue;
+        }
+        let sym = symbol_of(ds, r);
+        let count = r.instances(pins_named);
+        let terms = r
+            .pins
+            .iter()
+            .map(|(pin, t)| {
+                let end = match target(t) {
+                    Target::ThisPin => End::Pin(r.per_pin.clone().unwrap_or_default()),
+                    Target::HostPin(p) => End::Pin(p.to_string()),
+                    Target::Net(n) => End::Net(net(n)),
+                };
+                (pin.clone(), end)
+            })
+            .collect();
+        s.elements.push(Element {
+            role: name.clone(),
+            sym,
+            value: value_lines(r, sym),
+            count,
+            level: r.level.value,
+            tip: tip_of(ds, c, name, r, count),
+            terms,
+        });
+    }
+}
+
+/// The drawing of `c` on `device` (titled `label`). A composite with a
+/// part of its own hosting an included circuit (the minimal design's
+/// LDO) is drawn around that part; its other includes have drawings
+/// of their own.
+pub fn scene(ds: &Dataset, c: &Circuit, device: &Device, label: &str) -> Scene {
+    let mut s = Scene::default();
+    let hosted = c.includes.iter().find_map(|inc| {
+        let role = &inc.host.as_ref()?.role;
+        let part = c.roles.get(role)?.requires.part.as_ref()?;
+        let (m, mpn) = part.0.split_once('/')?;
+        let part = ds.part(m, mpn)?;
+        let dev = ds.devices.get(&part.device.0)?;
+        let child = ds.circuits.get(&inc.circuit)?;
+        Some((role, part.mpn.clone(), dev, child, &inc.nets))
+    });
+    let host = match hosted {
+        Some((role, mpn, dev, child, rename)) => {
+            add_to_scene(&mut s, ds, child, dev, rename, None);
+            add_to_scene(&mut s, ds, c, device, &BTreeMap::new(), Some(role));
+            s.host = mpn;
+            dev
+        }
+        None => {
+            add_to_scene(&mut s, ds, c, device, &BTreeMap::new(), None);
+            s.host = label.to_string();
+            device
+        }
+    };
+    let mut pins: Vec<(String, String)> = host
+        .pins
+        .iter()
+        .map(|(num, p)| (num.clone(), p.name.clone()))
+        .collect();
+    pins.sort_by(|a, b| pin_order(&a.0, &b.0));
+    s.pins = pins;
+    s
+}
+
+pub fn view(ds: &Dataset, c: &Circuit, device: &Device, host_label: &str) -> CircuitView {
+    let pins_named = |name: &str| device.pins.values().filter(|p| p.name == name).count();
     let mut counts = [0u32; 4];
     let mut count = |l: LevelValue| {
         counts[match l {
@@ -334,7 +620,7 @@ pub fn view(ds: &Dataset, c: &Circuit, pins_named: impl Fn(&str) -> usize) -> Ci
             let at = format!("/roles/{}", esc(name));
             CircuitRoleRow {
                 role: name.clone(),
-                count: r.instances(&pins_named) as u32,
+                count: r.instances(pins_named) as u32,
                 value: requirement_label(&r.requires),
                 connects,
                 level,
@@ -473,6 +759,10 @@ pub fn view(ds: &Dataset, c: &Circuit, pins_named: impl Fn(&str) -> usize) -> Ci
         formulas,
         includes: c.includes.iter().map(|i| i.circuit.clone()).collect(),
         use_line: format!("{{ circuit: {}, host: <REF> }}", c.id),
+        diagram: {
+            let svg = circuit_diagram::render(&scene(ds, c, device, host_label), false);
+            (!svg.is_empty()).then_some(svg)
+        },
     }
 }
 

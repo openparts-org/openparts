@@ -279,6 +279,7 @@ pub impl @json.FromJson for CircuitSummary
 #derive(Eq)
 pub(all) struct CircuitView {
   connects : Array[CircuitConnectRow]
+  diagram : String?
   document_type : DocumentType?
   example : Int32
   formulas : Array[CircuitFormulaRow]

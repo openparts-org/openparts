@@ -33,6 +33,11 @@ type CatalogState
 
 type CircuitCopy
 
+type CircuitMsg
+
+#derive(Eq)
+type CircuitUi
+
 type Copy
 
 type DataReviewCopy

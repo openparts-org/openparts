@@ -1,0 +1,411 @@
+/* The part page's reference circuits (cmd/app/circuits.mbt): a list of
+   one-line circuits that open to a schematic or a table. */
+
+.circuits-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.circuits-head .badge-mini {
+  margin-left: 0;
+}
+
+.circuit-list,
+.circuit-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.circuit-list {
+  border-top: 1px solid var(--color-border);
+}
+
+.circuit {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Circuits a composite is made of, under it. */
+.circuit-children {
+  margin: 0 0 var(--space-2) 7px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
+}
+
+.circuit-children .circuit {
+  border-bottom: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.circuit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+}
+
+.circuit-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  padding: var(--space-2) 0 var(--space-2) 18px;
+  position: relative;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.circuit-toggle:hover .circuit-title {
+  color: var(--color-accent);
+}
+
+.chevron {
+  position: absolute;
+  left: 2px;
+  top: 19px;
+  width: 6px;
+  height: 6px;
+  margin-top: -4px;
+  border-right: 1.5px solid var(--color-text-muted);
+  border-bottom: 1.5px solid var(--color-text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.12s;
+}
+
+.is-open > .circuit-row .chevron {
+  transform: rotate(45deg);
+  margin-top: -5px;
+}
+
+.circuit-title {
+  font-weight: 600;
+}
+
+.circuit-counts {
+  display: inline-flex;
+  gap: var(--space-3);
+  font-size: 0.8em;
+  color: var(--color-text-muted);
+}
+
+/* A level: a dot and a word. Required is the text colour, recommended
+   the accent, example and optional hollow (as in the schematic). */
+.lv {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.lv-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.lv-required .lv-dot {
+  background: var(--color-text);
+}
+
+.lv-recommended .lv-dot {
+  background: var(--color-accent);
+}
+
+.lv-example .lv-dot {
+  border: 1.5px solid var(--color-text-muted);
+}
+
+.lv-optional .lv-dot {
+  border: 1.5px dotted var(--color-text-muted);
+}
+
+.circuit-source {
+  font-size: 0.8em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+a.circuit-source:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+/* Copy the board.yaml entry: two sheets; a tick once copied. */
+.circuit-copy {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.circuit-copy:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.circuit-copy::before,
+.circuit-copy::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.circuit-copy::before {
+  left: 7px;
+  top: 6px;
+}
+
+.circuit-copy::after {
+  left: 11px;
+  top: 10px;
+  background: var(--color-bg);
+}
+
+.circuit-copy.is-copied {
+  color: var(--color-status-good);
+}
+
+.circuit-copy.is-copied::before {
+  left: 8px;
+  top: 7px;
+  width: 6px;
+  height: 11px;
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  transform: rotate(45deg);
+}
+
+.circuit-copy.is-copied::after {
+  display: none;
+}
+
+.circuit-body {
+  padding: 0 0 var(--space-3) 18px;
+}
+
+/* Schematic | table */
+.circuit-tabs {
+  display: inline-flex;
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg {
+  padding: 2px var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+
+.seg + .seg {
+  border-left: 1px solid var(--color-border);
+}
+
+.seg-on {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* The schematic scrolls inside its own box on narrow screens. */
+.circuit-diagram {
+  overflow-x: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.circuit-diagram svg {
+  display: block;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+}
+
+.circuit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-1);
+  font-size: 0.75em;
+  color: var(--color-text-muted);
+}
+
+.lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lg-line {
+  width: 18px;
+  border-top: 2px solid var(--color-text);
+}
+
+.lg-recommended .lg-line {
+  border-top-color: var(--color-accent);
+}
+
+.lg-example .lg-line {
+  border-top: 2px dashed var(--color-text-muted);
+}
+
+.lg-optional .lg-line {
+  border-top: 2px dotted var(--color-text-muted);
+}
+
+/* One table: part, connection, level, page (when not the usual one). */
+.circuit-table {
+  table-layout: fixed;
+  font-size: 0.875em;
+}
+
+.circuit-table col.ct-part {
+  width: 24%;
+}
+
+.circuit-table col.ct-level {
+  width: 6.5em;
+}
+
+.circuit-table col.ct-page {
+  width: 5.5em;
+}
+
+.circuit-table th,
+.circuit-table td {
+  padding: 6px var(--space-2);
+  vertical-align: top;
+}
+
+.circuit-table th {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.circuit-table .ct-conn code {
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+
+.circuit-table .ct-page {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.circuit-page {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+}
+
+.circuit-formula {
+  margin: var(--space-2) 0 0;
+  font-size: 0.875em;
+}
+
+.circuit-formula code {
+  font-size: 0.95em;
+}
+
+@media (max-width: 600px) {
+  .circuit-row {
+    flex-wrap: wrap;
+    row-gap: 0;
+    column-gap: var(--space-2);
+  }
+
+  .circuit-toggle {
+    flex-basis: 100%;
+    padding-bottom: 0;
+  }
+
+  .circuit-row > .circuit-source {
+    margin-left: 18px;
+  }
+
+  .circuit-row > .circuit-copy {
+    margin-left: auto;
+  }
+
+  .circuit-body {
+    padding-left: 0;
+  }
+
+  .circuit-children {
+    padding-left: var(--space-2);
+  }
+
+  /* Each row a small card: part and level, then the connection. */
+  .circuit-table thead {
+    display: none;
+  }
+
+  .circuit-table,
+  .circuit-table tbody {
+    display: block;
+  }
+
+  .circuit-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "part level"
+      "conn page";
+    column-gap: var(--space-2);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .circuit-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .circuit-table .ct-part {
+    grid-area: part;
+    font-weight: 600;
+  }
+
+  .circuit-table .ct-level {
+    grid-area: level;
+  }
+
+  .circuit-table .ct-conn {
+    grid-area: conn;
+  }
+
+  .circuit-table .ct-page {
+    grid-area: page;
+  }
+
+  .circuit-table .ct-pin .ct-conn {
+    grid-row: 1;
+  }
+}

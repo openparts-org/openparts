@@ -1139,6 +1139,23 @@ async fn reference_circuits_are_served_per_part_and_by_id() {
     if store.dataset.circuits.is_empty() {
         return; // a dataset without circuits/ (before they landed)
     }
+    // No two texts of any schematic overlap, on every host part.
+    let ds = &store.dataset;
+    for part in &ds.parts {
+        let Some(device) = ds.devices.get(&part.device.0) else {
+            continue;
+        };
+        for c in ds.circuits_for(device) {
+            let scene = openparts_server::circuits::scene(ds, c, device, &part.mpn);
+            let overlaps = openparts_server::circuit_diagram::overlapping_texts(&scene);
+            assert!(
+                overlaps.is_empty(),
+                "{} on {}: {overlaps:?}",
+                c.id,
+                part.mpn
+            );
+        }
+    }
     let app = openparts_server::routes::build_router(Arc::new(store));
     let response = get(app.clone(), "/v1/parts/raspberrypi/RP2040/circuits").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -1167,6 +1184,17 @@ async fn reference_circuits_are_served_per_part_and_by_id() {
     assert!(power["required"].as_u64().unwrap() >= 2);
     // The crystal's load capacitance: computed and stated, no verdict.
     assert!(body.contains("\"computed\":\"10.5 pF\""), "{body}");
+    // Every circuit with parts or connections has a schematic.
+    for c in list {
+        let svg = c["diagram"].as_str().unwrap_or_default();
+        assert!(svg.starts_with("<svg"), "{}", c["id"]);
+    }
+    let xosc = list
+        .iter()
+        .find(|c| c["id"] == "raspberrypi/rp2040-xosc-12mhz")
+        .unwrap();
+    let svg = xosc["diagram"].as_str().unwrap();
+    assert!(svg.contains(">XIN<") && svg.contains(">15 pF<") && svg.contains(">1 kΩ<"));
 
     // A generic circuit attaches to any matching receptacle.
     let response = get(app.clone(), "/v1/parts/gct/USB4105-GF-A/circuits").await;
@@ -1188,6 +1216,17 @@ async fn reference_circuits_are_served_per_part_and_by_id() {
     assert!(doc["provenance"]["/roles/X1/level"].is_array());
     let response = get(app.clone(), "/v1/circuits/raspberrypi/nope").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    // The schematic on its own, for a device host and a generic one.
+    for id in ["raspberrypi/rp2040-xosc-12mhz", "usb-if/typec-usb2-sink"] {
+        let response = get(app.clone(), &format!("/v1/circuits/{id}/diagram.svg")).await;
+        assert_eq!(response.status(), StatusCode::OK, "{id}");
+        assert_eq!(
+            response.headers()["content-type"],
+            "image/svg+xml; charset=utf-8"
+        );
+        let svg = body_string(response).await;
+        assert!(svg.starts_with("<svg") && svg.contains("CC1") || id.contains("xosc"));
+    }
     let response = get(app, "/v1/circuits").await;
     let all: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
     assert!(all.as_array().unwrap().len() >= 8);

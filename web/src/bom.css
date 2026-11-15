@@ -345,40 +345,6 @@ span.alt-fail {
   margin-top: var(--space-2);
 }
 
-/* Reference circuits (cmd/app/circuits.mbt): one line per circuit. */
-details.circuit {
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-1) 0;
-}
-
-.circuit-head {
-  cursor: pointer;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1);
-}
-
-.circuit-counts {
-  font-size: 0.9em;
-}
-
-.circuit-table {
-  margin-top: var(--space-2);
-  font-size: 0.9em;
-}
-
-.circuit-table td,
-.circuit-table th {
-  padding: 2px var(--space-2);
-  vertical-align: top;
-}
-
-.circuit-formula {
-  font-size: 0.9em;
-  margin-top: var(--space-2);
-}
-
 @media (max-width: 760px) {
   .bom-input {
     grid-template-columns: 1fr;

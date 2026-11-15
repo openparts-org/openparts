@@ -670,6 +670,7 @@ pub impl @json.FromJson for CircuitSummary with fn from_json(json, path) {
 #derive(Eq)
 pub(all) struct CircuitView {
   connects : Array[CircuitConnectRow]
+  diagram : String?
   document_type : DocumentType?
   example : Int32
   formulas : Array[CircuitFormulaRow]
@@ -693,6 +694,7 @@ pub impl @json.FromJson for CircuitView with fn from_json(json, path) {
   }
   {
     connects: field(obj, "connects", path),
+    diagram: opt_field(obj, "diagram", path),
     document_type: opt_field(obj, "document_type", path),
     example: field(obj, "example", path),
     formulas: field(obj, "formulas", path),

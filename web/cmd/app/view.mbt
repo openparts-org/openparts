@@ -5,6 +5,8 @@ using @html {
   a,
   button,
   code,
+  col,
+  colgroup,
   details,
   div,
   figcaption,
@@ -615,7 +617,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     ]),
   )
   sections.push(review_section(lang, data))
-  sections.push(circuits_section(lang, data))
+  sections.push(circuits_section(lang, model.circuits, data, emit))
   sections.push(alternatives_section(model, emit))
   sections.push(
     section(class="section", [

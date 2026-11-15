@@ -1,5 +1,6 @@
 import {
   "moonbit-community/rabbita",
+  "moonbit-community/rabbita/clipboard",
   "moonbit-community/rabbita/html",
   "moonbit-community/rabbita/nav",
   "moonbit-community/rabbita/sub",

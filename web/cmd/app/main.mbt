@@ -24,6 +24,8 @@ struct Model {
   bom : BomState
   /// The part page's alternatives (alternatives.mbt).
   alts : AltState
+  /// The part page's reference circuits (circuits.mbt).
+  circuits : CircuitUi
 }
 
 ///|
@@ -37,6 +39,7 @@ enum Msg {
   ZipDone(String?)
   Bom(BomMsg)
   Alt(AltMsg)
+  Circuit(CircuitMsg)
 }
 
 ///|
@@ -171,6 +174,7 @@ fn update(
     ZipDone(Some(e)) => ({ ..model, zip: ZipFailed(e), }, @rabbita.none)
     Bom(m) => bom_update(model, m, emit)
     Alt(m) => alt_update(model, m)
+    Circuit(m) => circuit_update(model, m, emit)
   }
 }
 
@@ -189,6 +193,7 @@ fn main {
           viewer_error: None,
           bom: BomState::new(),
           alts: AltState::new(),
+          circuits: CircuitUi::new(),
         }
         let url = try! @url.parse(current_href())
         enter(model, url, emit)
