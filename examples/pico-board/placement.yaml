@@ -14,6 +14,10 @@ U1: {x: 0.0, y: -0.3, rot: -90, side: top}
 U3: {x: -15.0, y: 0, rot: 0, side: bottom}
 C14: {x: -15.0, y: -5.4, rot: 0, side: bottom}
 C15: {x: -15.0, y: 5.4, rot: 0, side: bottom}
+# 10 uF bulk on 3V3 (the minimal design's C17), beside the LDO output.
+C18: {x: -11.0, y: 5.4, rot: 0, side: bottom}
+# SWD header (SWCLK, GND, SWD), on the edge opposite the USB-C.
+J4: {x: -23.5, y: 1.0, rot: 0, side: top}
 Y1: {x: -7.9, y: 0.6, rot: -90, side: top}
 C16: {x: -7.4, y: 3.2, rot: 180, side: top}
 R3: {x: -7.4, y: -2.0, rot: 180, side: top}

@@ -17,6 +17,64 @@ Python 3 with PyYAML; `pcb_stage.py` runs inside KiCad's Flatpak (pcbnew);
 (`pytest tools/kicad-board/tests`). The stages are described in
 `build.py`'s docstring; the routing rules below.
 
+## Reference circuits (`use:`)
+
+A board may take parts and nets from the registry's reference circuits
+(Canonical Data Specification section 41) instead of listing them:
+
+```yaml
+select:                                   # board policy, not a source's
+  filter: {capacitor: {size: "0603"}, resistor: {size: "0603"}}
+  prefer: {manufacturers: [samsung, yageo]}
+  rules: {capacitor_voltage_margin: 1.5}  # OpenParts' own rule ("ours")
+use:
+  - circuit: raspberrypi/rp2040-minimal
+    host: U1                              # the component it serves
+    with: {3V3: 3V3, VBUS: VBUS}          # circuit net -> board net
+    refs: {C_IOVDD: [C1, C2, C3, C4, C5, C6], X1: Y1}
+    override: {SW_BOOT: {part: omron/B3FS-1050, pins: {"1": BOOT, "2": BOOT, "3": GND, "4": GND}}}
+    omit: [R_CS_PULLUP]                   # optional in the source
+    waive: {}                             # ROLE: reason, to drop or replace a required role
+    nets_as: {QSPI_CSn: QSPI_CS}          # rename generated nets
+```
+
+`circuits.py` expands them before every stage:
+
+- **Instances.** Each role becomes one part (`per_pin`: one per host pin
+  of that name, in pin order); `includes` expand recursively (a role can
+  host another circuit, the NCP1117's capacitors around `U_LDO`).
+  `connect` puts host pins on nets, `no_connect` on the no-connect
+  list. Nets join pins and named nets; a net without a name takes its
+  host pin's name.
+- **Part choice.** A part the source names is used as is. Otherwise
+  `GET /v1/catalog` by category, with the board's `select.filter`, and
+  every `requires` value checked against the part's parameters; a
+  capacitor must also be rated at least `capacitor_voltage_margin` x the
+  highest working voltage of its nets (`board.nets.<NET>.voltage`, else
+  the circuit net's) -- OpenParts' rule, labelled "ours" in the report.
+  Parts that state every constrained key beat those that don't (a key
+  no candidate states is reported as unchecked). Ties: reviewed, then
+  more `example` facts matched, then `select.prefer` manufacturer order,
+  then closest to a `min`/`max` bound, then manufacturer and MPN.
+- **`board.lock.yaml`** (next to board.yaml) keeps each role's part and
+  each circuit's hash; rebuilds reuse it and re-check it against the
+  role, `--update-lock` chooses again.
+- **Levels.** Omitting a `required` role, or overriding it with a part
+  that doesn't meet `requires`, is an error without `waive: {ROLE:
+  reason}`; a `recommended` one warns; `example`/`optional` are free.
+- **`DIR/basis.md`** and `basis.json`: per generated part its role,
+  constraint and the page that states it, level and word, how it was
+  chosen, the rules applied (ours), keys not in the part's data,
+  formula results (shown, never judged), every connection with its
+  source, placement/routing hints, and each circuit's review state.
+
+`examples/pico-board/board.yaml` takes 28 of its 35 parts from
+`raspberrypi/rp2040-minimal` and `usb-if/typec-usb2-sink`, plus the
+minimal design's SWD header (J4) and 10 uF bulk capacitor (C18). Built
+on two layers (2026-11-16): ERC clean, DRC 0 violations / 0 unconnected
+/ 0 parity, 0 current-width violations; one sweep of 24 router
+configurations (`route --evaluate-all --rounds 1`) completes 4 of 24.
+
 ## Routing rules
 
 Nothing in `board.yaml` states a track width. Every width follows from the

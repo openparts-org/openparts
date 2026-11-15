@@ -1,0 +1,35 @@
+# Written by tools/kicad-board from board.yaml `use:` (reference circuits):
+# the part chosen per role and each circuit's hash. Rebuilds reuse it;
+# `--update-lock` chooses again.
+circuits:
+  onsemi/ncp1117-fixed: 61650201dc6d0097
+  raspberrypi/rp2040-debug-reset: 2b1ee48dd873ccd8
+  raspberrypi/rp2040-minimal: 8c3bb744af248621
+  raspberrypi/rp2040-power: c7c3feb50d4a5295
+  raspberrypi/rp2040-qspi-boot: 29b9dcd1a0ec26ec
+  raspberrypi/rp2040-usb-device: 8808dab1f2c5ea9c
+  raspberrypi/rp2040-xosc-12mhz: 0f1e23735a5cb6d0
+  usb-if/typec-usb2-sink: 3dd7fac586169c37
+roles:
+  J1 usb-if/typec-usb2-sink R_CC1: yageo/RC0603FR-075K1L
+  J1 usb-if/typec-usb2-sink R_CC2: yageo/RC0603FR-075K1L
+  U1 onsemi/ncp1117-fixed C_IN: samsung/CL10A106KP8NNNC
+  U1 onsemi/ncp1117-fixed C_OUT: samsung/CL10A106KP8NNNC
+  U1 raspberrypi/rp2040-minimal C_BULK_3V3: samsung/CL10A106KP8NNNC
+  U1 raspberrypi/rp2040-minimal U_LDO: onsemi/NCP1117ST33T3G
+  U1 raspberrypi/rp2040-power C_ADC_AVDD: samsung/CL10B104KB8NNNC
+  U1 raspberrypi/rp2040-power C_DVDD: murata/GRM188R71E104KA01D
+  U1 raspberrypi/rp2040-power C_IOVDD: murata/GRM188R71E104KA01D
+  U1 raspberrypi/rp2040-power C_USB_VDD: samsung/CL10B104KB8NNNC
+  U1 raspberrypi/rp2040-power C_VREG_VIN: murata/GRM188R61C105KA93D
+  U1 raspberrypi/rp2040-power C_VREG_VOUT: murata/GRM188R61C105KA93D
+  U1 raspberrypi/rp2040-qspi-boot C_FLASH: samsung/CL10B104KB8NNNC
+  U1 raspberrypi/rp2040-qspi-boot R_BOOT: yageo/RC0603FR-071KL
+  U1 raspberrypi/rp2040-qspi-boot SW_BOOT: omron/B3FS-1050
+  U1 raspberrypi/rp2040-qspi-boot U_FLASH: winbond/W25Q128JVSIQ
+  U1 raspberrypi/rp2040-usb-device R_DM: yageo/RC0603FR-0727RL
+  U1 raspberrypi/rp2040-usb-device R_DP: yageo/RC0603FR-0727RL
+  U1 raspberrypi/rp2040-xosc-12mhz C_XIN: samsung/CL10C150JB8NNNC
+  U1 raspberrypi/rp2040-xosc-12mhz C_XOUT: samsung/CL10C150JB8NNNC
+  U1 raspberrypi/rp2040-xosc-12mhz R_XOUT: yageo/RC0603FR-071KL
+  U1 raspberrypi/rp2040-xosc-12mhz X1: abracon/ABM8-272-T3

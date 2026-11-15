@@ -37,6 +37,11 @@ Stages (each needs the ones before it):
   check  ERC, DRC with schematic parity, and renders under DIR/out/
   preview  `pcb` plus an unrouted render and DRC's placement findings
 
+Reference circuits (circuits.py): `use:` entries name registry circuits
+and the component they serve; they expand into parts (chosen from the
+catalog, pinned in board.lock.yaml), nets and no-connects before any
+stage, with the basis of every choice in DIR/basis.md.
+
 Routing rules (rules.py, README.md): `board.fab` names a fab profile
 (fab/*.yaml: the fab's published limits and the design values used),
 `board.nets: {NET: {current: A}}` the supply currents. The pcb stage
@@ -66,6 +71,7 @@ from pathlib import Path
 
 import yaml
 
+import circuits
 import rules
 
 HERE = Path(__file__).resolve().parent
@@ -81,6 +87,7 @@ GRID = 1.27
 def load_spec(path):
     spec = yaml.safe_load(Path(path).read_text())
     spec["components"] = {k: str(v) for k, v in spec["components"].items()}
+    spec.setdefault("nets", {})
     return spec
 
 
@@ -1164,6 +1171,8 @@ def main():
                     help="route: score every router configuration and report how many complete")
     ap.add_argument("--rounds", type=int, metavar="N",
                     help="route: at most N sweeps (default %d)" % ROUTER_ROUNDS)
+    ap.add_argument("--update-lock", action="store_true",
+                    help="reference circuits (`use:`): choose every role's part again instead of board.lock.yaml's")
     ap.add_argument("--sweep", type=int, metavar="N",
                     help="route: try only the first N router cost settings (of %d)" % len(ROUTER_VARIANTS))
     a = ap.parse_args()
@@ -1174,12 +1183,15 @@ def main():
     spec = load_spec(a.board)
     if a.registry:
         spec["registry"] = a.registry.rstrip("/")
+    out = Path(a.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    # Reference circuits (`use:`): parts, nets and no-connects from the
+    # registry's circuits; board.lock.yaml and DIR/basis.md (circuits.py).
+    circuits.expand(spec, a.board, spec["registry"], out=out, update=a.update_lock)
     apply_layers(spec, a.layers)
     if a.stackup:
         spec["board"]["stackup"] = ["signal" if s == "signal" else {"plane": s} for s in a.stackup.split(",")]
     apply_fab(spec, a.fab)
-    out = Path(a.out).resolve()
-    out.mkdir(parents=True, exist_ok=True)
     stages = STAGES if a.stage == "all" else [a.stage]
     for s in stages:
         print(f"== {s}", flush=True)

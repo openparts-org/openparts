@@ -1,8 +1,11 @@
 # A Raspberry Pi Pico-style RP2040 board (51 x 21 mm, 2 x 20 pins at
-# 2.54 mm on 17.78 mm row spacing), following the RP2040 hardware design
-# guide's minimal design: 12 MHz crystal, QSPI flash, 3.3 V LDO from
-# USB (USB-C here, with its CC pull-downs), BOOTSEL button, LED on
-# GPIO25. Every part is fetched from the OpenParts registry.
+# 2.54 mm on 17.78 mm row spacing) built from reference circuits: the
+# RP2040 minimal design (Hardware design with RP2040: supply decoupling,
+# core regulator, 12 MHz crystal, QSPI flash and BOOTSEL, USB series
+# resistors, SWD/RUN, NCP1117 3.3 V LDO from VBUS, 10 uF bulk on 3V3)
+# and the USB Type-C sink (Rd on CC1/CC2). The circuits' parts are
+# chosen from the registry's catalog (board.lock.yaml pins them; the
+# basis of every choice is in <dir>/basis.md); the rest is written here.
 #
 #   cp examples/pico-board/placement.yaml <dir>/
 #   tools/kicad-board/build.py examples/pico-board/board.yaml --out <dir>
@@ -22,10 +25,12 @@ board:
   # USB-C receptacle; 3V3: the RP2040 and flash plus 300 mA for the
   # header's 3V3 pin; 1V1: the RP2040's core supply. GND returns them
   # through the pours (no current declared: pour nets are not tracks).
+  # `voltage` (V) is each net's working voltage, for the capacitor
+  # voltage-rating rule below.
   nets:
-    VBUS: {current: 1.0}
-    3V3: {current: 0.3}
-    1V1: {current: 0.1}
+    VBUS: {current: 1.0, voltage: 5.0}
+    3V3: {current: 0.3, voltage: 3.3}
+    1V1: {current: 0.1, voltage: 1.1}
   # Copper pours on both outer layers.
   zones: [GND]
   # With --layers 4: JLCPCB's JLC04161H-7628 stackup, L1 signal, L2 a
@@ -41,70 +46,73 @@ board:
       fab: {preset: jlcpcb-4layer-standard}
       stackup: [signal, {plane: GND}, {plane: 3V3}, signal]
 
+# How the circuits' parts are chosen (board policy, not a source's):
+# 0603 chip capacitors and resistors, Samsung/Yageo first on a tie, and
+# OpenParts' own rule that a capacitor is rated at least 1.5 x the
+# working voltage of its nets.
+select:
+  filter:
+    capacitor: {size: "0603"}
+    resistor: {size: "0603"}
+  prefer: {manufacturers: [samsung, yageo]}
+  rules: {capacitor_voltage_margin: 1.5}
+
 components:
   U1: raspberrypi/RP2040
-  U2: winbond/W25Q128JVSIQ
-  U3: onsemi/NCP1117ST33T3G
-  Y1: abracon/ABM8-272-T3
   J1: gct/USB4105-GF-A
   J2: wurth/61302011121           # 1 x 20, 2.54 mm
   J3: wurth/61302011121
-  SW1: omron/B3FS-1050
-  D1: kingbright/APT1608SGC
-  R1: yageo/RC0603FR-0727RL      # USB D+ series
-  R2: yageo/RC0603FR-0727RL      # USB D- series
-  R3: yageo/RC0603FR-071KL       # XOUT series
-  R4: yageo/RC0603FR-071KL       # BOOTSEL to QSPI_CS
-  R5: yageo/RC0603FR-075K1L      # CC1 pull-down
-  R6: yageo/RC0603FR-075K1L      # CC2 pull-down
-  R7: yageo/RC0603FR-07330RL     # LED
-  C1: samsung/CL10B104KB8NNNC    # IOVDD decoupling x6
-  C2: samsung/CL10B104KB8NNNC
-  C3: samsung/CL10B104KB8NNNC
-  C4: samsung/CL10B104KB8NNNC
-  C5: samsung/CL10B104KB8NNNC
-  C6: samsung/CL10B104KB8NNNC
-  C7: samsung/CL10B104KB8NNNC    # ADC_AVDD
-  C8: samsung/CL10B104KB8NNNC    # USB_VDD
-  C9: samsung/CL10B104KB8NNNC    # flash VCC
-  C10: samsung/CL10B104KB8NNNC   # DVDD
-  C11: samsung/CL10B104KB8NNNC   # DVDD
-  C12: samsung/CL10A105KB8NNNC   # VREG_VIN 1 uF
-  C13: samsung/CL10A105KB8NNNC   # VREG_VOUT 1 uF
-  C14: samsung/CL10A106KP8NNNC   # LDO in 10 uF
-  C15: samsung/CL10A106KP8NNNC   # LDO out 10 uF
-  C16: samsung/CL10C150JB8NNNC   # crystal load caps, 15 pF C0G
-  C17: samsung/CL10C150JB8NNNC
+  J4: wurth/61300311121           # SWD: 1 x 3, SWCLK GND SWD as Pico's debug header
+  D1: kingbright/APT1608SGC       # LED on GPIO25 (ours)
+  R7: yageo/RC0603FR-07330RL      # its 330 ohm resistor (ours)
 
+use:
+  - circuit: raspberrypi/rp2040-minimal
+    host: U1
+    with: {3V3: 3V3, 1V1: 1V1, GND: GND, VBUS: VBUS, USB_DP: USB_CONN_D+, USB_DM: USB_CONN_D-,
+           RUN: RUN, SWCLK: SWCLK, SWD: SWD}
+    # Reference designators as before the circuits (placement.yaml).
+    refs:
+      C_IOVDD: [C1, C2, C3, C4, C5, C6]     # pins 1, 10, 22, 33, 42, 49
+      C_ADC_AVDD: C7
+      C_USB_VDD: C8
+      C_FLASH: C9
+      C_DVDD: [C10, C11]                    # pins 23, 50
+      C_VREG_VIN: C12
+      C_VREG_VOUT: C13
+      C_IN: C14
+      C_OUT: C15
+      C_XIN: C16
+      C_XOUT: C17
+      C_BULK_3V3: C18
+      U_FLASH: U2
+      U_LDO: U3
+      X1: Y1
+      R_XOUT: R3
+      R_BOOT: R4
+      R_DP: R1
+      R_DM: R2
+      SW_BOOT: SW1
+    override:
+      # A tact switch (as on Pico) instead of the minimal design's jumper.
+      SW_BOOT: {part: omron/B3FS-1050, pins: {"1": BOOT, "2": BOOT, "3": GND, "4": GND}}
+      # 10 uF as the minimal design's C4 (NCP1117 asks for >= 4.7 uF).
+      C_OUT: {part: samsung/CL10A106KP8NNNC}
+    omit: [R_CS_PULLUP]                     # optional (DNF in the source)
+    nets_as: {USB_DP: USB_D+, USB_DM: USB_D-, QSPI_CSn: QSPI_CS, BOOT: BOOTSEL}
+  - circuit: usb-if/typec-usb2-sink
+    host: J1
+    with: {GND: GND, VBUS: VBUS, USB_DP: USB_CONN_D+, USB_DM: USB_CONN_D-}
+    refs: {R_CC1: R5, R_CC2: R6}
+
+# What no circuit says: header pins, the LED, ground on the headers.
 nets:
-  GND: [U1.EP, U1.19, U2.4, U3.1, J1.A1, J1.A12, J1.B1, J1.B12, J1.SHELL,
-        SW1.3, SW1.4, D1.1, R5.2, R6.2,
-        C1.2, C2.2, C3.2, C4.2, C5.2, C6.2, C7.2, C8.2, C9.2, C10.2, C11.2,
-        C12.2, C13.2, C14.2, C15.2, C16.2, C17.2, Y1.2, Y1.4,
-        J2.3, J2.8, J2.13, J2.18, J3.3, J3.8, J3.13, J3.18]
-  VBUS: [J1.A4, J1.A9, J1.B4, J1.B9, U3.3, C14.1, J3.19, J3.20]
-  3V3: [U3.2, U3.4, C15.1, U1.1, U1.10, U1.22, U1.33, U1.42, U1.49,
-        U1.43, U1.48, U1.44, U2.8,
-        C1.1, C2.1, C3.1, C4.1, C5.1, C6.1, C7.1, C8.1, C9.1, C12.1,
-        J3.15, J3.16]
-  1V1: [U1.45, U1.23, U1.50, C10.1, C11.1, C13.1]
-  USB_CONN_D+: [J1.A6, J1.B6, R1.1]
-  USB_CONN_D-: [J1.A7, J1.B7, R2.1]
-  USB_D+: [R1.2, U1.47]
-  USB_D-: [R2.2, U1.46]
-  CC1: [J1.A5, R5.1]
-  CC2: [J1.B5, R6.1]
-  XIN: [U1.20, Y1.1, C16.1]
-  XOUT: [U1.21, R3.1]
-  XTAL_OUT: [R3.2, Y1.3, C17.1]
-  QSPI_CS: [U1.56, U2.1, R4.2]
-  BOOTSEL: [R4.1, SW1.1, SW1.2]
-  QSPI_SCLK: [U1.52, U2.6]
-  QSPI_SD0: [U1.53, U2.5]
-  QSPI_SD1: [U1.55, U2.2]
-  QSPI_SD2: [U1.54, U2.3]
-  QSPI_SD3: [U1.51, U2.7]
-  RUN: [U1.26, J3.10]
+  GND: [J2.3, J2.8, J2.13, J2.18, J3.3, J3.8, J3.13, J3.18, J4.2, D1.1]
+  VBUS: [J3.19, J3.20]
+  3V3: [J3.15, J3.16]
+  RUN: [J3.10]
+  SWCLK: [J4.1]
+  SWD: [J4.3]
   LED: [U1.37, R7.1]
   LED_A: [R7.2, D1.2]
   # Header pins as on the Pico (pins 1-20 on J2, 21-40 on J3 counted
@@ -139,5 +147,6 @@ nets:
 # Nets fed from outside the schematic's own power outputs.
 power_flags: [GND, VBUS]
 
-# Pins deliberately left open (get a no-connect flag).
-no_connect: [U1.24, U1.25, U1.35, U1.36, U1.41, J1.A8, J1.B8, J3.17]
+# Pins deliberately left open (get a no-connect flag); the circuits add
+# their own (USB-C SBU1/SBU2).
+no_connect: [U1.35, U1.36, U1.41, J3.17]
