@@ -13,7 +13,9 @@ board:
   height: 21.0
   layers: 2
   rules:
-    track: 0.2
+    # 0.15 mm tracks leave more room in the RP2040's fan-out to both
+    # headers (well within common 2-layer fab rules).
+    track: 0.15
     clearance: 0.15
     via_diameter: 0.6
     via_drill: 0.3
@@ -21,7 +23,7 @@ board:
     # Only VBUS stays clear of the RP2040's 0.4 mm-pitch QFN; the supply
     # nets that reach its pins get a track that fits between them.
     Power: {track: 0.4, nets: [VBUS]}
-    Supply: {track: 0.2, nets: [GND, 3V3, 1V1]}
+    Supply: {track: 0.15, nets: [GND, 3V3, 1V1]}
   # Copper pours on both layers.
   zones: [GND]
 

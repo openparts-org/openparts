@@ -111,6 +111,7 @@ def build():
                 # diagonals find the gaps between them.
                 pad.SetThermalSpokeAngleDegrees(45)
 
+    prewire(board, placement.get("prewire") or [], net)
     tie_pads_in_footprints(board)
     bridge_pads_in_footprints(board)
     fitted = save_board_variants(board, clip_silk_to_board(board, w, h))
@@ -146,6 +147,40 @@ def build():
 
     pcbnew.SaveBoard(str(PCB), board)
     report(board, w, h)
+
+
+def prewire(board, items, net):
+    """Locked copper from placement.yaml's `prewire` list, placed before
+    routing (the router keeps it and routes around it), in board mm:
+    `{net: GND, via: [x, y]}` or `{net: GND, layer: B.Cu, width: 0.3,
+    path: [[x, y], ...]}`. For what the router reliably gets wrong: an
+    exposed pad's thermal vias and a ground spine out from under a QFN
+    to the main pour, so the routing cannot wall the pad in."""
+    rules = PLAN["board"]["rules"]
+    layers = {"F.Cu": pcbnew.F_Cu, "B.Cu": pcbnew.B_Cu}
+    for item in items:
+        netinfo = net(item["net"])
+        if "via" in item:
+            via = pcbnew.PCB_VIA(board)
+            via.SetPosition(to_board(*item["via"]))
+            via.SetWidth(mm(item.get("diameter", rules["via_diameter"])))
+            via.SetDrill(mm(item.get("drill", rules["via_drill"])))
+            via.SetNet(netinfo)
+            via.SetLocked(True)
+            board.Add(via)
+            continue
+        pts = item["path"]
+        for a, b in zip(pts, pts[1:]):
+            t = pcbnew.PCB_TRACK(board)
+            t.SetStart(to_board(*a))
+            t.SetEnd(to_board(*b))
+            t.SetWidth(mm(item.get("width", rules["track"])))
+            t.SetLayer(layers[item["layer"]])
+            t.SetNet(netinfo)
+            t.SetLocked(True)
+            board.Add(t)
+    if items:
+        print(f"prewired: {len(items)} item(s)")
 
 
 SILK_EDGE = 0.25    # KiCad's silk-to-edge check uses the copper edge clearance
@@ -484,36 +519,39 @@ def bridges(board, fp, net, pads, extra):
                 else:
                     level = max(p.x for p in ends) if sign > 0 else min(p.x for p in ends)
                     ends = [pcbnew.VECTOR2I(level, p.y) for p in ends]
+                # The cross piece in two halves: the exit stub below
+                # starts where they meet (Freerouting takes a track end
+                # in the middle of another track for unconnected).
+                mid = pcbnew.VECTOR2I((ends[0].x + ends[1].x) // 2, (ends[0].y + ends[1].y) // 2)
                 items = [bridge_track(board, netinfo, a.GetPosition(), ends[0], layer),
-                         bridge_track(board, netinfo, ends[0], ends[1], layer),
+                         bridge_track(board, netinfo, ends[0], mid, layer),
+                         bridge_track(board, netinfo, mid, ends[1], layer),
                          bridge_track(board, netinfo, ends[1], b.GetPosition(), layer)]
                 if any(collides(board, t, layer, net, gap, extra) for t in items):
                     continue
-                # A join behind the pads (under the part's body, such as a
-                # receptacle's) is walled in by the pads on its own side:
-                # it gets a via out, on a stub further back.
-                o, c = fp.GetPosition(), a.GetPosition()
-                toward = (o.y - c.y) if vertical else (o.x - c.x)
-                if toward * sign > 0:
-                    mid = pcbnew.VECTOR2I((ends[0].x + ends[1].x) // 2, (ends[0].y + ends[1].y) // 2)
-                    exit_ = None
-                    for d in (0.5, 0.7, 0.9, 1.2):
-                        v = (pcbnew.VECTOR2I(mid.x, mid.y + sign * mm(d)) if vertical
-                             else pcbnew.VECTOR2I(mid.x + sign * mm(d), mid.y))
-                        via = pcbnew.PCB_VIA(board)
-                        via.SetPosition(v)
-                        via.SetWidth(via_d)
-                        via.SetDrill(drill)
-                        via.SetNet(netinfo)
-                        via.SetLocked(True)
-                        stub = bridge_track(board, netinfo, mid, v, layer)
-                        if (hole_clear(board, v, drill, extra) and not collides(board, stub, layer, net, gap, extra)
-                                and not any(collides(board, via, l, net, gap, extra + items) for l in (layer, other))):
-                            exit_ = [stub, via]
-                            break
-                    if exit_ is None:
-                        continue
-                    items += exit_
+                # The join gets a via out, on a stub further from the
+                # pads: one behind them (under a receptacle's body) is
+                # walled in by them, and the router did not attach a
+                # route to one in front (in the open) either.
+                # An exit the router does not use is pruned on import.
+                exit_ = None
+                for d in (0.5, 0.7, 0.9, 1.2):
+                    v = (pcbnew.VECTOR2I(mid.x, mid.y + sign * mm(d)) if vertical
+                         else pcbnew.VECTOR2I(mid.x + sign * mm(d), mid.y))
+                    via = pcbnew.PCB_VIA(board)
+                    via.SetPosition(v)
+                    via.SetWidth(via_d)
+                    via.SetDrill(drill)
+                    via.SetNet(netinfo)
+                    via.SetLocked(True)
+                    stub = bridge_track(board, netinfo, mid, v, layer)
+                    if (hole_clear(board, v, drill, extra) and not collides(board, stub, layer, net, gap, extra)
+                            and not any(collides(board, via, l, net, gap, extra + items) for l in (layer, other))):
+                        exit_ = [stub, via]
+                        break
+                if exit_ is None:
+                    continue
+                items += exit_
                 yield items
     options = []
     for pad in pads:
@@ -815,18 +853,40 @@ def stitch(board):
     print(f"stitching vias: {added}")
     for net in PLAN["board"].get("zones", []):
         tie_isolated_pads(board, net)
+        drop_dead_islands(board, net)
 
 
-def clusters(board, net):
+def drop_dead_islands(board, net):
+    """Pour fragments joined to each other by stitching vias but to no
+    pad (a corner cut off by the routing on both sides): the vias go, so
+    the refill drops the fragments as islands (DRC would otherwise find
+    them unconnected from the rest of the net)."""
+    dropped = 0
+    for items in clusters(board, net, padless=True):
+        for item in items:
+            if not item.IsLocked():
+                board.Delete(item)
+                dropped += 1
+    if dropped:
+        board.BuildConnectivity()
+        pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+        print(f"dead {net} islands: {dropped} via(s)/track(s) removed")
+
+
+def clusters(board, net, padless=False):
     """The net's copper grouped by what joins it (tracks, vias and each
     separate fragment of the filled pour), largest first: a list of
-    (pads, {layer: [fragments]}). KiCad's connectivity API treats a zone
-    as one item whatever its fragments, so the grouping is done here
-    from the shapes."""
+    (pads, {layer: [fragments]}), or with `padless` the groups without a
+    pad as a list of their tracks and vias. KiCad's connectivity API
+    treats a zone as one item whatever its fragments, so the grouping is
+    done here from the shapes."""
     layers = list(board.GetEnabledLayers().CuStack())
     nodes = []  # (pad or None, {layer: polygon}, fragment?)
+    tracks = {}  # node index: track or via
     for item in list(board.GetPads()) + list(board.GetTracks()):
         if item.GetNetname() == net:
+            if item.GetClass() != "PAD":
+                tracks[len(nodes)] = item
             nodes.append((item if item.GetClass() == "PAD" else None,
                           {l: as_polygon(item, l) for l in layers if item.IsOnLayer(l)}, False))
     for l in layers:
@@ -858,6 +918,8 @@ def clusters(board, net):
         if is_fragment:
             for l, f in shapes.items():
                 frags[l].append(f)
+    if padless:
+        return [[tracks[i] for i in tracks if find(i) == root] for root, g in groups.items() if not g[0]]
     found = [g for g in groups.values() if g[0]]
     return sorted(found, key=lambda g: len(g[0]), reverse=True)
 

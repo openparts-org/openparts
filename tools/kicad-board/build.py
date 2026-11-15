@@ -23,9 +23,10 @@ Stages (each needs the ones before it):
          ROUTER_VARIANTS cost settings x two plane modes (pours as
          planes on every layer, or only on the top / inner ones), and
          keep the result with the fewest unrouted connections plus pour
-         pads cut off; --evaluate-all scores every result and reports
-         how many are complete, --sweep N tries only the first N
-         settings
+         pads cut off; with none complete, further sweeps with other
+         settings follow (ROUTER_ROUNDS); --evaluate-all scores every
+         result and reports how many are complete, --sweep N tries only
+         the first N settings per sweep
   check  ERC, DRC with schematic parity, and renders under DIR/out/
   preview  `pcb` plus an unrouted render and DRC's placement findings
 
@@ -474,10 +475,12 @@ def freerouting_jar():
     return jar
 
 
-# Freerouting is deterministic for a given board and cost setting, and
-# a dense board can end a few connections short with one setting and
-# complete with another: `route` runs these in parallel and keeps the
-# result with the fewest unrouted connections (the first, on a tie).
+# Freerouting is deterministic for a given board and cost setting, but
+# chaotic: on a dense board one setting ends a connection or two short
+# and the next one completes, with nothing to tell them apart before.
+# `route` runs a sweep of these settings in parallel (each with the pours
+# as planes on every layer, and only on the top / inner ones) and keeps
+# the result with the fewest unrouted connections plus cut-off pour pads.
 ROUTER_VARIANTS = [
     {},
     {"via_costs": 100, "start_ripup_costs": 200},
@@ -492,18 +495,19 @@ ROUTER_VARIANTS = [
     {"via_costs": 80, "start_ripup_costs": 150},
     {"via_costs": 100, "start_ripup_costs": 100},
 ]
+# When no result of a sweep is complete, further sweeps follow, each
+# with settings of its own (re-running a setting gives the same board):
+# up to ROUTER_ROUNDS sweeps in all.
+ROUTER_ROUNDS = 3
+EXTRA_VARIANTS = [{"via_costs": v, "start_ripup_costs": r}
+                  for r in (80, 175, 225) for v in (45, 55, 65, 75, 85, 95, 110, 130)]
 # Parallel Freerouting runs (each takes up to ~1 GB of heap).
-ROUTER_JOBS = 6
+ROUTER_JOBS = 8
 # --evaluate-all: import and score every routing result (for measuring
 # how robust a placement routes), not only until a complete one.
 EVALUATE_ALL = False
 # --sweep N: only the first N cost settings (a quicker, reduced sweep).
 SWEEP = len(ROUTER_VARIANTS)
-# Freerouting is not deterministic on a board this dense (its threads
-# race): the same setting completes on one run and ends a connection or
-# two short on the next. When no result of a sweep is complete, the
-# sweep is run again, up to this many times in all.
-ROUTER_ROUNDS = 4
 
 
 def freerouting(dsn, ses, costs):
@@ -531,6 +535,26 @@ def freerouting(dsn, ses, costs):
     return int(final[-1]), log
 
 
+def split_wire_paths(dsn):
+    """Rewrites a DSN's pre-routed wires (the locked bridges and ties) as
+    one two-point wire per segment: KiCad writes connected segments as one
+    path, and Freerouting does not take a path of more than two points for
+    connecting its ends (a bridge over a USB-C pad pair stayed unrouted in
+    every run)."""
+    text = Path(dsn).read_text()
+
+    def split(m):
+        layer, width, coords, rest = m.groups()
+        nums = coords.split()
+        pts = list(zip(nums[0::2], nums[1::2]))
+        if len(pts) <= 2:
+            return m.group(0)
+        return "\n    ".join(f"(wire (path {layer} {width}  {a[0]} {a[1]}  {b[0]} {b[1]}){rest})"
+                              for a, b in zip(pts, pts[1:]))
+
+    Path(dsn).write_text(re.sub(r"\(wire \(path (\S+) (\S+)\s+([-\d.\s]+?)\)((?:\([^()]*\))*)\)", split, text))
+
+
 def unrouted_nets(log):
     """The nets Freerouting's last stage lists as not routed."""
     tail = log.rsplit("could not be routed", 1)
@@ -545,12 +569,15 @@ def stage_route(spec, out):
     second = "inner" if spec["board"].get("layers", 2) == 4 else "top"
     kicad_python(HERE / "pcb_stage.py", out, "dsn-from", out / f"{name}.kicad_pcb",
                  out / f"{name}-{second}.dsn", second)
+    for dsn in (out / f"{name}.dsn", out / f"{name}-{second}.dsn"):
+        split_wire_paths(dsn)
     ses = out / f"{name}.ses"
     ses.unlink(missing_ok=True)
     freerouting_jar()
     modes = (("all planes", "all", out / f"{name}.dsn"), (f"{second} plane", second, out / f"{name}-{second}.dsn"))
-    sweep = [(f"{label} {costs or 'defaults'}", mode, dsn, costs)
-             for label, mode, dsn in modes for costs in ROUTER_VARIANTS[:SWEEP]]
+    variants = ROUTER_VARIANTS[:SWEEP]
+    rounds = [variants] + [EXTRA_VARIANTS[k:k + len(variants)]
+                           for k in range(0, len(variants) * (ROUTER_ROUNDS - 1), len(variants))]
 
     # Scored by what stays unconnected: connections Freerouting left
     # unrouted plus pour-net pads the stitched pour cannot reach (walled
@@ -561,7 +588,9 @@ def stage_route(spec, out):
         return int(re.search(r"pour pads cut off: (\d+)", report).group(1))
 
     tries, results, cut = [], [], {}
-    for rnd in range(ROUTER_ROUNDS):
+    for rnd, costs_list in enumerate(r for r in rounds if r):
+        sweep = [(f"{label} {costs or 'defaults'}", mode, dsn, costs)
+                 for label, mode, dsn in modes for costs in costs_list]
         base = len(tries)
         tries += sweep
         with ThreadPoolExecutor(max_workers=ROUTER_JOBS) as pool:
@@ -586,13 +615,11 @@ def stage_route(spec, out):
                     break
         if any(results[i][0] + cut[i] == 0 for i in cut):
             break
-        if rnd + 1 < ROUTER_ROUNDS:
-            print(f"round {rnd + 1}: none complete, routing again", flush=True)
+        print(f"round {rnd + 1}: none complete", flush=True)
     if not cut:
         sys.exit("Freerouting failed:\n" + results[0][1][-2000:])
     i = min(cut, key=lambda i: (results[i][0] + cut[i], i))
-    print(f"kept freerouting {tries[i][0]} (round {i // len(sweep) + 1}): "
-          f"{results[i][0]} unrouted, {cut[i]} pour pad(s) cut off")
+    print(f"kept freerouting {tries[i][0]}: {results[i][0]} unrouted, {cut[i]} pour pad(s) cut off")
     (out / f".route-{i}.kicad_pcb").replace(out / f"{name}.kicad_pcb")
     (out / f".route-{i}.ses").replace(ses)
     (out / "out").mkdir(exist_ok=True)
