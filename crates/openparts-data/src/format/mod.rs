@@ -623,10 +623,26 @@ fn top_level_order(map: Mapping, kind: &str, default: Option<String>) -> Mapping
             "edge",
             "keepouts",
         ],
+        "circuit" => &[
+            "schema_version",
+            "kind",
+            "id",
+            "title",
+            "host",
+            "conditions",
+            "nets",
+            "connect",
+            "roles",
+            "formulas",
+            "placement",
+            "routing",
+            "includes",
+        ],
         _ => &["schema_version", "kind", "id"],
     };
     let identity: &[&str] = match kind {
         "package" => &["id", "family", "lead_count", "lead_layout"],
+        "circuit" => &["id", "title", "host"],
         _ => &[
             "id",
             "manufacturer",
@@ -700,6 +716,7 @@ pub fn canonical(doc: Value) -> Result<Value, String> {
         Some("manufacturer") => via::<c::Manufacturer>(doc),
         Some("erratum") => via::<c::Erratum>(doc),
         Some("rejected") => via::<c::Rejected>(doc),
+        Some("circuit") => via::<c::Circuit>(doc),
         Some(k) => Err(format!("unknown kind \"{k}\"")),
         None => Err("no `kind`".into()),
     }
@@ -838,5 +855,45 @@ parameters:
         let out = write(&doc, &Comments::default()).unwrap();
         assert!(out.contains("pins:\n  src:  p3 \"Pin table\"\n  \"2\":  { name: { value: Y, src: p4 }, type: io }\n  \"10\": { name: X, type: io }\n"), "{out}");
         assert_eq!(format(&out).unwrap(), out);
+    }
+
+    #[test]
+    fn a_circuit_reads_its_quantities_levels_and_src_and_writes_back() {
+        let text = r#"schema_version: "0.2"
+kind: circuit
+id: t/x
+title: X
+host: t/MCU
+source: t/DS
+nets:
+  VDD: { kind: power, voltage: { typ: 3.3 V }, src: p2 "2.1" }
+roles:
+  C1:
+    per_pin: VDD
+    requires: { category: capacitor, capacitance: { typ: 100 nF }, src: p3 "2.2" }
+    pins: { "1": $pin, "2": GND }
+    level: { value: required, word: must, src: p3 "2.2" }
+  R1:
+    requires: { category: resistor, resistance: { typ: 1 kΩ }, src: p4 }
+    level: { value: example, src: p4 }
+"#;
+        let v = read(text).unwrap();
+        assert_eq!(
+            v["roles"]["C1"]["requires"]["capacitance"]["unit"].as_str(),
+            Some("nF")
+        );
+        assert_eq!(v["roles"]["R1"]["level"].as_str(), Some("example"));
+        assert_eq!(
+            v["provenance"]["/roles/C1/level"][0]["page"].as_u64(),
+            Some(3)
+        );
+        let c: openparts_core::Circuit = serde_yaml::from_value(v.clone()).unwrap();
+        assert_eq!(c.roles["C1"].level.word.as_deref(), Some("must"));
+        let out = format(text).unwrap();
+        assert_eq!(format(&out).unwrap(), out);
+        assert_eq!(
+            canonical(read(&out).unwrap()).unwrap(),
+            canonical(v).unwrap()
+        );
     }
 }

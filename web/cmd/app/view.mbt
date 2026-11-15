@@ -615,6 +615,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     ]),
   )
   sections.push(review_section(lang, data))
+  sections.push(circuits_section(lang, data))
   sections.push(alternatives_section(model, emit))
   sections.push(
     section(class="section", [

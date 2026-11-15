@@ -167,6 +167,24 @@ pub enum Quantity {
 }
 
 impl Quantity {
+    /// Every quantity.
+    pub const ALL: &'static [Quantity] = &[
+        Quantity::Capacitance,
+        Quantity::Resistance,
+        Quantity::Inductance,
+        Quantity::Voltage,
+        Quantity::Current,
+        Quantity::Power,
+        Quantity::Frequency,
+        Quantity::Ratio,
+        Quantity::TemperatureCoefficient,
+        Quantity::Length,
+        Quantity::Force,
+        Quantity::Information,
+        Quantity::Temperature,
+        Quantity::Time,
+    ];
+
     /// The SI (base) unit symbol normalised values are in.
     pub fn si_unit(self) -> &'static str {
         match self {

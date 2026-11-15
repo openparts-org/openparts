@@ -14,6 +14,9 @@
 //!
 //! Every rule is listed, with what it means, in [`RULES`].
 
+mod circuit;
+#[cfg(test)]
+mod circuit_tests;
 mod cross;
 mod device;
 mod diagnostic;
@@ -22,6 +25,7 @@ mod parameter;
 mod provenance;
 mod review;
 
+pub use circuit::{validate_circuit, validate_circuit_location, CircuitContext};
 pub use cross::{validate_location, validate_source, DocKind};
 pub use diagnostic::{Diagnostic, Severity};
 pub use review::{check_review, is_github_login};
@@ -83,7 +87,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "provenance.missing",
-        meaning: "a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path, or a pin's `diff_pair` has none at `/pins/<n>/diff_pair` or `/pins/<n>` (these fields were added with field-level provenance required from the start)",
+        meaning: "a circuit fact (a net's voltage, a condition, a connection, a role's `requires`/`level`/`place`/`example`/`expects`, a formula, a literal input or result, a hint, an include) has no `src` at it or an ancestor; or a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path, or a pin's `diff_pair` has none at `/pins/<n>/diff_pair` or `/pins/<n>` (these fields were added with field-level provenance required from the start)",
     },
     Rule {
         id: "parameter.unknown_key",
@@ -176,6 +180,38 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "review.block",
         meaning: "a document's `review` block is incomplete or malformed: `by` (GitHub logins, no duplicates) and `pr` (the openparts-data pull request, 1 or more) are required, `date` is YYYY-MM-DD (Canonical Data Specification section 26.1)",
+    },
+    Rule {
+        id: "circuit.host",
+        meaning: "a circuit's `host` names a device the dataset doesn't have, or a match with nothing to match on",
+    },
+    Rule {
+        id: "circuit.pin",
+        meaning: "a circuit names a host pin (`connect`, `per_pin`, `host.<PIN>`, `conditions`) the host device doesn't have (for a generic host: one outside its `has_pins`)",
+    },
+    Rule {
+        id: "circuit.connection",
+        meaning: "a circuit connection is invalid: a target is not `$pin` (with `per_pin`), `host.<PIN>` or a net under `nets`, a `connect` entry has neither `net` nor `no_connect`, or a hint names an unknown net or role",
+    },
+    Rule {
+        id: "circuit.part",
+        meaning: "a circuit role's `requires.part` or `example.part` is not a part of the dataset",
+    },
+    Rule {
+        id: "circuit.level",
+        meaning: "a level's `word` is not one of the words of its level (required: must, shall, ...; recommended: should, recommend; optional: may, DNF), or an `example` has one",
+    },
+    Rule {
+        id: "circuit.formula",
+        meaning: "a circuit formula doesn't parse, uses a name that is not one of its inputs, or an input/target names an unknown role or a parameter the role doesn't state (warning: an input the expression doesn't use)",
+    },
+    Rule {
+        id: "circuit.include",
+        meaning: "an included circuit doesn't exist, is for another host without `host: { role }`, binds a net it doesn't have, or names an unknown role",
+    },
+    Rule {
+        id: "circuit.invalid",
+        meaning: "a circuit is malformed: empty title, id not `<publisher>/<name>`, `per_pin` with `count`, a role without `category` or `part`, a hint about nothing, a diff pair not of two nets",
     },
     Rule {
         id: "id.location",
@@ -351,6 +387,7 @@ mod tests {
             include_str!("cross.rs"),
             include_str!("parameter.rs"),
             include_str!("review.rs"),
+            include_str!("circuit.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
@@ -358,6 +395,10 @@ mod tests {
         for chunk in src
             .split("Diagnostic::error(")
             .chain(src.split("Diagnostic::warning("))
+            .chain(src.split("self.error("))
+            .chain(src.split("self.warning("))
+            .chain(src.split("v.error("))
+            .chain(src.split("v.warning("))
             .filter(|c| c.trim_start().starts_with('"'))
         {
             let id = chunk.trim_start().trim_start_matches('"');

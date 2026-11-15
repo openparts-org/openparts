@@ -3,7 +3,7 @@
 //! loader the CLI, the server, the tests and the gallery share.
 
 use crate::{check_kind, DataError};
-use openparts_core::{Device, Kind, Manufacturer, Package, Part, Source, SourceId};
+use openparts_core::{Circuit, Device, Kind, Manufacturer, Package, Part, Source, SourceId};
 use serde::de::DeserializeOwned;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -34,6 +34,8 @@ pub struct Dataset {
     pub devices: BTreeMap<String, Device>,
     pub packages: BTreeMap<String, Package>,
     pub sources: BTreeMap<String, Source>,
+    /// Reference circuits (`circuits/<publisher>/<name>.yaml`) by id.
+    pub circuits: BTreeMap<String, Circuit>,
     /// Every loaded document's (kind, id) -> its file (relative to
     /// `root`). Ids are unique per kind only: a Part and its Device may
     /// share one.
@@ -103,6 +105,11 @@ impl Dataset {
                     .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.sources.insert(doc.id.to_string(), doc);
             }
+            Some(Kind::Circuit) => {
+                let doc: Circuit = parse(path, &text, Kind::Circuit, |d: &Circuit| d.kind)?;
+                self.paths.insert((doc.kind, doc.id.clone()), rel.clone());
+                self.circuits.insert(doc.id.clone(), doc);
+            }
             Some(Kind::Manufacturer) => {
                 let doc: Manufacturer =
                     parse(path, &text, Kind::Manufacturer, |d: &Manufacturer| d.kind)?;
@@ -143,6 +150,19 @@ impl Dataset {
             .get(&part.package.0)
             .ok_or_else(|| ResolveError::Package(part.package.0.clone()))?;
         Ok((device, package))
+    }
+
+    /// The circuits whose host is `device` (by id, a device list, or a
+    /// category and pin names it has), by id.
+    pub fn circuits_for(&self, device: &openparts_core::Device) -> Vec<&Circuit> {
+        self.circuits
+            .values()
+            .filter(|c| {
+                c.host.matches(&device.id.0, device.category, |name| {
+                    device.pins.values().any(|p| p.name == name)
+                })
+            })
+            .collect()
     }
 
     /// Every loaded Source id (what the validator checks citations

@@ -142,9 +142,10 @@ package
 source
 erratum
 rejected
+circuit
 ```
 
-KindごとにSchema Validationを行う。
+KindごとにSchema Validationを行う。`circuit`はsection 41。
 
 ---
 
@@ -1128,8 +1129,12 @@ package_drawing
 product_page
 pcn
 eol_notice
+standard
+reference_design
 other
 ```
+
+`standard`は規格書（USB Type-C Specificationなど。`publisher`は`usb-if`など規格団体）、`reference_design`はメーカーのリファレンスデザイン文書（ガイド、設計ファイル）。どちらも主にsection 41の参考回路の出典。
 
 ---
 
@@ -1276,6 +1281,16 @@ Engineering policy, not legal advice.
 - **No rehosting.** Sources are cited by URL; PDFs are never published
   ([Architecture Specification](architecture.md) sections 3 and 20: the
   document cache is opt-in and off on public deployments).
+- **Reference circuits** (section 41) are facts too: roles, values,
+  connections, constraints, conditions, the level and the source's
+  one modal word. No schematic images, redrawn figures or prose. A
+  reference design's own files (KiCad, Allegro, BOM) are not stored,
+  even when their licence allows it: record the link and what a
+  cross-check found. Standards are used under their own terms (the USB
+  specifications' limited copyright license: facts only).
+- **Trademarks.** Manufacturer names identify the source; logos are
+  never stored or shown, and pages are not branded as the
+  manufacturer's.
 
 ---
 
@@ -1442,6 +1457,9 @@ openparts-data/
 ├── errata/
 │   └── st/
 │
+├── circuits/
+│   └── raspberrypi/          # circuits/<publisher>/<name>.yaml
+│
 └── rejected/
 ```
 
@@ -1566,3 +1584,123 @@ Canonical Dataは、
 Canonical Dataにおいて、推測された完全なDataより、
 
 **不完全だが出典が明確なDataを優先する。**
+
+---
+
+# 41. Reference Circuit
+
+A reference circuit is the peripheral circuit a manufacturer's
+document or a standard gives for a device (the RP2040's decoupling,
+the USB Type-C sink's Rd), stored as facts with provenance so that
+the part page lists it and a board tool can expand it
+(`tools/kicad-board`, `use:`). It lives in
+`circuits/<publisher>/<name>.yaml`; its id is `<publisher>/<name>`.
+
+```yaml
+schema_version: "0.2"
+kind: circuit
+id: raspberrypi/rp2040-xosc-12mhz
+title: RP2040 12 MHz crystal oscillator
+host: raspberrypi/RP2040
+source: raspberrypi/RP-008279-DS@rev2
+
+conditions: { IOVDD: { typ: 3.3 V, src: p11 "2.3.1" } }
+nets:
+  GND:      { kind: ground }
+  XTAL_OUT: { kind: local }
+roles:
+  C_XIN:
+    requires: { category: capacitor, capacitance: { typ: 15 pF }, src: p11 "2.3" }
+    pins:     { "1": host.XIN, "2": GND }
+    level:    { value: recommended, word: recommend, src: p11 "2.3" }
+    example:  { size: "0402", dielectric: { value: C0G }, src: p14 "Figure 11, C2" }
+  X1:
+    requires: { part: abracon/ABM8-272-T3, src: p11 "2.3.1" }
+    pins:     { XTAL1: host.XIN, XTAL2: XTAL_OUT, GND: GND }
+    level:    { value: recommended, word: recommend, src: p11 "2.3.1" }
+    expects:  { load_capacitance: { typ: 10 pF }, esr: { max: 50 Ω }, src: p11 "Table 1" }
+formulas:
+  load_capacitance:
+    expr: C_XIN * C_XOUT / (C_XIN + C_XOUT) + C_stray
+    inputs:
+      C_XIN:   { role: C_XIN, param: capacitance }
+      C_XOUT:  { role: C_XOUT, param: capacitance }
+      C_stray: { typ: 3 pF, src: p11 "2.3" }
+    target: { role: X1, param: load_capacitance }
+    result: { typ: 10.5 pF, src: p11 "2.3" }
+    src: p11 "2.3"
+```
+
+## 41.1 Keys
+
+| Key | Meaning |
+|---|---|
+| `host` | the device it serves: a device id, `{ devices: [...] }`, or a generic match `{ category: connector, has_pins: [CC1, CC2] }` (any device with those pin names) |
+| `conditions` | where it is valid: host pin or net name -> value (`IOVDD: { typ: 3.3 V }`); outside them it needs re-tuning |
+| `nets` | `kind: power / ground / signal` (interface nets the board binds) or `local` (one per instance); optional `voltage` |
+| `connect` | host pin name -> `{ net }` or `{ no_connect: true }`, for every host pin of that name; `level` defaults to `required` |
+| `roles.<R>` | one component: `requires`, `pins`, `level`, and optionally `per_pin`/`count`, `place`, `example`, `expects` |
+| `formulas` | a value the source computes (below) |
+| `placement`, `routing` | hints: `keep_short`, `short_stub` + `max_length`; `diff_pair` + `impedance`, `reference_plane`, `example` geometry |
+| `includes` | a composite: `{ circuit, with: { their net: our net }, host: { role } }` |
+| `review` | section 26.1; absent: unreviewed |
+
+**Role.** `requires` is what the source states the part must be: a
+`category` (one or a list) and catalog parameters (section 11.1 keys,
+units and shapes; `typ` is the value, `min`/`max` a bound), or a `part`
+the source names. Only what the source states. `pins` maps the part's
+pin (name or number) to `$pin` (the host pin of a `per_pin` instance),
+`host.<PIN>` or a circuit net; its evidence is `requires`'. `per_pin:
+<PIN>` makes one instance per host pin of that name, in pin-number
+order. `place: { near }` names `$pin`, `host.<PIN>` or another role.
+`example` holds what the reference design used without stating a rule
+(ratings, dielectric, `size`, `part`): it guides selection, it never
+filters. `expects` holds facts about the chosen part the circuit was
+tuned to (a crystal's load capacitance, maximum ESR).
+
+## 41.2 Levels
+
+| `value` | the source says | `word` |
+|---|---|---|
+| `required` | must, shall, required, mandatory, tie to, need, important | the one modal word, lower case or as printed |
+| `recommended` | should, recommend | |
+| `example` | the design has it; no rule stated | none |
+| `optional` | may, DNF | |
+
+`level: example` or `level: { value: required, word: must }`. When two
+places of a source disagree, the stronger one with its own citation.
+A board may drop or replace a `required` fact only with a stated
+waiver; a `recommended` one with a warning.
+
+## 41.3 Formulas
+
+`expr` uses `+ - * /`, parentheses, `sqrt()`, numbers and input names,
+evaluated in SI units. An input is a role's parameter (`{ role, param
+}`: its `requires` value, or the selected part's on a board) or a
+literal the source assumes, with its own `src`. `target` names what the
+result is compared with; `result` is the source's own worked value;
+`unit` the display unit. Without a tolerance stated by the source a
+result is shown, never judged pass or fail.
+
+## 41.4 Provenance
+
+Every fact cites its source (section 25): a net's `voltage`, each
+`conditions` and `connect` entry, a role's `requires`, `level`,
+`place`, `example` and `expects`, each formula and literal input and
+`result`, each hint and include -- at the fact or an ancestor. Sources
+are manufacturer documents (`datasheet`, `application_note`,
+`reference_design`) or a `standard`. Copyright: section 26.2.
+
+## 41.5 Validation
+
+`openparts validate --data` checks: the host device exists and every
+host pin named (`connect`, `per_pin`, `host.<PIN>`, `conditions`)
+exists on it (`circuit.host`, `circuit.pin`); parameter keys and units
+as for parts (`parameter.*`); `requires.part` and `example.part` exist
+(`circuit.part`); every target and hint names a declared net, a role or
+`$pin` with `per_pin` (`circuit.connection`); level words fit their
+level (`circuit.level`); formulas parse and have their inputs
+(`circuit.formula`); includes exist and bind their nets
+(`circuit.include`); every fact has provenance (`provenance.missing`);
+locators are short (`provenance.locator_long`); the file is at
+`circuits/<id>.yaml` (`id.location`).

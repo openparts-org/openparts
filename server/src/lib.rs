@@ -2,6 +2,7 @@ pub mod app;
 pub mod bom;
 pub mod bundle;
 pub mod catalog;
+pub mod circuits;
 pub mod documents;
 pub mod error;
 pub mod routes;

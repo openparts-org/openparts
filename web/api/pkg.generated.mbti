@@ -223,6 +223,79 @@ pub fn CheckStatus::all() -> Array[Self]
 pub fn CheckStatus::wire(Self) -> String
 pub impl @json.FromJson for CheckStatus
 
+#derive(Eq)
+pub(all) struct CircuitCite {
+  label : String
+  locator : String?
+  page : Int32?
+  source : String
+  url : String?
+}
+pub impl @json.FromJson for CircuitCite
+
+#derive(Eq)
+pub(all) struct CircuitConnectRow {
+  cite : CircuitCite?
+  level : LevelValue
+  net : String
+  pin : String
+  word : String?
+}
+pub impl @json.FromJson for CircuitConnectRow
+
+#derive(Eq)
+pub(all) struct CircuitFormulaRow {
+  cite : CircuitCite?
+  computed : String?
+  expr : String
+  inputs : Array[String]
+  name : String
+  stated : String?
+  target : String?
+}
+pub impl @json.FromJson for CircuitFormulaRow
+
+#derive(Eq)
+pub(all) struct CircuitRoleRow {
+  cite : CircuitCite?
+  connects : Array[String]
+  count : Int32
+  level : LevelValue
+  role : String
+  value : String
+  word : String?
+}
+pub impl @json.FromJson for CircuitRoleRow
+
+#derive(Eq)
+pub(all) struct CircuitSummary {
+  host : String
+  id : String
+  reviewed : Bool
+  title : String
+}
+pub impl @json.FromJson for CircuitSummary
+
+#derive(Eq)
+pub(all) struct CircuitView {
+  connects : Array[CircuitConnectRow]
+  document_type : DocumentType?
+  example : Int32
+  formulas : Array[CircuitFormulaRow]
+  id : String
+  includes : Array[String]
+  optional : Int32
+  pages : String
+  recommended : Int32
+  required : Int32
+  reviewed : Bool
+  roles : Array[CircuitRoleRow]
+  source : CircuitCite?
+  title : String
+  use_line : String
+}
+pub impl @json.FromJson for CircuitView
+
 #derive(Eq, @debug.Debug)
 pub(all) enum ColumnRole {
   Reference
@@ -426,6 +499,8 @@ pub(all) enum DocumentType {
   Pcn
   EolNotice
   Other
+  Standard
+  ReferenceDesign
 }
 pub fn DocumentType::all() -> Array[Self]
 pub fn DocumentType::wire(Self) -> String
@@ -609,10 +684,22 @@ pub(all) enum Kind {
   Source
   Erratum
   Rejected
+  Circuit
 }
 pub fn Kind::all() -> Array[Self]
 pub fn Kind::wire(Self) -> String
 pub impl @json.FromJson for Kind
+
+#derive(Eq, @debug.Debug)
+pub(all) enum LevelValue {
+  Required
+  Recommended
+  Example
+  Optional
+}
+pub fn LevelValue::all() -> Array[Self]
+pub fn LevelValue::wire(Self) -> String
+pub impl @json.FromJson for LevelValue
 
 #derive(Eq)
 pub(all) struct Lifecycle {

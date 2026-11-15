@@ -535,6 +535,182 @@ pub impl @json.FromJson for CheckStatus with fn from_json(json, path) {
 }
 
 ///|
+/// Where a fact is cited.
+#derive(Eq)
+pub(all) struct CircuitCite {
+  label : String
+  locator : String?
+  page : Int32?
+  source : String
+  url : String?
+}
+
+///|
+pub impl @json.FromJson for CircuitCite with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitCite object"))
+  }
+  {
+    label: field(obj, "label", path),
+    locator: opt_field(obj, "locator", path),
+    page: opt_field(obj, "page", path),
+    source: field(obj, "source", path),
+    url: opt_field(obj, "url", path),
+  }
+}
+
+///|
+/// One host pin connection.
+#derive(Eq)
+pub(all) struct CircuitConnectRow {
+  cite : CircuitCite?
+  level : LevelValue
+  net : String
+  pin : String
+  word : String?
+}
+
+///|
+pub impl @json.FromJson for CircuitConnectRow with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitConnectRow object"))
+  }
+  {
+    cite: opt_field(obj, "cite", path),
+    level: field(obj, "level", path),
+    net: field(obj, "net", path),
+    pin: field(obj, "pin", path),
+    word: opt_field(obj, "word", path),
+  }
+}
+
+///|
+/// A formula with its value from the required inputs.
+#derive(Eq)
+pub(all) struct CircuitFormulaRow {
+  cite : CircuitCite?
+  computed : String?
+  expr : String
+  inputs : Array[String]
+  name : String
+  stated : String?
+  target : String?
+}
+
+///|
+pub impl @json.FromJson for CircuitFormulaRow with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitFormulaRow object"))
+  }
+  {
+    cite: opt_field(obj, "cite", path),
+    computed: opt_field(obj, "computed", path),
+    expr: field(obj, "expr", path),
+    inputs: field(obj, "inputs", path),
+    name: field(obj, "name", path),
+    stated: opt_field(obj, "stated", path),
+    target: opt_field(obj, "target", path),
+  }
+}
+
+///|
+/// One role of a circuit, as the part page lists it.
+#derive(Eq)
+pub(all) struct CircuitRoleRow {
+  cite : CircuitCite?
+  connects : Array[String]
+  count : Int32
+  level : LevelValue
+  role : String
+  value : String
+  word : String?
+}
+
+///|
+pub impl @json.FromJson for CircuitRoleRow with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitRoleRow object"))
+  }
+  {
+    cite: opt_field(obj, "cite", path),
+    connects: field(obj, "connects", path),
+    count: field(obj, "count", path),
+    level: field(obj, "level", path),
+    role: field(obj, "role", path),
+    value: field(obj, "value", path),
+    word: opt_field(obj, "word", path),
+  }
+}
+
+///|
+/// One line of `GET /v1/circuits`.
+#derive(Eq)
+pub(all) struct CircuitSummary {
+  host : String
+  id : String
+  reviewed : Bool
+  title : String
+}
+
+///|
+pub impl @json.FromJson for CircuitSummary with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitSummary object"))
+  }
+  {
+    host: field(obj, "host", path),
+    id: field(obj, "id", path),
+    reviewed: field(obj, "reviewed", path),
+    title: field(obj, "title", path),
+  }
+}
+
+///|
+/// A circuit as the part page shows it.
+#derive(Eq)
+pub(all) struct CircuitView {
+  connects : Array[CircuitConnectRow]
+  document_type : DocumentType?
+  example : Int32
+  formulas : Array[CircuitFormulaRow]
+  id : String
+  includes : Array[String]
+  optional : Int32
+  pages : String
+  recommended : Int32
+  required : Int32
+  reviewed : Bool
+  roles : Array[CircuitRoleRow]
+  source : CircuitCite?
+  title : String
+  use_line : String
+}
+
+///|
+pub impl @json.FromJson for CircuitView with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CircuitView object"))
+  }
+  {
+    connects: field(obj, "connects", path),
+    document_type: opt_field(obj, "document_type", path),
+    example: field(obj, "example", path),
+    formulas: field(obj, "formulas", path),
+    id: field(obj, "id", path),
+    includes: field(obj, "includes", path),
+    optional: field(obj, "optional", path),
+    pages: field(obj, "pages", path),
+    recommended: field(obj, "recommended", path),
+    required: field(obj, "required", path),
+    reviewed: field(obj, "reviewed", path),
+    roles: field(obj, "roles", path),
+    source: opt_field(obj, "source", path),
+    title: field(obj, "title", path),
+    use_line: field(obj, "use_line", path),
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum ColumnRole {
   Reference
@@ -1153,6 +1329,8 @@ pub(all) enum DocumentType {
   Pcn
   EolNotice
   Other
+  Standard
+  ReferenceDesign
 }
 
 ///|
@@ -1168,6 +1346,8 @@ pub fn DocumentType::wire(self : DocumentType) -> String {
     Pcn => "pcn"
     EolNotice => "eol_notice"
     Other => "other"
+    Standard => "standard"
+    ReferenceDesign => "reference_design"
   }
 }
 
@@ -1184,6 +1364,8 @@ pub fn DocumentType::all() -> Array[DocumentType] {
     Pcn,
     EolNotice,
     Other,
+    Standard,
+    ReferenceDesign,
   ]
 }
 
@@ -1199,6 +1381,8 @@ pub impl @json.FromJson for DocumentType with fn from_json(json, path) {
     String("pcn") => Pcn
     String("eol_notice") => EolNotice
     String("other") => Other
+    String("standard") => Standard
+    String("reference_design") => ReferenceDesign
     _ => raise @json.JsonDecodeError((path, "expected a DocumentType"))
   }
 }
@@ -1769,6 +1953,7 @@ pub(all) enum Kind {
   Source
   Erratum
   Rejected
+  Circuit
 }
 
 ///|
@@ -1782,13 +1967,14 @@ pub fn Kind::wire(self : Kind) -> String {
     Source => "source"
     Erratum => "erratum"
     Rejected => "rejected"
+    Circuit => "circuit"
   }
 }
 
 ///|
 /// Every value, in declaration order.
 pub fn Kind::all() -> Array[Kind] {
-  [Manufacturer, Part, Device, Package, Source, Erratum, Rejected]
+  [Manufacturer, Part, Device, Package, Source, Erratum, Rejected, Circuit]
 }
 
 ///|
@@ -1801,7 +1987,45 @@ pub impl @json.FromJson for Kind with fn from_json(json, path) {
     String("source") => Source
     String("erratum") => Erratum
     String("rejected") => Rejected
+    String("circuit") => Circuit
     _ => raise @json.JsonDecodeError((path, "expected a Kind"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum LevelValue {
+  Required
+  Recommended
+  Example
+  Optional
+}
+
+///|
+/// The wire (JSON) string.
+pub fn LevelValue::wire(self : LevelValue) -> String {
+  match self {
+    Required => "required"
+    Recommended => "recommended"
+    Example => "example"
+    Optional => "optional"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn LevelValue::all() -> Array[LevelValue] {
+  [Required, Recommended, Example, Optional]
+}
+
+///|
+pub impl @json.FromJson for LevelValue with fn from_json(json, path) {
+  match json {
+    String("required") => Required
+    String("recommended") => Recommended
+    String("example") => Example
+    String("optional") => Optional
+    _ => raise @json.JsonDecodeError((path, "expected a LevelValue"))
   }
 }
 

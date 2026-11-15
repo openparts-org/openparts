@@ -589,6 +589,35 @@ report or a fix.
 added, the sources and pages read, the keys deliberately left out and
 why, and every datasheet that could not be fetched.
 
+## 19.2 Reference Circuit Ingestion
+
+How an agent records a reference circuit (Canonical Data Specification
+section 41).
+
+1. **Sources.** The manufacturer's datasheet, application note or
+   hardware design guide (`reference_design`), or a standard
+   (`standard`, e.g. the USB Type-C specification for CC pull-downs).
+   Read the current release; record the release, date, URL and SHA-256
+   in the Source. Check the document's licence first and note it there.
+2. **One circuit per function** (supply decoupling, crystal, flash and
+   boot strap, USB termination); a composite (`includes`) for a whole
+   reference design.
+3. **Facts only.** Roles, values, connections, conditions; the level
+   and the source's one modal word (`must` -> required, `should` ->
+   recommended, no rule -> example, `may`/DNF -> optional). Values
+   printed in a schematic are facts; never store or describe the
+   figure itself, and copy no prose.
+4. **`requires` is what the source requires.** Ratings, sizes and MPNs
+   the design merely uses go to `example`. Rules of your own (voltage
+   margins, sizes) never go into a circuit: the board tool applies
+   them and reports them as its own.
+5. **Unsure? Leave it out** -- a pin assignment read only off a drawing,
+   a value the text doesn't confirm. Say so in the file's comment.
+6. **Cross-check** against the design's published files when there are
+   any (a netlist), but cite the document, and don't commit the files.
+7. Validate (`openparts validate --data`), format (`openparts data
+   fmt`), and commit as an AI candidate: never write a `review` block.
+
 ---
 
 # 20. Incremental Research

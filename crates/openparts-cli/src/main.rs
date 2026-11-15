@@ -387,6 +387,22 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
     for source in dataset.sources.values() {
         report(&shown(Kind::Source, &source.id.0), validate_source(source));
     }
+    let part_ids: BTreeSet<String> = dataset.parts.iter().map(|p| p.id.0.clone()).collect();
+    let ctx = openparts_validator::CircuitContext {
+        devices: &dataset.devices,
+        parts: &part_ids,
+        sources: &sources,
+        circuits: &dataset.circuits,
+    };
+    for circuit in dataset.circuits.values() {
+        let shown = shown(Kind::Circuit, &circuit.id);
+        let mut diags = openparts_validator::validate_circuit(circuit, &ctx);
+        diags.extend(openparts_validator::validate_circuit_location(
+            &circuit.id,
+            &shown,
+        ));
+        report(&shown, diags);
+    }
     let located = dataset
         .parts
         .iter()
@@ -443,9 +459,10 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
         println!("warning: {n} x {rule} (OPENPARTS_SHOW_WARNINGS=1 lists them)");
     }
     println!(
-        "Checked {} part(s), {} source(s).",
+        "Checked {} part(s), {} source(s), {} circuit(s).",
         dataset.parts.len(),
-        dataset.sources.len()
+        dataset.sources.len(),
+        dataset.circuits.len()
     );
     failures += unresolved;
     if failures > 0 {

@@ -31,6 +31,8 @@ type CatalogQuery
 #derive(Eq)
 type CatalogState
 
+type CircuitCopy
+
 type Copy
 
 type DataReviewCopy

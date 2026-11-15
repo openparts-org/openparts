@@ -15,6 +15,10 @@ pub enum DocumentType {
     ProductPage,
     Pcn,
     EolNotice,
+    /// A published standard (the USB Type-C specification).
+    Standard,
+    /// A manufacturer's reference design (its guide or design files).
+    ReferenceDesign,
     Other,
 }
 

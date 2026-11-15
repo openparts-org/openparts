@@ -14,6 +14,7 @@ pub enum Kind {
     Source,
     Erratum,
     Rejected,
+    Circuit,
 }
 
 impl Kind {
@@ -26,6 +27,7 @@ impl Kind {
             Kind::Source => "source",
             Kind::Erratum => "erratum",
             Kind::Rejected => "rejected",
+            Kind::Circuit => "circuit",
         }
     }
 }

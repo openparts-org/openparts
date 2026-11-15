@@ -5,6 +5,7 @@
 //! It only knows about Rust types and the format-agnostic `serde` traits.
 
 pub mod category;
+pub mod circuit;
 pub mod condition;
 pub mod device;
 pub mod dimension;
@@ -29,6 +30,11 @@ pub mod structure;
 pub mod text;
 
 pub use category::ComponentCategory;
+pub use circuit::{
+    Categories, Circuit, CircuitHost, CircuitNet, Connect, Example, Formula, FormulaInput,
+    HostMatch, Include, IncludeHost, Level, LevelValue, NetKind, Place, PlacementHint, Requirement,
+    Role, RoleParam, RoutingExample, RoutingHint,
+};
 pub use condition::{
     condition_symbol, conditions_label, Condition, ConditionError, ConditionSymbol, Conditions,
     CONDITION_SYMBOLS,

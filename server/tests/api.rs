@@ -1132,3 +1132,63 @@ async fn an_mpn_containing_a_slash_is_one_percent_encoded_segment() {
     let response = get(deployed, "/api/v1/parts/kingbright/APT1608QBC/D").await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn reference_circuits_are_served_per_part_and_by_id() {
+    let store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+    if store.dataset.circuits.is_empty() {
+        return; // a dataset without circuits/ (before they landed)
+    }
+    let app = openparts_server::routes::build_router(Arc::new(store));
+    let response = get(app.clone(), "/v1/parts/raspberrypi/RP2040/circuits").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_string(response).await;
+    let list: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let list = list.as_array().unwrap();
+    let ids: Vec<&str> = list.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    assert!(ids.contains(&"raspberrypi/rp2040-power"), "{ids:?}");
+    // Building blocks before the composite that includes them.
+    assert_eq!(ids.last(), Some(&"raspberrypi/rp2040-minimal"));
+    let power = list
+        .iter()
+        .find(|c| c["id"] == "raspberrypi/rp2040-power")
+        .unwrap();
+    assert_eq!(power["reviewed"], false);
+    let iovdd = power["roles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["role"] == "C_IOVDD")
+        .unwrap();
+    assert_eq!(iovdd["count"], 6);
+    assert_eq!(iovdd["value"], "100 nF");
+    assert_eq!(iovdd["level"], "recommended");
+    assert_eq!(iovdd["cite"]["page"], 152);
+    assert!(power["required"].as_u64().unwrap() >= 2);
+    // The crystal's load capacitance: computed and stated, no verdict.
+    assert!(body.contains("\"computed\":\"10.5 pF\""), "{body}");
+
+    // A generic circuit attaches to any matching receptacle.
+    let response = get(app.clone(), "/v1/parts/gct/USB4105-GF-A/circuits").await;
+    let body = body_string(response).await;
+    assert!(body.contains("usb-if/typec-usb2-sink"), "{body}");
+
+    // The document itself, for the board tool.
+    let response = get(app.clone(), "/v1/circuits/raspberrypi/rp2040-xosc-12mhz").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let doc: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    assert_eq!(
+        doc["roles"]["X1"]["requires"]["part"],
+        "abracon/ABM8-272-T3"
+    );
+    assert_eq!(
+        doc["roles"]["C_XIN"]["requires"]["capacitance"]["unit"],
+        "pF"
+    );
+    assert!(doc["provenance"]["/roles/X1/level"].is_array());
+    let response = get(app.clone(), "/v1/circuits/raspberrypi/nope").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let response = get(app, "/v1/circuits").await;
+    let all: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    assert!(all.as_array().unwrap().len() >= 8);
+}

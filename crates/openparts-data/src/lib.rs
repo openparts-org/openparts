@@ -16,7 +16,7 @@ pub mod migrate;
 pub use dataset::{yaml_files, Dataset, LoadIssue, ResolveError};
 pub use error::DataError;
 
-use openparts_core::{Device, Kind, Manufacturer, Package, Part, Source};
+use openparts_core::{Circuit, Device, Kind, Manufacturer, Package, Part, Source};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::Path;
@@ -123,6 +123,17 @@ pub fn load_source<P: AsRef<Path>>(path: P) -> Result<Source, DataError> {
 }
 
 pub fn save_source<P: AsRef<Path>>(doc: &Source, path: P) -> Result<(), DataError> {
+    save_yaml(doc, path.as_ref())
+}
+
+pub fn load_circuit<P: AsRef<Path>>(path: P) -> Result<Circuit, DataError> {
+    let path = path.as_ref();
+    let doc: Circuit = load_yaml(path)?;
+    check_kind(path, Kind::Circuit, doc.kind)?;
+    Ok(doc)
+}
+
+pub fn save_circuit<P: AsRef<Path>>(doc: &Circuit, path: P) -> Result<(), DataError> {
     save_yaml(doc, path.as_ref())
 }
 
