@@ -3,7 +3,7 @@
 come from an OpenParts registry.
 
   build.py BOARD.yaml --out DIR [--stage fetch|sch|pcb|route|check|all|preview]
-           [--data OPENPARTS_DATA_DIR]
+           [--data OPENPARTS_DATA_DIR] [--layers 2|4] [--sweep N] [--evaluate-all]
 
 Stages (each needs the ones before it):
   fetch  install every part into DIR's own libraries (`openparts
@@ -15,11 +15,17 @@ Stages (each needs the ones before it):
          flags on open ones
   pcb    write DIR/<name>.kicad_pcb (KiCad's pcbnew, in its Flatpak):
          footprints at their place in DIR/placement.yaml (or a grid),
-         nets, board outline, design rules, zones
-  route  route it with Freerouting (Specctra DSN/SES): every net,
-         the pour nets too (exported without their zones, so each pad
-         gets a real connection rather than relying on a pour that may
-         leave islands), then refill the zones
+         nets, board outline, design rules, zones; footprints whose
+         silkscreen had to be clipped to the outline go to the
+         project's own `board` library and the schematic's footprint
+         fields follow (DRC's library and parity checks then agree)
+  route  route it with Freerouting (Specctra DSN/SES), in parallel over
+         ROUTER_VARIANTS cost settings x two plane modes (pours as
+         planes on every layer, or only on the top / inner ones), and
+         keep the result with the fewest unrouted connections plus pour
+         pads cut off; --evaluate-all scores every result and reports
+         how many are complete, --sweep N tries only the first N
+         settings
   check  ERC, DRC with schematic parity, and renders under DIR/out/
   preview  `pcb` plus an unrouted render and DRC's placement findings
 
@@ -245,7 +251,7 @@ def stage_sch(spec, out):
         o.append(f'    (property "Reference" "{ref}" (at {ox:.2f} {oy - 3:.2f} 0) (effects (font (size 1.27 1.27))))')
         o.append(f'    (property "Value" "{mpn}" (at {ox:.2f} {oy + 3:.2f} 0) (effects (font (size 1.27 1.27))))')
         o.append(
-            f'    (property "Footprint" "openparts:{safe(mpn)}" (at {ox:.2f} {oy:.2f} 0)'
+            f'    (property "Footprint" "{footprint_ids(spec, out)[ref]}" (at {ox:.2f} {oy:.2f} 0)'
             " (effects (font (size 1.27 1.27)) hide))"
         )
         for number, *_ in pins:
@@ -285,6 +291,34 @@ def stage_sch(spec, out):
     o.append(")")
     (out / f"{name}.kicad_sch").write_text("\n".join(o) + "\n")
     write_project(spec, out)
+
+
+def footprint_ids(spec, out):
+    """{ref: library id} of each part's footprint: the project library's
+    `openparts:<mpn>`, or the board's own fitted copy (silkscreen clipped
+    to the outline) that the pcb stage listed in footprints.json."""
+    ids = {ref: f"openparts:{safe(mpn_of(p))}" for ref, p in spec["components"].items()}
+    fitted = out / "footprints.json"
+    if fitted.exists():
+        ids.update({r: i for r, i in json.loads(fitted.read_text()).items() if r in ids})
+    return ids
+
+
+def sync_sch_footprints(spec, out):
+    """The schematic's footprint fields set to footprint_ids (the pcb
+    stage may have fitted some), so DRC's parity check agrees."""
+    sch = out / f"{spec['name']}.kicad_sch"
+    if not sch.exists():
+        return
+    ids, ref, lines = footprint_ids(spec, out), None, []
+    for line in sch.read_text().splitlines():
+        m = re.match(r'\s*\(property "Reference" "([^"]*)"', line)
+        if m:
+            ref = m.group(1)
+        if ref in ids:
+            line = re.sub(r'^(\s*\(property "Footprint" )"[^"]*"', lambda m: f'{m.group(1)}"{ids[ref]}"', line)
+        lines.append(line)
+    sch.write_text("\n".join(lines) + "\n")
 
 
 def global_label(net, x, y, angle):
@@ -424,6 +458,7 @@ def stage_pcb(spec, out):
     }
     (out / "plan.json").write_text(json.dumps(plan, indent=1))
     kicad_python(HERE / "pcb_stage.py", out, "pcb")
+    sync_sch_footprints(spec, out)
 
 
 def freerouting_jar():
@@ -459,6 +494,16 @@ ROUTER_VARIANTS = [
 ]
 # Parallel Freerouting runs (each takes up to ~1 GB of heap).
 ROUTER_JOBS = 6
+# --evaluate-all: import and score every routing result (for measuring
+# how robust a placement routes), not only until a complete one.
+EVALUATE_ALL = False
+# --sweep N: only the first N cost settings (a quicker, reduced sweep).
+SWEEP = len(ROUTER_VARIANTS)
+# Freerouting is not deterministic on a board this dense (its threads
+# race): the same setting completes on one run and ends a connection or
+# two short on the next. When no result of a sweep is complete, the
+# sweep is run again, up to this many times in all.
+ROUTER_ROUNDS = 4
 
 
 def freerouting(dsn, ses, costs):
@@ -486,44 +531,70 @@ def freerouting(dsn, ses, costs):
     return int(final[-1]), log
 
 
+def unrouted_nets(log):
+    """The nets Freerouting's last stage lists as not routed."""
+    tail = log.rsplit("could not be routed", 1)
+    return re.findall(r"Net '([^']+)'", tail[1].split("Auto-routing stage completed")[0]) if len(tail) > 1 else []
+
+
 def stage_route(spec, out):
     from concurrent.futures import ThreadPoolExecutor
 
     kicad_python(HERE / "pcb_stage.py", out, "dsn")
     name = spec["name"]
+    second = "inner" if spec["board"].get("layers", 2) == 4 else "top"
+    kicad_python(HERE / "pcb_stage.py", out, "dsn-from", out / f"{name}.kicad_pcb",
+                 out / f"{name}-{second}.dsn", second)
     ses = out / f"{name}.ses"
     ses.unlink(missing_ok=True)
     freerouting_jar()
-    tries = [(f"{label} {costs or 'defaults'}", dsn, costs)
-             for label, dsn in (("both planes", out / f"{name}.dsn"), ("top plane", out / f"{name}-top.dsn"))
-             for costs in ROUTER_VARIANTS]
-    tries = [(what, dsn, costs, out / f".route-{i}.ses") for i, (what, dsn, costs) in enumerate(tries)]
-    with ThreadPoolExecutor(max_workers=ROUTER_JOBS) as pool:
-        results = list(pool.map(lambda t: freerouting(t[1], t[3], t[2]), tries))
-    for (what, *_), (unrouted, log) in zip(tries, results):
-        print(f"freerouting {what}: " + ("failed" if unrouted is None else f"{unrouted} unrouted"), flush=True)
-    done = [(unrouted, i) for i, (unrouted, _) in enumerate(results) if unrouted is not None]
-    if not done:
-        sys.exit("Freerouting failed:\n" + results[0][1][-2000:])
+    modes = (("all planes", "all", out / f"{name}.dsn"), (f"{second} plane", second, out / f"{name}-{second}.dsn"))
+    sweep = [(f"{label} {costs or 'defaults'}", mode, dsn, costs)
+             for label, mode, dsn in modes for costs in ROUTER_VARIANTS[:SWEEP]]
+
     # Scored by what stays unconnected: connections Freerouting left
     # unrouted plus pour-net pads the stitched pour cannot reach (walled
-    # in by tracks on both sides). Candidates are imported in order of
-    # unrouted count until none can beat the best so far.
-    best = None
-    for unrouted, i in sorted(done):
-        if best and unrouted >= best[0] + best[1]:
+    # in by tracks on both sides).
+    def score(i):
+        report = kicad_python(HERE / "pcb_stage.py", out, "ses", out / f".route-{i}.ses",
+                              out / f".route-{i}.kicad_pcb", capture=True)
+        return int(re.search(r"pour pads cut off: (\d+)", report).group(1))
+
+    tries, results, cut = [], [], {}
+    for rnd in range(ROUTER_ROUNDS):
+        base = len(tries)
+        tries += sweep
+        with ThreadPoolExecutor(max_workers=ROUTER_JOBS) as pool:
+            results += list(pool.map(lambda it: freerouting(it[1][2], out / f".route-{base + it[0]}.ses", it[1][3]),
+                                     enumerate(sweep)))
+        for (what, *_), (unrouted, log) in zip(sweep, results[base:]):
+            print(f"freerouting {what}: " + ("failed" if unrouted is None else f"{unrouted} unrouted")
+                  + "".join(f" {n}" for n in unrouted_nets(log)), flush=True)
+        done = [i for i in range(base, len(tries)) if results[i][0] is not None]
+        if EVALUATE_ALL:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                cut.update(zip(done, pool.map(score, done)))
+            complete = sum(results[i][0] + cut[i] == 0 for i in done)
+            print(f"round {rnd + 1}: complete (0 unrouted, 0 cut off): {complete} of {len(sweep)}", flush=True)
+        else:
+            # In order of unrouted count, until none can beat the best.
+            for i in sorted(done, key=lambda i: (results[i][0], i)):
+                if cut and results[i][0] >= min(results[j][0] + cut[j] for j in cut):
+                    break
+                cut[i] = score(i)
+                if results[i][0] + cut[i] == 0:
+                    break
+        if any(results[i][0] + cut[i] == 0 for i in cut):
             break
-        board = out / f".route-{i}.kicad_pcb"
-        report = kicad_python(HERE / "pcb_stage.py", out, "ses", tries[i][3], board, capture=True)
-        cut_off = int(re.search(r"pour pads cut off: (\d+)", report).group(1))
-        if best is None or unrouted + cut_off < best[0] + best[1]:
-            best = (unrouted, cut_off, board, i)
-        if best[0] + best[1] == 0:
-            break
-    unrouted, cut_off, board, i = best
-    print(f"kept freerouting {tries[i][0]}: {unrouted} unrouted, {cut_off} pour pad(s) cut off")
-    board.replace(out / f"{name}.kicad_pcb")
-    tries[i][3].replace(ses)
+        if rnd + 1 < ROUTER_ROUNDS:
+            print(f"round {rnd + 1}: none complete, routing again", flush=True)
+    if not cut:
+        sys.exit("Freerouting failed:\n" + results[0][1][-2000:])
+    i = min(cut, key=lambda i: (results[i][0] + cut[i], i))
+    print(f"kept freerouting {tries[i][0]} (round {i // len(sweep) + 1}): "
+          f"{results[i][0]} unrouted, {cut[i]} pour pad(s) cut off")
+    (out / f".route-{i}.kicad_pcb").replace(out / f"{name}.kicad_pcb")
+    (out / f".route-{i}.ses").replace(ses)
     (out / "out").mkdir(exist_ok=True)
     (out / "out" / "freerouting.log").write_text(results[i][1])
     # (SaveBoard also writes a project file beside each candidate.)
@@ -593,8 +664,19 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--stage", default="all", choices=STAGES + ["all", "preview"])
     ap.add_argument("--data", help="build the parts from this openparts-data checkout instead of the registry")
+    ap.add_argument("--layers", type=int, choices=(2, 4),
+                    help="copper layers, overriding the board file (4: the pour nets also fill both inner layers)")
+    ap.add_argument("--evaluate-all", action="store_true",
+                    help="route: score every router configuration and report how many complete")
+    ap.add_argument("--sweep", type=int, metavar="N",
+                    help="route: try only the first N router cost settings (of %d)" % len(ROUTER_VARIANTS))
     a = ap.parse_args()
+    global EVALUATE_ALL, SWEEP
+    EVALUATE_ALL = a.evaluate_all
+    SWEEP = a.sweep or SWEEP
     spec = load_spec(a.board)
+    if a.layers:
+        spec["board"]["layers"] = a.layers
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     stages = STAGES if a.stage == "all" else [a.stage]
