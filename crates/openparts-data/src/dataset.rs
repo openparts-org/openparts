@@ -170,13 +170,22 @@ fn parse<T: DeserializeOwned>(
     Ok(doc)
 }
 
-/// Every `*.yaml` under `dir`, recursively, in sorted order.
+/// Every `*.yaml` under `dir`, recursively, in sorted order. Hidden
+/// directories (`.git`, `.github`, editor and agent worktrees under
+/// `.claude/`) are not part of the dataset and are skipped.
 pub fn yaml_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
         .map(|e| e.map(|e| e.path()))
         .collect::<Result<_, _>>()?;
     entries.sort();
     for path in entries {
+        let hidden = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'));
+        if path.is_dir() && hidden {
+            continue;
+        }
         if path.is_dir() {
             yaml_files(&path, out)?;
         } else if path.extension().is_some_and(|e| e == "yaml") {

@@ -15,6 +15,8 @@ pub struct Store {
     pub search: crate::search::SearchIndex,
     /// `GET /v1/catalog`'s facets over `dataset.parts`.
     pub catalog: crate::catalog::CatalogIndex,
+    /// `POST /v1/bom/check` and `GET .../alternatives` (openparts-bom).
+    pub bom: openparts_bom::BomIndex,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,6 +51,7 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
     Ok(Store {
         search: crate::search::SearchIndex::build(&dataset),
         catalog: crate::catalog::CatalogIndex::build(&dataset),
+        bom: openparts_bom::BomIndex::build(&dataset),
         dataset,
         bundle: None,
     })

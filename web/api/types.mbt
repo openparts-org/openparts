@@ -2,6 +2,108 @@
 // types (schemars JSON Schema). Do not edit; CI fails if it is stale.
 
 ///|
+/// One candidate replacement.
+#derive(Eq)
+pub(all) struct Alternative {
+  class : AlternativeClass
+  footprint : FootprintCheck
+  listed_replacement : Bool
+  parameters : Array[ParameterCheck]
+  part : PartBrief
+  pins : PinComparison?
+  score : Int32
+  verdict : Verdict
+}
+
+///|
+pub impl @json.FromJson for Alternative with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a Alternative object"))
+  }
+  {
+    class: field(obj, "class", path),
+    footprint: field(obj, "footprint", path),
+    listed_replacement: field(obj, "listed_replacement", path),
+    parameters: field(obj, "parameters", path),
+    part: field(obj, "part", path),
+    pins: opt_field(obj, "pins", path),
+    score: field(obj, "score", path),
+    verdict: field(obj, "verdict", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum AlternativeClass {
+  DropIn
+  FootprintCompatible
+  Functional
+  NearMiss
+  Listed
+}
+
+///|
+/// The wire (JSON) string.
+pub fn AlternativeClass::wire(self : AlternativeClass) -> String {
+  match self {
+    DropIn => "drop_in"
+    FootprintCompatible => "footprint_compatible"
+    Functional => "functional"
+    NearMiss => "near_miss"
+    Listed => "listed"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn AlternativeClass::all() -> Array[AlternativeClass] {
+  [DropIn, FootprintCompatible, Functional, NearMiss, Listed]
+}
+
+///|
+pub impl @json.FromJson for AlternativeClass with fn from_json(json, path) {
+  match json {
+    String("drop_in") => DropIn
+    String("footprint_compatible") => FootprintCompatible
+    String("functional") => Functional
+    String("near_miss") => NearMiss
+    String("listed") => Listed
+    _ => raise @json.JsonDecodeError((path, "expected a AlternativeClass"))
+  }
+}
+
+///|
+/// `GET /v1/parts/{manufacturer}/{mpn}/alternatives`.
+#derive(Eq)
+pub(all) struct AlternativesResponse {
+  alternatives : Array[Alternative]
+  drop_in : Int32
+  footprint_compatible : Int32
+  functional : Int32
+  near_miss : Int32
+  part : PartBrief
+  rejected : Int32
+}
+
+///|
+pub impl @json.FromJson for AlternativesResponse with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError(
+      (path, "expected a AlternativesResponse object"),
+    )
+  }
+  {
+    alternatives: field(obj, "alternatives", path),
+    drop_in: field(obj, "drop_in", path),
+    footprint_compatible: field(obj, "footprint_compatible", path),
+    functional: field(obj, "functional", path),
+    near_miss: field(obj, "near_miss", path),
+    part: field(obj, "part", path),
+    rejected: field(obj, "rejected", path),
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct ArtifactsResponse {
   x3mf : String
@@ -24,6 +126,185 @@ pub impl @json.FromJson for ArtifactsResponse with fn from_json(json, path) {
     kicad_symbol: field(obj, "kicad-symbol", path),
     step: field(obj, "step", path),
     stl: field(obj, "stl", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum BomFormat {
+  KicadCsv
+  KicadNetlist
+  GenericCsv
+}
+
+///|
+/// The wire (JSON) string.
+pub fn BomFormat::wire(self : BomFormat) -> String {
+  match self {
+    KicadCsv => "kicad_csv"
+    KicadNetlist => "kicad_netlist"
+    GenericCsv => "generic_csv"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn BomFormat::all() -> Array[BomFormat] {
+  [KicadCsv, KicadNetlist, GenericCsv]
+}
+
+///|
+pub impl @json.FromJson for BomFormat with fn from_json(json, path) {
+  match json {
+    String("kicad_csv") => KicadCsv
+    String("kicad_netlist") => KicadNetlist
+    String("generic_csv") => GenericCsv
+    _ => raise @json.JsonDecodeError((path, "expected a BomFormat"))
+  }
+}
+
+///|
+#derive(Eq)
+pub(all) struct BomIssue {
+  code : IssueCode
+  detail : String?
+  severity : Severity
+}
+
+///|
+pub impl @json.FromJson for BomIssue with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a BomIssue object"))
+  }
+  {
+    code: field(obj, "code", path),
+    detail: opt_field(obj, "detail", path),
+    severity: field(obj, "severity", path),
+  }
+}
+
+///|
+/// One checked BOM line.
+#derive(Eq)
+pub(all) struct BomLineResult {
+  alternatives : Array[Alternative]
+  confidence : Double
+  dnp : Bool
+  footprint : String
+  issues : Array[BomIssue]
+  kind : MatchKind
+  manufacturer : String
+  matches : Array[BomMatch]
+  mpn : String
+  quantity : Int32
+  references : Array[String]
+  row : Int32
+  status : LineStatus
+  value : String
+}
+
+///|
+pub impl @json.FromJson for BomLineResult with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a BomLineResult object"))
+  }
+  {
+    alternatives: field(obj, "alternatives", path),
+    confidence: field(obj, "confidence", path),
+    dnp: field(obj, "dnp", path),
+    footprint: field(obj, "footprint", path),
+    issues: field(obj, "issues", path),
+    kind: field(obj, "kind", path),
+    manufacturer: field(obj, "manufacturer", path),
+    matches: field(obj, "matches", path),
+    mpn: field(obj, "mpn", path),
+    quantity: field(obj, "quantity", path),
+    references: field(obj, "references", path),
+    row: field(obj, "row", path),
+    status: field(obj, "status", path),
+    value: field(obj, "value", path),
+  }
+}
+
+///|
+/// One candidate part of a line.
+#derive(Eq)
+pub(all) struct BomMatch {
+  confidence : Double
+  coverage : Coverage
+  footprint : FootprintNameCheck
+  kind : MatchKind
+  part : PartBrief
+}
+
+///|
+pub impl @json.FromJson for BomMatch with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a BomMatch object"))
+  }
+  {
+    confidence: field(obj, "confidence", path),
+    coverage: field(obj, "coverage", path),
+    footprint: field(obj, "footprint", path),
+    kind: field(obj, "kind", path),
+    part: field(obj, "part", path),
+  }
+}
+
+///|
+/// `POST /v1/bom/check`.
+#derive(Eq)
+pub(all) struct BomReport {
+  columns : Array[DetectedColumn]
+  format : BomFormat
+  lines : Array[BomLineResult]
+  summary : BomSummary
+}
+
+///|
+pub impl @json.FromJson for BomReport with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a BomReport object"))
+  }
+  {
+    columns: field(obj, "columns", path),
+    format: field(obj, "format", path),
+    lines: field(obj, "lines", path),
+    summary: field(obj, "summary", path),
+  }
+}
+
+///|
+#derive(Eq)
+pub(all) struct BomSummary {
+  components : Int32
+  exact : Int32
+  lines : Int32
+  normalized : Int32
+  not_found : Int32
+  ok : Int32
+  review : Int32
+  value_footprint : Int32
+  variant : Int32
+  warning : Int32
+}
+
+///|
+pub impl @json.FromJson for BomSummary with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a BomSummary object"))
+  }
+  {
+    components: field(obj, "components", path),
+    exact: field(obj, "exact", path),
+    lines: field(obj, "lines", path),
+    normalized: field(obj, "normalized", path),
+    not_found: field(obj, "not_found", path),
+    ok: field(obj, "ok", path),
+    review: field(obj, "review", path),
+    value_footprint: field(obj, "value_footprint", path),
+    variant: field(obj, "variant", path),
+    warning: field(obj, "warning", path),
   }
 }
 
@@ -186,6 +467,108 @@ pub impl @json.FromJson for CategoryNode with fn from_json(json, path) {
     label: field(obj, "label", path),
     selected: field(obj, "selected", path),
     value: field(obj, "value", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum CheckStatus {
+  Pass
+  Better
+  Info
+  Unverified
+  Fail
+}
+
+///|
+/// The wire (JSON) string.
+pub fn CheckStatus::wire(self : CheckStatus) -> String {
+  match self {
+    Pass => "pass"
+    Better => "better"
+    Info => "info"
+    Unverified => "unverified"
+    Fail => "fail"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn CheckStatus::all() -> Array[CheckStatus] {
+  [Pass, Better, Info, Unverified, Fail]
+}
+
+///|
+pub impl @json.FromJson for CheckStatus with fn from_json(json, path) {
+  match json {
+    String("pass") => Pass
+    String("better") => Better
+    String("info") => Info
+    String("unverified") => Unverified
+    String("fail") => Fail
+    _ => raise @json.JsonDecodeError((path, "expected a CheckStatus"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ColumnRole {
+  Reference
+  Value
+  Footprint
+  Datasheet
+  Quantity
+  Mpn
+  Manufacturer
+  Description
+  Dnp
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ColumnRole::wire(self : ColumnRole) -> String {
+  match self {
+    Reference => "reference"
+    Value => "value"
+    Footprint => "footprint"
+    Datasheet => "datasheet"
+    Quantity => "quantity"
+    Mpn => "mpn"
+    Manufacturer => "manufacturer"
+    Description => "description"
+    Dnp => "dnp"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ColumnRole::all() -> Array[ColumnRole] {
+  [
+    Reference,
+    Value,
+    Footprint,
+    Datasheet,
+    Quantity,
+    Mpn,
+    Manufacturer,
+    Description,
+    Dnp,
+  ]
+}
+
+///|
+pub impl @json.FromJson for ColumnRole with fn from_json(json, path) {
+  match json {
+    String("reference") => Reference
+    String("value") => Value
+    String("footprint") => Footprint
+    String("datasheet") => Datasheet
+    String("quantity") => Quantity
+    String("mpn") => Mpn
+    String("manufacturer") => Manufacturer
+    String("description") => Description
+    String("dnp") => Dnp
+    _ => raise @json.JsonDecodeError((path, "expected a ColumnRole"))
   }
 }
 
@@ -413,6 +796,47 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("gate_driver") => GateDriver
     _ => raise @json.JsonDecodeError((path, "expected a ComponentCategory"))
   }
+}
+
+///|
+/// How much of the category's expected data the part states.
+#derive(Eq)
+pub(all) struct Coverage {
+  expected : Int32
+  expected_present : Int32
+  missing : Array[String]
+  parameters : Int32
+  sources : Int32
+}
+
+///|
+pub impl @json.FromJson for Coverage with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a Coverage object"))
+  }
+  {
+    expected: field(obj, "expected", path),
+    expected_present: field(obj, "expected_present", path),
+    missing: field(obj, "missing", path),
+    parameters: field(obj, "parameters", path),
+    sources: field(obj, "sources", path),
+  }
+}
+
+///|
+/// A detected column: its role and the header text it was found under.
+#derive(Eq)
+pub(all) struct DetectedColumn {
+  header : String
+  role : ColumnRole
+}
+
+///|
+pub impl @json.FromJson for DetectedColumn with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a DetectedColumn object"))
+  }
+  { header: field(obj, "header", path), role: field(obj, "role", path), }
 }
 
 ///|
@@ -717,6 +1141,182 @@ pub impl @json.FromJson for FacetValue with fn from_json(json, path) {
 }
 
 ///|
+/// The footprint side of an alternative.
+#derive(Eq)
+pub(all) struct FootprintCheck {
+  difference : FootprintDifference?
+  max_offset_mm : Double?
+  method_ : FootprintMethod
+  same_land_pattern : Bool
+}
+
+///|
+pub impl @json.FromJson for FootprintCheck with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a FootprintCheck object"))
+  }
+  {
+    difference: opt_field(obj, "difference", path),
+    max_offset_mm: opt_field(obj, "max_offset_mm", path),
+    method_: field(obj, "method", path),
+    same_land_pattern: field(obj, "same_land_pattern", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum FootprintDifference {
+  SizeCode
+  PadCount
+  PadPosition
+  PadSize
+  Mounting
+  Family
+  LeadCount
+  Pitch
+  BodySize
+}
+
+///|
+/// The wire (JSON) string.
+pub fn FootprintDifference::wire(self : FootprintDifference) -> String {
+  match self {
+    SizeCode => "size_code"
+    PadCount => "pad_count"
+    PadPosition => "pad_position"
+    PadSize => "pad_size"
+    Mounting => "mounting"
+    Family => "family"
+    LeadCount => "lead_count"
+    Pitch => "pitch"
+    BodySize => "body_size"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn FootprintDifference::all() -> Array[FootprintDifference] {
+  [
+    SizeCode,
+    PadCount,
+    PadPosition,
+    PadSize,
+    Mounting,
+    Family,
+    LeadCount,
+    Pitch,
+    BodySize,
+  ]
+}
+
+///|
+pub impl @json.FromJson for FootprintDifference with fn from_json(json, path) {
+  match json {
+    String("size_code") => SizeCode
+    String("pad_count") => PadCount
+    String("pad_position") => PadPosition
+    String("pad_size") => PadSize
+    String("mounting") => Mounting
+    String("family") => Family
+    String("lead_count") => LeadCount
+    String("pitch") => Pitch
+    String("body_size") => BodySize
+    _ => raise @json.JsonDecodeError((path, "expected a FootprintDifference"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum FootprintMethod {
+  SamePackage
+  SizeCode
+  Pads
+  Dimensions
+}
+
+///|
+/// The wire (JSON) string.
+pub fn FootprintMethod::wire(self : FootprintMethod) -> String {
+  match self {
+    SamePackage => "same_package"
+    SizeCode => "size_code"
+    Pads => "pads"
+    Dimensions => "dimensions"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn FootprintMethod::all() -> Array[FootprintMethod] {
+  [SamePackage, SizeCode, Pads, Dimensions]
+}
+
+///|
+pub impl @json.FromJson for FootprintMethod with fn from_json(json, path) {
+  match json {
+    String("same_package") => SamePackage
+    String("size_code") => SizeCode
+    String("pads") => Pads
+    String("dimensions") => Dimensions
+    _ => raise @json.JsonDecodeError((path, "expected a FootprintMethod"))
+  }
+}
+
+///|
+#derive(Eq)
+pub(all) struct FootprintNameCheck {
+  bom : String?
+  part : String
+  status : FootprintStatus
+}
+
+///|
+pub impl @json.FromJson for FootprintNameCheck with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a FootprintNameCheck object"))
+  }
+  {
+    bom: opt_field(obj, "bom", path),
+    part: field(obj, "part", path),
+    status: field(obj, "status", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum FootprintStatus {
+  Match
+  Mismatch
+  Unknown
+}
+
+///|
+/// The wire (JSON) string.
+pub fn FootprintStatus::wire(self : FootprintStatus) -> String {
+  match self {
+    Match => "match"
+    Mismatch => "mismatch"
+    Unknown => "unknown"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn FootprintStatus::all() -> Array[FootprintStatus] {
+  [Match, Mismatch, Unknown]
+}
+
+///|
+pub impl @json.FromJson for FootprintStatus with fn from_json(json, path) {
+  match json {
+    String("match") => Match
+    String("mismatch") => Mismatch
+    String("unknown") => Unknown
+    _ => raise @json.JsonDecodeError((path, "expected a FootprintStatus"))
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum GeometryType {
   Parametric
@@ -753,6 +1353,92 @@ pub impl @json.FromJson for GeometryType with fn from_json(json, path) {
     String("external") => External
     String("none") => None
     _ => raise @json.JsonDecodeError((path, "expected a GeometryType"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum IssueCode {
+  NotFound
+  VariantMatch
+  ValueMatch
+  Ambiguous
+  ManufacturerMismatch
+  LifecycleObsolete
+  LifecycleEol
+  LifecycleNrnd
+  LifecycleUnknown
+  ExistenceRejected
+  ExistenceUnverified
+  NoParameters
+  FootprintMismatch
+  FootprintUnchecked
+  Dnp
+}
+
+///|
+/// The wire (JSON) string.
+pub fn IssueCode::wire(self : IssueCode) -> String {
+  match self {
+    NotFound => "not_found"
+    VariantMatch => "variant_match"
+    ValueMatch => "value_match"
+    Ambiguous => "ambiguous"
+    ManufacturerMismatch => "manufacturer_mismatch"
+    LifecycleObsolete => "lifecycle_obsolete"
+    LifecycleEol => "lifecycle_eol"
+    LifecycleNrnd => "lifecycle_nrnd"
+    LifecycleUnknown => "lifecycle_unknown"
+    ExistenceRejected => "existence_rejected"
+    ExistenceUnverified => "existence_unverified"
+    NoParameters => "no_parameters"
+    FootprintMismatch => "footprint_mismatch"
+    FootprintUnchecked => "footprint_unchecked"
+    Dnp => "dnp"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn IssueCode::all() -> Array[IssueCode] {
+  [
+    NotFound,
+    VariantMatch,
+    ValueMatch,
+    Ambiguous,
+    ManufacturerMismatch,
+    LifecycleObsolete,
+    LifecycleEol,
+    LifecycleNrnd,
+    LifecycleUnknown,
+    ExistenceRejected,
+    ExistenceUnverified,
+    NoParameters,
+    FootprintMismatch,
+    FootprintUnchecked,
+    Dnp,
+  ]
+}
+
+///|
+pub impl @json.FromJson for IssueCode with fn from_json(json, path) {
+  match json {
+    String("not_found") => NotFound
+    String("variant_match") => VariantMatch
+    String("value_match") => ValueMatch
+    String("ambiguous") => Ambiguous
+    String("manufacturer_mismatch") => ManufacturerMismatch
+    String("lifecycle_obsolete") => LifecycleObsolete
+    String("lifecycle_eol") => LifecycleEol
+    String("lifecycle_nrnd") => LifecycleNrnd
+    String("lifecycle_unknown") => LifecycleUnknown
+    String("existence_rejected") => ExistenceRejected
+    String("existence_unverified") => ExistenceUnverified
+    String("no_parameters") => NoParameters
+    String("footprint_mismatch") => FootprintMismatch
+    String("footprint_unchecked") => FootprintUnchecked
+    String("dnp") => Dnp
+    _ => raise @json.JsonDecodeError((path, "expected a IssueCode"))
   }
 }
 
@@ -860,6 +1546,83 @@ pub impl @json.FromJson for LifecycleStatus with fn from_json(json, path) {
     String("obsolete") => Obsolete
     String("unknown") => Unknown
     _ => raise @json.JsonDecodeError((path, "expected a LifecycleStatus"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum LineStatus {
+  NotFound
+  Ok
+  Review
+  Warning
+}
+
+///|
+/// The wire (JSON) string.
+pub fn LineStatus::wire(self : LineStatus) -> String {
+  match self {
+    NotFound => "not_found"
+    Ok => "ok"
+    Review => "review"
+    Warning => "warning"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn LineStatus::all() -> Array[LineStatus] {
+  [NotFound, Ok, Review, Warning]
+}
+
+///|
+pub impl @json.FromJson for LineStatus with fn from_json(json, path) {
+  match json {
+    String("not_found") => NotFound
+    String("ok") => Ok
+    String("review") => Review
+    String("warning") => Warning
+    _ => raise @json.JsonDecodeError((path, "expected a LineStatus"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum MatchKind {
+  Exact
+  Normalized
+  Variant
+  ValueFootprint
+  None
+}
+
+///|
+/// The wire (JSON) string.
+pub fn MatchKind::wire(self : MatchKind) -> String {
+  match self {
+    Exact => "exact"
+    Normalized => "normalized"
+    Variant => "variant"
+    ValueFootprint => "value_footprint"
+    None => "none"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn MatchKind::all() -> Array[MatchKind] {
+  [Exact, Normalized, Variant, ValueFootprint, None]
+}
+
+///|
+pub impl @json.FromJson for MatchKind with fn from_json(json, path) {
+  match json {
+    String("exact") => Exact
+    String("normalized") => Normalized
+    String("variant") => Variant
+    String("value_footprint") => ValueFootprint
+    String("none") => None
+    _ => raise @json.JsonDecodeError((path, "expected a MatchKind"))
   }
 }
 
@@ -1293,6 +2056,155 @@ pub impl @json.FromJson for PackageTab with fn from_json(json, path) {
 }
 
 ///|
+/// One pad of the comparison.
+#derive(Eq)
+pub(all) struct PadDiff {
+  candidate : PinBrief?
+  candidate_pad : String
+  original : PinBrief?
+  pad : String
+  reason : PadReason?
+  status : PadStatus
+}
+
+///|
+pub impl @json.FromJson for PadDiff with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PadDiff object"))
+  }
+  {
+    candidate: opt_field(obj, "candidate", path),
+    candidate_pad: field(obj, "candidate_pad", path),
+    original: opt_field(obj, "original", path),
+    pad: field(obj, "pad", path),
+    reason: opt_field(obj, "reason", path),
+    status: field(obj, "status", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PadReason {
+  FunctionDiffers
+  GroundMismatch
+  PolarityDiffers
+  PolarityUnverified
+  CandidateUsesNcPad
+  CandidateNeedsNcPad
+  UnusedOnCandidate
+  MissingPin
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PadReason::wire(self : PadReason) -> String {
+  match self {
+    FunctionDiffers => "function_differs"
+    GroundMismatch => "ground_mismatch"
+    PolarityDiffers => "polarity_differs"
+    PolarityUnverified => "polarity_unverified"
+    CandidateUsesNcPad => "candidate_uses_nc_pad"
+    CandidateNeedsNcPad => "candidate_needs_nc_pad"
+    UnusedOnCandidate => "unused_on_candidate"
+    MissingPin => "missing_pin"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PadReason::all() -> Array[PadReason] {
+  [
+    FunctionDiffers,
+    GroundMismatch,
+    PolarityDiffers,
+    PolarityUnverified,
+    CandidateUsesNcPad,
+    CandidateNeedsNcPad,
+    UnusedOnCandidate,
+    MissingPin,
+  ]
+}
+
+///|
+pub impl @json.FromJson for PadReason with fn from_json(json, path) {
+  match json {
+    String("function_differs") => FunctionDiffers
+    String("ground_mismatch") => GroundMismatch
+    String("polarity_differs") => PolarityDiffers
+    String("polarity_unverified") => PolarityUnverified
+    String("candidate_uses_nc_pad") => CandidateUsesNcPad
+    String("candidate_needs_nc_pad") => CandidateNeedsNcPad
+    String("unused_on_candidate") => UnusedOnCandidate
+    String("missing_pin") => MissingPin
+    _ => raise @json.JsonDecodeError((path, "expected a PadReason"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PadStatus {
+  Same
+  Equivalent
+  Note
+  Differs
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PadStatus::wire(self : PadStatus) -> String {
+  match self {
+    Same => "same"
+    Equivalent => "equivalent"
+    Note => "note"
+    Differs => "differs"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PadStatus::all() -> Array[PadStatus] {
+  [Same, Equivalent, Note, Differs]
+}
+
+///|
+pub impl @json.FromJson for PadStatus with fn from_json(json, path) {
+  match json {
+    String("same") => Same
+    String("equivalent") => Equivalent
+    String("note") => Note
+    String("differs") => Differs
+    _ => raise @json.JsonDecodeError((path, "expected a PadStatus"))
+  }
+}
+
+///|
+/// One key compared.
+#derive(Eq)
+pub(all) struct ParameterCheck {
+  candidate : String?
+  identity : Bool
+  key : String
+  original : String?
+  rule : RuleKind
+  status : CheckStatus
+}
+
+///|
+pub impl @json.FromJson for ParameterCheck with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ParameterCheck object"))
+  }
+  {
+    candidate: opt_field(obj, "candidate", path),
+    identity: field(obj, "identity", path),
+    key: field(obj, "key", path),
+    original: opt_field(obj, "original", path),
+    rule: field(obj, "rule", path),
+    status: field(obj, "status", path),
+  }
+}
+
+///|
 /// One electrical-parameter facet: present only when some part under
 /// the other filters states the key (or the key is filtered on).
 #derive(Eq)
@@ -1425,6 +2337,45 @@ pub impl @json.FromJson for Part with fn from_json(json, path) {
 }
 
 ///|
+/// A part as alternatives and BOM results show it.
+#derive(Eq)
+pub(all) struct PartBrief {
+  category : ComponentCategory?
+  device : String
+  existence : ExistenceStatus
+  lead_count : Int32?
+  lifecycle : LifecycleStatus
+  manufacturer : String
+  manufacturer_name : String
+  mpn : String
+  package_ : String
+  package_family : PackageFamily?
+  parameters : Map[String, String]
+  size_code : String?
+}
+
+///|
+pub impl @json.FromJson for PartBrief with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PartBrief object"))
+  }
+  {
+    category: opt_field(obj, "category", path),
+    device: field(obj, "device", path),
+    existence: field(obj, "existence", path),
+    lead_count: opt_field(obj, "lead_count", path),
+    lifecycle: field(obj, "lifecycle", path),
+    manufacturer: field(obj, "manufacturer", path),
+    manufacturer_name: field(obj, "manufacturer_name", path),
+    mpn: field(obj, "mpn", path),
+    package_: field(obj, "package", path),
+    package_family: opt_field(obj, "package_family", path),
+    parameters: field(obj, "parameters", path),
+    size_code: opt_field(obj, "size_code", path),
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct PartSource {
   cited_by : Array[String]
@@ -1485,6 +2436,45 @@ pub impl @json.FromJson for Pin with fn from_json(json, path) {
     connected_to: opt_field(obj, "connected_to", path),
     name: field(obj, "name", path),
     type_: field(obj, "type", path),
+  }
+}
+
+///|
+/// A pin as the comparison shows it.
+#derive(Eq)
+pub(all) struct PinBrief {
+  name : String
+  type_ : PinType
+}
+
+///|
+pub impl @json.FromJson for PinBrief with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PinBrief object"))
+  }
+  { name: field(obj, "name", path), type_: field(obj, "type", path), }
+}
+
+///|
+/// A pad-by-pad comparison of two pinouts on one land pattern.
+#derive(Eq)
+pub(all) struct PinComparison {
+  compatible : Bool
+  differing : Array[String]
+  noted : Array[String]
+  pads : Array[PadDiff]
+}
+
+///|
+pub impl @json.FromJson for PinComparison with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PinComparison object"))
+  }
+  {
+    compatible: field(obj, "compatible", path),
+    differing: field(obj, "differing", path),
+    noted: field(obj, "noted", path),
+    pads: field(obj, "pads", path),
   }
 }
 
@@ -1696,6 +2686,77 @@ pub impl @json.FromJson for RevisionSummary with fn from_json(json, path) {
 }
 
 ///|
+#derive(Eq, Debug)
+pub(all) enum RuleKind {
+  Equal
+  AtLeast
+  AtMost
+  Ranked
+  Informational
+}
+
+///|
+/// The wire (JSON) string.
+pub fn RuleKind::wire(self : RuleKind) -> String {
+  match self {
+    Equal => "equal"
+    AtLeast => "at_least"
+    AtMost => "at_most"
+    Ranked => "ranked"
+    Informational => "informational"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn RuleKind::all() -> Array[RuleKind] {
+  [Equal, AtLeast, AtMost, Ranked, Informational]
+}
+
+///|
+pub impl @json.FromJson for RuleKind with fn from_json(json, path) {
+  match json {
+    String("equal") => Equal
+    String("at_least") => AtLeast
+    String("at_most") => AtMost
+    String("ranked") => Ranked
+    String("informational") => Informational
+    _ => raise @json.JsonDecodeError((path, "expected a RuleKind"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum Severity {
+  Info
+  Warning
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Severity::wire(self : Severity) -> String {
+  match self {
+    Info => "info"
+    Warning => "warning"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Severity::all() -> Array[Severity] {
+  [Info, Warning]
+}
+
+///|
+pub impl @json.FromJson for Severity with fn from_json(json, path) {
+  match json {
+    String("info") => Info
+    String("warning") => Warning
+    _ => raise @json.JsonDecodeError((path, "expected a Severity"))
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct Source {
   date : String
@@ -1726,5 +2787,39 @@ pub impl @json.FromJson for Source with fn from_json(json, path) {
     revision: field(obj, "revision", path),
     schema_version: field(obj, "schema_version", path),
     url: field(obj, "url", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum Verdict {
+  Meets
+  Unverified
+  Worse
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Verdict::wire(self : Verdict) -> String {
+  match self {
+    Meets => "meets"
+    Unverified => "unverified"
+    Worse => "worse"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Verdict::all() -> Array[Verdict] {
+  [Meets, Unverified, Worse]
+}
+
+///|
+pub impl @json.FromJson for Verdict with fn from_json(json, path) {
+  match json {
+    String("meets") => Meets
+    String("unverified") => Unverified
+    String("worse") => Worse
+    _ => raise @json.JsonDecodeError((path, "expected a Verdict"))
   }
 }

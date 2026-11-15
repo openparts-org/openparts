@@ -58,6 +58,7 @@ pub fn build_router(store: Arc<Store>) -> Router {
         )
         .route("/v1/devices/*id", get(get_device))
         .route("/v1/packages/*id", get(get_package))
+        .merge(crate::bom::router())
         .with_state(store)
 }
 
@@ -481,6 +482,7 @@ mod schema_export {
         gen.subschema_for::<ArtifactsResponse>();
         gen.subschema_for::<ProvenanceResponse>();
         crate::error::subschemas(&mut gen);
+        crate::bom::subschemas(&mut gen);
         let defs = serde_json::Value::Object(gen.definitions().clone());
         std::fs::write(out, serde_json::to_string_pretty(&defs).unwrap()).unwrap();
     }

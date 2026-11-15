@@ -2760,12 +2760,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "openparts-bom"
+version = "0.1.0"
+dependencies = [
+ "openparts-core",
+ "openparts-data",
+ "openparts-mcad",
+ "openparts-pcbcad",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "openparts-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "openparts-artifacts",
+ "openparts-bom",
  "openparts-client",
  "openparts-core",
  "openparts-data",
@@ -2872,6 +2887,7 @@ dependencies = [
  "axum",
  "http-body-util",
  "openparts-artifacts",
+ "openparts-bom",
  "openparts-core",
  "openparts-data",
  "openparts-mcad",

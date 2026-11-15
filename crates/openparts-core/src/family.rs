@@ -140,6 +140,30 @@ impl schemars::JsonSchema for PackageFamily {
     }
 }
 
+/// Standard chip body sizes (length, width in mm) with their imperial
+/// and metric codes, smallest first. A metric code that reads like an
+/// imperial one carries an `m` suffix (`0603m` is imperial 0201).
+pub const CHIP_SIZES: &[(f64, f64, &[&str])] = &[
+    (0.4, 0.2, &["01005", "0402m"]),
+    (0.6, 0.3, &["0201", "0603m"]),
+    (1.0, 0.5, &["0402", "1005"]),
+    (1.6, 0.8, &["0603", "1608"]),
+    (2.0, 1.25, &["0805", "2012"]),
+    (3.2, 1.6, &["1206", "3216"]),
+    (3.2, 2.5, &["1210", "3225"]),
+    (4.5, 3.2, &["1812", "4532"]),
+    (5.0, 2.5, &["2010", "5025"]),
+    (6.4, 3.2, &["2512", "6432"]),
+];
+
+/// Imperial and metric size codes of a chip body (length x width, mm).
+pub fn chip_codes(l: f64, w: f64) -> &'static [&'static str] {
+    CHIP_SIZES
+        .iter()
+        .find(|(sl, sw, _)| (l - sl).abs() <= 0.15 && (w - sw).abs() <= 0.15)
+        .map_or(&[], |s| s.2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

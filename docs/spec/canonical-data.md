@@ -432,8 +432,11 @@ for the Device's category (capacitance on a resistor) is a warning
 (`parameter.implausible`).
 
 The vocabulary grows like `PinType` (section 15): a new component type
-adds keys here, in `PARAMETERS` and in the web catalog's labels, in one
-change. A key is never reused for another quantity.
+adds keys here, in `PARAMETERS`, in the web catalog's labels and in the
+alternatives' comparison rules (`PARAMETER_RULES`: whether a value must
+be equal, at least or at most the original's;
+[Alternative Parts and BOM Checking](alternatives-and-bom.md) section
+1.4), in one change. A key is never reused for another quantity.
 
 ---
 
@@ -484,6 +487,11 @@ lifecycle:
 ```
 
 Replacementが完全互換であることをLifecycle Fieldだけから意味しない。
+
+Alternatives (`GET /v1/parts/{manufacturer}/{mpn}/alternatives`) list a
+`replacement` first and still check its land pattern, pinout and
+parameters ([Alternative Parts and BOM Checking](alternatives-and-bom.md)
+section 1).
 
 ---
 

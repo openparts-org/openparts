@@ -1,3 +1,4 @@
+mod bom;
 mod bundle;
 
 use anyhow::Context;
@@ -100,6 +101,31 @@ enum Commands {
         #[arg(long)]
         strict: bool,
     },
+    /// Bill of materials tools.
+    Bom {
+        #[command(subcommand)]
+        command: BomCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum BomCommand {
+    /// Check a BOM (KiCad BOM CSV, KiCad netlist `.net`, or a CSV with
+    /// MPN/manufacturer columns) against a local openparts-data
+    /// checkout: each line matched to parts, with lifecycle, data
+    /// coverage and footprint checks and alternatives for EOL/NRND
+    /// lines -- the same check as the server's `POST /v1/bom/check`.
+    Check {
+        file: PathBuf,
+        #[arg(long, default_value = "../openparts-data")]
+        data: PathBuf,
+        /// The full report as JSON (the API's shape).
+        #[arg(long)]
+        json: bool,
+        /// Exit with an error when a line has a warning or isn't found.
+        #[arg(long)]
+        strict: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -148,6 +174,20 @@ fn main() -> anyhow::Result<()> {
             out,
             jobs: jobs
                 .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get())),
+            strict,
+        }),
+        Commands::Bom {
+            command:
+                BomCommand::Check {
+                    file,
+                    data,
+                    json,
+                    strict,
+                },
+        } => bom::check(bom::Options {
+            file: &file,
+            data: &data,
+            json,
             strict,
         }),
     }

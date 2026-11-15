@@ -12,6 +12,7 @@ openparts-validator = { path = "../crates/openparts-validator" }
 openparts-mcad = { path = "../crates/mcad/openparts-mcad" }
 openparts-solidcraft = { path = "../crates/mcad/openparts-solidcraft" }
 openparts-artifacts = { path = "../crates/openparts-artifacts" }
+openparts-bom = { path = "../crates/openparts-bom" }
 
 axum = "0.7"
 tower-http = { version = "0.6", features = ["fs"] }
@@ -29,7 +30,7 @@ schemars = { version = "1", optional = true }
 
 [features]
 # MoonBit API types for openparts-web (from the JSON Schemas).
-schema = ["dep:schemars", "openparts-core/schema"]
+schema = ["dep:schemars", "openparts-core/schema", "openparts-bom/schema"]
 
 [dev-dependencies]
 openparts-stl = { path = "../crates/mcad/openparts-stl" }

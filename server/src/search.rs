@@ -12,6 +12,10 @@
 //! split into words that must all match (AND); Japanese and common
 //! English terms are first rewritten to the indexed vocabulary.
 
+pub(crate) use openparts_core::family::{chip_codes, CHIP_SIZES};
+use openparts_core::text::{
+    fold, infix_value, is_separator, normalize, normalize_folded, trim_decimal_zeros,
+};
 use openparts_core::{
     effective_parameters, format_value, parameter_spec, ComponentCategory, Normalized,
     PackageFamily, ParameterSpec, Part,
@@ -317,30 +321,6 @@ fn category_name(c: ComponentCategory) -> &'static str {
     }
 }
 
-/// Standard chip body sizes (length, width in mm) with their imperial
-/// and metric codes, smallest first. A metric code that reads like an
-/// imperial one carries an `m` suffix (`0603m` is imperial 0201).
-pub(crate) const CHIP_SIZES: &[(f64, f64, &[&str])] = &[
-    (0.4, 0.2, &["01005", "0402m"]),
-    (0.6, 0.3, &["0201", "0603m"]),
-    (1.0, 0.5, &["0402", "1005"]),
-    (1.6, 0.8, &["0603", "1608"]),
-    (2.0, 1.25, &["0805", "2012"]),
-    (3.2, 1.6, &["1206", "3216"]),
-    (3.2, 2.5, &["1210", "3225"]),
-    (4.5, 3.2, &["1812", "4532"]),
-    (5.0, 2.5, &["2010", "5025"]),
-    (6.4, 3.2, &["2512", "6432"]),
-];
-
-/// Imperial and metric size codes of a chip body (length x width, mm).
-pub(crate) fn chip_codes(l: f64, w: f64) -> &'static [&'static str] {
-    CHIP_SIZES
-        .iter()
-        .find(|(sl, sw, _)| (l - sl).abs() <= 0.15 && (w - sw).abs() <= 0.15)
-        .map_or(&[], |s| s.2)
-}
-
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
@@ -492,116 +472,6 @@ fn query_words(query: &str) -> Vec<Vec<String>> {
             }
             out.push(alts);
         }
-        i += 1;
-    }
-    out
-}
-
-/// Full normalisation: [`fold`], then per whitespace word value
-/// notation and separator removal, joined with spaces.
-fn normalize(s: &str) -> String {
-    fold(s)
-        .split_whitespace()
-        .map(normalize_folded)
-        .filter(|w| !w.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// Character-level folding: full-width ASCII and the ideographic space
-/// to ASCII, lowercase, Latin diacritics dropped, `µ`/`μ` to `u`, `Ω` to
-/// `ohm`.
-fn fold(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        let c = match c {
-            '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
-            '\u{3000}' => ' ',
-            _ => c,
-        };
-        match c {
-            '\u{00B5}' | '\u{03BC}' => out.push('u'),
-            '\u{03A9}' | '\u{2126}' => out.push_str("ohm"),
-            'ß' => out.push_str("ss"),
-            'à'..='å' | 'À'..='Å' => out.push('a'),
-            'è'..='ë' | 'È'..='Ë' => out.push('e'),
-            'ì'..='ï' | 'Ì'..='Ï' => out.push('i'),
-            'ò'..='ö' | 'Ò'..='Ö' => out.push('o'),
-            'ù'..='ü' | 'Ù'..='Ü' => out.push('u'),
-            'ç' | 'Ç' => out.push('c'),
-            'ñ' | 'Ñ' => out.push('n'),
-            _ => out.extend(c.to_lowercase()),
-        }
-    }
-    out
-}
-
-/// One folded word: `3v3`/`4k7` to `3.3v`/`4.7k`, trailing decimal
-/// zeros trimmed (`12.000` to `12`), then separators removed.
-fn normalize_folded(w: &str) -> String {
-    let w = infix_value(w).unwrap_or_else(|| w.to_string());
-    let w = trim_decimal_zeros(&w);
-    w.chars().filter(|&c| !is_separator(c)).collect()
-}
-
-fn is_separator(c: char) -> bool {
-    matches!(
-        c,
-        '-' | '_' | '.' | '/' | ',' | '(' | ')' | '+' | '#' | '\'' | '"' | ':' | ';'
-    )
-}
-
-/// `<digits><unit><digit>` as `<digits>.<digit><unit>` (`3v3`, `4k7`,
-/// `2n2`). Only a whole word with a single trailing digit, so MPNs
-/// such as `1n4148` stay as they are.
-fn infix_value(w: &str) -> Option<String> {
-    let b = w.as_bytes();
-    let n = b.len();
-    if n < 3
-        || !b[n - 1].is_ascii_digit()
-        || !matches!(b[n - 2], b'v' | b'k' | b'r' | b'u' | b'n' | b'p' | b'm')
-    {
-        return None;
-    }
-    let head = &w[..n - 2];
-    if !head.bytes().all(|c| c.is_ascii_digit()) {
-        return None;
-    }
-    let unit = if b[n - 2] == b'r' {
-        String::new()
-    } else {
-        (b[n - 2] as char).to_string()
-    };
-    Some(format!("{head}.{}{unit}", b[n - 1] as char))
-}
-
-/// Drops trailing zeros after a decimal point (`12.000mhz` to `12mhz`,
-/// `3.30` to `3.3`).
-fn trim_decimal_zeros(w: &str) -> String {
-    let chars: Vec<char> = w.chars().collect();
-    let mut out = String::with_capacity(w.len());
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c == '.'
-            && i > 0
-            && chars[i - 1].is_ascii_digit()
-            && chars.get(i + 1).is_some_and(|d| d.is_ascii_digit())
-        {
-            let mut j = i + 1;
-            while j < chars.len() && chars[j].is_ascii_digit() {
-                j += 1;
-            }
-            let frac: String = chars[i + 1..j].iter().collect();
-            let frac = frac.trim_end_matches('0');
-            if !frac.is_empty() {
-                out.push('.');
-                out.push_str(frac);
-            }
-            i = j;
-            continue;
-        }
-        out.push(c);
         i += 1;
     }
     out

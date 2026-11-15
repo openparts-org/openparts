@@ -23,6 +23,7 @@ pub mod provenance;
 pub mod rejected;
 pub mod serde_util;
 pub mod source;
+pub mod text;
 
 pub use category::ComponentCategory;
 pub use device::{Device, DeviceOverrides, DeviceRevision, RevisionDetection};

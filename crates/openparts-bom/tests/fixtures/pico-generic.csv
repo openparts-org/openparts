@@ -1,0 +1,17 @@
+﻿Designator;Quantity;Manufacturer;Manufacturer Part Number;Description
+"C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11";11;Samsung Electro-Mechanics;CL10B104KB8NNNC;
+"C12,C13";2;Samsung Electro-Mechanics;CL10A105KB8NNNC;
+"C14,C15";2;Samsung Electro-Mechanics;CL10A106KP8NNNC;
+"C16,C17";2;Samsung Electro-Mechanics;CL10C150JB8NNNC;
+"D1";1;Kingbright Corporation;APT1608SGC;
+"J1";1;Global Connector Technology, Ltd;USB4105-GF-A;
+"J2,J3";2;Würth Elektronik eiSos GmbH & Co. KG;61302011121;
+"R1,R2";2;YAGEO Corporation;RC0603FR-0727RL;
+"R3,R4";2;YAGEO Corporation;RC0603FR-071KL;
+"R5,R6";2;YAGEO Corporation;RC0603FR-075K1L;
+"R7";1;YAGEO Corporation;RC0603FR-07330RL;
+"SW1";1;OMRON Corporation;B3FS-1050;
+"U1";1;Raspberry Pi Ltd;RP2040;
+"U2";1;Winbond Electronics Corporation;W25Q128JVSIQ;
+"U3";1;onsemi (Semiconductor Components Industries, LLC);NCP1117ST33T3G;
+"Y1";1;Abracon LLC;ABM8-272-T3;

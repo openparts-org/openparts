@@ -12,6 +12,43 @@ import {
 
 // Types and methods
 #derive(Eq)
+pub(all) struct Alternative {
+  class : AlternativeClass
+  footprint : FootprintCheck
+  listed_replacement : Bool
+  parameters : Array[ParameterCheck]
+  part : PartBrief
+  pins : PinComparison?
+  score : Int32
+  verdict : Verdict
+}
+pub impl @json.FromJson for Alternative
+
+#derive(Eq, @debug.Debug)
+pub(all) enum AlternativeClass {
+  DropIn
+  FootprintCompatible
+  Functional
+  NearMiss
+  Listed
+}
+pub fn AlternativeClass::all() -> Array[Self]
+pub fn AlternativeClass::wire(Self) -> String
+pub impl @json.FromJson for AlternativeClass
+
+#derive(Eq)
+pub(all) struct AlternativesResponse {
+  alternatives : Array[Alternative]
+  drop_in : Int32
+  footprint_compatible : Int32
+  functional : Int32
+  near_miss : Int32
+  part : PartBrief
+  rejected : Int32
+}
+pub impl @json.FromJson for AlternativesResponse
+
+#derive(Eq)
 pub(all) struct ArtifactsResponse {
   x3mf : String
   footprint_svg : String
@@ -21,6 +58,77 @@ pub(all) struct ArtifactsResponse {
   stl : String
 }
 pub impl @json.FromJson for ArtifactsResponse
+
+#derive(Eq, @debug.Debug)
+pub(all) enum BomFormat {
+  KicadCsv
+  KicadNetlist
+  GenericCsv
+}
+pub fn BomFormat::all() -> Array[Self]
+pub fn BomFormat::wire(Self) -> String
+pub impl @json.FromJson for BomFormat
+
+#derive(Eq)
+pub(all) struct BomIssue {
+  code : IssueCode
+  detail : String?
+  severity : Severity
+}
+pub impl @json.FromJson for BomIssue
+
+#derive(Eq)
+pub(all) struct BomLineResult {
+  alternatives : Array[Alternative]
+  confidence : Double
+  dnp : Bool
+  footprint : String
+  issues : Array[BomIssue]
+  kind : MatchKind
+  manufacturer : String
+  matches : Array[BomMatch]
+  mpn : String
+  quantity : Int32
+  references : Array[String]
+  row : Int32
+  status : LineStatus
+  value : String
+}
+pub impl @json.FromJson for BomLineResult
+
+#derive(Eq)
+pub(all) struct BomMatch {
+  confidence : Double
+  coverage : Coverage
+  footprint : FootprintNameCheck
+  kind : MatchKind
+  part : PartBrief
+}
+pub impl @json.FromJson for BomMatch
+
+#derive(Eq)
+pub(all) struct BomReport {
+  columns : Array[DetectedColumn]
+  format : BomFormat
+  lines : Array[BomLineResult]
+  summary : BomSummary
+}
+pub impl @json.FromJson for BomReport
+
+#derive(Eq)
+pub(all) struct BomSummary {
+  components : Int32
+  exact : Int32
+  lines : Int32
+  normalized : Int32
+  not_found : Int32
+  ok : Int32
+  review : Int32
+  value_footprint : Int32
+  variant : Int32
+  warning : Int32
+}
+pub impl @json.FromJson for BomSummary
 
 #derive(Eq)
 pub(all) struct CatalogFacets {
@@ -92,6 +200,34 @@ pub(all) struct CategoryNode {
 pub impl @json.FromJson for CategoryNode
 
 #derive(Eq, @debug.Debug)
+pub(all) enum CheckStatus {
+  Pass
+  Better
+  Info
+  Unverified
+  Fail
+}
+pub fn CheckStatus::all() -> Array[Self]
+pub fn CheckStatus::wire(Self) -> String
+pub impl @json.FromJson for CheckStatus
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ColumnRole {
+  Reference
+  Value
+  Footprint
+  Datasheet
+  Quantity
+  Mpn
+  Manufacturer
+  Description
+  Dnp
+}
+pub fn ColumnRole::all() -> Array[Self]
+pub fn ColumnRole::wire(Self) -> String
+pub impl @json.FromJson for ColumnRole
+
+#derive(Eq, @debug.Debug)
 pub(all) enum ComponentCategory {
   Microcontroller
   Capacitor
@@ -147,6 +283,23 @@ pub(all) enum ComponentCategory {
 pub fn ComponentCategory::all() -> Array[Self]
 pub fn ComponentCategory::wire(Self) -> String
 pub impl @json.FromJson for ComponentCategory
+
+#derive(Eq)
+pub(all) struct Coverage {
+  expected : Int32
+  expected_present : Int32
+  missing : Array[String]
+  parameters : Int32
+  sources : Int32
+}
+pub impl @json.FromJson for Coverage
+
+#derive(Eq)
+pub(all) struct DetectedColumn {
+  header : String
+  role : ColumnRole
+}
+pub impl @json.FromJson for DetectedColumn
 
 #derive(Eq)
 pub(all) struct Device {
@@ -253,6 +406,60 @@ pub(all) struct FacetValue {
 }
 pub impl @json.FromJson for FacetValue
 
+#derive(Eq)
+pub(all) struct FootprintCheck {
+  difference : FootprintDifference?
+  max_offset_mm : Double?
+  method_ : FootprintMethod
+  same_land_pattern : Bool
+}
+pub impl @json.FromJson for FootprintCheck
+
+#derive(Eq, @debug.Debug)
+pub(all) enum FootprintDifference {
+  SizeCode
+  PadCount
+  PadPosition
+  PadSize
+  Mounting
+  Family
+  LeadCount
+  Pitch
+  BodySize
+}
+pub fn FootprintDifference::all() -> Array[Self]
+pub fn FootprintDifference::wire(Self) -> String
+pub impl @json.FromJson for FootprintDifference
+
+#derive(Eq, @debug.Debug)
+pub(all) enum FootprintMethod {
+  SamePackage
+  SizeCode
+  Pads
+  Dimensions
+}
+pub fn FootprintMethod::all() -> Array[Self]
+pub fn FootprintMethod::wire(Self) -> String
+pub impl @json.FromJson for FootprintMethod
+
+#derive(Eq)
+pub(all) struct FootprintNameCheck {
+  bom : String?
+  part : String
+  status : FootprintStatus
+}
+pub impl @json.FromJson for FootprintNameCheck
+
+#derive(Eq, @debug.Debug)
+pub(all) enum FootprintStatus {
+  Match
+  Mismatch
+  Unknown
+}
+pub fn FootprintStatus::all() -> Array[Self]
+pub fn FootprintStatus::wire(Self) -> String
+pub impl @json.FromJson for FootprintStatus
+
 #derive(Eq, @debug.Debug)
 pub(all) enum GeometryType {
   Parametric
@@ -264,6 +471,28 @@ pub(all) enum GeometryType {
 pub fn GeometryType::all() -> Array[Self]
 pub fn GeometryType::wire(Self) -> String
 pub impl @json.FromJson for GeometryType
+
+#derive(Eq, @debug.Debug)
+pub(all) enum IssueCode {
+  NotFound
+  VariantMatch
+  ValueMatch
+  Ambiguous
+  ManufacturerMismatch
+  LifecycleObsolete
+  LifecycleEol
+  LifecycleNrnd
+  LifecycleUnknown
+  ExistenceRejected
+  ExistenceUnverified
+  NoParameters
+  FootprintMismatch
+  FootprintUnchecked
+  Dnp
+}
+pub fn IssueCode::all() -> Array[Self]
+pub fn IssueCode::wire(Self) -> String
+pub impl @json.FromJson for IssueCode
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Kind {
@@ -298,6 +527,29 @@ pub(all) enum LifecycleStatus {
 pub fn LifecycleStatus::all() -> Array[Self]
 pub fn LifecycleStatus::wire(Self) -> String
 pub impl @json.FromJson for LifecycleStatus
+
+#derive(Eq, @debug.Debug)
+pub(all) enum LineStatus {
+  NotFound
+  Ok
+  Review
+  Warning
+}
+pub fn LineStatus::all() -> Array[Self]
+pub fn LineStatus::wire(Self) -> String
+pub impl @json.FromJson for LineStatus
+
+#derive(Eq, @debug.Debug)
+pub(all) enum MatchKind {
+  Exact
+  Normalized
+  Variant
+  ValueFootprint
+  None
+}
+pub fn MatchKind::all() -> Array[Self]
+pub fn MatchKind::wire(Self) -> String
+pub impl @json.FromJson for MatchKind
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Mounting {
@@ -441,6 +693,54 @@ pub(all) struct PackageTab {
 pub impl @json.FromJson for PackageTab
 
 #derive(Eq)
+pub(all) struct PadDiff {
+  candidate : PinBrief?
+  candidate_pad : String
+  original : PinBrief?
+  pad : String
+  reason : PadReason?
+  status : PadStatus
+}
+pub impl @json.FromJson for PadDiff
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PadReason {
+  FunctionDiffers
+  GroundMismatch
+  PolarityDiffers
+  PolarityUnverified
+  CandidateUsesNcPad
+  CandidateNeedsNcPad
+  UnusedOnCandidate
+  MissingPin
+}
+pub fn PadReason::all() -> Array[Self]
+pub fn PadReason::wire(Self) -> String
+pub impl @json.FromJson for PadReason
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PadStatus {
+  Same
+  Equivalent
+  Note
+  Differs
+}
+pub fn PadStatus::all() -> Array[Self]
+pub fn PadStatus::wire(Self) -> String
+pub impl @json.FromJson for PadStatus
+
+#derive(Eq)
+pub(all) struct ParameterCheck {
+  candidate : String?
+  identity : Bool
+  key : String
+  original : String?
+  rule : RuleKind
+  status : CheckStatus
+}
+pub impl @json.FromJson for ParameterCheck
+
+#derive(Eq)
 pub(all) struct ParameterFacet {
   key : String
   kind : ParameterKind
@@ -490,6 +790,23 @@ pub(all) struct Part {
 pub impl @json.FromJson for Part
 
 #derive(Eq)
+pub(all) struct PartBrief {
+  category : ComponentCategory?
+  device : String
+  existence : ExistenceStatus
+  lead_count : Int32?
+  lifecycle : LifecycleStatus
+  manufacturer : String
+  manufacturer_name : String
+  mpn : String
+  package_ : String
+  package_family : PackageFamily?
+  parameters : Map[String, String]
+  size_code : String?
+}
+pub impl @json.FromJson for PartBrief
+
+#derive(Eq)
 pub(all) struct PartSource {
   cited_by : Array[String]
   source : Source
@@ -514,6 +831,22 @@ pub(all) struct Pin {
   type_ : PinType
 }
 pub impl @json.FromJson for Pin
+
+#derive(Eq)
+pub(all) struct PinBrief {
+  name : String
+  type_ : PinType
+}
+pub impl @json.FromJson for PinBrief
+
+#derive(Eq)
+pub(all) struct PinComparison {
+  compatible : Bool
+  differing : Array[String]
+  noted : Array[String]
+  pads : Array[PadDiff]
+}
+pub impl @json.FromJson for PinComparison
 
 #derive(Eq)
 pub(all) struct PinOverride {
@@ -584,6 +917,27 @@ pub(all) struct RevisionSummary {
 }
 pub impl @json.FromJson for RevisionSummary
 
+#derive(Eq, @debug.Debug)
+pub(all) enum RuleKind {
+  Equal
+  AtLeast
+  AtMost
+  Ranked
+  Informational
+}
+pub fn RuleKind::all() -> Array[Self]
+pub fn RuleKind::wire(Self) -> String
+pub impl @json.FromJson for RuleKind
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Severity {
+  Info
+  Warning
+}
+pub fn Severity::all() -> Array[Self]
+pub fn Severity::wire(Self) -> String
+pub impl @json.FromJson for Severity
+
 #derive(Eq)
 pub(all) struct Source {
   date : String
@@ -598,6 +952,16 @@ pub(all) struct Source {
   url : String
 }
 pub impl @json.FromJson for Source
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Verdict {
+  Meets
+  Unverified
+  Worse
+}
+pub fn Verdict::all() -> Array[Self]
+pub fn Verdict::wire(Self) -> String
+pub impl @json.FromJson for Verdict
 
 // Type aliases
 
