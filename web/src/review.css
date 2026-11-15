@@ -1,0 +1,409 @@
+/* The review workflow (cmd/app/review.mbt) and the datasheet viewer
+   (datasheet.js). Uses global.css's variables. */
+
+/* ---- review status badges ---- */
+.rv-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.rv-unreviewed {
+  color: var(--color-status-neutral);
+  background: var(--color-status-neutral-bg);
+}
+.rv-confirmed {
+  color: var(--color-status-good);
+  background: var(--color-status-good-bg);
+}
+.rv-disputed {
+  color: var(--color-status-bad);
+  background: var(--color-status-bad-bg);
+}
+.rv-dot {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  padding: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+  border: 2px solid currentColor;
+  box-sizing: border-box;
+}
+.rv-dot.rv-unreviewed {
+  background: transparent;
+  border-style: dashed;
+}
+.rv-dot.rv-confirmed {
+  background: var(--color-status-good);
+}
+.rv-dot.rv-disputed {
+  background: var(--color-status-bad);
+}
+
+.fact-link {
+  color: inherit;
+  text-decoration: underline dotted var(--color-accent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.fact-link:hover {
+  color: var(--color-accent);
+}
+
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-status-neutral);
+  border-radius: var(--radius);
+  background: var(--color-bg-subtle);
+}
+.review-summary-done {
+  border-left-color: var(--color-status-good);
+}
+.review-summary-disputed {
+  border-left-color: var(--color-status-bad);
+}
+.review-summary-count {
+  font-weight: 600;
+}
+
+.facts-group h4 {
+  margin: var(--space-3) 0 var(--space-2);
+}
+.facts-table {
+  width: 100%;
+}
+.facts-table td.fact-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the datasheet viewer ---- */
+.ds-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(760px, 100vw);
+  z-index: 1000;
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  transform: translateX(100%);
+  transition: transform 0.18s ease-out;
+  display: flex;
+}
+.ds-drawer.ds-open {
+  transform: none;
+}
+.ds-drawer .ds-panel {
+  flex: 1;
+  padding: var(--space-3);
+}
+.ds-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+.ds-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.ds-title {
+  font-weight: 700;
+  font-size: 1.05em;
+}
+.ds-meta {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+}
+.ds-close {
+  border: none;
+  background: none;
+  font-size: 1.6em;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.ds-value {
+  font-weight: 600;
+}
+.ds-locator q {
+  font-style: normal;
+  background: #fff3a8;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.ds-key,
+.review-key {
+  display: inline-block;
+  min-width: 4.5em;
+  color: var(--color-text-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ds-status {
+  font-size: 0.9em;
+  color: var(--color-text-muted);
+  min-height: 1.3em;
+}
+.ds-status-found {
+  color: var(--color-status-good);
+}
+.ds-status-miss {
+  color: var(--color-status-warn);
+}
+.ds-status-error {
+  color: var(--color-status-bad);
+}
+.ds-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.ds-nav {
+  min-width: 32px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  cursor: pointer;
+  font-size: 1.05em;
+}
+.ds-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ds-page-label {
+  font-variant-numeric: tabular-nums;
+  min-width: 7em;
+  text-align: center;
+}
+.ds-original {
+  margin-left: auto;
+  font-size: 0.9em;
+}
+.ds-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #6b6b73;
+  border-radius: var(--radius);
+  padding: 8px;
+}
+.ds-page {
+  position: relative;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}
+.ds-canvas {
+  display: block;
+}
+.ds-highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ds-hl {
+  position: absolute;
+  border-radius: 3px;
+  mix-blend-mode: multiply;
+}
+.ds-hl-primary {
+  background: rgba(255, 214, 0, 0.55);
+  outline: 2px solid rgba(230, 120, 0, 0.9);
+  animation: ds-pulse 1.2s ease-out 2;
+}
+.ds-hl-secondary {
+  background: rgba(255, 230, 90, 0.35);
+}
+@keyframes ds-pulse {
+  0% {
+    outline-offset: 6px;
+    outline-color: rgba(230, 120, 0, 0);
+  }
+  100% {
+    outline-offset: 0;
+    outline-color: rgba(230, 120, 0, 0.9);
+  }
+}
+
+/* ---- the /review page ---- */
+.review-title {
+  margin-top: 0;
+}
+.review-readonly {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  background: var(--color-status-warn-bg);
+  color: var(--color-status-warn);
+}
+.review-creds,
+.review-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0;
+}
+.review-creds label,
+.review-filters label,
+.review-dispute label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9em;
+  color: var(--color-text-muted);
+}
+.review-creds input,
+.review-filters input,
+.review-filters select,
+.review-dispute input,
+.review-dispute textarea {
+  font: inherit;
+  color: var(--color-text);
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+}
+.review-creds-note {
+  font-size: 0.85em;
+}
+.button-small {
+  padding: 2px 10px;
+  font-size: 0.9em;
+}
+.review-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) 3fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+.review-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-subtle);
+  min-width: 0;
+}
+.review-datasheet {
+  height: calc(100vh - 140px);
+  min-height: 480px;
+  position: sticky;
+  top: 70px;
+  min-width: 0;
+}
+.review-context {
+  font-size: 0.9em;
+}
+.review-field {
+  margin: 0;
+}
+.review-shared {
+  margin: 0;
+  font-size: 0.85em;
+}
+.review-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 1.25em;
+}
+.review-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.review-locator {
+  background: #fff3a8;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.review-history h4 {
+  margin: var(--space-2) 0 0;
+  font-size: 0.9em;
+}
+.review-history ul {
+  margin: var(--space-1) 0;
+  padding-left: 1.2em;
+  font-size: 0.9em;
+}
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.button-confirm {
+  background: var(--color-status-good);
+  border-color: var(--color-status-good);
+  color: #fff;
+}
+.button-dispute {
+  background: var(--color-status-bad);
+  border-color: var(--color-status-bad);
+  color: #fff;
+}
+.button-confirm:disabled,
+.button-dispute:disabled {
+  opacity: 0.5;
+}
+.kbd {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 0.75em;
+  opacity: 0.8;
+}
+.review-dispute {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-status-bad);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+.review-error {
+  color: var(--color-status-bad);
+}
+.review-notice {
+  color: var(--color-status-good);
+}
+.review-keys {
+  font-size: 0.85em;
+}
+
+@media (max-width: 900px) {
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+  .review-datasheet {
+    position: static;
+    height: 70vh;
+  }
+}

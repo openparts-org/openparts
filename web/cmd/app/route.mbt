@@ -10,6 +10,7 @@ enum Route {
   KicadPlugin
   Contributing
   Bom // BOM check (bom.mbt)
+  Reviews(ReviewQuery) // ?category=&manufacturer=&mpn=&status= (review.mbt)
   NotFound
 }
 
@@ -74,6 +75,7 @@ fn route_of(url : @url.Url) -> (Lang, Route) {
         _ => NotFound
       }
     "kicad-plugin" => KicadPlugin
+    "review" => Reviews(review_query_of(params))
     "contributing" => Contributing
     "bom" => Bom
     _ => NotFound
@@ -105,6 +107,7 @@ fn route_path(route : Route) -> String {
     Search(q) => catalog_path(q)
     Part(m, p) => part_path(m, p)
     KicadPlugin => "kicad-plugin"
+    Reviews(q) => review_path(q)
     Contributing => "contributing"
     Bom => "bom"
   }

@@ -798,12 +798,25 @@ impl ModelView {
                     } else {
                         let href = match entry.page {
                             Some(p) => format!("{url}#page={p}"),
-                            None => url,
+                            None => url.clone(),
                         };
+                        // data-op-*: the site's datasheet viewer
+                        // (web/src/datasheet.js) opens the cited page
+                        // with the locator highlighted.
+                        let page = entry.page.map_or(String::new(), |p| p.to_string());
                         format!(
-                            "<a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"{}\">{}</a>",
+                            "<a href=\"{}\" target=\"_blank\" rel=\"noopener noreferrer\" title=\"{}\" \
+                             data-op-source=\"{}\" data-op-page=\"{}\" data-op-locator=\"{}\" \
+                             data-op-url=\"{}\" data-op-title=\"{}\" data-op-label=\"{}\" data-op-value=\"{}\">{}</a>",
                             esc(&href),
                             esc(&l.open_source),
+                            esc(id),
+                            esc(&page),
+                            esc(entry.locator.as_deref().unwrap_or("")),
+                            esc(&url),
+                            esc(&name),
+                            esc(&format!("{} {}", l.get(a.key), a.text)),
+                            esc(&a.text),
                             esc(&name)
                         )
                     };

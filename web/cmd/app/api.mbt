@@ -74,6 +74,9 @@ struct PartData {
   /// Why the CAD artifacts aren't available (e.g. a missing dimension),
   /// when they aren't; the rest of the page still shows.
   artifacts_error : String?
+  /// Every fact's review status (review.mbt); `None` when the server
+  /// didn't answer (the page shows without it).
+  reviews : @api.PartReviews?
 }
 
 ///|
@@ -96,6 +99,11 @@ async fn load_part(
   )
   let sources : Fetch[Array[@api.PartSource]] = get_json(base + "/sources")
   let artifacts : Fetch[@api.ArtifactsResponse] = get_json(base + "/artifacts")
+  let reviews : Fetch[@api.PartReviews] = get_json(base + "/reviews")
+  let reviews = match reviews {
+    Got(r) => Some(r)
+    _ => None
+  }
   match (device, package_, revisions, sources) {
     (Got(device), Got(package_), Got(revisions), Got(sources)) => {
       let artifacts_error = match artifacts {
@@ -103,7 +111,15 @@ async fn load_part(
         Failed(e) => Some(e)
         _ => Some("")
       }
-      Got({ part, device, package_, revisions, sources, artifacts_error, })
+      Got({
+        part,
+        device,
+        package_,
+        revisions,
+        sources,
+        artifacts_error,
+        reviews,
+      })
     }
     (Failed(e), _, _, _)
     | (_, Failed(e), _, _)

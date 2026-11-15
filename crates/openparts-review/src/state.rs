@@ -213,12 +213,18 @@ pub fn display_value(value: Option<&Value>) -> String {
             {
                 match (num("nominal"), num("min"), num("max")) {
                     (Some(n), None, None) => with_unit(number(n)),
-                    (Some(n), lo, hi) => format!(
-                        "{} ({}–{})",
-                        with_unit(number(n)),
-                        lo.map_or(String::new(), number),
-                        hi.map_or(String::new(), number)
-                    ),
+                    (Some(n), Some(lo), Some(hi)) => {
+                        format!("{} ({}–{})", with_unit(number(n)), number(lo), number(hi))
+                    }
+                    (Some(n), None, Some(hi)) => {
+                        format!("{} (≤{})", with_unit(number(n)), number(hi))
+                    }
+                    (Some(n), Some(lo), None) => {
+                        format!("{} (≥{})", with_unit(number(n)), number(lo))
+                    }
+                    (None, Some(lo), Some(hi)) if lo == -hi && hi > 0.0 => {
+                        with_unit(format!("±{}", number(hi)))
+                    }
                     (None, Some(lo), Some(hi)) => {
                         with_unit(format!("{}–{}", number(lo), number(hi)))
                     }
@@ -238,6 +244,9 @@ pub fn display_value(value: Option<&Value>) -> String {
                     .map(|(n, p)| format!("{n} {}", p["name"].as_str().unwrap_or("")))
                     .collect();
                 format!("{} pins: {}", names.len(), names.join(", "))
+            } else if !map.is_empty() && map.values().all(Value::is_object) {
+                // A map of records (silicon revisions): their keys.
+                map.keys().cloned().collect::<Vec<_>>().join(", ")
             } else {
                 v.to_string()
             }
@@ -346,9 +355,10 @@ mod tests {
         let d = |v: Value| display_value(Some(&v));
         assert_eq!(d(json!({"nominal": 3.9, "unit": "mm"})), "3.9 mm");
         assert_eq!(d(json!({"min": 0.9, "max": 1.1, "unit": "V"})), "0.9–1.1 V");
+        assert_eq!(d(json!({"min": -10.0, "max": 10.0, "unit": "%"})), "±10%");
         assert_eq!(
-            d(json!({"min": -10.0, "max": 10.0, "unit": "%"})),
-            "-10–10%"
+            d(json!({"nominal": 0.08, "max": 0.1, "unit": "Ω"})),
+            "0.08 Ω (≤0.1)"
         );
         assert_eq!(d(json!({"max": 2.0, "unit": "A"})), "≤2 A");
         assert_eq!(d(json!({"value": "X7R"})), "X7R");
