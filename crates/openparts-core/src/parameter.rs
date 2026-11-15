@@ -302,7 +302,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num(
         "rated_voltage",
         Q::Voltage,
-        &[C::Capacitor, C::Fuse, C::Resistor],
+        &[C::Capacitor, C::Fuse, C::Resistor, C::Switch],
     ),
     enumerated(
         "dielectric",
@@ -326,7 +326,11 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     )),
     // Inductors
     num("inductance", Q::Inductance, &[C::Inductor]),
-    num("rated_current", Q::Current, &[C::Inductor, C::Fuse]),
+    num(
+        "rated_current",
+        Q::Current,
+        &[C::Inductor, C::Fuse, C::Switch],
+    ),
     num("saturation_current", Q::Current, &[C::Inductor]),
     num("dcr", Q::Resistance, &[C::Inductor]),
     // Crystals
@@ -370,16 +374,16 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("collector_emitter_voltage", Q::Voltage, &[C::Transistor]),
     num("collector_current", Q::Current, &[C::Transistor]),
     // Regulators
-    enumerated("output_type", &["fixed", "adjustable"], &[C::Other]),
-    num("output_voltage", Q::Voltage, &[C::Other]),
-    num("input_voltage_max", Q::Voltage, &[C::Other]),
-    num("output_current", Q::Current, &[C::Other]),
-    num("dropout_voltage", Q::Voltage, &[C::Other]),
+    enumerated("output_type", &["fixed", "adjustable"], &[C::Power]),
+    num("output_voltage", Q::Voltage, &[C::Power]),
+    num("input_voltage_max", Q::Voltage, &[C::Power]),
+    num("output_current", Q::Current, &[C::Power]),
+    num("dropout_voltage", Q::Voltage, &[C::LinearRegulator]),
     // Memory
-    num("capacity", Q::Information, &[C::Other]),
+    num("capacity", Q::Information, &[C::Memory]),
     // Switches
-    num("actuation_force", Q::Force, &[C::Other]),
-    shown_in(num("travel", Q::Length, &[C::Other]), "mm"),
+    num("actuation_force", Q::Force, &[C::Switch]),
+    shown_in(num("travel", Q::Length, &[C::Switch]), "mm"),
 ];
 
 /// The vocabulary entry for `key`.
@@ -771,9 +775,10 @@ pub fn effective_parameters<'a>(
     out
 }
 
-/// Whether `key` is plausible for a device of `category`.
+/// Whether `key` is plausible for a device of `category` (a listed
+/// group covers its subcategories).
 pub fn plausible_for(spec: &ParameterSpec, category: ComponentCategory) -> bool {
-    spec.categories.contains(&category)
+    spec.categories.iter().any(|c| category.is_within(*c))
 }
 
 #[cfg(test)]

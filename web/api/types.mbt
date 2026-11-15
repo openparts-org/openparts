@@ -34,6 +34,7 @@ pub(all) struct CatalogFacets {
   body_length : RangeFacet
   body_width : RangeFacet
   category : Array[FacetValue]
+  category_tree : Array[CategoryNode]
   existence : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
@@ -55,6 +56,7 @@ pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
     body_length: field(obj, "body_length", path),
     body_width: field(obj, "body_width", path),
     category: field(obj, "category", path),
+    category_tree: field(obj, "category_tree", path),
     existence: field(obj, "existence", path),
     lifecycle: field(obj, "lifecycle", path),
     manufacturer: field(obj, "manufacturer", path),
@@ -163,6 +165,31 @@ pub impl @json.FromJson for CatalogResponse with fn from_json(json, path) {
 }
 
 ///|
+/// One node of the category tree facet.
+#derive(Eq)
+pub(all) struct CategoryNode {
+  children : Array[CategoryNode]
+  count : Int32
+  label : String
+  selected : Bool
+  value : String
+}
+
+///|
+pub impl @json.FromJson for CategoryNode with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CategoryNode object"))
+  }
+  {
+    children: field(obj, "children", path),
+    count: field(obj, "count", path),
+    label: field(obj, "label", path),
+    selected: field(obj, "selected", path),
+    value: field(obj, "value", path),
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum ComponentCategory {
   Microcontroller
@@ -176,6 +203,45 @@ pub(all) enum ComponentCategory {
   Fuse
   Connector
   Other
+  Power
+  LinearRegulator
+  SwitchingRegulator
+  BatteryCharger
+  VoltageReference
+  Memory
+  Flash
+  Eeprom
+  Sram
+  Sensor
+  PressureSensor
+  TemperatureSensor
+  Analog
+  OpAmp
+  Comparator
+  CurrentSenseAmplifier
+  Adc
+  Dac
+  Interface
+  IoExpander
+  CanController
+  CanTransceiver
+  Rs485Transceiver
+  Rs232Transceiver
+  Timing
+  Timer
+  Rtc
+  Switch
+  TactSwitch
+  Driver
+  DarlingtonArray
+  Optocoupler
+  PowerSwitch
+  Imu
+  PowerMonitor
+  AnalogSwitch
+  LevelShifter
+  Logic
+  GateDriver
 }
 
 ///|
@@ -193,6 +259,45 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     Fuse => "fuse"
     Connector => "connector"
     Other => "other"
+    Power => "power"
+    LinearRegulator => "linear_regulator"
+    SwitchingRegulator => "switching_regulator"
+    BatteryCharger => "battery_charger"
+    VoltageReference => "voltage_reference"
+    Memory => "memory"
+    Flash => "flash"
+    Eeprom => "eeprom"
+    Sram => "sram"
+    Sensor => "sensor"
+    PressureSensor => "pressure_sensor"
+    TemperatureSensor => "temperature_sensor"
+    Analog => "analog"
+    OpAmp => "op_amp"
+    Comparator => "comparator"
+    CurrentSenseAmplifier => "current_sense_amplifier"
+    Adc => "adc"
+    Dac => "dac"
+    Interface => "interface"
+    IoExpander => "io_expander"
+    CanController => "can_controller"
+    CanTransceiver => "can_transceiver"
+    Rs485Transceiver => "rs485_transceiver"
+    Rs232Transceiver => "rs232_transceiver"
+    Timing => "timing"
+    Timer => "timer"
+    Rtc => "rtc"
+    Switch => "switch"
+    TactSwitch => "tact_switch"
+    Driver => "driver"
+    DarlingtonArray => "darlington_array"
+    Optocoupler => "optocoupler"
+    PowerSwitch => "power_switch"
+    Imu => "imu"
+    PowerMonitor => "power_monitor"
+    AnalogSwitch => "analog_switch"
+    LevelShifter => "level_shifter"
+    Logic => "logic"
+    GateDriver => "gate_driver"
   }
 }
 
@@ -211,6 +316,45 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     Fuse,
     Connector,
     Other,
+    Power,
+    LinearRegulator,
+    SwitchingRegulator,
+    BatteryCharger,
+    VoltageReference,
+    Memory,
+    Flash,
+    Eeprom,
+    Sram,
+    Sensor,
+    PressureSensor,
+    TemperatureSensor,
+    Analog,
+    OpAmp,
+    Comparator,
+    CurrentSenseAmplifier,
+    Adc,
+    Dac,
+    Interface,
+    IoExpander,
+    CanController,
+    CanTransceiver,
+    Rs485Transceiver,
+    Rs232Transceiver,
+    Timing,
+    Timer,
+    Rtc,
+    Switch,
+    TactSwitch,
+    Driver,
+    DarlingtonArray,
+    Optocoupler,
+    PowerSwitch,
+    Imu,
+    PowerMonitor,
+    AnalogSwitch,
+    LevelShifter,
+    Logic,
+    GateDriver,
   ]
 }
 
@@ -228,6 +372,45 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("fuse") => Fuse
     String("connector") => Connector
     String("other") => Other
+    String("power") => Power
+    String("linear_regulator") => LinearRegulator
+    String("switching_regulator") => SwitchingRegulator
+    String("battery_charger") => BatteryCharger
+    String("voltage_reference") => VoltageReference
+    String("memory") => Memory
+    String("flash") => Flash
+    String("eeprom") => Eeprom
+    String("sram") => Sram
+    String("sensor") => Sensor
+    String("pressure_sensor") => PressureSensor
+    String("temperature_sensor") => TemperatureSensor
+    String("analog") => Analog
+    String("op_amp") => OpAmp
+    String("comparator") => Comparator
+    String("current_sense_amplifier") => CurrentSenseAmplifier
+    String("adc") => Adc
+    String("dac") => Dac
+    String("interface") => Interface
+    String("io_expander") => IoExpander
+    String("can_controller") => CanController
+    String("can_transceiver") => CanTransceiver
+    String("rs485_transceiver") => Rs485Transceiver
+    String("rs232_transceiver") => Rs232Transceiver
+    String("timing") => Timing
+    String("timer") => Timer
+    String("rtc") => Rtc
+    String("switch") => Switch
+    String("tact_switch") => TactSwitch
+    String("driver") => Driver
+    String("darlington_array") => DarlingtonArray
+    String("optocoupler") => Optocoupler
+    String("power_switch") => PowerSwitch
+    String("imu") => Imu
+    String("power_monitor") => PowerMonitor
+    String("analog_switch") => AnalogSwitch
+    String("level_shifter") => LevelShifter
+    String("logic") => Logic
+    String("gate_driver") => GateDriver
     _ => raise @json.JsonDecodeError((path, "expected a ComponentCategory"))
   }
 }

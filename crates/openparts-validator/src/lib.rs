@@ -100,6 +100,10 @@ pub const RULES: &[Rule] = &[
         meaning: "warning: a parameter key is unusual for the Device's category (e.g. `capacitance` on a resistor)",
     },
     Rule {
+        id: "category.other",
+        meaning: "warning: the Device's category is `other`; use the most specific node of the category tree (Canonical Data Specification section 14.1) its datasheet supports, keeping `other` for component types the tree doesn't have yet",
+    },
+    Rule {
         id: "tab.invalid",
         meaning: "a package `tab` has an empty number, a trimmed lead that is not a lead position (`1..=lead_count`), or no `dimensions.tab_width`",
     },
@@ -238,6 +242,14 @@ pub fn validate_part(
     ));
 
     out.extend(check_duplicate_pin_names(&device_entity, device));
+    if device.category == openparts_core::ComponentCategory::Other {
+        out.push(Diagnostic::warning(
+            "category.other",
+            &device_entity,
+            Some("/category"),
+            "category is `other`: use a node of the category tree if one fits",
+        ));
+    }
 
     let package_entity = format!("package:{}", package.id);
     out.extend(check_dimension(&package_entity, "/pitch", &package.pitch));

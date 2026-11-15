@@ -358,23 +358,113 @@ fn cited_by_label(lang : Lang, by : String) -> String {
 
 ///|
 fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
-  match (lang, c) {
-    (Ja, Microcontroller) => "マイコン"
-    (Ja, Capacitor) => "コンデンサ"
-    (Ja, Resistor) => "抵抗"
-    (Ja, Inductor) => "インダクタ"
-    (Ja, Diode) => "ダイオード"
-    (Ja, Transistor) => "トランジスタ"
-    (Ja, Led) => "LED"
-    (Ja, Crystal) => "水晶発振子"
-    (Ja, Fuse) => "ヒューズ"
-    (Ja, Connector) => "コネクタ"
-    (Ja, Other) => "その他"
-    (En, Led) => "LED"
-    (En, c) => {
-      let w = c.wire()
-      w[:1].to_owned().to_upper() + w[1:].to_owned()
-    }
+  match lang {
+    Ja =>
+      match c {
+        Microcontroller => "マイコン"
+        Capacitor => "コンデンサ"
+        Resistor => "抵抗"
+        Inductor => "インダクタ"
+        Diode => "ダイオード"
+        Transistor => "トランジスタ"
+        Led => "LED"
+        Crystal => "水晶発振子"
+        Fuse => "ヒューズ"
+        Connector => "コネクタ"
+        Other => "その他"
+        Optocoupler => "フォトカプラ"
+        Power => "電源IC"
+        LinearRegulator => "リニアレギュレータ"
+        SwitchingRegulator => "スイッチングレギュレータ (DC-DC)"
+        BatteryCharger => "充電IC"
+        VoltageReference => "基準電圧IC"
+        PowerSwitch => "電源スイッチ・パワーマルチプレクサ"
+        Memory => "メモリ"
+        Flash => "フラッシュメモリ"
+        Eeprom => "EEPROM"
+        Sram => "SRAM"
+        Sensor => "センサ"
+        PressureSensor => "気圧センサ"
+        Imu => "加速度・IMUセンサ"
+        TemperatureSensor => "温度センサ"
+        Analog => "アナログIC"
+        OpAmp => "オペアンプ"
+        Comparator => "コンパレータ"
+        CurrentSenseAmplifier => "電流センスアンプ"
+        PowerMonitor => "電流・電力モニタ"
+        AnalogSwitch => "アナログスイッチ・マルチプレクサ"
+        Adc => "A/Dコンバータ"
+        Dac => "D/Aコンバータ"
+        Interface => "インターフェースIC"
+        IoExpander => "I/Oエキスパンダ"
+        CanController => "CANコントローラ"
+        CanTransceiver => "CANトランシーバ"
+        Rs485Transceiver => "RS-485トランシーバ"
+        Rs232Transceiver => "RS-232トランシーバ"
+        LevelShifter => "レベルシフタ"
+        Logic => "ロジックIC"
+        Timing => "タイマ・RTC"
+        Timer => "タイマIC"
+        Rtc => "リアルタイムクロック (RTC)"
+        Switch => "スイッチ"
+        TactSwitch => "タクトスイッチ"
+        Driver => "ドライバIC"
+        GateDriver => "ゲートドライバ"
+        DarlingtonArray => "ダーリントンアレイ"
+      }
+    En =>
+      match c {
+        Microcontroller => "Microcontroller"
+        Capacitor => "Capacitor"
+        Resistor => "Resistor"
+        Inductor => "Inductor"
+        Diode => "Diode"
+        Transistor => "Transistor"
+        Led => "LED"
+        Crystal => "Crystal"
+        Fuse => "Fuse"
+        Connector => "Connector"
+        Other => "Other"
+        Optocoupler => "Optocoupler"
+        Power => "Power ICs"
+        LinearRegulator => "Linear regulator"
+        SwitchingRegulator => "Switching regulator (DC-DC)"
+        BatteryCharger => "Battery charger"
+        VoltageReference => "Voltage reference"
+        PowerSwitch => "Power switch / power mux"
+        Memory => "Memory"
+        Flash => "Flash"
+        Eeprom => "EEPROM"
+        Sram => "SRAM"
+        Sensor => "Sensor"
+        PressureSensor => "Pressure sensor"
+        Imu => "IMU / accelerometer"
+        TemperatureSensor => "Temperature sensor"
+        Analog => "Analog ICs"
+        OpAmp => "Op amp"
+        Comparator => "Comparator"
+        CurrentSenseAmplifier => "Current-sense amplifier"
+        PowerMonitor => "Current / power monitor"
+        AnalogSwitch => "Analog switch / multiplexer"
+        Adc => "ADC"
+        Dac => "DAC"
+        Interface => "Interface ICs"
+        IoExpander => "I/O expander"
+        CanController => "CAN controller"
+        CanTransceiver => "CAN transceiver"
+        Rs485Transceiver => "RS-485 transceiver"
+        Rs232Transceiver => "RS-232 transceiver"
+        LevelShifter => "Level shifter"
+        Logic => "Logic ICs"
+        Timing => "Timers & RTC"
+        Timer => "Timer"
+        Rtc => "Real-time clock (RTC)"
+        Switch => "Switch"
+        TactSwitch => "Tact switch"
+        Driver => "Driver ICs"
+        GateDriver => "Gate driver"
+        DarlingtonArray => "Darlington array"
+      }
   }
 }
 
@@ -434,7 +524,7 @@ struct CatalogCopy {
 
 ///|
 let catalog_ja : CatalogCopy = {
-  lead: "カテゴリを選ぶか型番・キーワードで検索し、パッケージ・サイズ・ピン数・ピッチ・寸法で絞り込めます。",
+  lead: "カテゴリを選ぶか型番・キーワードで検索し、電気的特性・パッケージ・サイズ・ピン数・ピッチ・寸法で絞り込めます。",
   browse_all: "すべての部品",
   by_size: "チップサイズから探す",
   by_family: "パッケージから探す",
@@ -483,7 +573,7 @@ let catalog_ja : CatalogCopy = {
 
 ///|
 let catalog_en : CatalogCopy = {
-  lead: "Pick a category or search by part number or keyword, then narrow by package, size, pin count, pitch and dimensions.",
+  lead: "Pick a category or search by part number or keyword, then narrow by electrical parameters, package, size, pin count, pitch and dimensions.",
   browse_all: "All parts",
   by_size: "Browse by chip size",
   by_family: "Browse by package",
@@ -815,20 +905,20 @@ fn viewer_labels(lang : Lang) -> Json {
         "dimensions": "寸法",
         "measure": "計測",
         "reset_view": "視点リセット",
-      "fit": "全体表示",
-      "home": "ホームビュー",
-      "perspective": "透視投影",
-      "orthographic": "平行投影",
-      "view_front": "正面",
-      "view_back": "背面",
-      "view_left": "左側面",
-      "view_right": "右側面",
-      "view_top": "上面",
-      "view_bottom": "下面",
-      "view_iso": "等角",
-      "axis_hint": "軸に近いとX/Y/Zに平行にスナップ・Shift: 自由・X/Y/Zキー: 軸を固定",
-      "axis_locked": "軸固定",
-      "free": "自由",
+        "fit": "全体表示",
+        "home": "ホームビュー",
+        "perspective": "透視投影",
+        "orthographic": "平行投影",
+        "view_front": "正面",
+        "view_back": "背面",
+        "view_left": "左側面",
+        "view_right": "右側面",
+        "view_top": "上面",
+        "view_bottom": "下面",
+        "view_iso": "等角",
+        "axis_hint": "軸に近いとX/Y/Zに平行にスナップ・Shift: 自由・X/Y/Zキー: 軸を固定",
+        "axis_locked": "軸固定",
+        "free": "自由",
         "measure_hint": "2点をクリック(頂点・辺の中点・パッド中心にスナップ)。Escでクリア。",
         "distance": "距離",
         "source": "出典",
@@ -865,20 +955,20 @@ fn viewer_labels(lang : Lang) -> Json {
         "dimensions": "Dimensions",
         "measure": "Measure",
         "reset_view": "Reset view",
-      "fit": "Fit",
-      "home": "Home view",
-      "perspective": "Perspective",
-      "orthographic": "Orthographic",
-      "view_front": "Front",
-      "view_back": "Back",
-      "view_left": "Left",
-      "view_right": "Right",
-      "view_top": "Top",
-      "view_bottom": "Bottom",
-      "view_iso": "Isometric",
-      "axis_hint": "Snaps parallel to X/Y/Z near an axis · Shift: free · X/Y/Z key: lock an axis",
-      "axis_locked": "axis locked",
-      "free": "free",
+        "fit": "Fit",
+        "home": "Home view",
+        "perspective": "Perspective",
+        "orthographic": "Orthographic",
+        "view_front": "Front",
+        "view_back": "Back",
+        "view_left": "Left",
+        "view_right": "Right",
+        "view_top": "Top",
+        "view_bottom": "Bottom",
+        "view_iso": "Isometric",
+        "axis_hint": "Snaps parallel to X/Y/Z near an axis · Shift: free · X/Y/Z key: lock an axis",
+        "axis_locked": "axis locked",
+        "free": "free",
         "measure_hint": "Click two points (snaps to vertices, edge midpoints and pad centres). Esc clears.",
         "distance": "Distance",
         "source": "Source",

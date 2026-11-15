@@ -73,10 +73,15 @@ comment header saying what you verified where.
   EP size for QFN (`QFN48-7x7-P0.5-EP5.15`), the vendor drawing code
   (`SOT96-1`, `C04-052C`, `PW0020A`), a thickness or tab code where it
   varies (`C0805-DH`, `SOT223-...-TabPin4`).
-- `category`: microcontroller, capacitor, resistor, inductor, diode,
-  transistor, led, crystal, fuse, connector, other (it changes how the 3D
-  model is drawn). `document_type` also accepts `product_page`, `pcn`,
-  `eol_notice`, `other`.
+- `category`: the most specific node of the category tree
+  (canonical-data.md 14.1) the device's own datasheet title supports:
+  microcontroller, capacitor, resistor, inductor, diode, transistor, led,
+  crystal, fuse, connector, optocoupler, or a subcategory such as
+  `linear_regulator`, `eeprom`, `imu`, `op_amp`, `can_transceiver`,
+  `logic`, `rtc`, `tact_switch`, `gate_driver`; `other` only when the tree
+  has no fitting node (the validator warns). The passive/discrete values
+  change how the 3D model is drawn. `document_type` also accepts
+  `product_page`, `pcn`, `eol_notice`, `other`.
 
 ## 2. Parts: existence and lifecycle
 

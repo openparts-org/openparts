@@ -472,7 +472,9 @@ own. Only add `parameters` (and their `provenance`) to existing Parts
 and Devices unless the task says otherwise. Don't touch Parts whose
 data is held for a decision (the task names them).
 
-**1. Pick the key set from the Device's category.**
+**1. Pick the key set from the Device's category** (Canonical Data
+Specification section 14.1; a fixed regulator's `output_voltage` is per
+MPN, so it goes on the Part).
 
 | Category | Keys to look for |
 |---|---|
@@ -484,9 +486,9 @@ data is held for a decision (the task names them).
 | LED | `color`, `wavelength`, `forward_voltage`, `forward_current` |
 | transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
 | fuse | `rated_current`, `rated_voltage` |
-| regulators | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`, `dropout_voltage` |
-| memory | `capacity` |
-| switches | `actuation_force`, `travel` |
+| `linear_regulator`, `switching_regulator` (group `power`) | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`; `dropout_voltage` (linear only) |
+| `flash`, `eeprom`, `sram` (group `memory`) | `capacity` (on the Device when all its Parts share it) |
+| `tact_switch` (group `switch`) | `actuation_force`, `travel`, `rated_voltage`, `rated_current` |
 
 No other keys exist. Don't invent one; propose it in the PR text
 instead.

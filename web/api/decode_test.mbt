@@ -1025,6 +1025,30 @@ test "decode CatalogResponse" {
     #|    "selected": false
     #|   }
     #|  ],
+    #|  "category_tree": [
+    #|   {
+    #|    "value": "capacitor",
+    #|    "label": "Capacitor",
+    #|    "count": 7,
+    #|    "selected": true,
+    #|    "children": []
+    #|   },
+    #|   {
+    #|    "value": "power",
+    #|    "label": "Power",
+    #|    "count": 2,
+    #|    "selected": false,
+    #|    "children": [
+    #|     {
+    #|      "value": "linear_regulator",
+    #|      "label": "Linear regulator",
+    #|      "count": 2,
+    #|      "selected": false,
+    #|      "children": []
+    #|     }
+    #|    ]
+    #|   }
+    #|  ],
     #|  "manufacturer": [
     #|   {
     #|    "value": "samsung",
@@ -1167,6 +1191,7 @@ test "decode CatalogResponse" {
   let json = @json.parse(text)
   let r : @api.CatalogResponse = @json.from_json(json)
   assert_eq(r.facets.parameters.length(), 2)
+  assert_eq(r.facets.category_tree[1].children[0].value, "linear_regulator")
   assert_eq(r.facets.parameters[1].kind, @api.ParameterKind::Enumerated)
   assert_eq(
     r.items[0].parameters.get("capacitance").map(p => p.label),

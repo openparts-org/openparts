@@ -120,7 +120,8 @@ async fn search(
         })
         .filter(|p| match params.category {
             None => true,
-            Some(wanted) => p.category == Some(wanted),
+            // A group (`power`) takes in its subcategories.
+            Some(wanted) => p.category.is_some_and(|c| c.is_within(wanted)),
         })
         .collect();
     Json(results)

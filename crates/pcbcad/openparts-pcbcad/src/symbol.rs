@@ -286,7 +286,9 @@ pub fn reference_prefix(category: openparts_core::ComponentCategory) -> &'static
         C::Crystal => "Y",
         C::Fuse => "F",
         C::Connector => "J",
-        C::Microcontroller | C::Other => "U",
+        C::Switch | C::TactSwitch => "SW",
+        // Integrated circuits, modules, optocouplers.
+        _ => "U",
     }
 }
 

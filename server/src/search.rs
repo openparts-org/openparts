@@ -189,7 +189,13 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
         if let Some(f) = &d.family {
             add(Field::Device, f);
         }
-        add(Field::Category, category_name(d.category));
+        // The category and its group: a linear regulator is also found
+        // as `power`.
+        let mut c = Some(d.category);
+        while let Some(cat) = c {
+            add(Field::Category, category_name(cat));
+            c = cat.parent();
+        }
         for pin in d.pins.values() {
             add(Field::Pin, &pin.name);
         }
@@ -253,19 +259,61 @@ fn parameter_terms(n: &Normalized, spec: &ParameterSpec) -> Vec<String> {
     out
 }
 
+/// The words a category is found by (the query side rewrites Japanese
+/// and shorthand terms to these).
 fn category_name(c: ComponentCategory) -> &'static str {
+    use ComponentCategory as C;
     match c {
-        ComponentCategory::Microcontroller => "microcontroller mcu",
-        ComponentCategory::Capacitor => "capacitor",
-        ComponentCategory::Resistor => "resistor",
-        ComponentCategory::Inductor => "inductor",
-        ComponentCategory::Diode => "diode",
-        ComponentCategory::Transistor => "transistor",
-        ComponentCategory::Led => "led",
-        ComponentCategory::Crystal => "crystal",
-        ComponentCategory::Fuse => "fuse",
-        ComponentCategory::Connector => "connector",
-        ComponentCategory::Other => "other",
+        C::Microcontroller => "microcontroller mcu",
+        C::Capacitor => "capacitor",
+        C::Resistor => "resistor",
+        C::Inductor => "inductor",
+        C::Diode => "diode",
+        C::Transistor => "transistor",
+        C::Led => "led",
+        C::Crystal => "crystal",
+        C::Fuse => "fuse",
+        C::Connector => "connector",
+        C::Other => "other",
+        C::Optocoupler => "optocoupler photocoupler optoisolator",
+        C::Power => "power",
+        C::LinearRegulator => "linear_regulator regulator ldo",
+        C::SwitchingRegulator => "switching_regulator regulator dc-dc converter buck boost",
+        C::BatteryCharger => "battery_charger charger",
+        C::VoltageReference => "voltage_reference reference",
+        C::PowerSwitch => "power_switch load_switch power_mux",
+        C::Memory => "memory",
+        C::Flash => "flash",
+        C::Eeprom => "eeprom",
+        C::Sram => "sram ram",
+        C::Sensor => "sensor",
+        C::PressureSensor => "pressure_sensor pressure barometer",
+        C::Imu => "imu accelerometer gyroscope motion",
+        C::TemperatureSensor => "temperature_sensor temperature",
+        C::Analog => "analog",
+        C::OpAmp => "op_amp opamp operational_amplifier amplifier",
+        C::Comparator => "comparator",
+        C::CurrentSenseAmplifier => "current_sense_amplifier current_sense amplifier",
+        C::PowerMonitor => "power_monitor current_monitor current_sense",
+        C::AnalogSwitch => "analog_switch multiplexer mux",
+        C::Adc => "adc a/d_converter",
+        C::Dac => "dac d/a_converter",
+        C::Interface => "interface",
+        C::IoExpander => "io_expander gpio_expander expander",
+        C::CanController => "can_controller can",
+        C::CanTransceiver => "can_transceiver can transceiver",
+        C::Rs485Transceiver => "rs485_transceiver rs485 transceiver",
+        C::Rs232Transceiver => "rs232_transceiver rs232 transceiver",
+        C::LevelShifter => "level_shifter level_translator",
+        C::Logic => "logic",
+        C::Timing => "timing",
+        C::Timer => "timer",
+        C::Rtc => "rtc real_time_clock",
+        C::Switch => "switch",
+        C::TactSwitch => "tact_switch tactile_switch",
+        C::Driver => "driver",
+        C::GateDriver => "gate_driver mosfet_driver",
+        C::DarlingtonArray => "darlington_array darlington",
     }
 }
 
@@ -296,6 +344,60 @@ pub(crate) fn chip_codes(l: f64, w: f64) -> &'static [&'static str] {
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
+    ("リアルタイムクロック", "rtc"),
+    ("スイッチングレギュレータ", "switching_regulator"),
+    ("スイッチングレギュレーター", "switching_regulator"),
+    ("リニアレギュレータ", "linear_regulator"),
+    ("リニアレギュレーター", "linear_regulator"),
+    ("三端子レギュレータ", "linear_regulator"),
+    ("三端子レギュレーター", "linear_regulator"),
+    ("オペアンプ", "op_amp"),
+    ("演算増幅器", "op_amp"),
+    ("フォトカプラ", "optocoupler"),
+    ("フォトカプラー", "optocoupler"),
+    ("温度センサー", "temperature_sensor"),
+    ("温度センサ", "temperature_sensor"),
+    ("圧力センサー", "pressure_sensor"),
+    ("圧力センサ", "pressure_sensor"),
+    ("気圧センサー", "pressure_sensor"),
+    ("気圧センサ", "pressure_sensor"),
+    ("加速度センサー", "imu"),
+    ("加速度センサ", "imu"),
+    ("ジャイロセンサ", "imu"),
+    ("ジャイロ", "imu"),
+    ("電流センスアンプ", "current_sense"),
+    ("基準電圧源", "voltage_reference"),
+    ("基準電圧", "voltage_reference"),
+    ("レベルシフタ", "level_shifter"),
+    ("レベル変換", "level_shifter"),
+    ("トランシーバー", "transceiver"),
+    ("トランシーバ", "transceiver"),
+    ("マルチプレクサ", "multiplexer"),
+    ("ゲートドライバ", "gate_driver"),
+    ("エキスパンダ", "expander"),
+    ("コンパレーター", "comparator"),
+    ("コンパレータ", "comparator"),
+    ("レギュレーター", "regulator"),
+    ("レギュレータ", "regulator"),
+    ("充電IC", "charger"),
+    ("充電", "charger"),
+    ("フラッシュメモリ", "flash"),
+    ("フラッシュ", "flash"),
+    ("メモリー", "memory"),
+    ("メモリ", "memory"),
+    ("センサー", "sensor"),
+    ("センサ", "sensor"),
+    ("加速度", "imu"),
+    ("気圧", "pressure"),
+    ("圧力", "pressure"),
+    ("ロジックIC", "logic"),
+    ("ロジック", "logic"),
+    ("タイマー", "timer"),
+    ("タイマ", "timer"),
+    ("ドライバー", "driver"),
+    ("ドライバ", "driver"),
+    ("電源IC", "power"),
+    ("電源", "power"),
     ("積層セラミックコンデンサ", "capacitor"),
     ("電解コンデンサ", "capacitor"),
     ("タンタルコンデンサ", "capacitor"),
@@ -358,6 +460,11 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("typec", "usbc"),
     ("usbtypec", "usbc"),
     ("pinheader", "header"),
+    ("dcdc", "dc-dc"),
+    ("opamp", "op_amp"),
+    ("ram", "sram"),
+    ("tact", "tact_switch"),
+    ("accel", "accelerometer"),
 ];
 
 /// The query as words, each with its alternative spellings (a word
@@ -566,6 +673,53 @@ mod tests {
         assert!(hit(&res, "10k") && hit(&res, "10kΩ") && hit(&res, "10 kohm"));
         let res = terms(4.7, "kohm", "resistance");
         assert!(hit(&res, "4k7") && hit(&res, "4.7k"));
+    }
+
+    #[test]
+    fn category_terms_cover_the_japanese_names() {
+        let indexed = |c: ComponentCategory| {
+            let mut terms = vec![Term::new(category_name(c))];
+            if let Some(p) = c.parent() {
+                terms.push(Term::new(category_name(p)));
+            }
+            terms
+        };
+        let hit = |c: ComponentCategory, q: &str| {
+            let terms = indexed(c);
+            query_words(q)
+                .iter()
+                .all(|alts| alts.iter().any(|w| terms.iter().any(|t| t.matches(w))))
+        };
+        use ComponentCategory as C;
+        for (q, c) in [
+            ("スイッチ", C::TactSwitch),
+            ("タクトスイッチ", C::TactSwitch),
+            ("レギュレータ", C::LinearRegulator),
+            ("レギュレータ", C::SwitchingRegulator),
+            ("LDO", C::LinearRegulator),
+            ("DC-DC", C::SwitchingRegulator),
+            ("dcdc", C::SwitchingRegulator),
+            ("フラッシュ", C::Flash),
+            ("EEPROM", C::Eeprom),
+            ("センサ", C::Imu),
+            ("加速度", C::Imu),
+            ("気圧", C::PressureSensor),
+            ("温度センサ", C::TemperatureSensor),
+            ("オペアンプ", C::OpAmp),
+            ("コンパレータ", C::Comparator),
+            ("ADC", C::Adc),
+            ("DAC", C::Dac),
+            ("ロジック", C::Logic),
+            ("タイマ", C::Timer),
+            ("RTC", C::Rtc),
+            ("電源", C::BatteryCharger),
+            ("CAN トランシーバ", C::CanTransceiver),
+        ] {
+            assert!(hit(c, q), "{q} should find {c:?}");
+        }
+        assert!(!hit(C::Flash, "温度センサ"));
+        assert!(!hit(C::LinearRegulator, "DC-DC"));
+        assert!(!hit(C::Comparator, "オペアンプ"));
     }
 
     #[test]

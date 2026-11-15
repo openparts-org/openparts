@@ -28,6 +28,7 @@ pub(all) struct CatalogFacets {
   body_length : RangeFacet
   body_width : RangeFacet
   category : Array[FacetValue]
+  category_tree : Array[CategoryNode]
   existence : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
@@ -80,6 +81,16 @@ pub(all) struct CatalogResponse {
 }
 pub impl @json.FromJson for CatalogResponse
 
+#derive(Eq)
+pub(all) struct CategoryNode {
+  children : Array[CategoryNode]
+  count : Int32
+  label : String
+  selected : Bool
+  value : String
+}
+pub impl @json.FromJson for CategoryNode
+
 #derive(Eq, @debug.Debug)
 pub(all) enum ComponentCategory {
   Microcontroller
@@ -93,6 +104,45 @@ pub(all) enum ComponentCategory {
   Fuse
   Connector
   Other
+  Power
+  LinearRegulator
+  SwitchingRegulator
+  BatteryCharger
+  VoltageReference
+  Memory
+  Flash
+  Eeprom
+  Sram
+  Sensor
+  PressureSensor
+  TemperatureSensor
+  Analog
+  OpAmp
+  Comparator
+  CurrentSenseAmplifier
+  Adc
+  Dac
+  Interface
+  IoExpander
+  CanController
+  CanTransceiver
+  Rs485Transceiver
+  Rs232Transceiver
+  Timing
+  Timer
+  Rtc
+  Switch
+  TactSwitch
+  Driver
+  DarlingtonArray
+  Optocoupler
+  PowerSwitch
+  Imu
+  PowerMonitor
+  AnalogSwitch
+  LevelShifter
+  Logic
+  GateDriver
 }
 pub fn ComponentCategory::all() -> Array[Self]
 pub fn ComponentCategory::wire(Self) -> String

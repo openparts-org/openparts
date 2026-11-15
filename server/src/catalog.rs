@@ -151,6 +151,21 @@ pub struct FacetValue {
     pub selected: bool,
 }
 
+/// One node of the category tree facet.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct CategoryNode {
+    /// The category value (`power`, `linear_regulator`).
+    pub value: String,
+    /// English display name; clients may localise by `value`.
+    pub label: String,
+    /// Parts in this node or its subcategories under every other filter.
+    pub count: usize,
+    pub selected: bool,
+    /// Subcategories with parts (or picked), in catalog order.
+    pub children: Vec<CategoryNode>,
+}
+
 /// The span of a dimension over the parts that pass every other
 /// filter (`None` when none of them states it).
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -163,7 +178,13 @@ pub struct RangeFacet {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize)]
 pub struct CatalogFacets {
+    /// Each part counted under its own category (the most specific
+    /// node its Device states).
     pub category: Vec<FacetValue>,
+    /// The category tree: top-level nodes in catalog order, each
+    /// counting its whole subtree, with its subcategories. A picked
+    /// group (`category=power`) selects its subcategories too.
+    pub category_tree: Vec<CategoryNode>,
     pub manufacturer: Vec<FacetValue>,
     pub package_family: Vec<FacetValue>,
     /// Chip size codes, smallest first; `value` is the imperial code.
@@ -627,10 +648,9 @@ impl CatalogIndex {
             let mut keys: [Option<String>; 9] = Default::default();
             for (i, g) in GROUPS.iter().enumerate() {
                 let opt = match g {
-                    Group::Category => category.map(|c| {
-                        let w = wire(&c);
-                        (w.clone(), title_case(&w), 0.0)
-                    }),
+                    Group::Category => {
+                        category.map(|c| (c.name().to_string(), category_label(c), 0.0))
+                    }
                     Group::Manufacturer => {
                         Some((p.manufacturer.0.clone(), manufacturer_name.clone(), 0.0))
                     }
@@ -700,8 +720,16 @@ impl CatalogIndex {
                 let mut pass = vec![true; n];
                 for g in 0..GROUPS.len() {
                     let wanted = &q.filters[g];
-                    pass[g] =
-                        wanted.is_empty() || f.keys[g].as_ref().is_some_and(|k| wanted.contains(k));
+                    pass[g] = wanted.is_empty()
+                        || if GROUPS[g] == Group::Category {
+                            // A picked group takes in its subcategories.
+                            f.item.category.is_some_and(|c| {
+                                wanted.contains(c.name())
+                                    || c.parent().is_some_and(|p| wanted.contains(p.name()))
+                            })
+                        } else {
+                            f.keys[g].as_ref().is_some_and(|k| wanted.contains(k))
+                        };
                 }
                 for a in 0..AXES.len() {
                     let (min, max) = q.ranges[a];
@@ -782,6 +810,45 @@ impl CatalogIndex {
                 r
             })
             .collect();
+        let category_tree = {
+            let g = GROUPS
+                .iter()
+                .position(|g| *g == Group::Category)
+                .unwrap_or(0);
+            let mut own: BTreeMap<ComponentCategory, usize> = BTreeMap::new();
+            for (i, _, pass) in &passes {
+                if all_but(pass, Some(g)) {
+                    if let Some(c) = self.facts[*i].item.category {
+                        *own.entry(c).or_default() += 1;
+                    }
+                }
+            }
+            let picked = |c: ComponentCategory| q.filters[g].contains(c.name());
+            let node = |c: ComponentCategory, children: Vec<CategoryNode>| CategoryNode {
+                value: c.name().to_string(),
+                label: category_label(c),
+                count: own.get(&c).copied().unwrap_or(0)
+                    + children.iter().map(|n| n.count).sum::<usize>(),
+                selected: picked(c),
+                children,
+            };
+            let shown = |n: &CategoryNode| {
+                n.count > 0 || n.selected || n.children.iter().any(|c| c.selected)
+            };
+            ComponentCategory::ALL
+                .iter()
+                .filter(|c| c.parent().is_none())
+                .map(|&root| {
+                    let children = root
+                        .children()
+                        .map(|c| node(c, vec![]))
+                        .filter(shown)
+                        .collect();
+                    node(root, children)
+                })
+                .filter(shown)
+                .collect()
+        };
         let parameters = PARAMETERS
             .iter()
             .filter_map(|spec| {
@@ -909,6 +976,7 @@ impl CatalogIndex {
             items,
             facets: CatalogFacets {
                 category: next(),
+                category_tree,
                 manufacturer: next(),
                 package_family: next(),
                 size: next(),
@@ -1077,6 +1145,28 @@ fn title_case(s: &str) -> String {
         .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
 }
 
+/// A category's English display name.
+fn category_label(c: ComponentCategory) -> String {
+    use ComponentCategory as C;
+    match c {
+        C::Microcontroller => "Microcontroller".into(),
+        C::Led => "LED".into(),
+        C::Imu => "IMU / accelerometer".into(),
+        C::Sram => "SRAM".into(),
+        C::Eeprom => "EEPROM".into(),
+        C::Adc => "ADC".into(),
+        C::Dac => "DAC".into(),
+        C::Rtc => "RTC".into(),
+        C::OpAmp => "Op amp".into(),
+        C::IoExpander => "I/O expander".into(),
+        C::CanController => "CAN controller".into(),
+        C::CanTransceiver => "CAN transceiver".into(),
+        C::Rs485Transceiver => "RS-485 transceiver".into(),
+        C::Rs232Transceiver => "RS-232 transceiver".into(),
+        other => title_case(other.name()),
+    }
+}
+
 fn family_label(f: PackageFamily) -> String {
     use PackageFamily as F;
     match f {
@@ -1214,6 +1304,13 @@ mod tests {
                 .and_then(|s| s.split(']').next())
                 .is_some_and(|s| s.contains(&format!("\"{}\"", spec.key)));
             assert_eq!(enumerated, listed, "enum_param_keys and {}", spec.key);
+        }
+    }
+
+    #[test]
+    fn category_names_are_the_wire_names() {
+        for c in ComponentCategory::ALL {
+            assert_eq!(wire(c), c.name());
         }
     }
 

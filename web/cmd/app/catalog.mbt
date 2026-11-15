@@ -62,9 +62,39 @@ fn param_bound(pick : String) -> (String, String)? {
 }
 
 ///|
-/// The parameter columns of the results table for one picked category.
-fn param_columns(category : String) -> Array[String] {
+/// The top-level category of `value` in the tree (itself if top-level).
+fn category_root(tree : Array[@api.CategoryNode], value : String) -> String {
+  for root in tree {
+    if root.value == value {
+      return value
+    }
+    for child in root.children {
+      if child.value == value {
+        return root.value
+      }
+    }
+  }
+  value
+}
+
+///|
+/// The parameter columns of the results table for one picked category
+/// (`root` is its top-level category).
+fn param_columns(category : String, root~ : String = category) -> Array[String] {
   match category {
+    "linear_regulator" =>
+      ["output_type", "output_voltage", "output_current", "dropout_voltage"]
+    _ => param_columns_of_root(if root.is_empty() { category } else { root })
+  }
+}
+
+///|
+fn param_columns_of_root(category : String) -> Array[String] {
+  match category {
+    "power" =>
+      ["output_type", "output_voltage", "output_current", "input_voltage_max"]
+    "memory" => ["capacity"]
+    "switch" => ["actuation_force", "travel", "rated_voltage", "rated_current"]
     "capacitor" => ["capacitance", "rated_voltage", "dielectric", "tolerance"]
     "resistor" =>
       ["resistance", "tolerance", "power_rating", "temperature_coefficient"]
@@ -549,7 +579,8 @@ fn package_name(id : String) -> String {
 // ---- views ----
 
 ///|
-/// Reference designator shown on a category tile.
+/// The short mark on a top-level category tile (a reference designator
+/// where there is one).
 fn category_glyph(c : @api.ComponentCategory) -> String {
   match c {
     Microcontroller => "U"
@@ -562,24 +593,50 @@ fn category_glyph(c : @api.ComponentCategory) -> String {
     Led => "LED"
     Inductor => "L"
     Fuse => "F"
+    Optocoupler => "OPT"
+    Switch | TactSwitch => "SW"
+    Power
+    | LinearRegulator
+    | SwitchingRegulator
+    | BatteryCharger
+    | VoltageReference
+    | PowerSwitch => "PWR"
+    Memory | Flash | Eeprom | Sram => "MEM"
+    Sensor | PressureSensor | Imu | TemperatureSensor => "SNS"
+    Analog
+    | OpAmp
+    | Comparator
+    | CurrentSenseAmplifier
+    | PowerMonitor
+    | AnalogSwitch
+    | Adc
+    | Dac => "AMP"
+    Interface
+    | IoExpander
+    | CanController
+    | CanTransceiver
+    | Rs485Transceiver
+    | Rs232Transceiver
+    | LevelShifter => "I/F"
+    Logic => "74"
+    Timing | Timer | Rtc => "TMR"
+    Driver | GateDriver | DarlingtonArray => "DRV"
     Other => "IC"
   }
 }
 
 ///|
-let tile_order : Array[@api.ComponentCategory] = [
-  Microcontroller,
-  Capacitor,
-  Resistor,
-  Connector,
-  Crystal,
-  Diode,
-  Transistor,
-  Led,
-  Inductor,
-  Fuse,
-  Other,
-]
+/// A category value's label in `lang` (the server's if unknown here).
+fn category_value_label(
+  lang : Lang,
+  value : String,
+  fallback : String,
+) -> String {
+  match category_of(value) {
+    Some(c) => category_label(lang, c)
+    None => fallback
+  }
+}
 
 ///|
 fn catalog_view(model : Model, emit : Emit[Msg]) -> Html {
@@ -623,15 +680,6 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
       head + [fetch_message(lang, model.catalog.results)],
     )
   }
-  let count = (value : String) => {
-    let mut n = 0
-    for v in r.facets.category {
-      if v.value == value {
-        n = v.count
-      }
-    }
-    n
-  }
   let tile = (path : String, glyph : String, name : String, n : Int32) => {
     a(class="catalog-tile", href=href(lang, path), [
       span(class="catalog-tile-glyph", glyph),
@@ -639,23 +687,43 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
       span(class="catalog-tile-count", parts_count(lang, n)),
     ])
   }
+  let pick_path = (value : String) => {
+    catalog_path({ ..CatalogQuery::empty(), picks: [("category", value)], })
+  }
+  // One tile per top-level category; a group lists its subcategories.
+  // Plain categories first, then the (taller) groups.
   let tiles = []
-  for cat in tile_order {
-    let n = count(cat.wire())
-    if n > 0 {
-      tiles.push(
-        tile(
-          catalog_path({
-            ..CatalogQuery::empty(),
-            picks: [("category", cat.wire())],
-          }),
-          category_glyph(cat),
-          category_label(lang, cat),
-          n,
-        ),
+  let groups = []
+  for node in r.facets.category_tree {
+    guard node.count > 0 else { continue }
+    let glyph = match category_of(node.value) {
+      Some(c) => category_glyph(c)
+      None => "IC"
+    }
+    let main = tile(
+      pick_path(node.value),
+      glyph,
+      category_value_label(lang, node.value, node.label),
+      node.count,
+    )
+    if node.children.is_empty() {
+      tiles.push(main)
+    } else {
+      let subs = node.children.map(child => {
+        a(class="catalog-tile-sub", href=href(lang, pick_path(child.value)), [
+          text(category_value_label(lang, child.value, child.label)),
+          span(class="chip-count", child.count.to_string()),
+        ])
+      })
+      groups.push(
+        div(class="catalog-tile-group", [
+          main,
+          div(class="catalog-tile-subs", subs),
+        ]),
       )
     }
   }
+  tiles.append(groups)
   tiles.push(
     tile(
       catalog_path({ ..CatalogQuery::empty(), all: true, }),
@@ -843,6 +911,76 @@ fn facet_range(
 }
 
 ///|
+/// The category facet as a tree: top-level categories, each with its
+/// subcategories while it or one of them is picked (or it is the only
+/// one with parts).
+fn category_tree_checks(
+  lang : Lang,
+  s : CatalogState,
+  emit : Emit[Msg],
+  f : @api.CatalogFacets,
+) -> Array[Html] {
+  let k = lang.catalog()
+  let expanded = s.folded.contains("more:category")
+  let limit = 14
+  let row = (node : @api.CategoryNode, child : Bool) => {
+    @html.label(
+      class=match (child, node.count) {
+        (true, 0) => "facet-option facet-child facet-empty"
+        (true, _) => "facet-option facet-child"
+        (false, 0) => "facet-option facet-empty"
+        _ => "facet-option"
+      },
+      [
+        input(
+          input_type=Checkbox,
+          checked=node.selected,
+          on_change=emit.map(_ => Catalog(CatToggle("category", node.value))),
+        ),
+        span(
+          class="facet-label",
+          category_value_label(lang, node.value, node.label),
+        ),
+        span(class="facet-count", node.count.to_string()),
+      ],
+    )
+  }
+  let with_parts = f.category_tree.filter(n => n.count > 0).length()
+  let out = []
+  let mut hidden = 0
+  for i, node in f.category_tree {
+    let open = node.selected ||
+      node.children.iter().any(c => c.selected) ||
+      with_parts == 1
+    if !expanded && i >= limit && !open {
+      hidden += 1
+      continue
+    }
+    out.push(row(node, false))
+    if open {
+      for child in node.children {
+        out.push(row(child, true))
+      }
+    }
+  }
+  if hidden > 0 || (expanded && f.category_tree.length() > limit) {
+    out.push(
+      button(
+        type_="button",
+        class="facet-more",
+        on_click=emit(Catalog(CatFold("more:category"))),
+        if expanded {
+          k.show_less
+        } else {
+          show_more(lang, hidden)
+        },
+      ),
+    )
+  }
+  out
+}
+
+///|
 /// A parameter's range: text inputs, since values are typed with unit
 /// prefixes (`10n`, `0.1u`, `4k7`).
 fn param_range(
@@ -903,9 +1041,7 @@ fn sidebar(
     facet_group(s, emit, key, group_title(k, key), body)
   }
   let out = []
-  out.push(
-    group("category", facet_checks(lang, s, emit, "category", f.category, 12)),
-  )
+  out.push(group("category", category_tree_checks(lang, s, emit, f)))
   for pf in f.parameters {
     out.push(param_facet(lang, s, emit, pf))
   }
@@ -1046,11 +1182,19 @@ fn results_table(
   lang : Lang,
   q : CatalogQuery,
   emit : Emit[Msg],
-  items : Array[@api.CatalogItem],
+  r : @api.CatalogResponse,
 ) -> Html {
+  let items = r.items
   let k = lang.catalog()
-  // One picked category: its column would only repeat it.
-  let category = q.values("category").length() != 1
+  // One picked category: its column would only repeat it (unless it
+  // is a group, whose rows show their subcategories).
+  let category = match q.values("category") {
+    [one] =>
+      r.facets.category_tree
+      .iter()
+      .any(n => n.value == one && !n.children.is_empty())
+    _ => true
+  }
   let head = (label : String, sort : String) => {
     if sort.is_empty() {
       return th(scope=Col, label)
@@ -1084,8 +1228,13 @@ fn results_table(
     heads.push(head(k.c_category, ""))
   }
   // One picked category: its key parameters as columns.
+  // ...those some row on this page states.
   let params = match q.values("category") {
-    [one] => param_columns(one)
+    [one] =>
+      param_columns(one, root=category_root(r.facets.category_tree, one)).filter(key => {
+          items.iter().any(it => it.parameters.contains(key))
+        },
+      )
     _ => []
   }
   for key in params {
@@ -1163,7 +1312,11 @@ fn catalog_results_view(model : Model, emit : Emit[Msg], box : Html) -> Html {
   ]
   // The picked category's numeric parameters sort too.
   if q.values("category") is [one] {
-    for key in param_columns(one) {
+    let root = match response {
+      Some(r) => category_root(r.facets.category_tree, one)
+      None => one
+    }
+    for key in param_columns(one, root~) {
       if !enum_param_keys.contains(key) {
         sorts.push((key, param_name(lang, key)))
       }
@@ -1271,7 +1424,7 @@ fn catalog_results_view(model : Model, emit : Emit[Msg], box : Html) -> Html {
   )
   let main_body = match s.results {
     Got(r) if r.items.is_empty() => [p(class="text-muted", c.no_results)]
-    Got(r) => [results_table(lang, q, emit, r.items), pager(lang, emit, r)]
+    Got(r) => [results_table(lang, q, emit, r), pager(lang, emit, r)]
     other => [fetch_message(lang, other)]
   }
   div(class=if s.loading { "catalog catalog-loading" } else { "catalog" }, [

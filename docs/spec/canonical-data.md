@@ -379,14 +379,18 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
 | `collector_emitter_voltage` | voltage (Vceo) | transistor |
 | `collector_current` | current (Ic) | transistor |
-| `output_type` | `fixed` `adjustable` | regulators |
-| `output_voltage` | voltage | regulators |
-| `input_voltage_max` | voltage | regulators |
-| `output_current` | current (max) | regulators |
-| `dropout_voltage` | voltage | regulators |
-| `capacity` | information | memory |
-| `actuation_force` | force | switches |
-| `travel` | length | switches |
+| `output_type` | `fixed` `adjustable` | `power` |
+| `output_voltage` | voltage | `power` |
+| `input_voltage_max` | voltage | `power` |
+| `output_current` | current (max) | `power` |
+| `dropout_voltage` | voltage | `linear_regulator` |
+| `capacity` | information | `memory` |
+| `actuation_force` | force | `switch` |
+| `travel` | length | `switch` |
+
+A group in the last column covers its subcategories (section 14.1);
+`rated_voltage` and `rated_current` are also plausible for `switch`
+(contact ratings).
 
 A *deviation* key (a tolerance) records signed bounds: ±10 % is
 `min: -10, max: 10, unit: "%"`; an asymmetric -20/+80 % is
@@ -524,6 +528,60 @@ pins:
   "2": { name: COLLECTOR, type: passive }
   "4": { name: COLLECTOR, type: passive, connected_to: "2" }
 ```
+
+## 14.1 Category
+
+Every Device states a `category` (required; no default -- section 7).
+It classifies the component type for catalog browsing, not for
+engineering decisions.
+
+```yaml
+category: linear_regulator
+```
+
+The vocabulary is a two-level tree: top-level categories, some of them
+*groups* with *subcategories*. Every node is a valid value. A Device
+states the most specific node its own datasheet supports (its title or
+description, e.g. "800-mA Low-Dropout Linear Regulator" ->
+`linear_regulator`); the tree supplies the group, so data never states
+both and they can't disagree. A group is used as a value only when none
+of its subcategories fits (a sensor of a kind not listed is `sensor`).
+
+| Top level | Subcategories |
+|---|---|
+| `microcontroller` | |
+| `capacitor` | |
+| `resistor` | |
+| `inductor` | |
+| `crystal` | |
+| `diode` | |
+| `transistor` | |
+| `led` | |
+| `optocoupler` | |
+| `fuse` | |
+| `connector` | |
+| `switch` | `tact_switch` |
+| `power` | `linear_regulator`, `switching_regulator`, `battery_charger`, `voltage_reference`, `power_switch` (load switches, power muxes) |
+| `memory` | `flash`, `eeprom`, `sram` |
+| `sensor` | `pressure_sensor`, `imu` (accelerometers, gyroscopes, IMUs), `temperature_sensor` |
+| `analog` | `op_amp`, `comparator`, `current_sense_amplifier`, `power_monitor` (current/power monitors with a digital interface), `analog_switch` (analog switches, multiplexers), `adc`, `dac` |
+| `interface` | `io_expander`, `can_controller`, `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter` |
+| `logic` | (gates, buffers, bus transceivers, shift registers, decoders) |
+| `timing` | `timer`, `rtc` |
+| `driver` | `gate_driver`, `darlington_array` |
+| `other` | |
+
+Why a tree in one field rather than `category` + `subcategory`: a
+single value can't contradict itself, existing flat values
+(`capacitor`, ...) stay valid unchanged, and a later split of a
+top-level value (say `capacitor` > `mlcc`) needs no migration -- the old
+value stays a valid, less specific node.
+
+`other` is for a real component type the tree doesn't have yet; the
+validator warns on it (`category.other`). Grow the tree instead: add
+the node here, in `openparts_core::ComponentCategory` (with its parent)
+and in the web catalog's labels, in one change. Never rename or remove
+a node that data uses.
 
 ---
 

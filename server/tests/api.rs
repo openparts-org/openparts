@@ -814,6 +814,81 @@ async fn catalog_filters_and_facets_electrical_parameters() {
 }
 
 #[tokio::test]
+async fn catalog_category_tree_counts_subtrees() {
+    let all = catalog("limit=0").await;
+    let tree = all["facets"]["category_tree"].as_array().unwrap();
+    let total = all["total"].as_u64().unwrap();
+    let count = |n: &serde_json::Value| n["count"].as_u64().unwrap();
+    // Every part sits in exactly one top-level node.
+    assert_eq!(tree.iter().map(count).sum::<u64>(), total);
+    let node = |v: &str| tree.iter().find(|n| n["value"] == v).unwrap().clone();
+    let power = node("power");
+    let children = power["children"].as_array().unwrap();
+    assert!(children.iter().any(|c| c["value"] == "linear_regulator"));
+    assert!(children.iter().any(|c| c["value"] == "switching_regulator"));
+    // A group counts its subcategories (and parts placed on it).
+    assert!(count(&power) >= children.iter().map(count).sum::<u64>());
+
+    // Picking a group selects its subcategories.
+    let picked = catalog("category=power&limit=500").await;
+    assert_eq!(picked["total"].as_u64().unwrap(), count(&power));
+    for it in picked["items"].as_array().unwrap() {
+        let c = it["category"].as_str().unwrap();
+        assert!(
+            c == "power" || children.iter().any(|n| n["value"] == c),
+            "{c}"
+        );
+    }
+    let tree = picked["facets"]["category_tree"].as_array().unwrap();
+    assert!(tree
+        .iter()
+        .any(|n| n["value"] == "power" && n["selected"] == true));
+    // The tree's counts ignore the category pick, like every facet.
+    assert_eq!(tree.iter().map(count).sum::<u64>(), total);
+
+    let switches = catalog("category=tact_switch&limit=500").await;
+    assert!(switches["total"].as_u64().unwrap() > 0);
+    assert!(switches["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|it| it["category"] == "tact_switch"));
+}
+
+#[tokio::test]
+async fn search_finds_subcategories_by_japanese_and_shorthand_names() {
+    let hits = search_mpns("タクトスイッチ").await;
+    assert!(!hits.is_empty());
+    assert!(hits.iter().all(|(_, c)| c == "tact_switch"), "{hits:?}");
+    let hits = search_mpns("LDO").await;
+    assert!(hits.iter().any(|(_, c)| c == "linear_regulator"));
+    // Category matches rank above pin-name matches (an MCU's `VLDO` pin).
+    let regulators = hits.iter().filter(|(_, c)| c == "linear_regulator").count();
+    assert!(
+        hits[..regulators]
+            .iter()
+            .all(|(_, c)| c == "linear_regulator"),
+        "{hits:?}"
+    );
+    let hits = search_mpns("オペアンプ").await;
+    assert!(!hits.is_empty() && hits.iter().all(|(_, c)| c == "op_amp"));
+    let hits = search_mpns("レギュレータ").await;
+    assert!(hits.iter().any(|(_, c)| c == "switching_regulator"));
+    let response = get(app(), "/v1/search?category=memory").await;
+    let body: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    let cats: std::collections::BTreeSet<&str> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["category"].as_str().unwrap())
+        .collect();
+    assert!(
+        cats.contains("flash") && cats.contains("eeprom"),
+        "{cats:?}"
+    );
+}
+
+#[tokio::test]
 async fn free_text_matches_formatted_parameter_values() {
     for q in ["100nF", "0.1uF", "100 nF"] {
         let body = catalog(&format!("q={}&limit=500", q.replace(' ', "%20"))).await;
