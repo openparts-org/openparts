@@ -1065,7 +1065,8 @@ pad_rows:
   src: p43 "Figure 13"
 pad_grids:
   # numbers: one shared number, or one per pad row by row from the top-left;
-  # pitch and pad [X, Y]; x, y: the grid centre in the package frame.
+  # pitch and pad [X, Y] (a pitch is unused along a single column or row, so a
+  # lone pad is a 1 x 1 grid); x, y: the grid centre in the package frame.
   value: [{ numbers: ["39"], columns: 3, rows: 3, pitch: [1.4, 1.4], pad: [0.9, 0.9], x: -1.5, y: -2.46 }]
   src: p43 "Figure 13"
 shield:                 # the can on the top face; its top is dimensions.overall_height
