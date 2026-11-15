@@ -9,6 +9,7 @@ enum Route {
   Part(String, String) // ?manufacturer=&mpn=
   KicadPlugin
   Contributing
+  Bom // BOM check (bom.mbt)
   NotFound
 }
 
@@ -74,6 +75,7 @@ fn route_of(url : @url.Url) -> (Lang, Route) {
       }
     "kicad-plugin" => KicadPlugin
     "contributing" => Contributing
+    "bom" => Bom
     _ => NotFound
   }
   (lang, route)
@@ -104,5 +106,6 @@ fn route_path(route : Route) -> String {
     Part(m, p) => part_path(m, p)
     KicadPlugin => "kicad-plugin"
     Contributing => "contributing"
+    Bom => "bom"
   }
 }

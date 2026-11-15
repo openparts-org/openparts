@@ -65,6 +65,7 @@ fn view(model : Model, emit : Emit[Msg]) -> Html {
     Part(_, _) => part_view(model, emit)
     KicadPlugin => kicad_view(model.lang)
     Contributing => contributing_view(model.lang)
+    Bom => bom_view(model, emit)
     NotFound => not_found_view(model.lang)
   }
   div([
@@ -80,6 +81,7 @@ fn nav_view(model : Model) -> Html {
   let c = lang.copy()
   let links = [
     ("search", c.nav_search),
+    ("bom", lang.bom().nav),
     ("kicad-plugin", c.nav_kicad),
     ("contributing", c.nav_contributing),
   ].map(l => li([a(href=href(lang, l.0), l.1)]))
@@ -476,6 +478,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       table([tbody(rows.map(r => tr([th(r.0), td(r.1)])))]),
     ]),
   )
+  sections.push(alternatives_section(model, emit))
   sections.push(
     section(class="section", [
       h3(c.sources_heading),

@@ -6,6 +6,21 @@ package "openparts/site/cmd/app"
 // Errors
 
 // Types and methods
+type AltMsg
+
+#derive(Eq)
+type AltState
+
+type BomCopy
+
+type BomMsg
+
+#derive(Eq)
+type BomPhase
+
+#derive(Eq)
+type BomState
+
 type CatalogCopy
 
 type CatalogMsg
@@ -22,6 +37,8 @@ type Feature
 
 #derive(Eq)
 type Fetch[T]
+
+type JsFile
 
 type JsResponse
 

@@ -20,6 +20,10 @@ struct Model {
   part : Fetch[PartData]
   zip : ZipState
   viewer_error : String?
+  /// The BOM check page (bom.mbt).
+  bom : BomState
+  /// The part page's alternatives (alternatives.mbt).
+  alts : AltState
 }
 
 ///|
@@ -31,6 +35,8 @@ enum Msg {
   ViewerDone(String?)
   ZipClicked
   ZipDone(String?)
+  Bom(BomMsg)
+  Alt(AltMsg)
 }
 
 ///|
@@ -42,6 +48,7 @@ fn title_of(lang : Lang, route : Route) -> String {
     Part(_, mpn) => mpn
     KicadPlugin => c.kicad_title
     Contributing => c.contrib_title
+    Bom => lang.bom().title
     NotFound => c.not_found_title
   }
   if page.is_empty() {
@@ -68,14 +75,19 @@ fn enter(
   }
   match route {
     Search(q) => catalog_enter(model, q, emit)
+    Bom => bom_enter(model, emit)
     Part(m, p) => {
       let key = (m, p)
+      let (model, alt_cmd) = alt_enter(model, m, p, emit)
       if key == model.part_key && !(model.part is Failed(_)) {
         // Back to the same part: the 3D view has to be drawn again.
         if model.part is Got(_) {
-          return (model, viewer_cmd(lang, m, p, emit))
+          return (
+            model,
+            @rabbita.batch([viewer_cmd(lang, m, p, emit), alt_cmd]),
+          )
         }
-        return (model, @rabbita.none)
+        return (model, alt_cmd)
       }
       let cmd = @rabbita.perform(r => emit(PartGot(key, r)), async fn() noraise {
         load_part(m, p)
@@ -88,7 +100,7 @@ fn enter(
           zip: Idle,
           viewer_error: None,
         },
-        cmd,
+        @rabbita.batch([cmd, alt_cmd]),
       )
     }
     _ => (model, @rabbita.none)
@@ -156,6 +168,8 @@ fn update(
     }
     ZipDone(None) => ({ ..model, zip: Idle, }, @rabbita.none)
     ZipDone(Some(e)) => ({ ..model, zip: ZipFailed(e), }, @rabbita.none)
+    Bom(m) => bom_update(model, m, emit)
+    Alt(m) => alt_update(model, m)
   }
 }
 
@@ -172,6 +186,8 @@ fn main {
           part: Loading,
           zip: Idle,
           viewer_error: None,
+          bom: BomState::new(),
+          alts: AltState::new(),
         }
         let url = try! @url.parse(current_href())
         enter(model, url, emit)
