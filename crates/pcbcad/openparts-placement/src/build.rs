@@ -531,7 +531,9 @@ fn body_regions(g: &MechanicalGeometry, t: ToModel) -> Vec<BodyRegion> {
                 (x0 - w, y0 - w, x1 + w, y1 + w),
                 (housing_top, housing_top + f.mating_length),
             )),
-            HeaderKind::RightAngle if f.mating_length > 0.0 && !g.leads.is_empty() => {
+            HeaderKind::RightAngle
+                if f.mating_length > 0.0 && f.smt.is_none() && !g.leads.is_empty() =>
+            {
                 let front = b.position.x + b.size.x / 2.0;
                 Some((
                     (front, y0 - w, front + f.mating_length, y1 + w),
@@ -553,6 +555,29 @@ fn body_regions(g: &MechanicalGeometry, t: ToModel) -> Vec<BodyRegion> {
             };
             out.push(region("pins", OutlineShape::Rect, center, size, z));
         }
+    }
+    // A module's shield can stands on the board's top face.
+    if let Details::Module(openparts_mcad::ModuleFeatures {
+        shield: Some(s), ..
+    }) = &g.details
+    {
+        let a = t.point(s.x - s.width / 2.0, s.y - s.length / 2.0);
+        let c = t.point(s.x + s.width / 2.0, s.y + s.length / 2.0);
+        let center = Point2 {
+            x: r4((a.x + c.x) / 2.0),
+            y: r4((a.y + c.y) / 2.0),
+        };
+        let size = Size2 {
+            x: r4((a.x - c.x).abs()),
+            y: r4((a.y - c.y).abs()),
+        };
+        out.push(region(
+            "shield",
+            OutlineShape::Rect,
+            center,
+            size,
+            (z.1, s.top),
+        ));
     }
     out
 }

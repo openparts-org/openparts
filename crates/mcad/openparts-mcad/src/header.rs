@@ -84,6 +84,21 @@ pub struct HeaderFeatures {
     /// `RightAngle` only: the bent post's centre line above the board
     /// (the housing's mid-height: drawings rarely dimension it).
     pub bend_height: f64,
+    /// Surface-mount contacts (`Package::smt`): no holes, an SMD land
+    /// per contact and two mechanical pads.
+    pub smt: Option<HeaderSmt>,
+}
+
+/// A surface-mount header's lands (`Package::smt`), for the 3D model's
+/// solder tails and retention tabs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HeaderSmt {
+    /// Signal land `[X, Y]`, centred on the contact row (x = 0).
+    pub pad: [f64; 2],
+    /// Mechanical pad `[X, Y]`.
+    pub mech_pad: [f64; 2],
+    /// Centre of the `+y` mechanical pad (the other mirrors it).
+    pub mech_at: [f64; 2],
 }
 
 fn kind(package: &Package) -> Result<HeaderKind, McadError> {
@@ -177,6 +192,11 @@ pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
         } else {
             0.0
         },
+        smt: package.smt.as_ref().map(|s| HeaderSmt {
+            pad: s.pad,
+            mech_pad: s.mech_pad,
+            mech_at: s.mech_pad_at,
+        }),
     })
 }
 
@@ -191,6 +211,9 @@ fn row_xs(f: &HeaderFeatures) -> impl Iterator<Item = f64> + '_ {
 pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadError> {
     kind(package)?;
     let f = header_features(package)?;
+    if f.smt.is_some() {
+        return generate_smt(package, f);
+    }
     let d = &package.dimensions;
     let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
@@ -300,6 +323,103 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
     })
 }
 
+/// A surface-mount wire-to-board header (`Package::smt`, section 20.5):
+/// one contact row along Y at `pitch`, centred on the origin, pin 1 at
+/// the top (`+y`); an SMD land per contact at x = 0, and two mechanical
+/// pads (`smt.mech_number`) at `smt.mech_pad_at` and its mirror across
+/// `y = 0`. The housing is the family's: `body_width` x `body_length` x
+/// `body_height`, `body_offset` along X from the contact row. Top entry
+/// is `shrouded_header`, side entry `right_angle_header` (the opening
+/// faces away from the contact row).
+fn generate_smt(package: &Package, f: HeaderFeatures) -> Result<MechanicalGeometry, McadError> {
+    let Some(smt) = f.smt else {
+        return Err(McadError::UnsupportedFamily(package.family));
+    };
+    if f.rows != 1 || !matches!(f.kind, HeaderKind::Shrouded | HeaderKind::RightAngle) {
+        return Err(McadError::InconsistentDimensions(format!(
+            "surface-mount contacts are drawn for a 1-row shrouded_header or \
+             right_angle_header, not a {}-row {}",
+            f.rows, package.family
+        )));
+    }
+    let d = &package.dimensions;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
+    let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
+    let [pw, pl] = smt.pad;
+    let [mw, ml] = smt.mech_pad;
+    let [mx, my] = smt.mech_at;
+    let y0 = (f.pins_per_row as f64 - 1.0) * pitch / 2.0;
+    if pw <= 0.0 || pl <= 0.0 || mw <= 0.0 || ml <= 0.0 {
+        return Err(McadError::InconsistentDimensions(
+            "smt pad sizes must be positive".into(),
+        ));
+    }
+    if f.pins_per_row > 1 && pl >= pitch {
+        return Err(McadError::InconsistentDimensions(format!(
+            "smt signal pads ({pl} along the row) overlap at pitch {pitch}"
+        )));
+    }
+    // The mechanical pads clear the end contacts' lands.
+    let clear_y = my - ml / 2.0 > y0 + pl / 2.0;
+    let clear_x = (mx.abs() - mw / 2.0) > pw / 2.0;
+    if !(clear_y || clear_x) || my <= 0.0 {
+        return Err(McadError::InconsistentDimensions(format!(
+            "the mechanical pad at ({mx}, {my}) overlaps the contact lands"
+        )));
+    }
+    let pad_t = defaults::land::PAD_T;
+    let lead = |number: String, x: f64, y: f64, sx: f64, sy: f64| Lead {
+        number,
+        position: Point3 {
+            x,
+            y,
+            z: pad_t / 2.0,
+        },
+        size: Size3 {
+            x: sx,
+            y: sy,
+            z: pad_t,
+        },
+        mounting: Mounting::Smd,
+        drill: None,
+        slot: None,
+    };
+    let mech = package
+        .smt
+        .as_ref()
+        .map_or("MP".to_string(), |s| s.mech_number.clone());
+    let mut leads: Vec<Lead> = (0..f.pins_per_row)
+        .map(|i| lead((i + 1).to_string(), 0.0, y0 - i as f64 * pitch, pw, pl))
+        .collect();
+    leads.push(lead(mech.clone(), mx, my, mw, ml));
+    leads.push(lead(mech, mx, -my, mw, ml));
+
+    let body = Body {
+        position: Point3 {
+            x: f.body_offset,
+            y: 0.0,
+            z: f.standoff + f.body_height / 2.0,
+        },
+        size: Size3 {
+            x: body_w,
+            y: body_l,
+            z: f.body_height,
+        },
+        shape: BodyShape::Box,
+    };
+    Ok(MechanicalGeometry {
+        family: package.family,
+        lands: vec![],
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::Header(f),
+        body,
+        leads,
+        markers: vec![],
+        lead_form: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,6 +472,10 @@ mod tests {
             pad_order: vec![],
             edge: None,
             keepouts: vec![],
+            pad_rows: vec![],
+            pad_grids: vec![],
+            shield: None,
+            smt: None,
             pads: vec![],
             construction: None,
             geometry: None,
@@ -588,5 +712,48 @@ mod tests {
             crate::generate(&p),
             Err(McadError::UnsupportedGenerator(_))
         ));
+    }
+
+    /// JST SM04B-SRSS-TB-style side entry: lands 1.55 x 0.6 on a 1.0
+    /// pitch, mechanical pads 1.8 x 1.2 at (-3.875, +-2.8).
+    fn sm04b() -> Package {
+        serde_yaml::from_str(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\n\
+             family: right_angle_header\nlead_count: 4\nlead_layout: [1, 4]\n\
+             pitch: {nominal: 1.0, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 4.25, unit: mm}\n\
+             \x20 body_length: {nominal: 6.0, unit: mm}\n\
+             \x20 body_height: {nominal: 2.9, unit: mm}\n\
+             \x20 body_offset: {nominal: -2.45, unit: mm}\n\
+             smt: {pad: [1.55, 0.6], mech_pad: [1.8, 1.2], mech_pad_at: [-3.875, 2.8]}\n",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn smt_headers_get_lands_on_the_row_and_two_mechanical_pads() {
+        let g = crate::generate(&sm04b()).unwrap();
+        let numbers: Vec<&str> = g.leads.iter().map(|l| l.number.as_str()).collect();
+        assert_eq!(numbers, ["1", "2", "3", "4", "MP", "MP"]);
+        assert!(g.leads.iter().all(|l| l.mounting == Mounting::Smd));
+        assert!(g.lands.is_empty(), "the stated lands are the footprint");
+        let p1 = &g.leads[0];
+        assert!(p1.position.x.abs() < 1e-9 && (p1.position.y - 1.5).abs() < 1e-9);
+        assert!((p1.size.x - 1.55).abs() < 1e-9 && (p1.size.y - 0.6).abs() < 1e-9);
+        assert!((g.leads[5].position.y + 2.8).abs() < 1e-9);
+        assert!((g.body.position.x + 2.45).abs() < 1e-9);
+        // No hole needed; a mechanical pad on the lands is an error.
+        let mut p = sm04b();
+        p.smt.as_mut().unwrap().mech_pad_at = [0.0, 1.0];
+        assert!(matches!(
+            crate::generate(&p),
+            Err(McadError::InconsistentDimensions(_))
+        ));
+        let mut p = sm04b();
+        p.family = openparts_core::PackageFamily::Header;
+        assert!(
+            crate::generate(&p).is_err(),
+            "smt is for wire-to-board headers"
+        );
     }
 }

@@ -131,7 +131,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "header.invalid",
-        meaning: "a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies)",
+        meaning: "a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill) unless it has `smt` contacts, `smt` on a family other than `shrouded_header`/`right_angle_header`, two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies)",
     },
     Rule {
         id: "edge.invalid",
@@ -140,6 +140,10 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "keepout.invalid",
         meaning: "a package keep-out has both or neither of `rect` (located) and `size` (only sized), a non-positive length, or restricts nothing",
+    },
+    Rule {
+        id: "pad_layout.invalid",
+        meaning: "a package's `pad_rows`/`pad_grids`/`shield` is on a family other than `module`, has a non-positive size or count, a pitch not above its pad, a pad number used twice, a grid with neither one number nor one per pad, `pad_grids` without `pad_rows`, a `shield` without `dimensions.overall_height`, or `smt` has a non-positive pad size or an empty `mech_number`",
     },
     Rule {
         id: "mpn.empty",
@@ -338,6 +342,7 @@ pub fn validate_part(
     out.extend(check_package_pad_order(&package_entity, package));
     out.extend(check_package_edge(&package_entity, package));
     out.extend(check_package_keepouts(&package_entity, package));
+    out.extend(check_package_pad_layout(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,
@@ -504,6 +509,10 @@ mod tests {
             pad_order: vec![],
             edge: None,
             keepouts: vec![],
+            pad_rows: vec![],
+            pad_grids: vec![],
+            shield: None,
+            smt: None,
             pads: vec![],
             construction: None,
             geometry: None,

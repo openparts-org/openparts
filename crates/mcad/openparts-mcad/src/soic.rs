@@ -22,6 +22,11 @@ use openparts_core::{Package, PackageFamily as F};
 /// The same two-row layout serves TSSOP (JEDEC MO-153), SSOP (MO-150) and
 /// MSOP/VSSOP (MO-187): `family` picks only the defaults used for
 /// dimensions the package doesn't state.
+///
+/// An optional exposed pad (`dimensions.exposed_pad`: TI PowerPAD
+/// HSOIC/HTSSOP/HVSSOP, Toshiba HSOP, Microchip SOIC-EP) becomes a
+/// centred terminal numbered `"EP"` on the underside; its footprint land
+/// is `exposed_pad.land_*` when the source gives one, else the pad.
 pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError> {
     let family_defaults = match package.family {
         F::Soic => &defaults::SOIC,
@@ -112,6 +117,35 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
         pin_num += 1;
     }
 
+    // The exposed thermal pad (PowerPAD, HSOP "E-PAD") on the underside,
+    // centred, flush with the seating plane: "EP", as the QFN generator
+    // numbers it.
+    if let Some(ep) = &package.dimensions.exposed_pad {
+        let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.typ")?;
+        let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.typ")?;
+        if ep_w >= body_w || ep_l >= body_l {
+            return Err(McadError::InconsistentDimensions(format!(
+                "exposed pad ({ep_w} x {ep_l}) must lie inside the body ({body_w} x {body_l})"
+            )));
+        }
+        leads.push(Lead {
+            number: "EP".to_string(),
+            position: Point3 {
+                x: 0.0,
+                y: 0.0,
+                z: lead_t / 2.0,
+            },
+            size: Size3 {
+                x: ep_w,
+                y: ep_l,
+                z: lead_t,
+            },
+            mounting: Mounting::Smd,
+            drill: None,
+            slot: None,
+        });
+    }
+
     let markers = vec![Marker {
         kind: MarkerKind::Pin1Dot,
         position: Point3 {
@@ -175,6 +209,10 @@ mod tests {
             pad_order: vec![],
             edge: None,
             keepouts: vec![],
+            pad_rows: vec![],
+            pad_grids: vec![],
+            shield: None,
+            smt: None,
             pads: vec![],
             construction: None,
             geometry: None,
@@ -353,6 +391,68 @@ mod tests {
         assert!(matches!(
             generate_soic(&package),
             Err(McadError::MissingDimension("pitch.typ"))
+        ));
+    }
+
+    /// TI DDA (HSOIC-8 PowerPAD): exposed pad 2.0..2.6 x 2.5..3.1, the
+    /// example board layout's thermal land 2.95 x 4.9.
+    fn hsoic8() -> Package {
+        let mut package = soic8();
+        package.dimensions.exposed_pad = Some(openparts_core::ExposedPadDimensions {
+            width: Dimension {
+                typ: None,
+                min: Some(2.0),
+                max: Some(2.6),
+                unit: "mm".into(),
+            },
+            length: Dimension {
+                typ: None,
+                min: Some(2.5),
+                max: Some(3.1),
+                unit: "mm".into(),
+            },
+            land_width: None,
+            land_length: None,
+        });
+        package
+    }
+
+    #[test]
+    fn an_exposed_pad_is_a_centred_ep_terminal_and_its_own_land() {
+        let g = crate::generate(&hsoic8()).unwrap();
+        assert_eq!(g.leads.len(), 9);
+        let ep = g.leads.iter().find(|l| l.number == "EP").unwrap();
+        assert!(ep.position.x.abs() < 1e-9 && ep.position.y.abs() < 1e-9);
+        assert!((ep.size.x - 2.3).abs() < 1e-9 && (ep.size.y - 2.8).abs() < 1e-9);
+        // IPC lands for the leads, the EP land is the pad.
+        let land = g.lands.iter().find(|l| l.number == "EP").unwrap();
+        assert_eq!(land.size, ep.size);
+        let pad1 = &g.lands[0];
+        assert!(
+            pad1.position.x + pad1.size.x / 2.0 < -1.15,
+            "clear of the EP"
+        );
+    }
+
+    #[test]
+    fn a_stated_thermal_land_replaces_the_pad_in_the_footprint_only() {
+        let mut p = hsoic8();
+        let ep = p.dimensions.exposed_pad.as_mut().unwrap();
+        ep.land_width = mm(2.95);
+        ep.land_length = mm(4.9);
+        let g = crate::generate(&p).unwrap();
+        let land = g.lands.iter().find(|l| l.number == "EP").unwrap();
+        assert!((land.size.x - 2.95).abs() < 1e-9 && (land.size.y - 4.9).abs() < 1e-9);
+        let lead = g.leads.iter().find(|l| l.number == "EP").unwrap();
+        assert!(
+            (lead.size.x - 2.3).abs() < 1e-9,
+            "the 3D slug keeps the pad size"
+        );
+        // A pad larger than the body is an error, not a drawing.
+        p.dimensions.exposed_pad.as_mut().unwrap().width = mm(4.0).unwrap();
+        assert!(matches!(
+            generate_soic(&p),
+            Err(McadError::InconsistentDimensions(_))
         ));
     }
 }

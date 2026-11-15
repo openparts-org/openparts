@@ -386,3 +386,90 @@ fn pads_carry_the_device_diff_pairs() {
     );
     assert_eq!(with.hash, model(&p, Density::N).hash);
 }
+
+/// Toshiba P-HSOP8-0405-1.27-001 (TB67H450FNG): SOIC-8 with a centred
+/// exposed pad.
+fn hsop8() -> Package {
+    pkg(
+        "family: soic\nlead_count: 8\npitch: {nominal: 1.27, unit: mm}\n\
+         dimensions:\n\
+         \x20 body_width: {min: 3.81, max: 3.99, unit: mm}\n\
+         \x20 body_length: {min: 4.8, max: 5.0, unit: mm}\n\
+         \x20 overall_width: {min: 5.79, max: 6.2, unit: mm}\n\
+         \x20 exposed_pad:\n\
+         \x20   width: {min: 2.18, max: 2.39, unit: mm}\n\
+         \x20   length: {min: 2.18, max: 2.39, unit: mm}\n",
+    )
+}
+
+#[test]
+fn an_exposed_pad_soic_keeps_pin_1_upper_left_and_marks_its_thermal_pad() {
+    let m = model(&hsop8(), Density::N);
+    assert!(upper_left(&m) && centred(&m));
+    assert_eq!(m.model3d.rotation, 0.0);
+    let ep = pad(&m, "EP");
+    assert!(ep.exposed && ep.position.x.abs() < 1e-9 && ep.position.y.abs() < 1e-9);
+    // The signal lands stay clear of it.
+    let p1 = pad(&m, "1");
+    assert!(p1.position.x + p1.size.x / 2.0 < -ep.size.x / 2.0);
+}
+
+/// An ESP32-WROOM-style module: castellated rows on three edges, a
+/// segmented ground pad and a shield can.
+fn wroom() -> Package {
+    pkg("family: module\nlead_count: 39\npitch: {nominal: 1.27, unit: mm}\n\
+         dimensions:\n\
+         \x20 body_width: {nominal: 18, unit: mm}\n\
+         \x20 body_length: {nominal: 25.5, unit: mm}\n\
+         \x20 body_height: {nominal: 0.8, unit: mm}\n\
+         \x20 overall_height: {nominal: 3.1, unit: mm}\n\
+         pad_rows:\n\
+         \x20 - {side: -x, first: 1, count: 14, pitch: 1.27, start: 7.49, inset: 0.25, pad: [0.9, 1.5]}\n\
+         \x20 - {side: -y, first: 15, count: 10, pitch: 1.27, start: 3.285, inset: 0.25, pad: [0.9, 1.5]}\n\
+         \x20 - {side: +x, first: 25, count: 14, pitch: 1.27, start: 1.5, inset: 0.25, pad: [0.9, 1.5]}\n\
+         pad_grids:\n\
+         \x20 - {numbers: ['39'], columns: 3, rows: 3, pitch: [1.4, 1.4], pad: [0.9, 0.9], x: -1.5, y: -2.46}\n\
+         shield: {x: 0, y: -2.9, width: 15.8, length: 17.6}\n")
+}
+
+#[test]
+fn a_rows_module_is_level_a_castellated_at_its_edges_and_as_tall_as_its_can() {
+    let m = model(&wroom(), Density::N);
+    assert!(upper_left(&m));
+    assert_eq!(m.model3d.rotation, 0.0);
+    assert!(pad(&m, "1").castellated && pad(&m, "15").castellated);
+    let ground: Vec<_> = m.pads.iter().filter(|p| p.number == "39").collect();
+    assert_eq!(ground.len(), 9);
+    assert!(ground.iter().all(|p| !p.castellated));
+    assert!((m.body.height - 3.1).abs() < 1e-9);
+    assert!(m.body.regions.iter().any(|r| r.name == "shield"));
+}
+
+/// JST SH-style SMT headers: top entry (`shrouded_header`) and side
+/// entry (`right_angle_header`), 4 circuits.
+fn smt_header(family: &str, offset: f64, mech_x: f64) -> Package {
+    pkg(&format!(
+        "family: {family}\nlead_count: 4\nlead_layout: [1, 4]\npitch: {{nominal: 1.0, unit: mm}}\n\
+         dimensions:\n\
+         \x20 body_width: {{nominal: 2.9, unit: mm}}\n\
+         \x20 body_length: {{nominal: 6.0, unit: mm}}\n\
+         \x20 body_height: {{nominal: 4.25, unit: mm}}\n\
+         \x20 body_offset: {{nominal: {offset}, unit: mm}}\n\
+         smt: {{pad: [1.55, 0.6], mech_pad: [1.8, 1.2], mech_pad_at: [{mech_x}, 2.8]}}\n"
+    ))
+}
+
+#[test]
+fn smt_headers_are_level_a_with_smd_signal_and_mechanical_pads() {
+    for (family, offset, mech_x) in [
+        ("shrouded_header", 1.775, 2.525),
+        ("right_angle_header", -2.45, -3.875),
+    ] {
+        let m = model(&smt_header(family, offset, mech_x), Density::N);
+        assert!(upper_left(&m), "{family}");
+        assert!(m.pads.iter().all(|p| p.kind == PadKind::Smd), "{family}");
+        assert_eq!(m.pads.iter().filter(|p| p.number == "MP").count(), 2);
+        assert!(m.tht.is_none());
+        assert_eq!(m.body.regions.len(), 1, "{family}: no pin region");
+    }
+}

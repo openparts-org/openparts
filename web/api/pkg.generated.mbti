@@ -543,6 +543,8 @@ pub impl @json.FromJson for ExistenceStatus
 
 #derive(Eq)
 pub(all) struct ExposedPadDimensions {
+  land_length : Dimension?
+  land_width : Dimension?
   length : Dimension
   width : Dimension
 }
@@ -777,12 +779,16 @@ pub(all) struct Package {
   kind : Kind
   lead_count : Int32
   lead_layout : Array[Int32]?
+  pad_grids : Array[PackagePadGrid]?
   pad_order : Array[String]?
+  pad_rows : Array[PackagePadRow]?
   pads : Array[PackagePad]?
   pitch : Dimension
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
   schema_version : String
+  shield : PackageRect?
+  smt : PackageSmt?
   tab : PackageTab?
 }
 pub impl @json.FromJson for Package
@@ -910,6 +916,30 @@ pub(all) struct PackagePad {
 pub impl @json.FromJson for PackagePad
 
 #derive(Eq)
+pub(all) struct PackagePadGrid {
+  columns : Int32
+  numbers : Array[String]
+  pad : Array[Double]
+  pitch : Array[Double]
+  rows : Int32
+  x : Double
+  y : Double
+}
+pub impl @json.FromJson for PackagePadGrid
+
+#derive(Eq)
+pub(all) struct PackagePadRow {
+  count : Int32
+  first : Int32
+  inset : Double
+  pad : Array[Double]
+  pitch : Double
+  side : PackageSide
+  start : Double
+}
+pub impl @json.FromJson for PackagePadRow
+
+#derive(Eq)
 pub(all) struct PackageRect {
   length : Double
   width : Double
@@ -928,6 +958,15 @@ pub(all) enum PackageSide {
 pub fn PackageSide::all() -> Array[Self]
 pub fn PackageSide::wire(Self) -> String
 pub impl @json.FromJson for PackageSide
+
+#derive(Eq)
+pub(all) struct PackageSmt {
+  mech_number : String?
+  mech_pad : Array[Double]
+  mech_pad_at : Array[Double]
+  pad : Array[Double]
+}
+pub impl @json.FromJson for PackageSmt
 
 #derive(Eq)
 pub(all) struct PackageTab {

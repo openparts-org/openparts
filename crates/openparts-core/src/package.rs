@@ -15,6 +15,14 @@ use serde::{Deserialize, Serialize};
 pub struct ExposedPadDimensions {
     pub width: Dimension,
     pub length: Dimension,
+    /// The source's recommended board land for the pad along X, when it
+    /// gives one (a PowerPAD SOIC's thermal land is larger than the
+    /// slug). Absent: the land is the exposed pad itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub land_width: Option<Dimension>,
+    /// The recommended land along Y (see `land_width`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub land_length: Option<Dimension>,
 }
 
 /// Canonical Data Specification section 20.
@@ -193,6 +201,12 @@ impl PackageDimensions {
         if let Some(ep) = &self.exposed_pad {
             out.push(("/dimensions/exposed_pad/width", &ep.width));
             out.push(("/dimensions/exposed_pad/length", &ep.length));
+            if let Some(d) = &ep.land_width {
+                out.push(("/dimensions/exposed_pad/land_width", d));
+            }
+            if let Some(d) = &ep.land_length {
+                out.push(("/dimensions/exposed_pad/land_length", d));
+            }
         }
         out
     }
@@ -404,6 +418,78 @@ pub struct PackageKeepout {
     pub side: Option<PackageSide>,
 }
 
+/// `Package::pad_rows` (`module`): a straight row of equal pads along
+/// one board edge -- castellations reaching the edge, or LGA pads set
+/// in from it. Rows run counter-clockwise in the top view (pin 1 at the
+/// top-left): down the `-x` edge, left to right along `-y`, up `+x`,
+/// right to left along `+y`; the pads are numbered `first`,
+/// `first + 1`, ... in that direction. Section 20.4.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackagePadRow {
+    /// The board edge the row runs along.
+    pub side: PackageSide,
+    /// Number of the row's first pad.
+    pub first: u32,
+    pub count: u32,
+    /// Centre distance of neighbouring pads (mm).
+    pub pitch: f64,
+    /// From the corner where the row starts (the top of `-x`, the left
+    /// of `-y`, the bottom of `+x`, the right of `+y`) to the first
+    /// pad's centre, along the edge (mm).
+    pub start: f64,
+    /// From the board edge inward to the pad centres (mm); negative
+    /// when the centres lie outside the board.
+    pub inset: f64,
+    /// Pad size: `[along the edge, across it]` (mm).
+    pub pad: [f64; 2],
+}
+
+/// `Package::pad_grids` (`module`): a rectangular grid of equal pads,
+/// such as a module's segmented ground pad. Section 20.4.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackagePadGrid {
+    /// One number shared by every pad (a segmented thermal pad), or one
+    /// per pad, row by row from the top-left.
+    pub numbers: Vec<String>,
+    pub columns: u32,
+    pub rows: u32,
+    /// Centre distances `[along X, along Y]` (mm).
+    pub pitch: [f64; 2],
+    /// Pad size `[along X, along Y]` (mm).
+    pub pad: [f64; 2],
+    /// The grid's centre in the package frame (mm).
+    pub x: f64,
+    pub y: f64,
+}
+
+/// `Package::smt` (`shrouded_header`, `right_angle_header`): a
+/// surface-mount wire-to-board header's land pattern, as the source's PC
+/// board layout gives it. Section 20.5.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSmt {
+    /// Signal pad size `[along X (across the row), along Y]` (mm). The
+    /// pads are centred on the contact row (x = 0) at `pitch`.
+    pub pad: [f64; 2],
+    /// Mechanical (retention) pad size `[along X, along Y]` (mm).
+    pub mech_pad: [f64; 2],
+    /// Centre of the mechanical pad beyond the pin-1 end (`+y`) in the
+    /// package frame (mm); the other one mirrors it across `y = 0`.
+    pub mech_pad_at: [f64; 2],
+    /// The mechanical pads' number (KiCad's libraries use `MP`).
+    #[serde(default = "mech_pad_number")]
+    pub mech_number: String,
+}
+
+fn mech_pad_number() -> String {
+    "MP".into()
+}
+
 /// Canonical Data Specification section 21.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -487,6 +573,23 @@ pub struct Package {
     /// states none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keepouts: Vec<PackageKeepout>,
+    /// `module`: rows of edge or LGA pads (section 20.4). When present,
+    /// they (with `pad_grids`) are the module's pads instead of the two
+    /// long-edge rows that `lead_count`, `pitch` and `overall_width`
+    /// describe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pad_rows: Vec<PackagePadRow>,
+    /// `module`: grids of pads (a segmented ground pad), section 20.4.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pad_grids: Vec<PackagePadGrid>,
+    /// `module`: the shield can on the board's top face, in the package
+    /// frame; its top is at `dimensions.overall_height`. Section 20.4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shield: Option<PackageRect>,
+    /// `shrouded_header` / `right_angle_header`: surface-mount contacts
+    /// and their mechanical pads instead of through-holes (section 20.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smt: Option<PackageSmt>,
     #[serde(default)]
     pub geometry: Option<PackageGeometrySpec>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]

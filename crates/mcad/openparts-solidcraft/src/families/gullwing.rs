@@ -95,7 +95,24 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
     body(s, input, family, form)?;
     lead_params(s, input, &rows, family, form)?;
     let layouts = common::row_layouts(s, &rows, input.geometry.pitch);
-    let leads = rows_of(s, &rows, &layouts, "lead_w")?;
+    let mut leads = rows_of(s, &rows, &layouts, "lead_w")?;
+    if let Some(ep) = g.leads.iter().find(|l| l.number == "EP") {
+        s.fragment(
+            fragment!("gullwing_exposed_pad"),
+            &vars!(
+                ep_w = mm(ep.size.x),
+                ep_l = mm(ep.size.y),
+                x = mm(ep.position.x),
+                y = mm(ep.position.y),
+                standoff = mm(form.2)
+            ),
+        )?;
+        s.fragment(
+            fragment!("inlay"),
+            &vars!(target = "Body", tools = vec!["ExposedPad".to_string()]),
+        )?;
+        leads.push("ExposedPad".into());
+    }
     s.paint(&["Body".into()], looks::MOLD);
     s.paint(&leads, looks::TIN);
     Ok(())

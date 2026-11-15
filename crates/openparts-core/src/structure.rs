@@ -134,6 +134,8 @@ mod tests {
         let s = pkg("family: qfn\nlead_count: 16\n");
         let mut s = s;
         s.dimensions.exposed_pad = Some(crate::ExposedPadDimensions {
+            land_width: None,
+            land_length: None,
             width: s.dimensions.body_width.clone(),
             length: s.dimensions.body_length.clone(),
         });

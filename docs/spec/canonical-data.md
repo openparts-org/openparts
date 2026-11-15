@@ -858,7 +858,7 @@ dimensions:
 | `body_width` | Body幅（X） | E1（QFP/SOIC）、D（SOT-23の長辺） | 必須 |
 | `body_length` | Body長（Y） | D1（QFP）、D（SOIC） | 必須 |
 | `body_height` | Moldの厚み | A2（leadless packageでA2が無い場合はA） | 省略可 |
-| `exposed_pad` | 裏面Exposed Padの`width`/`length` | E2 / D2 | 省略可 |
+| `exposed_pad` | 裏面Exposed Padの`width`/`length`（任意で推奨Land `land_width`/`land_length`、20.5参照） | E2 / D2 | 省略可 |
 | `overall_width` | X方向のLead先端間距離（Leadを含む全幅） | E（QFP/SOIC）、HE（SOT） | 省略可 |
 | `overall_length` | Y方向のLead先端間距離 | D（QFP）、HE（SOT-23ではY方向） | 省略可 |
 | `overall_height` | Seating planeからPackage上面まで | A | 省略可 |
@@ -1043,6 +1043,66 @@ keepouts:
 Rules: `edge.invalid` (a land reaches past `pcb_edge`), `keepout.invalid`
 (both or neither of `rect` and `size`, a non-positive length, nothing restricted),
 `provenance.missing` for `/edge` and `/keepouts`.
+
+## 20.4 Modules with Pad Rows and LGA Grids
+
+A `module` whose pads are not two centred long-edge rows (ESP32-WROOM: pins on
+three edges at their own offsets, a segmented ground pad; LGA modules) states
+them as `pad_rows` and `pad_grids`, taken from the source's recommended land
+pattern. They replace `overall_width`/`lead_width`/`lead_length`; `lead_count`
+is the number of distinct pad numbers.
+
+```yaml
+pad_rows:
+  value:
+    # side: the edge the row runs along. Rows run counter-clockwise in the top
+    # view: down -x, left to right along -y, up +x, right to left along +y.
+    # start: from the corner the row starts at to the first pad centre;
+    # inset: board edge inward to the pad centres (negative: outside);
+    # pad: [along the edge, across it]. All mm.
+    - { side: -x, first: 1, count: 14, pitch: 1.27, start: 7.49, inset: 0.25, pad: [0.9, 1.5] }
+    - { side: -y, first: 15, count: 10, pitch: 1.27, start: 3.285, inset: 0.25, pad: [0.9, 1.5] }
+  src: p43 "Figure 13"
+pad_grids:
+  # numbers: one shared number, or one per pad row by row from the top-left;
+  # pitch and pad [X, Y]; x, y: the grid centre in the package frame.
+  value: [{ numbers: ["39"], columns: 3, rows: 3, pitch: [1.4, 1.4], pad: [0.9, 0.9], x: -1.5, y: -2.46 }]
+  src: p43 "Figure 13"
+shield:                 # the can on the top face; its top is dimensions.overall_height
+  value: { x: 0, y: -2.9, width: 15.8, length: 17.6 }
+  src: p40 "Figure 10"
+```
+
+A pad reaching the board edge is a castellation (Placement Model `castellated`;
+the 3D model drills a plated half-hole of `dimensions.hole_diameter` there when
+stated); the others are LGA pads. Rule `pad_layout.invalid`: these fields on
+another family, non-positive sizes or counts, a pitch not above the pad, a pad
+number in two rows or in a row and a grid, a grid with neither one number nor
+one per pad, `pad_grids` without `pad_rows`, a `shield` without
+`dimensions.overall_height`. `provenance.missing` for `/pad_rows`,
+`/pad_grids`, `/shield`.
+
+## 20.5 Surface-Mount Wire-to-Board Headers
+
+`shrouded_header` (top entry) and `right_angle_header` (side entry) with
+surface-mount contacts state `smt` instead of `dimensions.hole_diameter`: one
+contact row along Y at `pitch` (`lead_layout: [1, n]`), pin 1 at the top, the
+signal lands centred on the row (x = 0), and two mechanical (retention) pads,
+numbered `mech_number` (default `MP`), at `mech_pad_at` and its mirror across
+y = 0. The housing is placed by `body_offset` along X from the contact row as
+for the through-hole families.
+
+```yaml
+smt:
+  value: { pad: [1.55, 0.6], mech_pad: [1.8, 1.2], mech_pad_at: [-3.875, 2.8] }   # [X, Y] mm
+  src: p1 "PC board layout, Side entry type"
+```
+
+Exposed pads on leaded packages (`soic`, `tssop`, `ssop`, `msop`: TI PowerPAD
+HSOIC/HTSSOP/HVSSOP, Toshiba HSOP) use `dimensions.exposed_pad` as on QFN: a
+centred terminal numbered `EP`. `exposed_pad.land_width`/`land_length` record
+the source's recommended thermal land when it differs from the pad (the 3D slug
+keeps the pad size).
 
 ---
 

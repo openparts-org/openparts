@@ -59,7 +59,8 @@ pub(crate) fn check_pins_and_pads(
         }
     }
     for pad in pads {
-        if pad != "EP" && !device.pins.contains_key(pad) {
+        let mech = package.smt.as_ref().is_some_and(|m| m.mech_number == pad);
+        if pad != "EP" && !mech && !device.pins.contains_key(pad) {
             out.push(Diagnostic::warning(
                 "pad.no_pin",
                 entity,

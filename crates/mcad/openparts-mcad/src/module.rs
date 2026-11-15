@@ -31,6 +31,9 @@ use openparts_core::Package;
 /// docs). Every pad dimension is required: modules have no JEDEC outline
 /// a default could come from.
 pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadError> {
+    if !package.pad_rows.is_empty() {
+        return generate_pad_rows(package);
+    }
     let lead_count = package.lead_count;
     if lead_count == 0 || !lead_count.is_multiple_of(2) {
         return Err(McadError::InvalidLeadCount(lead_count));
@@ -178,6 +181,140 @@ pub struct MountingHoles {
 pub struct ModuleFeatures {
     pub holes: Option<ModuleHoles>,
     pub mounting_holes: Option<MountingHoles>,
+    /// The shield can (`Package::shield`), when stated.
+    pub shield: Option<ModuleShield>,
+    /// The pads come from `Package::pad_rows` / `pad_grids` (an
+    /// ESP32-style module): castellations where a pad reaches the board
+    /// edge, LGA pads elsewhere, all on the board's underside.
+    pub pad_rows: bool,
+}
+
+/// A module's shield can: a box on the board's top face.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ModuleShield {
+    /// Centre in the package frame.
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub length: f64,
+    /// Seating plane to the can's top (`dimensions.overall_height`).
+    pub top: f64,
+}
+
+/// Mechanical Geometry for a module whose pads are `pad_rows` and
+/// `pad_grids` (section 20.4): each row's pads along its board edge at
+/// its own pitch and start, set in (or out) by `inset`; each grid's pads
+/// about its centre. Every pad is SMD, the body is the bare board.
+fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError> {
+    use openparts_core::PackageSide as S;
+    let d = &package.dimensions;
+    let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
+    let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
+    let board_t = stated(&d.body_height).unwrap_or(defaults::MODULE.board_thickness);
+    let pad_t = defaults::MODULE.pad_thickness;
+    let (hw, hl) = (body_w / 2.0, body_l / 2.0);
+    let pad = |number: String, x: f64, y: f64, sx: f64, sy: f64| Lead {
+        number,
+        position: Point3 {
+            x,
+            y,
+            z: pad_t / 2.0,
+        },
+        size: Size3 {
+            x: sx,
+            y: sy,
+            z: pad_t,
+        },
+        mounting: Mounting::Smd,
+        drill: None,
+        slot: None,
+    };
+    let mut leads = Vec::new();
+    for row in &package.pad_rows {
+        let [along, across] = row.pad;
+        for i in 0..row.count {
+            let s = row.start + f64::from(i) * row.pitch;
+            let number = (row.first + i).to_string();
+            leads.push(match row.side {
+                S::MinusX => pad(number, -hw + row.inset, hl - s, across, along),
+                S::MinusY => pad(number, -hw + s, -hl + row.inset, along, across),
+                S::PlusX => pad(number, hw - row.inset, -hl + s, across, along),
+                S::PlusY => pad(number, hw - s, hl - row.inset, along, across),
+            });
+        }
+    }
+    for grid in &package.pad_grids {
+        let n = (grid.columns * grid.rows) as usize;
+        if !(grid.numbers.len() == 1 || grid.numbers.len() == n) {
+            return Err(McadError::InconsistentDimensions(format!(
+                "a pad grid of {n} pads has {} numbers (one, or one per pad)",
+                grid.numbers.len()
+            )));
+        }
+        for r in 0..grid.rows {
+            for c in 0..grid.columns {
+                let k = (r * grid.columns + c) as usize;
+                let number = grid.numbers[if grid.numbers.len() == 1 { 0 } else { k }].clone();
+                let x = grid.x + (f64::from(c) - f64::from(grid.columns - 1) / 2.0) * grid.pitch[0];
+                let y = grid.y + (f64::from(grid.rows - 1) / 2.0 - f64::from(r)) * grid.pitch[1];
+                leads.push(pad(number, x, y, grid.pad[0], grid.pad[1]));
+            }
+        }
+    }
+    let distinct: std::collections::BTreeSet<&str> =
+        leads.iter().map(|l| l.number.as_str()).collect();
+    if distinct.len() != package.lead_count as usize {
+        return Err(McadError::InconsistentDimensions(format!(
+            "pad_rows and pad_grids give {} pad numbers for lead_count {}",
+            distinct.len(),
+            package.lead_count
+        )));
+    }
+    for l in &leads {
+        let inside = |c: f64, s: f64, h: f64| c - s / 2.0 < h && c + s / 2.0 > -h;
+        if !inside(l.position.x, l.size.x, hw) || !inside(l.position.y, l.size.y, hl) {
+            return Err(McadError::InconsistentDimensions(format!(
+                "pad \"{}\" lies off the {body_w} x {body_l} board",
+                l.number
+            )));
+        }
+    }
+    let pin1 = leads
+        .iter()
+        .find(|l| l.number == "1")
+        .unwrap_or(&leads[0])
+        .position;
+    let body = Body {
+        position: Point3 {
+            x: 0.0,
+            y: 0.0,
+            z: board_t / 2.0,
+        },
+        size: Size3 {
+            x: body_w,
+            y: body_l,
+            z: board_t,
+        },
+        shape: BodyShape::Box,
+    };
+    let markers = vec![Marker {
+        kind: MarkerKind::Pin1Dot,
+        position: Point3 {
+            x: pin1.x,
+            y: pin1.y,
+            z: board_t,
+        },
+    }];
+    Ok(MechanicalGeometry {
+        family: package.family,
+        lands: vec![],
+        pitch: crate::defaults::required(&package.pitch),
+        details: crate::Details::Module(module_features(package)?),
+        body,
+        leads,
+        markers,
+        lead_form: None,
+    })
 }
 
 /// Resolves the module's [`ModuleFeatures`] (the same value rules as the
@@ -222,9 +359,38 @@ pub fn module_features(package: &Package) -> Result<ModuleFeatures, McadError> {
         }
         _ => None,
     };
+    let shield = match &package.shield {
+        None => None,
+        Some(r) => {
+            let top = stated(&d.overall_height)
+                .ok_or(McadError::MissingDimension("dimensions.overall_height"))?;
+            let board_t = stated(&d.body_height).unwrap_or(defaults::MODULE.board_thickness);
+            if r.width <= 0.0
+                || r.length <= 0.0
+                || top <= board_t
+                || (r.x.abs() + r.width / 2.0) > body_w / 2.0 + 1e-9
+                || (r.y.abs() + r.length / 2.0) > body_l / 2.0 + 1e-9
+            {
+                return Err(McadError::InconsistentDimensions(format!(
+                    "the shield ({} x {} at {}, {}, top {top}) must stand on the {body_w} x \
+                     {body_l} x {board_t} board",
+                    r.width, r.length, r.x, r.y
+                )));
+            }
+            Some(ModuleShield {
+                x: r.x,
+                y: r.y,
+                width: r.width,
+                length: r.length,
+                top,
+            })
+        }
+    };
     Ok(ModuleFeatures {
         holes,
         mounting_holes,
+        shield,
+        pad_rows: !package.pad_rows.is_empty(),
     })
 }
 
@@ -282,6 +448,10 @@ mod tests {
             pad_order: vec![],
             edge: None,
             keepouts: vec![],
+            pad_rows: vec![],
+            pad_grids: vec![],
+            shield: None,
+            smt: None,
             pads: vec![],
             construction: None,
             geometry: None,
@@ -440,6 +610,87 @@ mod tests {
         assert!(matches!(
             module_features(&p),
             Err(McadError::InconsistentDimensions(_))
+        ));
+    }
+
+    /// ESP32-WROOM-32E's recommended land pattern (rows on three edges,
+    /// a 3 x 3 ground grid numbered 39).
+    fn wroom() -> Package {
+        serde_yaml::from_str(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: module\n\
+             lead_count: 39\npitch: {nominal: 1.27, unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {nominal: 18, unit: mm}\n\
+             \x20 body_length: {nominal: 25.5, unit: mm}\n\
+             \x20 body_height: {nominal: 0.8, unit: mm}\n\
+             \x20 overall_height: {nominal: 3.1, unit: mm}\n\
+             pad_rows:\n\
+             \x20 - {side: -x, first: 1, count: 14, pitch: 1.27, start: 7.49, inset: 0.25, pad: [0.9, 1.5]}\n\
+             \x20 - {side: -y, first: 15, count: 10, pitch: 1.27, start: 3.285, inset: 0.25, pad: [0.9, 1.5]}\n\
+             \x20 - {side: +x, first: 25, count: 14, pitch: 1.27, start: 1.5, inset: 0.25, pad: [0.9, 1.5]}\n\
+             pad_grids:\n\
+             \x20 - {numbers: ['39'], columns: 3, rows: 3, pitch: [1.4, 1.4], pad: [0.9, 0.9], x: -1.5, y: -2.46}\n\
+             shield: {x: 0, y: -2.9, width: 15.8, length: 17.6}\n",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn pad_rows_run_counter_clockwise_with_their_own_start_and_pitch() {
+        let g = generate_module(&wroom()).unwrap();
+        assert_eq!(g.leads.len(), 38 + 9);
+        // Pin 1: 7.49 below the top edge, its centre 0.25 inside the left
+        // edge, the 1.5 pad reaching 0.5 past it.
+        let p1 = lead(&g, "1");
+        assert!(close(p1.position.x, -8.75) && close(p1.position.y, 12.75 - 7.49));
+        assert!(close(p1.size.x, 1.5) && close(p1.size.y, 0.9));
+        assert!(close(p1.position.x - p1.size.x / 2.0, -9.5));
+        let p14 = lead(&g, "14");
+        assert!(close(p14.position.y, -12.75 + 1.5));
+        // The bottom row, left to right, 3.285 from the left edge.
+        let (p15, p24) = (lead(&g, "15"), lead(&g, "24"));
+        assert!(close(p15.position.x, -9.0 + 3.285) && close(p24.position.x, 9.0 - 3.285));
+        assert!(close(p15.position.y, -12.5) && close(p15.size.y, 1.5));
+        // The right row, bottom to top.
+        let (p25, p38) = (lead(&g, "25"), lead(&g, "38"));
+        assert!(close(p25.position.y, -11.25) && close(p38.position.y, 12.75 - 7.49));
+        assert!(close(p25.position.x, 8.75));
+        // The ground grid: nine pads, one number, 1.4 apart about its centre.
+        let ground: Vec<&Lead> = g.leads.iter().filter(|l| l.number == "39").collect();
+        assert_eq!(ground.len(), 9);
+        assert!(close(ground[0].position.x, -2.9) && close(ground[0].position.y, -1.06));
+        let crate::Details::Module(f) = g.details else {
+            panic!()
+        };
+        assert!(f.pad_rows);
+        assert_eq!(
+            f.shield,
+            Some(ModuleShield {
+                x: 0.0,
+                y: -2.9,
+                width: 15.8,
+                length: 17.6,
+                top: 3.1
+            })
+        );
+    }
+
+    #[test]
+    fn pad_rows_must_match_lead_count_and_stay_on_the_board() {
+        let mut p = wroom();
+        p.lead_count = 38;
+        assert!(matches!(
+            generate_module(&p),
+            Err(McadError::InconsistentDimensions(_))
+        ));
+        let mut p = wroom();
+        p.pad_rows[0].start = 30.0;
+        assert!(generate_module(&p).is_err());
+        let mut p = wroom();
+        p.dimensions.overall_height = None;
+        assert!(matches!(
+            generate_module(&p),
+            Err(McadError::MissingDimension("dimensions.overall_height"))
         ));
     }
 }

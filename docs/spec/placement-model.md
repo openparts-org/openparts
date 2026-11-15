@@ -205,7 +205,10 @@ a circle has 32 segments), `z_min` and `z_max` (mm above the top surface).
 
 - `body`: the package body (the molded body, a can, a housing, a module's PCB).
 - `pins`: a pin header's mating posts above its housing. For a right-angle
-  header, the bent posts beyond its front face.
+  header, the bent posts beyond its front face (none for surface-mount
+  headers, whose contacts stay inside the housing).
+- `shield`: a module's shield can (`Package::shield`), from the board's top
+  face to its stated top.
 
 `body.standoff` is the board-to-body-underside distance: gull-wing A1, a
 header's housing standoff, else the body's `z_min`. `body.height` is the
@@ -366,5 +369,5 @@ viewed from the top, applied after the mirror.
 - Windowed exposed-pad paste and per-pad mask expansion. No generator states
   them, so every SMD pad has `paste: full` and `mask_expansion: null`.
 - `roundrect` and `polygon` pads. No generator draws them yet.
-- Body regions beyond the main body and header posts (a module's shield can,
-  a USB-C shell's tabs).
+- Body regions beyond the main body, header posts and module shield cans
+  (a USB-C shell's tabs).

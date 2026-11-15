@@ -6,7 +6,7 @@ use openparts_core::Package;
 use std::collections::BTreeSet;
 
 /// Paths of the package fields that must carry their own provenance.
-pub(crate) const PROVENANCE_REQUIRED: [&str; 24] = [
+pub(crate) const PROVENANCE_REQUIRED: [&str; 26] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -28,6 +28,8 @@ pub(crate) const PROVENANCE_REQUIRED: [&str; 24] = [
     "/dimensions/mating_length",
     "/dimensions/tail_length",
     "/dimensions/pad_diameter",
+    "/dimensions/exposed_pad/land_width",
+    "/dimensions/exposed_pad/land_length",
     "/dimensions/body_offset",
     "/dimensions/lead_inset",
     "/dimensions/actuator_diameter",
@@ -61,6 +63,18 @@ pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<D
     }
     if !package.keepouts.is_empty() {
         present.push("/keepouts");
+    }
+    if !package.pad_rows.is_empty() {
+        present.push("/pad_rows");
+    }
+    if !package.pad_grids.is_empty() {
+        present.push("/pad_grids");
+    }
+    if package.shield.is_some() {
+        present.push("/shield");
+    }
+    if package.smt.is_some() {
+        present.push("/smt");
     }
     present
         .into_iter()
@@ -211,7 +225,25 @@ pub(crate) fn check_package_header(entity: &str, package: &Package) -> Vec<Diagn
         }
     };
     let d = &package.dimensions;
-    if d.hole_diameter.is_none() {
+    if package.smt.is_some()
+        && !matches!(
+            package.family,
+            openparts_core::PackageFamily::ShroudedHeader
+                | openparts_core::PackageFamily::RightAngleHeader
+        )
+    {
+        out.push(Diagnostic::error(
+            "header.invalid",
+            entity,
+            Some("/smt"),
+            format!(
+                "smt (surface-mount contacts) is for shrouded_header and right_angle_header, \
+                 not {}",
+                package.family
+            ),
+        ));
+    }
+    if package.smt.is_none() && d.hole_diameter.is_none() {
         out.push(Diagnostic::error(
             "header.invalid",
             entity,
@@ -394,6 +426,120 @@ pub(crate) fn check_package_edge(entity: &str, package: &Package) -> Vec<Diagnos
             )
         })
         .collect()
+}
+
+/// `pad_rows` / `pad_grids` / `shield` (`module` only) and `smt`
+/// (headers, see [`check_package_header`]): positive sizes and counts,
+/// distinct pad numbers, and the fields only on the family that draws
+/// them.
+pub(crate) fn check_package_pad_layout(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    use openparts_core::PackageFamily as F;
+    let mut out = Vec::new();
+    let mut bad = |path: &str, msg: String| {
+        out.push(Diagnostic::error(
+            "pad_layout.invalid",
+            entity,
+            Some(path),
+            msg,
+        ))
+    };
+    let module = package.family == F::Module;
+    for (field, used) in [
+        ("/pad_rows", !package.pad_rows.is_empty()),
+        ("/pad_grids", !package.pad_grids.is_empty()),
+        ("/shield", package.shield.is_some()),
+    ] {
+        if used && !module {
+            bad(
+                field,
+                format!("{field} is for the module family, not {}", package.family),
+            );
+        }
+    }
+    if !package.pad_grids.is_empty() && package.pad_rows.is_empty() {
+        bad(
+            "/pad_grids",
+            "pad_grids needs pad_rows (the module's edge or LGA pads)".to_string(),
+        );
+    }
+    let mut numbers = BTreeSet::new();
+    for (i, r) in package.pad_rows.iter().enumerate() {
+        let path = format!("/pad_rows/{i}");
+        if r.count == 0 || r.first == 0 || !(r.pad[0] > 0.0 && r.pad[1] > 0.0) {
+            bad(
+                &path,
+                "a pad row needs a count, a first number from 1 and a positive pad size".into(),
+            );
+        }
+        if r.count > 1 && r.pitch <= r.pad[0] {
+            bad(
+                &path,
+                format!(
+                    "pitch ({}) must exceed the pad size along the edge ({})",
+                    r.pitch, r.pad[0]
+                ),
+            );
+        }
+        for n in r.first..r.first + r.count {
+            if !numbers.insert(n.to_string()) {
+                bad(&path, format!("pad \"{n}\" is in two rows"));
+            }
+        }
+    }
+    for (i, g) in package.pad_grids.iter().enumerate() {
+        let path = format!("/pad_grids/{i}");
+        let n = (g.columns * g.rows) as usize;
+        if n == 0 || !(g.pad[0] > 0.0 && g.pad[1] > 0.0) {
+            bad(
+                &path,
+                "a pad grid needs columns, rows and a positive pad size".into(),
+            );
+        }
+        if (g.columns > 1 && g.pitch[0] <= g.pad[0]) || (g.rows > 1 && g.pitch[1] <= g.pad[1]) {
+            bad(&path, "a pad grid's pitch must exceed its pad size".into());
+        }
+        if !(g.numbers.len() == 1 || g.numbers.len() == n) {
+            bad(
+                &path,
+                format!(
+                    "a pad grid has one number or one per pad ({n}), not {}",
+                    g.numbers.len()
+                ),
+            );
+        }
+        if g.numbers.iter().any(|n| n.trim().is_empty()) {
+            bad(&path, "a pad grid number is empty".into());
+        }
+        let own: BTreeSet<&String> = g.numbers.iter().collect();
+        for n in own {
+            if numbers.contains(n) {
+                bad(&path, format!("pad \"{n}\" is also in a pad row"));
+            }
+        }
+    }
+    if let Some(r) = &package.shield {
+        if !(r.width > 0.0 && r.length > 0.0) {
+            bad(
+                "/shield",
+                "the shield needs a positive width and length".into(),
+            );
+        }
+        if package.dimensions.overall_height.is_none() {
+            bad(
+                "/dimensions/overall_height",
+                "a module with a shield must state dimensions.overall_height (its top)".into(),
+            );
+        }
+    }
+    if let Some(smt) = &package.smt {
+        if !(smt.pad.iter().chain(&smt.mech_pad).all(|v| *v > 0.0)) {
+            bad("/smt", "smt pad sizes must be positive".into());
+        }
+        if smt.mech_number.trim().is_empty() {
+            bad("/smt", "smt.mech_number is empty".into());
+        }
+    }
+    out
 }
 
 /// `keepouts`: each either located (`rect`) or only sized (`size`), with

@@ -237,6 +237,8 @@ mod tests {
                     unit: "mm".into(),
                 },
                 exposed_pad: Some(ExposedPadDimensions {
+                    land_width: None,
+                    land_length: None,
                     width: Dimension {
                         typ: Some(1.5),
                         min: None,
@@ -258,6 +260,10 @@ mod tests {
             pad_order: vec![],
             edge: None,
             keepouts: vec![],
+            pad_rows: vec![],
+            pad_grids: vec![],
+            shield: None,
+            smt: None,
             pads: vec![],
             construction: None,
             geometry: None,

@@ -52,7 +52,8 @@ pub use manufacturer::{Manufacturer, Website};
 pub use package::{
     EdgeRequirement, ExposedPadDimensions, GeometryType, KeepoutPurpose, KeepoutRestriction,
     Package, PackageConstruction, PackageDimensions, PackageEdge, PackageGeometrySpec,
-    PackageKeepout, PackagePad, PackageRect, PackageSide, PackageTab,
+    PackageKeepout, PackagePad, PackagePadGrid, PackagePadRow, PackageRect, PackageSide,
+    PackageSmt, PackageTab,
 };
 pub use parameter::{
     effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,

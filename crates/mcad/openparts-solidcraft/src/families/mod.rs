@@ -9,6 +9,7 @@ mod dip;
 mod gullwing;
 mod header;
 mod module;
+mod module_rows;
 mod qfn;
 mod radial;
 mod switch;

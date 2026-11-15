@@ -15,7 +15,7 @@ use crate::{ModelError, ModelInput, Script};
 use openparts_mcad::{Details, Lead, ModuleFeatures};
 
 /// Solder mask over FR-4.
-const SOLDER_MASK: Look = Look {
+pub(super) const SOLDER_MASK: Look = Look {
     color: "#1e6b3a",
     metallic: 0.0,
     roughness: 0.45,
@@ -28,6 +28,9 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let Details::Module(features) = g.details else {
         return Err(ModelError::MissingDetails(g.family));
     };
+    if features.pad_rows {
+        return super::module_rows::build(s, input);
+    }
     let is_aux = |number: &str| package.aux_pads.iter().any(|a| a == number);
 
     // The edge pins only (an extra pad row can sit anywhere on the
@@ -63,6 +66,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let ModuleFeatures {
         holes,
         mounting_holes,
+        ..
     } = features;
     let mut metal = Vec::new();
     for (row, layout) in rows.iter().zip(&layouts) {

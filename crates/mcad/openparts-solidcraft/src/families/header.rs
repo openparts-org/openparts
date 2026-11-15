@@ -35,6 +35,9 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let Some(first) = g.leads.first() else {
         return Err(ModelError::NoLeads(g.family));
     };
+    if let Some(smt) = f.smt {
+        return build_smt(s, input, &f, &smt);
+    }
     let pitch = if f.pins_per_row > 1 {
         first.position.y - g.leads[f.rows as usize].position.y
     } else {
@@ -131,9 +134,196 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     Ok(())
 }
 
+/// A surface-mount wire-to-board header (`Package::smt`): the housing
+/// (top entry: the open-top shroud; side entry: a box opening away from
+/// the contact row), one contact per land -- a post standing in the
+/// shroud, or a post bent from the land into the housing -- with a flat
+/// solder foot on its land, and a retention tab on each mechanical pad.
+/// Contact and tab sizes beyond the lands are generator choices: the
+/// drawings dimension only the outline.
+fn build_smt(
+    s: &mut Script,
+    input: &ModelInput<'_>,
+    f: &openparts_mcad::HeaderFeatures,
+    smt: &openparts_mcad::HeaderSmt,
+) -> Result<(), ModelError> {
+    use serde_json::json;
+    let g = input.geometry;
+    let n = f.pins_per_row;
+    let pitch = if n > 1 {
+        g.leads[0].position.y - g.leads[1].position.y
+    } else {
+        g.pitch.unwrap_or(1.0)
+    };
+    common::body_params(s, g)?;
+    s.fragment(
+        fragment!("header_params"),
+        &vars!(
+            pitch = mm(pitch),
+            rows = 1,
+            per_row = n,
+            row_pitch = mm(pitch),
+            pin_w = mm(f.pin_width),
+            tail_l = "0 mm",
+            standoff = mm(f.standoff),
+            body_x = mm(g.body.position.x),
+        ),
+    )?;
+    // The side away from the housing, where each foot runs out to.
+    let away = if f.body_offset >= 0.0 { -1.0 } else { 1.0 };
+    let foot_t = (f.pin_width * 0.6).max(0.1);
+    match f.kind {
+        HeaderKind::Shrouded => {
+            let shroud = f.shroud.ok_or(ModelError::MissingDetails(g.family))?;
+            s.fragment(
+                fragment!("shroud_cavity"),
+                &vars!(
+                    wall_t = mm(shroud.wall),
+                    floor_h = mm(shroud.floor),
+                    post_recess = mm(shroud.post_recess),
+                ),
+            )?;
+            // The post stands mid-cavity (its place isn't dimensioned).
+            s.cmd(
+                "solid.box",
+                json!({"length": "pin_w", "width": "pin_w",
+                       "height": "standoff + body_h - post_recess",
+                       "center": ["body_x", "pin_y0", "(standoff + body_h - post_recess) / 2"],
+                       "operation": "new", "body_name": "Pin", "name": "Pin"}),
+            );
+        }
+        _ => {
+            // Side entry: the opening on the housing face away from the
+            // contacts, the posts reaching into it.
+            let wall = (f.pin_width * 1.2).max(0.3);
+            let depth = g.body.size.x * 0.7;
+            let front = g.body.position.x - away * g.body.size.x / 2.0;
+            s.param("wall_t", mm(wall), "housing wall (generator default)");
+            s.cmd(
+                "solid.box",
+                json!({"length": mm(depth + 0.1), "width": "body_l - 2 * wall_t",
+                       "height": "body_h - 2 * wall_t",
+                       "center": [mm(front + away * (depth - 0.1) / 2.0), 0, "standoff + body_h / 2"],
+                       "operation": "cut", "targets": ["Housing"], "name": "Cavity"}),
+            );
+            s.param(
+                "mating_l",
+                mm(-depth * 0.6),
+                "post tip inside the opening (generator default)",
+            );
+            let (dir, inv) = if f.body_offset >= 0.0 {
+                ("+", "-")
+            } else {
+                ("-", "+")
+            };
+            s.fragment(
+                fragment!("header_ra_pin"),
+                &vars!(bend_h = mm(f.bend_height), dir = dir, inv = inv),
+            )?;
+        }
+    }
+    // The solder foot on pin 1's land, from the post out to the land's
+    // outer end.
+    let post_x = if f.kind == HeaderKind::Shrouded {
+        g.body.position.x
+    } else {
+        0.0
+    };
+    let toe = away * smt.pad[0] / 2.0 * 0.9;
+    s.cmd(
+        "solid.box",
+        json!({"length": mm((toe - post_x).abs() + f.pin_width / 2.0), "width": "pin_w",
+               "height": mm(foot_t),
+               "center": [mm((toe + post_x) / 2.0 - away * f.pin_width / 4.0), "pin_y0", mm(foot_t / 2.0)],
+               "operation": "join", "targets": ["Pin"], "name": "PinFoot"}),
+    );
+    if n > 1 {
+        s.fragment(fragment!("header_grid"), &vars!(seed = "Pin"))?;
+    }
+    // Retention tabs: a plate on each mechanical pad, folded up against
+    // the housing's end.
+    let [mw, ml] = smt.mech_pad;
+    let [mx, my] = smt.mech_at;
+    let plate_t = 0.2_f64.min(ml * 0.3);
+    let up = f.standoff + f.body_height * 0.7;
+    let mut tabs = Vec::new();
+    for (k, sign) in [(1, 1.0), (2, -1.0)] {
+        let name = format!("Tab{k}");
+        let y = sign * my;
+        s.cmd(
+            "solid.box",
+            json!({"length": mm(mw * 0.9), "width": mm(ml * 0.9), "height": mm(plate_t),
+                   "center": [mm(mx), mm(y), mm(plate_t / 2.0)],
+                   "operation": "new", "body_name": name, "name": format!("{name}Foot")}),
+        );
+        let end = sign * (g.body.size.y / 2.0 + plate_t / 2.0);
+        if (end - y).abs() < ml / 2.0 {
+            s.cmd(
+                "solid.box",
+                json!({"length": mm(mw * 0.9), "width": mm(plate_t), "height": mm(up),
+                       "center": [mm(mx), mm(end), mm(up / 2.0)],
+                       "operation": "join", "targets": [name], "name": format!("{name}Wall")}),
+            );
+        }
+        tabs.push(name);
+    }
+    s.paint(&["Housing".into()], looks::NYLON_NATURAL);
+    let mut metal = common::copies("Pin", n);
+    metal.extend(tabs);
+    s.paint(&metal, looks::TIN);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{build_script, run, Format, ModelInput};
+
+    /// JST SH-style 4-circuit SMT headers: top entry (shrouded) and side
+    /// entry (right-angle).
+    fn sh(family: &str, offset: f64, mech_x: f64) -> openparts_core::Package {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: {family}\n\
+             lead_count: 4\nlead_layout: [1, 4]\npitch: {{nominal: 1.0, unit: mm}}\n\
+             dimensions:\n\
+             \x20 body_width: {{nominal: 2.9, unit: mm}}\n\
+             \x20 body_length: {{nominal: 6.0, unit: mm}}\n\
+             \x20 body_height: {{nominal: 4.25, unit: mm}}\n\
+             \x20 body_offset: {{nominal: {offset}, unit: mm}}\n\
+             smt: {{pad: [1.55, 0.6], mech_pad: [1.8, 1.2], mech_pad_at: [{mech_x}, 2.8]}}\n"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn smt_headers_get_feet_and_retention_tabs() {
+        for (family, offset, mech_x) in [
+            ("shrouded_header", 1.775, 2.525),
+            ("right_angle_header", -2.45, -3.875),
+        ] {
+            let package = sh(family, offset, mech_x);
+            let geometry = openparts_mcad::generate(&package).unwrap();
+            assert_eq!(geometry.leads.len(), 6, "4 contacts and 2 MP");
+            let script = build_script(&ModelInput {
+                package: &package,
+                geometry: &geometry,
+                category: None,
+                marked_pin: None,
+            })
+            .unwrap();
+            let painted: usize = script
+                .commands()
+                .iter()
+                .filter(|c| c["command"] == "appearance.assign")
+                .map(|c| c["params"]["bodies"].as_array().unwrap().len())
+                .sum();
+            assert_eq!(painted, 1 + 4 + 2, "{family}");
+            if crate::available_for_test(module_path!()) {
+                let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
+                let step = String::from_utf8(step).unwrap();
+                assert_eq!(step.matches("MANIFOLD_SOLID_BREP(").count(), 7, "{family}");
+            }
+        }
+    }
 
     fn header(family: &str, layout: [u32; 2]) -> openparts_core::Package {
         let n = layout[0] * layout[1];

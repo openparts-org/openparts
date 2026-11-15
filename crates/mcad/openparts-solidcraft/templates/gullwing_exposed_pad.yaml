@@ -1,0 +1,12 @@
+# Exposed thermal pad of a leaded package (PowerPAD SOIC/TSSOP, HSOP):
+# the lead-frame slug under the molded body, its face on the seating
+# plane, reaching slug_embed into the body. Vars: ep_w, ep_l, x, y,
+# standoff.
+- params:
+    ep_w: ["{{ep_w}}", exposed pad size along X (datasheet)]
+    ep_l: ["{{ep_l}}", exposed pad size along Y (datasheet)]
+    slug_embed: [0.1 mm, slug depth inside the molded body]
+- solid.box:
+    {length: ep_w, width: ep_l, height: "{{standoff}} + slug_embed",
+     center: ["{{x}}", "{{y}}", "({{standoff}} + slug_embed) / 2"],
+     operation: new, body_name: ExposedPad, name: ExposedPad}

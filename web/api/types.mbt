@@ -1499,6 +1499,8 @@ pub impl @json.FromJson for ExistenceStatus with fn from_json(json, path) {
 /// bonded to it. `None` means the package has no exposed pad.
 #derive(Eq)
 pub(all) struct ExposedPadDimensions {
+  land_length : Dimension?
+  land_width : Dimension?
   length : Dimension
   width : Dimension
 }
@@ -1510,7 +1512,12 @@ pub impl @json.FromJson for ExposedPadDimensions with fn from_json(json, path) {
       (path, "expected a ExposedPadDimensions object"),
     )
   }
-  { length: field(obj, "length", path), width: field(obj, "width", path), }
+  {
+    land_length: opt_field(obj, "land_length", path),
+    land_width: opt_field(obj, "land_width", path),
+    length: field(obj, "length", path),
+    width: field(obj, "width", path),
+  }
 }
 
 ///|
@@ -2248,12 +2255,16 @@ pub(all) struct Package {
   kind : Kind
   lead_count : Int32
   lead_layout : Array[Int32]?
+  pad_grids : Array[PackagePadGrid]?
   pad_order : Array[String]?
+  pad_rows : Array[PackagePadRow]?
   pads : Array[PackagePad]?
   pitch : Dimension
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
   schema_version : String
+  shield : PackageRect?
+  smt : PackageSmt?
   tab : PackageTab?
 }
 
@@ -2274,12 +2285,16 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     kind: field(obj, "kind", path),
     lead_count: field(obj, "lead_count", path),
     lead_layout: opt_field(obj, "lead_layout", path),
+    pad_grids: opt_field(obj, "pad_grids", path),
     pad_order: opt_field(obj, "pad_order", path),
+    pad_rows: opt_field(obj, "pad_rows", path),
     pads: opt_field(obj, "pads", path),
     pitch: field(obj, "pitch", path),
     provenance: field_or(obj, "provenance", path, {}),
     review: opt_field(obj, "review", path),
     schema_version: field(obj, "schema_version", path),
+    shield: opt_field(obj, "shield", path),
+    smt: opt_field(obj, "smt", path),
     tab: opt_field(obj, "tab", path),
   }
 }
@@ -2662,6 +2677,70 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
 }
 
 ///|
+/// `Package::pad_grids` (`module`): a rectangular grid of equal pads,
+/// such as a module's segmented ground pad. Section 20.4.
+#derive(Eq)
+pub(all) struct PackagePadGrid {
+  columns : Int32
+  numbers : Array[String]
+  pad : Array[Double]
+  pitch : Array[Double]
+  rows : Int32
+  x : Double
+  y : Double
+}
+
+///|
+pub impl @json.FromJson for PackagePadGrid with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackagePadGrid object"))
+  }
+  {
+    columns: field(obj, "columns", path),
+    numbers: field(obj, "numbers", path),
+    pad: field(obj, "pad", path),
+    pitch: field(obj, "pitch", path),
+    rows: field(obj, "rows", path),
+    x: field(obj, "x", path),
+    y: field(obj, "y", path),
+  }
+}
+
+///|
+/// `Package::pad_rows` (`module`): a straight row of equal pads along
+/// one board edge -- castellations reaching the edge, or LGA pads set
+/// in from it. Rows run counter-clockwise in the top view (pin 1 at the
+/// top-left): down the `-x` edge, left to right along `-y`, up `+x`,
+/// right to left along `+y`; the pads are numbered `first`,
+/// `first + 1`, ... in that direction. Section 20.4.
+#derive(Eq)
+pub(all) struct PackagePadRow {
+  count : Int32
+  first : Int32
+  inset : Double
+  pad : Array[Double]
+  pitch : Double
+  side : PackageSide
+  start : Double
+}
+
+///|
+pub impl @json.FromJson for PackagePadRow with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackagePadRow object"))
+  }
+  {
+    count: field(obj, "count", path),
+    first: field(obj, "first", path),
+    inset: field(obj, "inset", path),
+    pad: field(obj, "pad", path),
+    pitch: field(obj, "pitch", path),
+    side: field(obj, "side", path),
+    start: field(obj, "start", path),
+  }
+}
+
+///|
 /// A rectangle in the package frame (mm): centre and size along X/Y.
 #derive(Eq)
 pub(all) struct PackageRect {
@@ -2718,6 +2797,31 @@ pub impl @json.FromJson for PackageSide with fn from_json(json, path) {
     String("+y") => PlusY
     String("-y") => MinusY
     _ => raise @json.JsonDecodeError((path, "expected a PackageSide"))
+  }
+}
+
+///|
+/// `Package::smt` (`shrouded_header`, `right_angle_header`): a
+/// surface-mount wire-to-board header's land pattern, as the source's PC
+/// board layout gives it. Section 20.5.
+#derive(Eq)
+pub(all) struct PackageSmt {
+  mech_number : String?
+  mech_pad : Array[Double]
+  mech_pad_at : Array[Double]
+  pad : Array[Double]
+}
+
+///|
+pub impl @json.FromJson for PackageSmt with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackageSmt object"))
+  }
+  {
+    mech_number: opt_field(obj, "mech_number", path),
+    mech_pad: field(obj, "mech_pad", path),
+    mech_pad_at: field(obj, "mech_pad_at", path),
+    pad: field(obj, "pad", path),
   }
 }
 

@@ -26,8 +26,8 @@ mod to220;
 mod to92;
 mod usb_c;
 
-pub use header::{HeaderFeatures, HeaderKind, Shroud};
-pub use module::{ModuleFeatures, ModuleHoles, MountingHoles};
+pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
+pub use module::{ModuleFeatures, ModuleHoles, ModuleShield, MountingHoles};
 pub use openparts_core::PackageFamily;
 pub use tact::SwitchFeatures;
 pub use to220::To220Features;
@@ -76,7 +76,40 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
     } else if let Some(lands) = ipc::lands(package, &geometry) {
         geometry.lands = lands;
     }
+    exposed_pad_land(&mut geometry, package)?;
     Ok(geometry)
+}
+
+/// The exposed pad's land: `dimensions.exposed_pad.land_*` when the
+/// source recommends a land of its own (each side independently), else
+/// the pad itself.
+fn exposed_pad_land(geometry: &mut MechanicalGeometry, package: &Package) -> Result<(), McadError> {
+    let Some(ep) = &package.dimensions.exposed_pad else {
+        return Ok(());
+    };
+    let w = ep.land_width.as_ref().and_then(defaults::required);
+    let l = ep.land_length.as_ref().and_then(defaults::required);
+    if w.is_none() && l.is_none() {
+        return Ok(());
+    }
+    if geometry.lands.is_empty() {
+        geometry.lands = geometry.leads.clone();
+    }
+    let Some(land) = geometry.lands.iter_mut().find(|l| l.number == "EP") else {
+        return Ok(());
+    };
+    if let Some(w) = w {
+        land.size.x = w;
+    }
+    if let Some(l) = l {
+        land.size.y = l;
+    }
+    if land.size.x <= 0.0 || land.size.y <= 0.0 {
+        return Err(McadError::InconsistentDimensions(
+            "dimensions.exposed_pad.land_* must be positive".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Applies `package.pad_order`: the leads numbered "1"..="lead_count" by
