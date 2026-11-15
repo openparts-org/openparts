@@ -9,8 +9,11 @@
 //! reachable; every other crate works entirely offline against local
 //! `openparts-data` files.
 
+pub mod api;
 mod cache;
 mod error;
+pub mod kicad_stale;
+pub mod sexpr;
 
 pub use error::ClientError;
 
@@ -149,6 +152,97 @@ impl Client {
         )
     }
 
+    /// Live `GET` of JSON, not cached: catalog pages, BOM reports and
+    /// placement hashes are only useful current.
+    fn get_json_live<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, ClientError> {
+        if self.offline {
+            return Err(ClientError::OfflineCacheMiss(path.to_string()));
+        }
+        let (body, _) = self.request_text(path)?;
+        serde_json::from_str(&body).map_err(|source| ClientError::Parse {
+            url: self.url(path),
+            source,
+        })
+    }
+
+    /// `GET /v1/catalog?...`: faceted search.
+    pub fn catalog(
+        &self,
+        request: &api::CatalogRequest,
+    ) -> Result<api::CatalogResponse, ClientError> {
+        self.get_json_live(&request.path())
+    }
+
+    /// `POST /v1/bom/check` with a BOM (KiCad BOM CSV, KiCad netlist,
+    /// or a CSV with MPN/manufacturer columns) as the body.
+    pub fn bom_check(&self, bom: &str) -> Result<api::BomReport, ClientError> {
+        let path = "/v1/bom/check";
+        if self.offline {
+            return Err(ClientError::OfflineCacheMiss(path.to_string()));
+        }
+        let url = self.url(path);
+        let body = match ureq::post(&url)
+            .set("content-type", "text/plain; charset=utf-8")
+            .send_string(bom)
+        {
+            Ok(response) => response.into_string().map_err(|e| ClientError::Network {
+                url: url.clone(),
+                message: e.to_string(),
+            })?,
+            Err(ureq::Error::Status(status, response)) => {
+                let body = response.into_string().unwrap_or_default();
+                return Err(ClientError::ServerError { url, status, body });
+            }
+            Err(ureq::Error::Transport(t)) => {
+                return Err(ClientError::Network {
+                    url,
+                    message: t.to_string(),
+                })
+            }
+        };
+        serde_json::from_str(&body).map_err(|source| ClientError::Parse { url, source })
+    }
+
+    /// `GET /v1/parts/{manufacturer}/{mpn}/alternatives`
+    pub fn alternatives(
+        &self,
+        manufacturer: &str,
+        mpn: &str,
+    ) -> Result<api::AlternativesResponse, ClientError> {
+        self.get_json_live(&format!("{}/alternatives", part_path(manufacturer, mpn)))
+    }
+
+    /// The current density-N Placement Model hash (`sha256:<hex>`) of
+    /// `GET /v1/parts/{manufacturer}/{mpn}/placement`: what a
+    /// footprint's `OpenParts placement` property is compared with.
+    pub fn placement_hash(&self, manufacturer: &str, mpn: &str) -> Result<String, ClientError> {
+        let p: api::PlacementHash =
+            self.get_json_live(&format!("{}/placement", part_path(manufacturer, mpn)))?;
+        Ok(p.hash)
+    }
+
+    /// The part whose MPN is `mpn` (ASCII case-insensitive), found
+    /// through the catalog's text search. `manufacturer` (an id or a
+    /// display name), when given, must match too. `Ok(None)` when no
+    /// part has that MPN; an error when several manufacturers do and
+    /// no hint picks one.
+    pub fn resolve_mpn(
+        &self,
+        mpn: &str,
+        manufacturer: Option<&str>,
+    ) -> Result<Option<api::CatalogItem>, ClientError> {
+        let request = api::CatalogRequest {
+            q: mpn.to_string(),
+            limit: Some(100),
+            ..Default::default()
+        };
+        let items = self.catalog(&request)?.items;
+        pick_mpn(items, mpn, manufacturer).map_err(|candidates| ClientError::Ambiguous {
+            mpn: mpn.to_string(),
+            candidates,
+        })
+    }
+
     /// `GET /v1/parts/{manufacturer}/{mpn}`
     pub fn get_part(&self, manufacturer: &str, mpn: &str) -> Result<Part, ClientError> {
         let cache_key = cache::metadata_key("parts", &part_segments(manufacturer, mpn));
@@ -247,6 +341,39 @@ impl Client {
     }
 }
 
+/// The one part among `items` with MPN `mpn`; `Err(manufacturers)`
+/// when several manufacturers make one.
+fn pick_mpn(
+    items: Vec<api::CatalogItem>,
+    mpn: &str,
+    manufacturer: Option<&str>,
+) -> Result<Option<api::CatalogItem>, Vec<String>> {
+    let hint = manufacturer
+        .map(|m| m.trim().to_ascii_lowercase())
+        .filter(|m| !m.is_empty());
+    let mut hits: Vec<api::CatalogItem> = items
+        .into_iter()
+        .filter(|i| i.mpn.eq_ignore_ascii_case(mpn))
+        .filter(|i| {
+            hint.as_deref().is_none_or(|m| {
+                i.manufacturer.to_ascii_lowercase() == m
+                    || i.manufacturer_name.to_ascii_lowercase().starts_with(m)
+            })
+        })
+        .collect();
+    if hits.iter().any(|i| i.mpn == mpn) {
+        hits.retain(|i| i.mpn == mpn);
+    }
+    match hits.len() {
+        0 => Ok(None),
+        1 => Ok(hits.pop()),
+        _ => Err(hits
+            .iter()
+            .map(|i| format!("{}/{}", i.manufacturer, i.mpn))
+            .collect()),
+    }
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -338,6 +465,60 @@ mod tests {
         let results = client.search("RP2040").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].mpn, "RP2040");
+    }
+
+    #[test]
+    fn pick_mpn_matches_case_insensitively_and_uses_the_hint() {
+        let item = |m: &str, p: &str| api::CatalogItem {
+            manufacturer: m.into(),
+            manufacturer_name: format!("{} Inc.", m.to_uppercase()),
+            mpn: p.into(),
+            ..Default::default()
+        };
+        let items = vec![item("a", "X1"), item("b", "X1"), item("a", "X10")];
+        assert!(pick_mpn(items.clone(), "x1", None).is_err());
+        let b = pick_mpn(items.clone(), "x1", Some("B Inc"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(b.manufacturer, "b");
+        let x10 = pick_mpn(items.clone(), "X10", None).unwrap().unwrap();
+        assert_eq!(x10.mpn, "X10");
+        assert!(pick_mpn(items, "nope", None).unwrap().is_none());
+    }
+
+    #[test]
+    fn bom_check_posts_the_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let bom = "Reference,Value\nU1,RP2040\n";
+        let seen = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0u8; 4096];
+            while !String::from_utf8_lossy(&request).ends_with(bom) {
+                let n = stream.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+            }
+            let body = r#"{"format":"kicad_csv","summary":{"lines":1,"ok":1},"lines":[{"references":["U1"],"status":"ok","matches":[{"part":{"manufacturer":"raspberrypi","mpn":"RP2040"}}]}]}"#;
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            );
+            String::from_utf8_lossy(&request).to_string()
+        });
+        let client = Client::new(format!("http://{addr}")).with_cache_dir(temp_cache_dir("bom"));
+        let report = client.bom_check(bom).unwrap();
+        assert_eq!(report.summary.ok, 1);
+        assert_eq!(report.lines[0].matches[0].part.mpn, "RP2040");
+        let request = seen.join().unwrap();
+        assert!(request.starts_with("POST /v1/bom/check HTTP/1.1"));
+        assert!(request.ends_with(&format!("\r\n\r\n{bom}")));
     }
 
     #[test]

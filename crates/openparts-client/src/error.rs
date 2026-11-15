@@ -26,6 +26,11 @@ pub enum ClientError {
         claimed: Option<String>,
         computed: String,
     },
+    #[error("{mpn} is made by several manufacturers: {}", candidates.join(", "))]
+    Ambiguous {
+        mpn: String,
+        candidates: Vec<String>,
+    },
     #[error("offline and no cached copy of {0} is available")]
     OfflineCacheMiss(String),
     #[error("cache I/O error at {path}: {source}")]

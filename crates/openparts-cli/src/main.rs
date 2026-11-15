@@ -2,6 +2,7 @@ mod bom;
 mod bundle;
 mod data;
 mod diff_facts;
+mod stale;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
@@ -78,6 +79,21 @@ enum Commands {
         data: Option<PathBuf>,
         /// `<manufacturer>/<mpn>` (the MPN may itself contain `/`).
         parts: Vec<String>,
+    },
+    /// List a KiCad project's OpenParts footprints (on its boards and in
+    /// its project libraries) whose `OpenParts placement` hash differs
+    /// from the registry's current Placement Model.
+    KicadCheckStale {
+        /// Project directory, `.kicad_pro` or `.kicad_pcb`.
+        project: PathBuf,
+        /// Every footprint, not just the stale and failed ones.
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        json: bool,
+        /// Exit with an error when a footprint is stale.
+        #[arg(long)]
+        strict: bool,
     },
     Show {
         manufacturer: String,
@@ -216,6 +232,12 @@ fn main() -> anyhow::Result<()> {
             data: None,
             parts,
         } => cmd_kicad_install(&cli.registry, &project, &parts),
+        Commands::KicadCheckStale {
+            project,
+            all,
+            json,
+            strict,
+        } => stale::run(&cli.registry, &project, all, json, strict),
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
         Commands::DiffFacts {
             base,
