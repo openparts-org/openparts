@@ -39,6 +39,7 @@ pub(all) struct CatalogFacets {
   manufacturer : Array[FacetValue]
   mounting : Array[FacetValue]
   package_family : Array[FacetValue]
+  parameters : Array[ParameterFacet]
   pins : Array[FacetValue]
   pitch : Array[FacetValue]
   size : Array[FacetValue]
@@ -59,6 +60,7 @@ pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
     manufacturer: field(obj, "manufacturer", path),
     mounting: field(obj, "mounting", path),
     package_family: field(obj, "package_family", path),
+    parameters: field(obj, "parameters", path),
     pins: field(obj, "pins", path),
     pitch: field(obj, "pitch", path),
     size: field(obj, "size", path),
@@ -85,6 +87,7 @@ pub(all) struct CatalogItem {
   mpn : String
   package_ : String
   package_family : PackageFamily?
+  parameters : Map[String, CatalogParameter]
   pitch : Double?
   size_code : String?
   size_code_metric : String?
@@ -110,10 +113,27 @@ pub impl @json.FromJson for CatalogItem with fn from_json(json, path) {
     mpn: field(obj, "mpn", path),
     package_: field(obj, "package", path),
     package_family: opt_field(obj, "package_family", path),
+    parameters: field(obj, "parameters", path),
     pitch: opt_field(obj, "pitch", path),
     size_code: opt_field(obj, "size_code", path),
     size_code_metric: opt_field(obj, "size_code_metric", path),
   }
+}
+
+///|
+/// One parameter of a catalog row.
+#derive(Eq)
+pub(all) struct CatalogParameter {
+  label : String
+  value : Double?
+}
+
+///|
+pub impl @json.FromJson for CatalogParameter with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a CatalogParameter object"))
+  }
+  { label: field(obj, "label", path), value: opt_field(obj, "value", path), }
 }
 
 ///|
@@ -221,6 +241,7 @@ pub(all) struct Device {
   id : String
   kind : Kind
   manufacturer : String
+  parameters : Map[String, ParameterValue]?
   pins : Map[String, Pin]
   provenance : Map[String, Array[ProvenanceEntry]]
   revisions : Map[String, DeviceRevision]
@@ -238,6 +259,7 @@ pub impl @json.FromJson for Device with fn from_json(json, path) {
     id: field(obj, "id", path),
     kind: field(obj, "kind", path),
     manufacturer: field(obj, "manufacturer", path),
+    parameters: opt_field(obj, "parameters", path),
     pins: field(obj, "pins", path),
     provenance: field_or(obj, "provenance", path, {}),
     revisions: field_or(obj, "revisions", path, {}),
@@ -1088,6 +1110,98 @@ pub impl @json.FromJson for PackageTab with fn from_json(json, path) {
 }
 
 ///|
+/// One electrical-parameter facet: present only when some part under
+/// the other filters states the key (or the key is filtered on).
+#derive(Eq)
+pub(all) struct ParameterFacet {
+  key : String
+  kind : ParameterKind
+  max : Double?
+  max_label : String?
+  min : Double?
+  min_label : String?
+  unit : String
+  values : Array[FacetValue]
+}
+
+///|
+pub impl @json.FromJson for ParameterFacet with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ParameterFacet object"))
+  }
+  {
+    key: field(obj, "key", path),
+    kind: field(obj, "kind", path),
+    max: opt_field(obj, "max", path),
+    max_label: opt_field(obj, "max_label", path),
+    min: opt_field(obj, "min", path),
+    min_label: opt_field(obj, "min_label", path),
+    unit: field(obj, "unit", path),
+    values: field(obj, "values", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ParameterKind {
+  Numeric
+  Enumerated
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ParameterKind::wire(self : ParameterKind) -> String {
+  match self {
+    Numeric => "numeric"
+    Enumerated => "enumerated"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ParameterKind::all() -> Array[ParameterKind] {
+  [Numeric, Enumerated]
+}
+
+///|
+pub impl @json.FromJson for ParameterKind with fn from_json(json, path) {
+  match json {
+    String("numeric") => Numeric
+    String("enumerated") => Enumerated
+    _ => raise @json.JsonDecodeError((path, "expected a ParameterKind"))
+  }
+}
+
+///|
+/// One parameter value as the data states it. A numeric key uses
+/// `nominal`/`min`/`max` + `unit` (like a [`crate::Dimension`]; none of
+/// the three is invented when the source doesn't state it); an
+/// enumerated key uses `value`. Which shape a key takes is fixed by the
+/// vocabulary; the validator rejects the other one.
+#derive(Eq)
+pub(all) struct ParameterValue {
+  max : Double?
+  min : Double?
+  nominal : Double?
+  unit : String?
+  value : String?
+}
+
+///|
+pub impl @json.FromJson for ParameterValue with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ParameterValue object"))
+  }
+  {
+    max: opt_field(obj, "max", path),
+    min: opt_field(obj, "min", path),
+    nominal: opt_field(obj, "nominal", path),
+    unit: opt_field(obj, "unit", path),
+    value: opt_field(obj, "value", path),
+  }
+}
+
+///|
 /// Canonical Data Specification section 11. Never duplicates Device
 /// pinout or Package dimensions — only references them.
 #derive(Eq)
@@ -1100,6 +1214,7 @@ pub(all) struct Part {
   manufacturer : String
   mpn : String
   package_ : String
+  parameters : Map[String, ParameterValue]?
   provenance : Map[String, Array[ProvenanceEntry]]
   schema_version : String
   sources : Array[String]
@@ -1119,6 +1234,7 @@ pub impl @json.FromJson for Part with fn from_json(json, path) {
     manufacturer: field(obj, "manufacturer", path),
     mpn: field(obj, "mpn", path),
     package_: field(obj, "package", path),
+    parameters: opt_field(obj, "parameters", path),
     provenance: field_or(obj, "provenance", path, {}),
     schema_version: field(obj, "schema_version", path),
     sources: field_or(obj, "sources", path, []),

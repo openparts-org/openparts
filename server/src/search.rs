@@ -3,14 +3,19 @@
 //! Each Part is indexed under more than its MPN: manufacturer id and
 //! display name, the Device's id and family, the category, the Package's
 //! id, family, lead count, pitch and body size (plus imperial/metric
-//! chip codes), and the Device's pin names. Text is normalised the same
+//! chip codes), the Device's pin names, and the Part's electrical
+//! parameters as formatted values (`100 nF`, also `0.1 µF`; `10 kΩ`;
+//! `X7R`), so `100nF` or `10k` finds the parts that have them. Text is normalised the same
 //! way on both sides (full-width to ASCII, case, diacritics, `µ`/`Ω`,
 //! trailing decimal zeros, `3v3`-style values, separators removed), so
 //! `ＲＰ２０４０`, `rp-2040` and `rp 2040` all find the RP2040. A query is
 //! split into words that must all match (AND); Japanese and common
 //! English terms are first rewritten to the indexed vocabulary.
 
-use openparts_core::{ComponentCategory, PackageFamily, Part};
+use openparts_core::{
+    effective_parameters, format_value, parameter_spec, ComponentCategory, Normalized,
+    PackageFamily, ParameterSpec, Part,
+};
 use openparts_data::Dataset;
 
 /// What a match was found in; the weight orders the results.
@@ -21,6 +26,7 @@ enum Field {
     Manufacturer,
     Category,
     Package,
+    Parameter,
     Pin,
 }
 
@@ -32,6 +38,7 @@ impl Field {
             Field::Manufacturer => 20,
             Field::Category => 15,
             Field::Package => 15,
+            Field::Parameter => 12,
             Field::Pin => 3,
         }
     }
@@ -162,6 +169,21 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
     if let Some(m) = ds.manufacturers.get(&p.manufacturer.0) {
         add(Field::Manufacturer, &m.name);
     }
+    let no_params = Default::default();
+    let device_params = ds
+        .devices
+        .get(&p.device.0)
+        .map_or(&no_params, |d| &d.parameters);
+    for (key, (value, _)) in effective_parameters(&p.parameters, device_params) {
+        let Some(spec) = parameter_spec(key) else {
+            continue;
+        };
+        if let Ok(n) = value.normalize(spec) {
+            for text in parameter_terms(&n, spec) {
+                add(Field::Parameter, &text);
+            }
+        }
+    }
     if let Some(d) = ds.devices.get(&p.device.0) {
         add(Field::Device, &d.id.0);
         if let Some(f) = &d.family {
@@ -201,6 +223,34 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
         mpn: normalize(&p.mpn).replace(" ", ""),
         terms,
     }
+}
+
+/// The ways a parameter value is written: its label (`100 nF`) and, for
+/// a value of 100 or more in its prefix, the next prefix up (`0.1 µF`),
+/// as capacitors are labelled both ways.
+fn parameter_terms(n: &Normalized, spec: &ParameterSpec) -> Vec<String> {
+    let mut out = vec![n.label(spec)];
+    if let (Some(v), None) = (n.stated(spec), spec.display_unit) {
+        if !spec.deviation {
+            let label = format_value(v, spec);
+            let mantissa: f64 = label
+                .split(' ')
+                .next()
+                .and_then(|m| m.parse().ok())
+                .unwrap_or(0.0);
+            if mantissa >= 100.0 {
+                let up = format_value(v * 1000.0, spec);
+                // One prefix up: 100 nF -> (100 µF) / 1000 = 0.1 µF.
+                if let Some((m, unit)) = up.split_once(' ') {
+                    if let Ok(m) = m.parse::<f64>() {
+                        let small = format!("{}", m / 1000.0);
+                        out.push(format!("{small} {unit}"));
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 fn category_name(c: ComponentCategory) -> &'static str {
@@ -486,6 +536,36 @@ mod tests {
         );
         assert_eq!(query_words("USB C"), vec![vec!["usbc"]]);
         assert_eq!(query_words("xtal")[0], vec!["xtal", "crystal"]);
+    }
+
+    #[test]
+    fn parameter_values_are_searchable_as_typed() {
+        let spec = |k: &str| parameter_spec(k).unwrap();
+        let value = |n: f64, unit: &str| openparts_core::ParameterValue {
+            nominal: Some(n),
+            unit: Some(unit.into()),
+            ..Default::default()
+        };
+        let terms = |n: f64, unit: &str, k: &str| -> Vec<Term> {
+            let n = value(n, unit).normalize(spec(k)).unwrap();
+            parameter_terms(&n, spec(k))
+                .iter()
+                .map(|t| Term::new(t))
+                .collect()
+        };
+        let hit = |terms: &[Term], q: &str| {
+            let words = query_words(q);
+            words
+                .iter()
+                .all(|alts| alts.iter().any(|w| terms.iter().any(|t| t.matches(w))))
+        };
+        let cap = terms(100.0, "nF", "capacitance");
+        assert!(hit(&cap, "100nF") && hit(&cap, "100 nF") && hit(&cap, "0.1uF"));
+        assert!(hit(&cap, "0.1µF") && !hit(&cap, "10nF"));
+        let res = terms(10.0, "kΩ", "resistance");
+        assert!(hit(&res, "10k") && hit(&res, "10kΩ") && hit(&res, "10 kohm"));
+        let res = terms(4.7, "kohm", "resistance");
+        assert!(hit(&res, "4k7") && hit(&res, "4.7k"));
     }
 
     #[test]

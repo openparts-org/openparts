@@ -216,7 +216,7 @@ pub fn validate_location(kind: DocKind, id: &str, rel_path: &str) -> Vec<Diagnos
 }
 
 /// JSON Pointer escaping of one key.
-fn pointer_escape(key: &str) -> String {
+pub(crate) fn pointer_escape(key: &str) -> String {
     key.replace('~', "~0").replace('/', "~1")
 }
 

@@ -18,6 +18,7 @@ mod cross;
 mod device;
 mod diagnostic;
 mod package;
+mod parameter;
 mod provenance;
 
 pub use cross::{validate_location, validate_source, DocKind};
@@ -26,6 +27,7 @@ pub use diagnostic::{Diagnostic, Severity};
 use device::*;
 use openparts_core::{Device, Package, Part, SourceId};
 use package::*;
+use parameter::*;
 use provenance::*;
 use std::collections::BTreeSet;
 
@@ -75,7 +77,27 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "provenance.missing",
-        meaning: "a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start)",
+        meaning: "a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start)",
+    },
+    Rule {
+        id: "parameter.unknown_key",
+        meaning: "a `parameters` key is not in the parameter vocabulary (`openparts_core::PARAMETERS`, Canonical Data Specification section 11.1)",
+    },
+    Rule {
+        id: "parameter.unit",
+        meaning: "a numeric parameter has no `unit`, or a unit that is not a unit of its key's quantity (e.g. `V` for `capacitance`)",
+    },
+    Rule {
+        id: "parameter.invalid",
+        meaning: "a parameter value has the wrong shape for its key (`value` on a numeric key, `nominal`/`min`/`max`/`unit` on an enumerated one, or nothing), or an enumerated value outside the key's vocabulary",
+    },
+    Rule {
+        id: "parameter.out_of_range",
+        meaning: "a parameter's `min <= nominal <= max` does not hold (compared only between stated values)",
+    },
+    Rule {
+        id: "parameter.implausible",
+        meaning: "warning: a parameter key is unusual for the Device's category (e.g. `capacitance` on a resistor)",
     },
     Rule {
         id: "tab.invalid",
@@ -245,6 +267,18 @@ pub fn validate_part(
         &package.provenance,
     ));
     out.extend(cross::check_existence_evidence(&part_entity, part));
+    out.extend(check_parameters(
+        &part_entity,
+        &part.parameters,
+        &part.provenance,
+        device.category,
+    ));
+    out.extend(check_parameters(
+        &device_entity,
+        &device.parameters,
+        &device.provenance,
+        device.category,
+    ));
 
     out
 }
@@ -263,6 +297,7 @@ mod tests {
             include_str!("package.rs"),
             include_str!("provenance.rs"),
             include_str!("cross.rs"),
+            include_str!("parameter.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
@@ -295,6 +330,7 @@ mod tests {
         Part {
             schema_version: "0.1".into(),
             kind: Kind::Part,
+            parameters: Default::default(),
             id: PartId::from("ex/EX1"),
             manufacturer: ManufacturerId::from("ex"),
             mpn: "EX1".into(),
@@ -326,6 +362,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: openparts_core::DeviceId::from("ex/DEV1"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -746,5 +783,103 @@ mod tests {
         package.family = openparts_core::PackageFamily::ShroudedHeader;
         let diags = validate_part(&base_part(), &base_device(), &package, &BTreeSet::new());
         assert!(paths(&diags, "header.invalid").is_empty());
+    }
+
+    #[test]
+    fn parameters_are_typed_cited_and_plausible() {
+        use openparts_core::ParameterValue;
+        let num =
+            |nominal: Option<f64>, min: Option<f64>, max: Option<f64>, unit: &str| ParameterValue {
+                nominal,
+                min,
+                max,
+                unit: Some(unit.into()),
+                value: None,
+            };
+        let cite = |part: &mut Part, path: &str| {
+            part.provenance.insert(
+                path.into(),
+                vec![openparts_core::ProvenanceEntry {
+                    source: SourceId::from("ex/DS1"),
+                    page: Some(1),
+                    locator: Some("Specifications".into()),
+                }],
+            );
+        };
+        let mut device = base_device();
+        device.category = openparts_core::ComponentCategory::Capacitor;
+        let mut part = base_part();
+        part.parameters
+            .insert("capacitance".into(), num(Some(100.0), None, None, "nF"));
+        part.parameters
+            .insert("rated_voltage".into(), num(Some(50.0), None, None, "nF"));
+        part.parameters
+            .insert("tolerance".into(), num(Some(5.0), Some(10.0), None, "%"));
+        part.parameters
+            .insert("colour".into(), num(Some(1.0), None, None, "V"));
+        part.parameters.insert(
+            "dielectric".into(),
+            ParameterValue {
+                value: Some("X9Q".into()),
+                ..Default::default()
+            },
+        );
+        part.parameters
+            .insert("resistance".into(), num(Some(10.0), None, None, "kΩ"));
+        cite(&mut part, "/parameters/capacitance");
+        let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
+        let paths = |rule: &str| -> Vec<String> {
+            diags
+                .iter()
+                .filter(|d| d.rule_id == rule)
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        assert_eq!(paths("parameter.unknown_key"), vec!["/parameters/colour"]);
+        assert_eq!(paths("parameter.unit"), vec!["/parameters/rated_voltage"]);
+        assert_eq!(
+            paths("parameter.out_of_range"),
+            vec!["/parameters/tolerance"]
+        );
+        assert_eq!(paths("parameter.invalid"), vec!["/parameters/dielectric"]);
+        assert_eq!(
+            paths("parameter.implausible"),
+            vec!["/parameters/resistance"]
+        );
+        assert!(diags
+            .iter()
+            .any(|d| d.rule_id == "parameter.implausible" && !d.is_error()));
+        assert_eq!(
+            paths("provenance.missing"),
+            vec![
+                "/parameters/colour",
+                "/parameters/dielectric",
+                "/parameters/rated_voltage",
+                "/parameters/resistance",
+                "/parameters/tolerance"
+            ]
+        );
+
+        // A clean, cited set passes; a Device-level value is checked too.
+        let mut part = base_part();
+        part.parameters
+            .insert("capacitance".into(), num(Some(100.0), None, None, "nF"));
+        part.parameters
+            .insert("tolerance".into(), num(None, Some(-10.0), Some(10.0), "%"));
+        cite(&mut part, "/parameters/capacitance");
+        cite(&mut part, "/parameters/tolerance");
+        device
+            .parameters
+            .insert("rated_voltage".into(), num(Some(50.0), None, None, "V"));
+        let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
+        let found: Vec<_> = diags
+            .iter()
+            .filter(|d| d.rule_id.starts_with("parameter.") || d.rule_id == "provenance.missing")
+            .map(|d| (d.entity.as_str(), d.field_path.as_deref()))
+            .collect();
+        assert_eq!(
+            found,
+            vec![("device:ex/DEV1", Some("/parameters/rated_voltage"))]
+        );
     }
 }

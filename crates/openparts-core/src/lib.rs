@@ -16,6 +16,7 @@ pub mod kind;
 pub mod lifecycle;
 pub mod manufacturer;
 pub mod package;
+pub mod parameter;
 pub mod part;
 pub mod pin;
 pub mod provenance;
@@ -37,6 +38,10 @@ pub use manufacturer::{Manufacturer, Website};
 pub use package::{
     ExposedPadDimensions, GeometryType, Package, PackageConstruction, PackageDimensions,
     PackageGeometrySpec, PackagePad, PackageTab,
+};
+pub use parameter::{
+    effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,
+    ParameterShape, ParameterSpec, ParameterValue, Parameters, Quantity, PARAMETERS,
 };
 pub use part::Part;
 pub use pin::{Pin, PinOverride, PinType};

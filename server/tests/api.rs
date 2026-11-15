@@ -715,9 +715,119 @@ async fn catalog_connectors_by_pitch_paged() {
     assert_eq!(q["items"][0]["mpn"], "RP2040");
 }
 
+fn param_facet<'a>(body: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
+    body["facets"]["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["key"] == key)
+}
+
+fn mpns(body: &serde_json::Value) -> Vec<&str> {
+    body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|it| it["mpn"].as_str().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn catalog_filters_and_facets_electrical_parameters() {
+    // A range typed with prefixes, in SI underneath.
+    let body =
+        catalog("category=capacitor&capacitance_min=10n&capacitance_max=0.2u&limit=500").await;
+    assert!(mpns(&body).contains(&"GRM155R71C104KA88D"), "{body}");
+    for it in body["items"].as_array().unwrap() {
+        let c = it["parameters"]["capacitance"]["value"].as_f64().unwrap();
+        assert!((1e-8..=2e-7).contains(&c), "{it}");
+    }
+    let item = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|it| it["mpn"] == "GRM155R71C104KA88D")
+        .unwrap();
+    assert_eq!(item["parameters"]["capacitance"]["label"], "100 nF");
+    assert_eq!(item["parameters"]["dielectric"]["label"], "X7R");
+    assert_eq!(item["parameters"]["tolerance"]["label"], "±10%");
+
+    // Discrete values, picked by any spelling of the value.
+    for v in ["100nF", "0.1u", "100n"] {
+        let body = catalog(&format!("capacitance={v}&limit=500")).await;
+        assert!(mpns(&body).contains(&"GRM155R71C104KA88D"), "{v}");
+        let f = param_facet(&body, "capacitance").unwrap();
+        let picked: Vec<_> = f["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["selected"] == true)
+            .collect();
+        assert_eq!(picked.len(), 1, "{v}: {f}");
+        assert_eq!(picked[0]["label"], "100 nF");
+    }
+
+    // Facets show only keys some result has; a facet's counts ignore
+    // its own filter, like every other facet.
+    let caps = catalog("category=capacitor&limit=0").await;
+    let dielectric = param_facet(&caps, "dielectric").unwrap();
+    assert_eq!(dielectric["kind"], "enumerated");
+    let x7r = dielectric["values"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["value"] == "X7R")
+        .unwrap()["count"]
+        .as_u64()
+        .unwrap();
+    let picked = catalog("category=capacitor&dielectric=x7r&limit=0").await;
+    assert_eq!(picked["total"].as_u64().unwrap(), x7r);
+    assert_eq!(
+        param_facet(&picked, "dielectric").unwrap()["values"]
+            .as_array()
+            .unwrap()
+            .clone(),
+        dielectric["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| {
+                let mut o = o.clone();
+                o["selected"] = (o["value"] == "X7R").into();
+                o
+            })
+            .collect::<Vec<_>>()
+    );
+    let resistors = catalog("category=resistor&limit=0").await;
+    assert!(param_facet(&resistors, "capacitance").is_none());
+    assert!(param_facet(&resistors, "resistance").is_some());
+
+    // Sorting by a parameter puts the parts that state it first.
+    let body = catalog("category=resistor&sort=resistance&limit=3").await;
+    let values: Vec<f64> = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|it| it["parameters"]["resistance"]["value"].as_f64().unwrap())
+        .collect();
+    assert!(values.windows(2).all(|w| w[0] <= w[1]), "{values:?}");
+}
+
+#[tokio::test]
+async fn free_text_matches_formatted_parameter_values() {
+    for q in ["100nF", "0.1uF", "100 nF"] {
+        let body = catalog(&format!("q={}&limit=500", q.replace(' ', "%20"))).await;
+        assert!(mpns(&body).contains(&"GRM155R71C104KA88D"), "{q}");
+    }
+    let body = catalog("q=10k&category=resistor&limit=500").await;
+    assert!(mpns(&body).contains(&"RC0201FR-0710KL"));
+}
+
 #[tokio::test]
 async fn catalog_rejects_bad_numbers() {
     let response = get(app(), "/v1/catalog?width_min=wide").await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = get(app(), "/v1/catalog?capacitance_min=10V").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response = get(app(), "/v1/catalog?sort=price").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);

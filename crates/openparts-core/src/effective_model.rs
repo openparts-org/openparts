@@ -106,6 +106,7 @@ mod tests {
         Part {
             schema_version: "0.1".into(),
             kind: Kind::Part,
+            parameters: Default::default(),
             id: PartId::from("ex/EX1"),
             manufacturer: ManufacturerId::from("ex"),
             mpn: "EX1".into(),
@@ -209,6 +210,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/DEV1"),
             manufacturer: ManufacturerId::from("ex"),
             category: crate::category::ComponentCategory::Other,

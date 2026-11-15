@@ -1,6 +1,7 @@
 use crate::category::ComponentCategory;
 use crate::ids::{DeviceId, ManufacturerId};
 use crate::kind::Kind;
+use crate::parameter::Parameters;
 use crate::pin::{Pin, PinOverride};
 use crate::provenance::ProvenanceMap;
 use crate::serde_util::deserialize_no_dup_map;
@@ -61,6 +62,15 @@ pub struct Device {
     pub pins: BTreeMap<String, Pin>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
     pub revisions: BTreeMap<String, DeviceRevision>,
+    /// Electrical parameters every Part of this Device shares (section
+    /// 11.1), e.g. a memory's capacity. A Part's own value for a key
+    /// replaces this one.
+    #[serde(
+        default,
+        skip_serializing_if = "Parameters::is_empty",
+        deserialize_with = "deserialize_no_dup_map"
+    )]
+    pub parameters: Parameters,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
     pub provenance: ProvenanceMap,
 }

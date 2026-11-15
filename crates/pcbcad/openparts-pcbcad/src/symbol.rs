@@ -584,6 +584,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/DEV8"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -685,6 +686,7 @@ mod tests {
         let device = Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/LONGNAMES"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -765,6 +767,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/MCU"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -957,6 +960,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/BIGMCU"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -1050,6 +1054,7 @@ mod tests {
         let device = Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/TWOPOWER"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,
@@ -1164,6 +1169,7 @@ mod tests {
         Device {
             schema_version: "0.1".into(),
             kind: Kind::Device,
+            parameters: Default::default(),
             id: DeviceId::from("ex/NAMES"),
             manufacturer: ManufacturerId::from("ex"),
             category: openparts_core::ComponentCategory::Other,

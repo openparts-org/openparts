@@ -449,7 +449,7 @@ let catalog_ja : CatalogCopy = {
   prev: "前へ",
   next: "次へ",
   show_less: "折りたたむ",
-  electrical_note: "容量・抵抗値・定格電圧などの電気的特性は、出典付きのデータがまだ無いため絞り込み項目にしていません。",
+  electrical_note: "容量・抵抗値・定格電圧などの電気的特性は、出典付きの値がある部品だけが絞り込み対象です(まだ一部の部品のみ)。範囲は 10n、0.1u、100nF、4k7 のように単位接頭辞付きで入力できます。",
   f_category: "カテゴリ",
   f_manufacturer: "メーカー",
   f_family: "パッケージ",
@@ -498,7 +498,7 @@ let catalog_en : CatalogCopy = {
   prev: "Previous",
   next: "Next",
   show_less: "Show less",
-  electrical_note: "Electrical parameters such as capacitance, resistance and voltage rating are not filterable yet: the dataset has no sourced values for them.",
+  electrical_note: "Electrical parameters such as capacitance, resistance and voltage rating filter only the parts with sourced values (so far a few). Ranges take unit prefixes: 10n, 0.1u, 100nF, 4k7.",
   f_category: "Category",
   f_manufacturer: "Manufacturer",
   f_family: "Package",
@@ -692,6 +692,116 @@ fn pitch_chip(lang : Lang, mm : String) -> String {
   match lang {
     Ja => "ピッチ \{mm} mm"
     En => "\{mm} mm pitch"
+  }
+}
+
+// ---- electrical parameters (the server's vocabulary,
+// openparts_core::PARAMETERS; a server test checks every key is here) ----
+
+///|
+/// (key, Japanese name, English name) of every parameter key, in the
+/// vocabulary's order.
+let param_names : Array[(String, String, String)] = [
+  ("capacitance", "静電容量", "Capacitance"),
+  ("tolerance", "許容差", "Tolerance"),
+  (
+    "capacitance_tolerance", "容量許容差 (絶対値)", "Capacitance tolerance (absolute)",
+  ),
+  ("rated_voltage", "定格電圧", "Rated voltage"),
+  ("dielectric", "温度特性 (誘電体)", "Dielectric"),
+  ("esr", "等価直列抵抗 (ESR)", "ESR"),
+  ("resistance", "抵抗値", "Resistance"),
+  ("power_rating", "定格電力", "Power rating"),
+  ("temperature_coefficient", "抵抗温度係数", "Temperature coefficient"),
+  ("inductance", "インダクタンス", "Inductance"),
+  ("rated_current", "定格電流", "Rated current"),
+  ("saturation_current", "飽和電流", "Saturation current"),
+  ("dcr", "直流抵抗 (DCR)", "DC resistance (DCR)"),
+  ("frequency", "周波数", "Frequency"),
+  ("load_capacitance", "負荷容量", "Load capacitance"),
+  ("frequency_tolerance", "周波数許容差", "Frequency tolerance"),
+  ("forward_voltage", "順方向電圧 (Vf)", "Forward voltage (Vf)"),
+  ("reverse_voltage", "逆方向電圧 (Vr)", "Reverse voltage (Vr)"),
+  ("forward_current", "順方向電流 (If)", "Forward current (If)"),
+  ("color", "発光色", "Color"),
+  ("wavelength", "波長", "Wavelength"),
+  ("polarity", "極性", "Polarity"),
+  (
+    "drain_source_voltage", "ドレイン-ソース間電圧 (Vds)", "Drain-source voltage (Vds)",
+  ),
+  ("drain_current", "ドレイン電流 (Id)", "Drain current (Id)"),
+  ("rds_on", "オン抵抗 (Rds(on))", "On-resistance (Rds(on))"),
+  (
+    "gate_threshold_voltage", "ゲートしきい値電圧 (Vgs(th))", "Gate threshold voltage (Vgs(th))",
+  ),
+  (
+    "collector_emitter_voltage", "コレクタ-エミッタ間電圧 (Vceo)", "Collector-emitter voltage (Vceo)",
+  ),
+  ("collector_current", "コレクタ電流 (Ic)", "Collector current (Ic)"),
+  ("output_type", "出力タイプ", "Output type"),
+  ("output_voltage", "出力電圧", "Output voltage"),
+  ("input_voltage_max", "最大入力電圧", "Max input voltage"),
+  ("output_current", "出力電流", "Output current"),
+  ("dropout_voltage", "ドロップアウト電圧", "Dropout voltage"),
+  ("capacity", "記憶容量", "Capacity"),
+  ("actuation_force", "操作力", "Actuation force"),
+  ("travel", "ストローク", "Travel"),
+]
+
+///|
+/// A parameter key's display name (the key itself if unknown).
+fn param_name(lang : Lang, key : String) -> String {
+  for p in param_names {
+    if p.0 == key {
+      return match lang {
+        Ja => p.1
+        En => p.2
+      }
+    }
+  }
+  key
+}
+
+///|
+/// An enumerated parameter value's display name; dielectric codes and
+/// unknown values show as they are.
+fn param_value_label(lang : Lang, key : String, value : String) -> String {
+  match (lang, key, value) {
+    (_, "polarity", "npn") => "NPN"
+    (_, "polarity", "pnp") => "PNP"
+    (Ja, "polarity", "n_channel") => "Nチャネル"
+    (Ja, "polarity", "p_channel") => "Pチャネル"
+    (En, "polarity", "n_channel") => "N-channel"
+    (En, "polarity", "p_channel") => "P-channel"
+    (Ja, "output_type", "fixed") => "固定"
+    (Ja, "output_type", "adjustable") => "可変"
+    (En, "output_type", "fixed") => "Fixed"
+    (En, "output_type", "adjustable") => "Adjustable"
+    (Ja, "color", "red") => "赤"
+    (Ja, "color", "orange") => "橙"
+    (Ja, "color", "amber") => "アンバー"
+    (Ja, "color", "yellow") => "黄"
+    (Ja, "color", "green") => "緑"
+    (Ja, "color", "blue") => "青"
+    (Ja, "color", "white") => "白"
+    (Ja, "color", "infrared") => "赤外"
+    (Ja, "color", "ultraviolet") => "紫外"
+    (_, "color", "rgb") => "RGB"
+    (En, "color", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
+    _ => value
+  }
+}
+
+///|
+fn range_chip(
+  lang : Lang,
+  name : String,
+  bound : String,
+  value : String,
+) -> String {
+  match (lang, bound) {
+    (_, "min") => "\{name} ≥ \{value}"
+    _ => "\{name} ≤ \{value}"
   }
 }
 

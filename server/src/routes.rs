@@ -126,10 +126,12 @@ async fn search(
     Json(results)
 }
 
-/// `GET /v1/catalog?q=&category=&manufacturer=&family=&size=&pins=&pitch=&mounting=&lifecycle=&existence=&width_min=&width_max=&length_min=&length_max=&height_min=&height_max=&sort=&order=&offset=&limit=`
+/// `GET /v1/catalog?q=&category=&manufacturer=&family=&size=&pins=&pitch=&mounting=&lifecycle=&existence=&width_min=&width_max=&length_min=&length_max=&height_min=&height_max=&<parameter>=&<parameter>_min=&<parameter>_max=&sort=&order=&offset=&limit=`
 ///
 /// Faceted search (`crate::catalog`): multi-select filters take
-/// comma-separated values or repeat; ranges are mm. Answers
+/// comma-separated values or repeat; body ranges are mm; electrical
+/// parameters (`capacitance=100nF`, `resistance_max=10k`) take typed
+/// values with unit prefixes. Answers
 /// `{ total, offset, limit, items, facets }`.
 async fn catalog(
     State(store): State<Arc<Store>>,

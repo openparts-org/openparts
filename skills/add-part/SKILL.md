@@ -98,6 +98,12 @@ comment header saying what you verified where.
   ("Full production", "Mass Production", "Active") are first-party; cite
   the page.
 - Several MPNs (reel, grade, temperature) share one Device and Package.
+- Electrical parameters (`parameters:` capacitance, resistance, rated
+  voltage...) follow the Parameter Ingestion Guide,
+  docs/spec/agent-ingestion.md section 19.1: closed key list, a unit of
+  the key's quantity, a `/parameters/<key>` provenance entry for each,
+  and no values decoded from the MPN unless the ordering-code table maps
+  the code (cite that table).
 
 ## 3. Devices and pins
 

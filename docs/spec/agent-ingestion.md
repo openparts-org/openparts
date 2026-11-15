@@ -459,6 +459,123 @@ Part
 
 ---
 
+## 19.1 Parameter Ingestion Guide
+
+How an agent records electrical parameters (Canonical Data
+Specification section 11.1) from datasheets. Follow it step by step;
+when a step can't be done, leave the key out -- an absent key is
+Unknown, which is always acceptable.
+
+**Scope of one task.** One manufacturer series (or one Device) at a
+time, in your own git worktree of openparts-data, on a branch of your
+own. Only add `parameters` (and their `provenance`) to existing Parts
+and Devices unless the task says otherwise. Don't touch Parts whose
+data is held for a decision (the task names them).
+
+**1. Pick the key set from the Device's category.**
+
+| Category | Keys to look for |
+|---|---|
+| capacitor | `capacitance`, `tolerance` (or `capacitance_tolerance` when the source gives pF), `rated_voltage`, `dielectric`, `esr` |
+| resistor | `resistance`, `tolerance`, `power_rating`, `temperature_coefficient` |
+| inductor | `inductance`, `tolerance`, `rated_current`, `saturation_current`, `dcr` |
+| crystal | `frequency`, `load_capacitance`, `frequency_tolerance`, `esr` |
+| diode | `forward_voltage`, `reverse_voltage`, `forward_current` |
+| LED | `color`, `wavelength`, `forward_voltage`, `forward_current` |
+| transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
+| fuse | `rated_current`, `rated_voltage` |
+| regulators | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`, `dropout_voltage` |
+| memory | `capacity` |
+| switches | `actuation_force`, `travel` |
+
+No other keys exist. Don't invent one; propose it in the PR text
+instead.
+
+**2. Find the value in a primary source already cited.** Use a Source
+the Part or Device already lists (`sources/*.yaml` carries its `url`).
+Fetch it with a plain standard tool (`curl`, then `wget` once if
+refused); no header spoofing, bot-challenge evasion, login walls or
+unofficial mirrors. If it can't be fetched, skip the part and list it
+in the report. A new Source is allowed only when it is a primary
+document (section 6) and gets its own `sources/` file.
+
+Look in this order: the MPN's own specification table (single-MPN
+datasheets such as Murata's or Yageo's per-part sheets); the series
+electrical-characteristics table, at the row or column for this MPN or
+its value; the ordering-code table.
+
+**3. Apply the two source rules.**
+
+- *No MPN decoding.* Never read a value out of the part number by
+  pattern (`104` = 100 nF, `K` = ±10 %) unless the datasheet's own
+  ordering-code table explicitly maps that code to that value. When it
+  does, cite that table as the provenance, quoting the code:
+  `"ORDERING INFORMATION, (2) TOLERANCE: B = ±0.1%"`.
+- *One datasheet, many MPNs: cite the row.* The locator names the table
+  and the row/column that applies to this MPN: `"Table 3, RT0805
+  column, Standard: 1/8W"`.
+
+If the applicable row depends on something the MPN doesn't fix (an
+operation mode, an option not encoded in the MPN), don't record the
+key.
+
+**4. Write the value exactly as stated.**
+
+- Numeric: `nominal` for a single stated value; `min`/`max` for stated
+  limits; never compute a `nominal` from them. Use the datasheet's unit
+  when it is in the accepted list (`uF`, `kΩ`, `ppm/°C`, `Vdc` -> `V`).
+- Tolerances (`tolerance`, `frequency_tolerance`,
+  `temperature_coefficient`, `capacitance_tolerance`) are signed bounds:
+  ±10 % -> `min: -10, max: 10, unit: "%"`.
+- Ratings with conditions (power at 70 °C, Id at 25 °C): the number in
+  the value, the condition in the locator.
+- "typ." -> `nominal`; "max." -> `max`; "min." -> `min`. Vf "typ 2.0,
+  max 2.6" -> `nominal: 2.0, max: 2.6`.
+- Enumerated keys: the exact listed spelling (`X7R`, `n_channel`,
+  `adjustable`). `X7R(EIA)` is `X7R`. A value not in the list: leave the
+  key out and report it.
+- A fact all Parts of a Device share (one capacity for the whole
+  Device): put it on the Device, cited in the Device's provenance.
+
+```yaml
+parameters:
+  resistance:
+    nominal: 10
+    unit: kΩ
+  tolerance:
+    min: -1
+    max: 1
+    unit: "%"
+
+provenance:
+  "/parameters/resistance":
+    - source: yageo/RC0201-SPEC
+      page: 1
+      locator: "Specifications, Resistance: 10 kOhms"
+  "/parameters/tolerance":
+    - source: yageo/RC0201-SPEC
+      page: 1
+      locator: "Specifications, Resistance Tolerance: 1%"
+```
+
+**5. Provenance for every key.** One entry per key at
+`/parameters/<key>`: `source`, `page` (the PDF page you read, not a
+guess) and a `locator` that quotes the table/row and the value. Two
+keys read from one cell (capacitance and tolerance from
+`0.10µF ±10%`) each get their own entry.
+
+**6. Validate.** `scripts/validate.sh` in openparts-data (or
+`openparts validate --data <dir>`) must report no errors; with
+`OPENPARTS_SHOW_WARNINGS=1` it lists `parameter.implausible`
+warnings -- each one needs a reason in the report or a fix.
+
+**7. Commit and report.** Commit messages say
+`... (AI candidates, needs review)`. The report lists per part the keys
+added, the sources and pages read, the keys deliberately left out and
+why, and every datasheet that could not be fetched.
+
+---
+
 # 20. Incremental Research
 
 Agentは既存Canonical Dataを入力として利用し、

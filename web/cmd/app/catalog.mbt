@@ -12,17 +12,72 @@ let facet_keys : Array[String] = [
 ]
 
 ///|
-/// Every parameter a pick can have: the facets, then the range bounds.
-let pick_keys : Array[String] = [
-  "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
-  "existence", "width_min", "width_max", "length_min", "length_max", "height_min",
-  "height_max",
-]
+/// Every parameter a pick can have: the facets, the range bounds, then
+/// each electrical parameter with its bounds.
+let pick_keys : Array[String] = build_pick_keys()
+
+///|
+fn build_pick_keys() -> Array[String] {
+  let out = [
+    "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
+    "existence", "width_min", "width_max", "length_min", "length_max", "height_min",
+    "height_max",
+  ]
+  for p in param_names {
+    out.push(p.0)
+    out.push(p.0 + "_min")
+    out.push(p.0 + "_max")
+  }
+  out
+}
 
 ///|
 let sort_keys : Array[String] = [
   "", "mpn", "manufacturer", "pins", "pitch", "size", "height",
 ]
+
+///|
+/// The enumerated parameter keys (checkboxes only, not sortable).
+let enum_param_keys : Array[String] = [
+  "dielectric", "color", "polarity", "output_type",
+]
+
+///|
+fn is_param_key(key : String) -> Bool {
+  param_names.iter().any(p => p.0 == key)
+}
+
+///|
+/// A parameter range bound (`capacitance_min`) as (key, "min"/"max").
+fn param_bound(pick : String) -> (String, String)? {
+  for p in param_names {
+    if pick == p.0 + "_min" {
+      return Some((p.0, "min"))
+    }
+    if pick == p.0 + "_max" {
+      return Some((p.0, "max"))
+    }
+  }
+  None
+}
+
+///|
+/// The parameter columns of the results table for one picked category.
+fn param_columns(category : String) -> Array[String] {
+  match category {
+    "capacitor" => ["capacitance", "rated_voltage", "dielectric", "tolerance"]
+    "resistor" =>
+      ["resistance", "tolerance", "power_rating", "temperature_coefficient"]
+    "inductor" => ["inductance", "rated_current", "saturation_current", "dcr"]
+    "crystal" => ["frequency", "load_capacitance", "frequency_tolerance", "esr"]
+    "diode" => ["reverse_voltage", "forward_current", "forward_voltage"]
+    "led" => ["color", "wavelength", "forward_voltage"]
+    "transistor" =>
+      ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
+    "fuse" => ["rated_current", "rated_voltage"]
+    _ => []
+  }
+}
 
 ///|
 let page_size : Int32 = 50
@@ -180,7 +235,8 @@ fn catalog_query_of(params : Map[String, String]) -> CatalogQuery {
   {
     q: params.get("q").unwrap_or(""),
     picks: normalize_picks(picks),
-    sort: if sort_keys.contains(sort) {
+    sort: if sort_keys.contains(sort) ||
+      (is_param_key(sort) && !enum_param_keys.contains(sort)) {
       sort
     } else {
       ""
@@ -386,6 +442,7 @@ fn option_label(
     "mounting" => mounting_label(lang, value)
     "lifecycle" => lifecycle_label(lang, value)
     "existence" => existence_label(lang, value)
+    k if enum_param_keys.contains(k) => param_value_label(lang, k, value)
     _ => fallback
   }
 }
@@ -438,6 +495,25 @@ fn pick_label(
         fallback = v.label
       }
     }
+  }
+  if f is Some(f) && is_param_key(key) {
+    for pf in f.parameters {
+      if pf.key == key {
+        for v in pf.values {
+          if v.value == value {
+            fallback = v.label
+          }
+        }
+      }
+    }
+  }
+  if is_param_key(key) {
+    return param_name(lang, key) +
+      ": " +
+      option_label(lang, key, value, fallback)
+  }
+  if param_bound(key) is Some((k, bound)) {
+    return range_chip(lang, param_name(lang, k), bound, value)
   }
   match key {
     "pins" => pins_chip(lang, value)
@@ -767,6 +843,54 @@ fn facet_range(
 }
 
 ///|
+/// A parameter's range: text inputs, since values are typed with unit
+/// prefixes (`10n`, `0.1u`, `4k7`).
+fn param_range(
+  lang : Lang,
+  s : CatalogState,
+  emit : Emit[Msg],
+  pf : @api.ParameterFacet,
+) -> Html {
+  let k = lang.catalog()
+  let bound = (which : String, hint : String?, title : String) => {
+    let key = pf.key + "_" + which
+    input(
+      input_type=Text,
+      class="range-input",
+      value=s.query.value(key),
+      placeholder=hint.unwrap_or(title),
+      title~,
+      attrs=@html.Attrs::build()
+        .attribute("inputmode", "text")
+        .attribute("spellcheck", "false")
+        .aria_label(param_name(lang, pf.key) + " " + title),
+      on_change=emit.map(v => Catalog(CatRange(key, v))),
+    )
+  }
+  div(class="facet-range", [
+    bound("min", pf.min_label, k.min),
+    span(class="text-muted", "–"),
+    bound("max", pf.max_label, k.max),
+  ])
+}
+
+///|
+/// One electrical-parameter facet: its values as checkboxes and, for a
+/// numeric key, a range.
+fn param_facet(
+  lang : Lang,
+  s : CatalogState,
+  emit : Emit[Msg],
+  pf : @api.ParameterFacet,
+) -> Html {
+  let body = facet_checks(lang, s, emit, pf.key, pf.values, 8)
+  if pf.kind == @api.ParameterKind::Numeric {
+    body.push(param_range(lang, s, emit, pf))
+  }
+  facet_group(s, emit, pf.key, param_name(lang, pf.key), body)
+}
+
+///|
 fn sidebar(
   lang : Lang,
   s : CatalogState,
@@ -782,6 +906,9 @@ fn sidebar(
   out.push(
     group("category", facet_checks(lang, s, emit, "category", f.category, 12)),
   )
+  for pf in f.parameters {
+    out.push(param_facet(lang, s, emit, pf))
+  }
   if !f.size.is_empty() {
     out.push(group("size", facet_chips(emit, "size", f.size)))
   }
@@ -829,7 +956,12 @@ fn lifecycle_class(s : @api.LifecycleStatus) -> String {
 ///|
 /// One table row; `category` is false when one category is picked
 /// (the column would repeat it).
-fn result_row(lang : Lang, it : @api.CatalogItem, category~ : Bool) -> Html {
+fn result_row(
+  lang : Lang,
+  it : @api.CatalogItem,
+  category~ : Bool,
+  params~ : Array[String],
+) -> Html {
   let k = lang.catalog()
   let size = match (it.size_code, it.size_code_metric) {
     (Some(i), Some(m)) => "\{i} / \{m}"
@@ -861,6 +993,13 @@ fn result_row(lang : Lang, it : @api.CatalogItem, category~ : Bool) -> Html {
       None => "—"
     }
     cells.push(cell(k.c_category, "nowrap", [text(name)]))
+  }
+  for key in params {
+    let value = match it.parameters.get(key) {
+      Some(p) => option_label(lang, key, p.label, p.label)
+      None => "—"
+    }
+    cells.push(cell(param_name(lang, key), "num nowrap", [text(value)]))
   }
   cells.push(
     cell(k.c_package, "col-package", [
@@ -944,6 +1083,23 @@ fn results_table(
   if category {
     heads.push(head(k.c_category, ""))
   }
+  // One picked category: its key parameters as columns.
+  let params = match q.values("category") {
+    [one] => param_columns(one)
+    _ => []
+  }
+  for key in params {
+    heads.push(
+      head(
+        param_name(lang, key),
+        if enum_param_keys.contains(key) {
+          ""
+        } else {
+          key
+        },
+      ),
+    )
+  }
   heads.push(head(k.c_package, ""))
   heads.push(head(k.c_size, "size"))
   heads.push(head(k.c_pins, "pins"))
@@ -954,7 +1110,7 @@ fn results_table(
   div(class="catalog-table-wrap", [
     table(class="catalog-table", [
       thead([tr(heads)]),
-      tbody(items.map(it => result_row(lang, it, category~))),
+      tbody(items.map(it => result_row(lang, it, category~, params~))),
     ]),
   ])
 }
@@ -1005,6 +1161,14 @@ fn catalog_results_view(model : Model, emit : Emit[Msg], box : Html) -> Html {
     ("size", k.s_size),
     ("height", k.s_height),
   ]
+  // The picked category's numeric parameters sort too.
+  if q.values("category") is [one] {
+    for key in param_columns(one) {
+      if !enum_param_keys.contains(key) {
+        sorts.push((key, param_name(lang, key)))
+      }
+    }
+  }
   let count = match response {
     Some(r) if r.total == 0 => c.no_results
     Some(r) =>
@@ -1058,7 +1222,7 @@ fn catalog_results_view(model : Model, emit : Emit[Msg], box : Html) -> Html {
     chip(
       pick_label(lang, facets, pk.0, pk.1) + " ×",
       true,
-      if facet_keys.contains(pk.0) {
+      if facet_keys.contains(pk.0) || is_param_key(pk.0) {
         emit(Catalog(CatToggle(pk.0, pk.1)))
       } else {
         emit(Catalog(CatRange(pk.0, "")))

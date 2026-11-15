@@ -205,6 +205,9 @@ C
 
 Unit StringはSchemaで管理する。
 
+Electrical parameters (section 11.1) use a per-quantity unit table
+with SI prefixes (`nF`, `kΩ`, `ppm/°C`); their values normalise to SI.
+
 値のString埋め込み、
 
 ```yaml
@@ -278,6 +281,151 @@ sources:
 ```
 
 PartへPinoutやPackage dimensionsを重複保存しない。
+
+## 11.1 Electrical Parameters
+
+A Part may carry a `parameters` map of electrical facts of that
+orderable MPN (capacitance, rated voltage, resistance, ...). It is
+optional: an absent key means Unknown (section 7), never a default.
+
+```yaml
+parameters:
+  capacitance:
+    nominal: 100
+    unit: nF
+  tolerance:
+    min: -10
+    max: 10
+    unit: "%"
+  rated_voltage:
+    nominal: 50
+    unit: V
+  dielectric:
+    value: X7R
+
+provenance:
+  "/parameters/capacitance":
+    - source: murata/GRM155R71C104KA88
+      page: 1
+      locator: "Specifications table, Capacitance: 0.10µF ±10%"
+```
+
+**Part vs Device.** Parameters are per MPN, so they live on the Part.
+A Device may also carry `parameters` for a fact every one of its Parts
+shares (a memory's capacity, a fixed regulator's output voltage when
+the Device is one voltage option). The value in force for a Part is the
+Device's value overlaid by the Part's own: a Part key replaces the
+Device key of the same name entirely (no field-by-field merge). Record
+a fact once, at the level the source states it for; don't copy a
+Device value into each Part.
+
+**Closed, typed vocabulary.** Keys come from a closed vocabulary
+(`openparts_core::PARAMETERS`). Each key has exactly one shape:
+
+- *numeric*: `nominal`/`min`/`max` + `unit`, like a Dimension (section
+  9). Only what the source states is recorded; a `nominal` is never
+  computed from `min`/`max` (section 7). `min <= nominal <= max`.
+- *enumerated*: `value`, one of the key's listed spellings
+  (case-sensitive).
+
+Each numeric key has a fixed physical quantity; its value normalises to
+that quantity's SI base unit. Accepted units (case-sensitive: `m` is
+milli-, `M` mega-):
+
+| Quantity | SI | Accepted units |
+|---|---|---|
+| capacitance | F | `pF` `nF` `uF` `µF` `mF` `F` |
+| resistance | Ω | `mΩ` `mohm` `Ω` `ohm` `kΩ` `kohm` `MΩ` `Mohm` |
+| inductance | H | `nH` `uH` `µH` `mH` `H` |
+| voltage | V | `uV` `µV` `mV` `V` `kV` |
+| current | A | `nA` `uA` `µA` `mA` `A` |
+| power | W | `uW` `µW` `mW` `W` |
+| frequency | Hz | `Hz` `kHz` `MHz` `GHz` |
+| ratio | 1 | `%` `ppm` |
+| temperature coefficient | 1/K | `ppm/K` `ppm/°C` `%/K` `%/°C` |
+| length | m | `nm` `um` `µm` `mm` `m` |
+| force | N | `mN` `N` `gf` (= 9.80665 mN) |
+| information | bit | `bit` `Kbit` `kbit` `Mbit` `Gbit` (binary: 2^10, 2^20, 2^30, as memory datasheets use them) |
+
+Vocabulary (key: quantity or values; categories it is plausible for):
+
+| Key | Shape | Plausible for |
+|---|---|---|
+| `capacitance` | capacitance | capacitor |
+| `tolerance` | ratio, deviation | capacitor, resistor, inductor |
+| `capacitance_tolerance` | capacitance, deviation (absolute, e.g. ±0.25 pF) | capacitor |
+| `rated_voltage` | voltage | capacitor, fuse, resistor |
+| `dielectric` | `C0G` `NP0` `U2J` `X5R` `X5S` `X6S` `X6T` `X7R` `X7S` `X7T` `X8L` `X8R` `Y5V` `Z5U` | capacitor |
+| `esr` | resistance | capacitor, crystal |
+| `resistance` | resistance | resistor |
+| `power_rating` | power | resistor, diode, LED |
+| `temperature_coefficient` | temperature coefficient, deviation | resistor |
+| `inductance` | inductance | inductor |
+| `rated_current` | current | inductor, fuse |
+| `saturation_current` | current | inductor |
+| `dcr` | resistance | inductor |
+| `frequency` | frequency | crystal |
+| `load_capacitance` | capacitance | crystal |
+| `frequency_tolerance` | ratio, deviation | crystal |
+| `forward_voltage` | voltage | diode, LED |
+| `reverse_voltage` | voltage | diode, LED |
+| `forward_current` | current | diode, LED |
+| `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
+| `wavelength` | length (dominant wavelength; peak only if that is all the source gives -- say so in the locator) | LED |
+| `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
+| `drain_source_voltage` | voltage (Vds max) | transistor |
+| `drain_current` | current (Id continuous) | transistor |
+| `rds_on` | resistance | transistor |
+| `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
+| `collector_emitter_voltage` | voltage (Vceo) | transistor |
+| `collector_current` | current (Ic) | transistor |
+| `output_type` | `fixed` `adjustable` | regulators |
+| `output_voltage` | voltage | regulators |
+| `input_voltage_max` | voltage | regulators |
+| `output_current` | current (max) | regulators |
+| `dropout_voltage` | voltage | regulators |
+| `capacity` | information | memory |
+| `actuation_force` | force | switches |
+| `travel` | length | switches |
+
+A *deviation* key (a tolerance) records signed bounds: ±10 % is
+`min: -10, max: 10, unit: "%"`; an asymmetric -20/+80 % is
+`min: -20, max: 80`. It is compared and filtered by its larger
+magnitude (10 %).
+
+A rating with conditions (power at 70 °C, current at a temperature
+rise) records the number; the condition goes into the provenance
+`locator`. When a value depends on a condition the Part does not fix
+(a different power per operation mode, a range across output options),
+leave the key out rather than pick one.
+
+Mounting style is not a parameter: it is derived from the Package
+geometry (SMD/THT) and never duplicated.
+
+**Provenance is mandatory per value.** Every key has a provenance entry
+at `/parameters/<key>` in the same document. Two rules for where values
+may come from:
+
+1. Never derive a value by decoding an MPN, unless the datasheet's
+   ordering-code (part numbering) table explicitly maps that code to the
+   value. Then cite that table as the provenance (page + table name +
+   the code: `"ORDERING INFORMATION, (2) TOLERANCE: B = ±0.1%"`).
+2. When one datasheet covers many MPNs, cite the row: the table and the
+   row or column naming this MPN (or its value), e.g.
+   `"Table 3, RT0805 column, Standard: 1/8W"`.
+
+**Validation** (openparts-validator): an unknown key, a unit
+incompatible with the key's quantity, the wrong shape for the key or an
+enumerated value outside its list, `min <= nominal <= max` not holding,
+and a missing `/parameters/<key>` provenance entry are errors
+(`parameter.unknown_key`, `parameter.unit`, `parameter.invalid`,
+`parameter.out_of_range`, `provenance.missing`). A key that is unusual
+for the Device's category (capacitance on a resistor) is a warning
+(`parameter.implausible`).
+
+The vocabulary grows like `PinType` (section 15): a new component type
+adds keys here, in `PARAMETERS` and in the web catalog's labels, in one
+change. A key is never reused for another quantity.
 
 ---
 

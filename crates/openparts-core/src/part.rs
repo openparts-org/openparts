@@ -2,6 +2,7 @@ use crate::existence::Existence;
 use crate::ids::{DeviceId, ManufacturerId, PackageId, PartId, SourceId};
 use crate::kind::Kind;
 use crate::lifecycle::Lifecycle;
+use crate::parameter::Parameters;
 use crate::provenance::ProvenanceMap;
 use crate::serde_util::deserialize_no_dup_map;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,15 @@ pub struct Part {
     pub lifecycle: Lifecycle,
     #[serde(default)]
     pub sources: Vec<SourceId>,
+    /// Electrical parameters of this orderable MPN (section 11.1), each
+    /// cited at `/parameters/<key>` in `provenance`. Overrides the
+    /// Device's family-wide value of the same key.
+    #[serde(
+        default,
+        skip_serializing_if = "Parameters::is_empty",
+        deserialize_with = "deserialize_no_dup_map"
+    )]
+    pub parameters: Parameters,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
     pub provenance: ProvenanceMap,
 }

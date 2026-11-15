@@ -5,6 +5,12 @@
 //! lifecycle and existence, and min-max ranges on the body's width,
 //! length and height.
 //!
+//! Electrical parameters (Canonical Data Specification section 11.1)
+//! add one facet per vocabulary key present in the results: numeric
+//! keys list their distinct values (engineering-formatted, `100 nF`)
+//! and take `<key>_min`/`<key>_max` ranges typed with prefixes (`10n`,
+//! `0.1u`, `100nF`); enumerated keys are checkboxes.
+//!
 //! Every filterable fact is read from the Part, its Device and its
 //! Package as the dataset states them -- nothing is parsed out of an
 //! MPN. A dimension counts as stated when it has a nominal value, else
@@ -17,7 +23,9 @@
 
 use crate::search::{chip_codes, CHIP_SIZES};
 use openparts_core::{
-    ComponentCategory, Dimension, ExistenceStatus, LifecycleStatus, Package, PackageFamily,
+    effective_parameters, parameter_spec, parse_value, ComponentCategory, Dimension,
+    ExistenceStatus, LifecycleStatus, Normalized, Package, PackageFamily, ParameterShape,
+    PARAMETERS,
 };
 use openparts_data::Dataset;
 use serde::Serialize;
@@ -82,6 +90,52 @@ pub struct CatalogItem {
     pub mounting: Option<Mounting>,
     pub lifecycle: LifecycleStatus,
     pub existence: ExistenceStatus,
+    /// The Part's electrical parameters (its Device's family-wide ones
+    /// included), by vocabulary key.
+    pub parameters: BTreeMap<String, CatalogParameter>,
+}
+
+/// One parameter of a catalog row.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct CatalogParameter {
+    /// The value in SI units (a tolerance's larger magnitude); `None`
+    /// for an enumerated key.
+    pub value: Option<f64>,
+    /// Display form: `100 nF`, `±10%`, `X7R`.
+    pub label: String,
+}
+
+/// Whether a parameter facet lists numbers or words.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ParameterKind {
+    /// Discrete values plus a `<key>_min`/`<key>_max` range.
+    Numeric,
+    /// Checkboxes only.
+    Enumerated,
+}
+
+/// One electrical-parameter facet: present only when some part under
+/// the other filters states the key (or the key is filtered on).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ParameterFacet {
+    /// The vocabulary key, also the filter parameter (`capacitance`).
+    pub key: String,
+    pub kind: ParameterKind,
+    /// The SI unit `min`/`max` and item values are in (`F`, `Ω`).
+    pub unit: String,
+    /// Distinct values (numeric: smallest first; enumerated: in
+    /// vocabulary order). `value` is what the filter parameter takes.
+    pub values: Vec<FacetValue>,
+    /// Span of the values under every other filter (SI), numeric keys.
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    /// `min`/`max` formatted (`10 pF`).
+    pub min_label: Option<String>,
+    pub max_label: Option<String>,
 }
 
 /// One option of a facet. `value` is what the filter parameter takes
@@ -122,6 +176,8 @@ pub struct CatalogFacets {
     pub body_width: RangeFacet,
     pub body_length: RangeFacet,
     pub body_height: RangeFacet,
+    /// Electrical-parameter facets, in vocabulary order.
+    pub parameters: Vec<ParameterFacet>,
 }
 
 /// `GET /v1/catalog`'s answer: `total` matching parts, the
@@ -235,10 +291,17 @@ pub enum Sort {
     /// Body footprint: the longer side, then the shorter.
     Size,
     Height,
+    /// A numeric parameter's value (`sort=capacitance`).
+    Parameter(&'static str),
 }
 
 impl Sort {
     fn parse(s: &str) -> Option<Sort> {
+        if let Some(spec) = parameter_spec(s) {
+            if matches!(spec.shape, ParameterShape::Numeric(_)) {
+                return Some(Sort::Parameter(spec.key));
+            }
+        }
         Some(match s {
             "" | "relevance" => Sort::Relevance,
             "mpn" => Sort::Mpn,
@@ -263,6 +326,8 @@ pub struct CatalogQuery {
     filters: [BTreeSet<String>; 9],
     /// (min, max) per [`AXES`] entry, mm.
     ranges: [(Option<f64>, Option<f64>); 3],
+    /// Parameter filters by vocabulary key.
+    params: BTreeMap<&'static str, ParamFilter>,
     pub sort: Sort,
     pub descending: bool,
     pub offset: usize,
@@ -286,6 +351,45 @@ impl CatalogQuery {
                 }
                 out.q.push_str(value);
                 continue;
+            }
+            if let Some(spec) = parameter_spec(key) {
+                let f = out.params.entry(spec.key).or_default();
+                for v in value.split(',').map(str::trim).filter(|v| !v.is_empty()) {
+                    match spec.shape {
+                        ParameterShape::Numeric(_) => {
+                            f.values.insert(v.replace(' ', ""));
+                            if let Some(n) = parse_value(v, spec) {
+                                f.numbers.push(n);
+                            }
+                        }
+                        ParameterShape::Enumerated(words) => {
+                            let w = words.iter().find(|w| w.eq_ignore_ascii_case(v));
+                            f.values
+                                .insert(w.map_or_else(|| format!("\u{0}{v}"), |w| w.to_string()));
+                        }
+                    }
+                }
+                continue;
+            }
+            if let Some((name, bound)) = key.rsplit_once('_') {
+                if let Some(spec) =
+                    parameter_spec(name).filter(|s| matches!(s.shape, ParameterShape::Numeric(_)))
+                {
+                    let parsed = if value.trim().is_empty() {
+                        None
+                    } else {
+                        Some(parse_value(value, spec).ok_or_else(|| {
+                            format!("{key}: not a {name} value: {value:?} (e.g. 100nF, 10k, 0.1u)")
+                        })?)
+                    };
+                    let f = out.params.entry(spec.key).or_default();
+                    match bound {
+                        "min" => f.min = parsed,
+                        "max" => f.max = parsed,
+                        _ => return Err(format!("unknown parameter {key:?}")),
+                    }
+                    continue;
+                }
             }
             if let Some(i) = GROUPS.iter().position(|g| g.params().contains(&key)) {
                 for v in value.split(',') {
@@ -354,12 +458,61 @@ impl CatalogQuery {
     }
 }
 
+/// The filter on one parameter key: picked values (and, for numeric
+/// keys, those values parsed to SI) and an SI range.
+#[derive(Debug, Clone, Default)]
+struct ParamFilter {
+    values: BTreeSet<String>,
+    numbers: Vec<f64>,
+    min: Option<f64>,
+    max: Option<f64>,
+}
+
+impl ParamFilter {
+    fn active(&self) -> bool {
+        !self.values.is_empty() || self.min.is_some() || self.max.is_some()
+    }
+
+    fn matches(&self, fact: Option<&ParamFact>) -> bool {
+        if !self.active() {
+            return true;
+        }
+        let Some(f) = fact else {
+            return false;
+        };
+        let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs());
+        let in_values = self.values.is_empty()
+            || self.values.contains(&f.key)
+            || f.stated
+                .is_some_and(|v| self.numbers.iter().any(|&n| near(n, v)));
+        let ranged = self.min.is_some() || self.max.is_some();
+        let in_range = !ranged
+            || f.stated.is_some_and(|v| {
+                self.min.is_none_or(|m| v >= m || near(v, m))
+                    && self.max.is_none_or(|m| v <= m || near(v, m))
+            });
+        in_values && in_range
+    }
+}
+
+/// One Part's value of one parameter.
+#[derive(Debug, Clone)]
+struct ParamFact {
+    /// The facet option key (the label without spaces, `100nF`).
+    key: String,
+    /// SI value of a numeric key.
+    stated: Option<f64>,
+    /// Option order: the SI value, or the vocabulary index.
+    order: f64,
+}
+
 /// One Part's filterable facts.
 #[derive(Debug)]
 struct Facts {
     /// The facet key per [`GROUPS`] entry (`None`: not stated).
     keys: [Option<String>; 9],
     dims: [Option<f64>; 3],
+    params: BTreeMap<&'static str, ParamFact>,
     item: CatalogItem,
 }
 
@@ -376,6 +529,8 @@ struct OptionInfo {
 pub struct CatalogIndex {
     facts: Vec<Facts>,
     options: [BTreeMap<String, OptionInfo>; 9],
+    /// Display labels of parameter options, by key then option key.
+    param_labels: BTreeMap<&'static str, BTreeMap<String, String>>,
 }
 
 impl CatalogIndex {
@@ -405,6 +560,50 @@ impl CatalogIndex {
                     .entry(k.id.0.clone())
                     .or_insert_with(|| mounting(k))
             });
+            let no_params = Default::default();
+            let device_params = device.map_or(&no_params, |d| &d.parameters);
+            let mut params = BTreeMap::new();
+            let mut item_params = BTreeMap::new();
+            for (key, (value, _)) in effective_parameters(&p.parameters, device_params) {
+                let Some(spec) = parameter_spec(key) else {
+                    continue;
+                };
+                // Invalid values are the validator's to report; the
+                // catalog only lists what normalises.
+                let Ok(n) = value.normalize(spec) else {
+                    continue;
+                };
+                let label = n.label(spec);
+                let stated = n.stated(spec);
+                let order = match (&n, spec.shape) {
+                    (Normalized::Text(t), ParameterShape::Enumerated(words)) => {
+                        words.iter().position(|w| w == t).unwrap_or(0) as f64
+                    }
+                    _ => stated.unwrap_or(f64::MAX),
+                };
+                let fact_key = label.replace(' ', "");
+                index
+                    .param_labels
+                    .entry(spec.key)
+                    .or_default()
+                    .entry(fact_key.clone())
+                    .or_insert_with(|| label.clone());
+                item_params.insert(
+                    spec.key.to_string(),
+                    CatalogParameter {
+                        value: stated,
+                        label,
+                    },
+                );
+                params.insert(
+                    spec.key,
+                    ParamFact {
+                        key: fact_key,
+                        stated,
+                        order,
+                    },
+                );
+            }
             let item = CatalogItem {
                 manufacturer: p.manufacturer.0.clone(),
                 manufacturer_name: manufacturer_name.clone(),
@@ -423,6 +622,7 @@ impl CatalogIndex {
                 mounting,
                 lifecycle: p.lifecycle.status,
                 existence: p.existence.status,
+                parameters: item_params,
             };
             let mut keys: [Option<String>; 9] = Default::default();
             for (i, g) in GROUPS.iter().enumerate() {
@@ -470,6 +670,7 @@ impl CatalogIndex {
             index.facts.push(Facts {
                 keys,
                 dims: [width, length, height],
+                params,
                 item,
             });
         }
@@ -480,14 +681,23 @@ impl CatalogIndex {
     /// their text scores, as [`crate::search::SearchIndex::search`]
     /// returns them).
     pub fn query(&self, hits: &[(usize, u32)], q: &CatalogQuery) -> CatalogResponse {
-        // Which constraints each hit passes: GROUPS, then AXES.
-        const N: usize = GROUPS.len() + AXES.len();
-        let passes: Vec<(usize, u32, [bool; N])> = hits
+        // The constraints each hit is checked against: GROUPS, then
+        // AXES, then one per filtered parameter key.
+        let active: Vec<(&'static str, &ParamFilter)> = q
+            .params
+            .iter()
+            .filter(|(_, f)| f.active())
+            .map(|(k, f)| (*k, f))
+            .collect();
+        let base = GROUPS.len() + AXES.len();
+        let n = base + active.len();
+        let param_slot = |key: &str| active.iter().position(|(k, _)| *k == key).map(|i| base + i);
+        let passes: Vec<(usize, u32, Vec<bool>)> = hits
             .iter()
             .filter(|(i, _)| *i < self.facts.len())
             .map(|&(i, score)| {
                 let f = &self.facts[i];
-                let mut pass = [true; N];
+                let mut pass = vec![true; n];
                 for g in 0..GROUPS.len() {
                     let wanted = &q.filters[g];
                     pass[g] =
@@ -500,17 +710,23 @@ impl CatalogIndex {
                             min.is_none_or(|m| v >= m - 1e-9) && max.is_none_or(|m| v <= m + 1e-9)
                         });
                 }
+                for (j, (key, filter)) in active.iter().enumerate() {
+                    pass[base + j] = filter.matches(f.params.get(key));
+                }
                 (i, score, pass)
             })
             .collect();
-        let all_but =
-            |pass: &[bool; N], skip: usize| pass.iter().enumerate().all(|(j, &ok)| ok || j == skip);
+        let all_but = |pass: &[bool], skip: Option<usize>| {
+            pass.iter()
+                .enumerate()
+                .all(|(j, &ok)| ok || Some(j) == skip)
+        };
 
         let mut groups: Vec<Vec<FacetValue>> = Vec::with_capacity(GROUPS.len());
         for (g, group) in GROUPS.iter().enumerate() {
             let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
             for (i, _, pass) in &passes {
-                if all_but(pass, g) {
+                if all_but(pass, Some(g)) {
                     if let Some(k) = &self.facts[*i].keys[g] {
                         *counts.entry(k.as_str()).or_default() += 1;
                     }
@@ -557,13 +773,115 @@ impl CatalogIndex {
                 let mut r = RangeFacet::default();
                 let values = passes
                     .iter()
-                    .filter(|(_, _, pass)| all_but(pass, GROUPS.len() + a))
+                    .filter(|(_, _, pass)| all_but(pass, Some(GROUPS.len() + a)))
                     .filter_map(|(i, _, _)| self.facts[*i].dims[a]);
                 for v in values {
                     r.min = Some(r.min.map_or(v, |m: f64| m.min(v)));
                     r.max = Some(r.max.map_or(v, |m: f64| m.max(v)));
                 }
                 r
+            })
+            .collect();
+        let parameters = PARAMETERS
+            .iter()
+            .filter_map(|spec| {
+                let filter = q.params.get(spec.key).filter(|f| f.active());
+                let skip = param_slot(spec.key);
+                // (option key) -> (order, count)
+                let mut counts: BTreeMap<&str, (f64, usize)> = BTreeMap::new();
+                let mut span: Option<(f64, f64)> = None;
+                for (i, _, pass) in &passes {
+                    if !all_but(pass, skip) {
+                        continue;
+                    }
+                    let Some(fact) = self.facts[*i].params.get(spec.key) else {
+                        continue;
+                    };
+                    counts.entry(fact.key.as_str()).or_insert((fact.order, 0)).1 += 1;
+                    if let Some(v) = fact.stated {
+                        span = Some(span.map_or((v, v), |(a, b)| (a.min(v), b.max(v))));
+                    }
+                }
+                if counts.is_empty() && filter.is_none() {
+                    return None;
+                }
+                let labels = self.param_labels.get(spec.key);
+                let mut values: Vec<(f64, FacetValue)> = counts
+                    .iter()
+                    .map(|(k, (order, count))| {
+                        let fact_like = ParamFact {
+                            key: k.to_string(),
+                            stated: (*order != f64::MAX
+                                && matches!(spec.shape, ParameterShape::Numeric(_)))
+                            .then_some(*order),
+                            order: *order,
+                        };
+                        let selected = filter.is_some_and(|f| {
+                            !f.values.is_empty()
+                                && ParamFilter {
+                                    min: None,
+                                    max: None,
+                                    ..(*f).clone()
+                                }
+                                .matches(Some(&fact_like))
+                        });
+                        (
+                            *order,
+                            FacetValue {
+                                value: k.to_string(),
+                                label: labels
+                                    .and_then(|l| l.get(*k))
+                                    .cloned()
+                                    .unwrap_or_else(|| k.to_string()),
+                                count: *count,
+                                selected,
+                            },
+                        )
+                    })
+                    .collect();
+                // Picked values no part under the other filters has.
+                if let Some(f) = filter {
+                    for v in &f.values {
+                        let parsed = parse_value(v, spec);
+                        let covered = values.iter().any(|(order, x)| {
+                            x.value == *v
+                                || (x.selected
+                                    && parsed.is_some_and(|n| {
+                                        (n - order).abs() <= 1e-9 * n.abs().max(order.abs())
+                                    }))
+                        });
+                        if !v.starts_with('\u{0}') && !covered {
+                            values.push((
+                                parsed.unwrap_or(f64::MAX),
+                                FacetValue {
+                                    value: v.clone(),
+                                    label: parsed.map_or_else(
+                                        || v.clone(),
+                                        |n| openparts_core::format_value(n, spec),
+                                    ),
+                                    count: 0,
+                                    selected: true,
+                                },
+                            ));
+                        }
+                    }
+                }
+                values.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.value.cmp(&b.1.value)));
+                let (kind, unit) = match spec.shape {
+                    ParameterShape::Numeric(q) => (ParameterKind::Numeric, q.si_unit()),
+                    ParameterShape::Enumerated(_) => (ParameterKind::Enumerated, ""),
+                };
+                let fmt = |v: f64| openparts_core::format_value(v, spec);
+                Some(ParameterFacet {
+                    key: spec.key.to_string(),
+                    kind,
+                    unit: unit.to_string(),
+                    values: values.into_iter().map(|(_, v)| v).collect(),
+                    min: span.map(|s| s.0),
+                    max: span.map(|s| s.1),
+                    min_label: span.map(|s| fmt(s.0)),
+                    max_label: span.map(|s| fmt(s.1)),
+                })
             })
             .collect();
 
@@ -602,6 +920,7 @@ impl CatalogIndex {
                 body_width: range(),
                 body_length: range(),
                 body_height: range(),
+                parameters,
             },
         }
     }
@@ -632,6 +951,11 @@ impl CatalogIndex {
                 Sort::Pins => it.lead_count.map(|n| (n as f64, 0.0)),
                 Sort::Pitch => it.pitch.map(|v| (v, 0.0)),
                 Sort::Height => it.body_height.map(|v| (v, 0.0)),
+                Sort::Parameter(k) => self.facts[i]
+                    .params
+                    .get(k)
+                    .and_then(|f| f.stated)
+                    .map(|v| (v, 0.0)),
                 Sort::Size => match (it.body_width, it.body_length) {
                     (Some(w), Some(l)) => Some((w.max(l), w.min(l))),
                     _ => None,
@@ -837,6 +1161,60 @@ mod tests {
         assert!(CatalogQuery::from_pairs([("width_min", "wide")]).is_err());
         assert!(CatalogQuery::from_pairs([("sort", "price")]).is_err());
         assert!(CatalogQuery::from_pairs([("limit", "-1")]).is_err());
+    }
+
+    #[test]
+    fn parameter_filters_parse_typed_values() {
+        let q = parse(&[
+            ("capacitance", "100nF,0.1u"),
+            ("capacitance_min", "10n"),
+            ("capacitance_max", "1µF"),
+            ("dielectric", "x7r,C0G,Z9Z"),
+            ("sort", "capacitance"),
+        ]);
+        let c = &q.params["capacitance"];
+        assert_eq!(c.min, Some(1e-8));
+        assert!(c.max.is_some_and(|m| (m - 1e-6).abs() < 1e-18));
+        assert_eq!(c.numbers.len(), 2);
+        assert!(c.numbers.iter().all(|n| (n - 1e-7).abs() < 1e-18));
+        let d: Vec<_> = q.params["dielectric"].values.iter().cloned().collect();
+        assert_eq!(d, ["\u{0}Z9Z", "C0G", "X7R"]);
+        assert_eq!(q.sort, Sort::Parameter("capacitance"));
+        let fact = |v: f64| ParamFact {
+            key: String::new(),
+            stated: Some(v),
+            order: v,
+        };
+        assert!(c.matches(Some(&fact(1e-7))));
+        assert!(!c.matches(Some(&fact(2.2e-7))));
+        assert!(!c.matches(None));
+        assert!(CatalogQuery::from_pairs([("capacitance_min", "ten")]).is_err());
+        assert!(CatalogQuery::from_pairs([("resistance_max", "10V")]).is_err());
+        assert!(CatalogQuery::from_pairs([("resistance_max", "4k7")]).is_ok());
+        // An enumerated key takes no range.
+        assert!(CatalogQuery::from_pairs([("dielectric_min", "1")]).is_ok());
+    }
+
+    /// The web catalog names every parameter key in both languages and
+    /// knows which keys are enumerated.
+    #[test]
+    fn the_web_labels_every_parameter_key() {
+        let i18n = include_str!("../../web/cmd/app/i18n.mbt");
+        let catalog = include_str!("../../web/cmd/app/catalog.mbt");
+        for spec in PARAMETERS {
+            assert!(
+                i18n.contains(&format!("\"{}\", \"", spec.key)),
+                "web/cmd/app/i18n.mbt param_names lacks {}",
+                spec.key
+            );
+            let enumerated = matches!(spec.shape, ParameterShape::Enumerated(_));
+            let listed = catalog
+                .split("let enum_param_keys : Array[String] = [")
+                .nth(1)
+                .and_then(|s| s.split(']').next())
+                .is_some_and(|s| s.contains(&format!("\"{}\"", spec.key)));
+            assert_eq!(enumerated, listed, "enum_param_keys and {}", spec.key);
+        }
     }
 
     #[test]

@@ -1003,7 +1003,11 @@ test "decode CatalogResponse" {
     #|   "size_code_metric": "1608",
     #|   "mounting": "smd",
     #|   "lifecycle": "unknown",
-    #|   "existence": "verified"
+    #|   "existence": "verified",
+    #|   "parameters": {
+    #|    "capacitance": { "value": 1e-05, "label": "10 µF" },
+    #|    "dielectric": { "value": null, "label": "X5R" }
+    #|   }
     #|  }
     #| ],
     #| "facets": {
@@ -1131,11 +1135,43 @@ test "decode CatalogResponse" {
     #|  "body_height": {
     #|   "min": 0.8,
     #|   "max": 0.8
-    #|  }
+    #|  },
+    #|  "parameters": [
+    #|   {
+    #|    "key": "capacitance",
+    #|    "kind": "numeric",
+    #|    "unit": "F",
+    #|    "values": [
+    #|     { "value": "10µF", "label": "10 µF", "count": 1, "selected": false }
+    #|    ],
+    #|    "min": 1e-05,
+    #|    "max": 1e-05,
+    #|    "min_label": "10 µF",
+    #|    "max_label": "10 µF"
+    #|   },
+    #|   {
+    #|    "key": "dielectric",
+    #|    "kind": "enumerated",
+    #|    "unit": "",
+    #|    "values": [
+    #|     { "value": "X5R", "label": "X5R", "count": 1, "selected": false }
+    #|    ],
+    #|    "min": null,
+    #|    "max": null,
+    #|    "min_label": null,
+    #|    "max_label": null
+    #|   }
+    #|  ]
     #| }
     #|}
   let json = @json.parse(text)
   let r : @api.CatalogResponse = @json.from_json(json)
+  assert_eq(r.facets.parameters.length(), 2)
+  assert_eq(r.facets.parameters[1].kind, @api.ParameterKind::Enumerated)
+  assert_eq(
+    r.items[0].parameters.get("capacitance").map(p => p.label),
+    Some("10 µF"),
+  )
   assert_eq(r.items.length(), 1)
   assert_eq(r.items[0].size_code, Some("0603"))
   assert_eq(r.items[0].mounting, Some(@api.Mounting::Smd))
