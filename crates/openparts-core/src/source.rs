@@ -39,4 +39,9 @@ pub struct Source {
     /// When the document was downloaded and read (`YYYY-MM-DD`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrieved: Option<String>,
+    /// SHA-256 (lowercase hex) of the document as read, when recorded.
+    /// openparts-server's document cache refuses a download that
+    /// doesn't match it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }

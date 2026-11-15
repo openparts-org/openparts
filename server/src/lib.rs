@@ -3,6 +3,8 @@ pub mod bom;
 pub mod bundle;
 pub mod catalog;
 pub mod error;
+pub mod review;
 pub mod routes;
 pub mod search;
+pub mod sources;
 pub mod store;

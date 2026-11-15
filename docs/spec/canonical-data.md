@@ -100,9 +100,10 @@ package
 source
 erratum
 rejected
+review
 ```
 
-KindごとにSchema Validationを行う。
+KindごとにSchema Validationを行う。`review`は事実のHuman Review記録（section 26.1）。
 
 ---
 
@@ -1027,6 +1028,8 @@ url: "https://..."
 retrieved: "2026-04-10"   # 省略可: 文書を取得して読んだ日
 ```
 
+`sha256`（省略可）は読んだ文書のSHA-256（小文字16進64桁）。記録されている場合、openparts-serverの文書キャッシュは一致しないダウンロードを拒否する（Validator rule `source.checksum`は形式のみ検査する）。
+
 `url`はその文書を読んだ場所。メーカーの「最新版」リンク（TIの`.../symlink/<part>.pdf`など）は、あとで`revision`より新しい版を返すことがある。表示側は`revision`と`date`を必ず併記する。`retrieved`は取得日（`YYYY-MM-DD`）で、分かる場合に記録する。PDFの複製は配布しない（リンクのみ）。
 
 初期Document Type：
@@ -1123,6 +1126,84 @@ provenance:
     - source: st/RM0440@rev5
       page: 91
 ```
+
+## 26.1 Review Records
+
+Every recorded fact -- one provenance key of a Part, Device or Package
+(an existence claim, a lifecycle status, a pin, a dimension, an
+electrical parameter) -- can be reviewed by a person against the
+location its provenance cites. A review is a separate `kind: review`
+document; it never edits the fact. Unreviewed is the absence of a
+record, not a stored state.
+
+```yaml
+schema_version: "0.1"
+kind: review
+id: part/murata/GRM188R71H104KA93D     # <target_kind>/<target>
+target_kind: part                      # part | device | package
+target: murata/GRM188R71H104KA93D
+
+reviews:
+  - pointer: /parameters/capacitance   # the provenance key reviewed
+    status: confirmed                  # confirmed | disputed
+    reviewer: alice                    # a name or handle
+    date: "2026-11-15"
+    sources: [murata/GRM188R71H104KA93D-spec@2026-11]
+    value_hash: "sha256:3b1f..."       # the fact as reviewed
+  - pointer: /parameters/rated_voltage
+    status: disputed
+    reviewer: bob
+    date: "2026-11-15"
+    sources: [murata/GRM188R71H104KA93D-spec@2026-11]
+    value_hash: "sha256:9c04..."
+    comment: "The cited table lists 25 V for this MPN, not 50 V."
+    corrected_value: "25 V"
+```
+
+- **File:** `reviews/<target_kind>/<target>.yaml`, the target id's `/`
+  segments as directories (`reviews/part/murata/GRM188R71H104KA93D.yaml`).
+  One document per reviewed entity. A Device or Package fact is
+  reviewed once on that Device or Package, for every Part using it
+  (section 35).
+- **One record per reviewer and fact.** A later review by the same
+  reviewer replaces the earlier record.
+- **`sources`** names the Source revisions the reviewer checked (those
+  the fact's provenance cited at the time).
+- **`value_hash`** is `sha256:` + the SHA-256 of the canonical JSON
+  (object keys sorted, no whitespace) of
+  `{"evidence": <the fact's provenance entries>, "value": <the value at the pointer>}`,
+  the value as the typed document serializes it (`null` when the
+  pointer names nothing). Changing the value, or what is cited for it
+  (source, page, locator), changes the hash: the review becomes
+  **stale** and stops counting until the fact is reviewed again.
+  Records are kept, not deleted, when they go stale.
+- **`disputed`** needs a `comment` saying what the cited location says
+  instead; `corrected_value` (optional, free text) is the value read
+  there. A dispute does not change the data: fixing it is an ordinary
+  data change with its own provenance, after which the fact is reviewed
+  again.
+- **Status of a fact:** each reviewer's latest current (non-stale)
+  record counts. Any `disputed` makes the fact disputed; otherwise any
+  `confirmed` makes it confirmed; otherwise it is unreviewed.
+- **Limits:** reviewer 1-64 characters (no leading/trailing spaces,
+  no control characters), comment at most 2000 characters, corrected
+  value at most 500, pointer at most 256.
+- **Validation:** a malformed record, an id that isn't
+  `<target_kind>/<target>`, or two records of one reviewer for one
+  pointer is an error (`review.invalid`); an unknown Source is
+  `ref.unknown_source`; the file must be where its id says
+  (`id.location`). A stale record -- the value or evidence changed, or
+  the pointer or target is gone -- is a warning (`review.stale`): data
+  may change, and its old reviews then simply no longer count.
+- A review is a human statement. Agents must not write review records
+  (Agent Ingestion Specification section 23), and a review never
+  promotes `existence` or any other field by itself (section 37).
+
+How reviews are collected: openparts-server can accept review
+submissions from the site (opt-in, Architecture Specification section
+20); `openparts reviews export --data <openparts-data> --from <review dir>`
+writes them into `reviews/` for a person to commit or open a pull
+request with. Records may also be written by hand.
 
 ---
 
@@ -1289,7 +1370,12 @@ openparts-data/
 ├── errata/
 │   └── st/
 │
-└── rejected/
+├── rejected/
+│
+└── reviews/          # Human review records (section 26.1)
+    ├── part/
+    ├── device/
+    └── package/
 ```
 
 大量のMPNを一つのDirectoryへ置かない。

@@ -656,6 +656,17 @@ Golden tests
 
 初期運用では、AIが生成したCanonical Data変更は原則としてHuman Reviewを要求する。
 
+Beyond reviewing a pull request as a whole, each fact an agent records
+(every provenance key) can be reviewed individually against the
+location it cites, and the verdict is kept as a review record
+(Canonical Data Specification section 26.1): confirmed, or disputed
+with a comment. Facts from an agent start unreviewed. Agents never
+write review records, never mark their own output as reviewed, and
+treat a disputed fact as a reason to re-read the source, not to
+overwrite the reviewer. A data change that alters a reviewed value
+makes its review stale (the validator warns `review.stale`); say so in
+the pull request, since the fact then needs reviewing again.
+
 将来的に十分成熟した場合、
 
 ```text

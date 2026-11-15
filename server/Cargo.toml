@@ -13,6 +13,7 @@ openparts-mcad = { path = "../crates/mcad/openparts-mcad" }
 openparts-solidcraft = { path = "../crates/mcad/openparts-solidcraft" }
 openparts-artifacts = { path = "../crates/openparts-artifacts" }
 openparts-bom = { path = "../crates/openparts-bom" }
+openparts-review = { path = "../crates/openparts-review" }
 
 axum = "0.7"
 tower-http = { version = "0.6", features = ["fs"] }
@@ -25,6 +26,7 @@ thiserror = "1"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+ureq = "2"
 
 schemars = { version = "1", optional = true }
 

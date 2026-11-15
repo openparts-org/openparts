@@ -787,6 +787,24 @@ Serverの責務：
 
 Canonical Data編集機能はServerの責務に含めない。
 
+Two opt-in exceptions serve the site without touching Canonical Data:
+
+- **Review submissions** (`POST /v1/reviews`, enabled only with
+  `OPENPARTS_REVIEW_TOKEN` and `OPENPARTS_REVIEW_DIR`): a reviewer's
+  verdict on one fact is validated and appended to
+  `OPENPARTS_REVIEW_DIR/submissions.jsonl`. The server shows them as
+  pending next to the committed reviews; `openparts reviews export`
+  turns them into `reviews/*.yaml` (Canonical Data Specification
+  section 26.1), and a person commits them. The server never writes the
+  data repository; Git stays the review database (section 4.7).
+- **Source documents** (`GET /v1/sources/{id}/document`, enabled only
+  with `OPENPARTS_SOURCE_CACHE`): the PDF a Source's `url` names,
+  fetched with a plain, honestly identified HTTP client (timeout, size
+  limit, PDF only, a recorded `sha256` checked) and cached on disk, so
+  the site's datasheet viewer can open the cited page. Only `url`s of
+  loaded Sources are fetched -- it is not a proxy. A publisher that
+  refuses gets a clear error, and the site links to the original.
+
 ---
 
 # 21. Podman Deployment

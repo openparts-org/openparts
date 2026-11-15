@@ -106,6 +106,12 @@ enum Commands {
         #[command(subcommand)]
         command: BomCommand,
     },
+    /// Human reviews of facts (Canonical Data Specification section
+    /// 26.1).
+    Reviews {
+        #[command(subcommand)]
+        action: ReviewsCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -125,6 +131,23 @@ enum BomCommand {
         /// Exit with an error when a line has a warning or isn't found.
         #[arg(long)]
         strict: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReviewsCommand {
+    /// Write the review submissions openparts-server collected
+    /// (`<review dir>/submissions.jsonl`) into the openparts-data
+    /// checkout as `reviews/<kind>/<id>.yaml`, for a person to commit or
+    /// open a pull request with. Submissions of a value that has changed
+    /// since are left out. Running it again adds nothing new.
+    Export {
+        /// The openparts-data checkout to write into.
+        #[arg(long)]
+        data: PathBuf,
+        /// The server's review directory (`OPENPARTS_REVIEW_DIR`).
+        #[arg(long, env = "OPENPARTS_REVIEW_DIR")]
+        from: PathBuf,
     },
 }
 
@@ -164,6 +187,9 @@ fn main() -> anyhow::Result<()> {
             parts,
         } => cmd_kicad_install(&cli.registry, &project, &parts),
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
+        Commands::Reviews {
+            action: ReviewsCommand::Export { data, from },
+        } => cmd_reviews_export(&data, &from),
         Commands::Bundle {
             data,
             out,
@@ -191,6 +217,45 @@ fn main() -> anyhow::Result<()> {
             strict,
         }),
     }
+}
+
+fn cmd_reviews_export(data: &std::path::Path, from: &std::path::Path) -> anyhow::Result<()> {
+    let log = openparts_review::SubmissionLog::open(from)?;
+    let (submissions, bad) = log
+        .read_all()
+        .with_context(|| format!("reading {}", log.path().display()))?;
+    if bad > 0 {
+        eprintln!(
+            "warning: {bad} unreadable line(s) in {} skipped",
+            log.path().display()
+        );
+    }
+    let report = openparts_review::export(data, &submissions)?;
+    for path in &report.written {
+        println!("wrote {}", path.display());
+    }
+    for s in &report.stale {
+        eprintln!("stale (the value changed since it was reviewed): {s}");
+    }
+    for s in &report.skipped {
+        eprintln!("skipped (no such fact, or malformed): {s}");
+    }
+    println!(
+        "{} submission(s): {} added, {} replaced an earlier review, {} already exported, {} superseded, {} stale, {} skipped",
+        submissions.len(),
+        report.added,
+        report.replaced,
+        report.unchanged,
+        report.superseded,
+        report.stale.len(),
+        report.skipped.len()
+    );
+    if !report.written.is_empty() {
+        println!(
+            "Check them (openparts validate --data ...) and commit them, or open a pull request."
+        );
+    }
+    Ok(())
 }
 
 fn load_known_sources(paths: &[PathBuf]) -> anyhow::Result<BTreeSet<openparts_core::SourceId>> {
@@ -287,6 +352,17 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
     for source in dataset.sources.values() {
         report(&shown(Kind::Source, &source.id.0), validate_source(source));
     }
+    let facts = openparts_review::FactIndex::build(&dataset);
+    for review in dataset.reviews.values() {
+        report(
+            &shown(Kind::Review, &review.id),
+            openparts_validator::validate_review(
+                review,
+                facts.facts(review.target_kind, &review.target),
+                &sources,
+            ),
+        );
+    }
     let located = dataset
         .parts
         .iter()
@@ -314,6 +390,12 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
                 .manufacturers
                 .values()
                 .map(|m| (DocKind::Manufacturer, Kind::Manufacturer, &m.id.0)),
+        )
+        .chain(
+            dataset
+                .reviews
+                .values()
+                .map(|r| (DocKind::Review, Kind::Review, &r.id)),
         );
     for (doc_kind, kind, id) in located {
         if let Some(path) = dataset.path_of(kind, id) {
@@ -343,9 +425,10 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
         println!("warning: {n} x {rule} (OPENPARTS_SHOW_WARNINGS=1 lists them)");
     }
     println!(
-        "Checked {} part(s), {} source(s).",
+        "Checked {} part(s), {} source(s), {} review document(s).",
         dataset.parts.len(),
-        dataset.sources.len()
+        dataset.sources.len(),
+        dataset.reviews.len()
     );
     failures += unresolved;
     if failures > 0 {

@@ -150,6 +150,20 @@ pub fn validate_source(source: &Source) -> Vec<Diagnostic> {
             format!("url \"{}\" is not an http(s) link", source.url),
         ));
     }
+    if let Some(hash) = &source.sha256 {
+        if hash.len() != 64
+            || !hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            out.push(Diagnostic::error(
+                "source.checksum",
+                &entity,
+                Some("/sha256"),
+                format!("sha256 \"{hash}\" is not 64 lowercase hex digits"),
+            ));
+        }
+    }
     out
 }
 
@@ -174,6 +188,8 @@ pub enum DocKind {
     Package,
     Source,
     Manufacturer,
+    /// A review document: its id is `<target_kind>/<target>`.
+    Review,
 }
 
 /// Where a document of `kind` with `id` belongs in the dataset tree:
@@ -203,6 +219,16 @@ pub fn validate_location(kind: DocKind, id: &str, rel_path: &str) -> Vec<Diagnos
         ),
         DocKind::Source => (path.starts_with(&format!("sources/{first}/")), true),
         DocKind::Manufacturer => (path == format!("manufacturers/{id}.yaml"), true),
+        DocKind::Review => {
+            let safe_id: String = id
+                .chars()
+                .map(|c| match c {
+                    '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | ' ' => '-',
+                    c => c,
+                })
+                .collect();
+            (path == format!("reviews/{safe_id}.yaml"), true)
+        }
     };
     if dir_ok && name_ok {
         return vec![];
@@ -276,6 +302,16 @@ mod tests {
             "packages/manufacturers/bosch/LGA10.yaml"
         ));
         assert!(!ok(DocKind::Device, "ti/A", "devices/ti/B.yaml"));
+        assert!(ok(
+            DocKind::Review,
+            "part/raspberrypi/RP2040",
+            "reviews/part/raspberrypi/RP2040.yaml"
+        ));
+        assert!(!ok(
+            DocKind::Review,
+            "part/raspberrypi/RP2040",
+            "reviews/raspberrypi/RP2040.yaml"
+        ));
     }
 
     #[test]

@@ -19,6 +19,8 @@ async fn main() -> anyhow::Result<()> {
         let dir = PathBuf::from(dir);
         loaded_store.bundle = Some(bundle::Bundle::load(&dir)?);
     }
+    loaded_store.review = openparts_server::review::ReviewService::from_env()?;
+    loaded_store.source_cache = openparts_server::sources::SourceCache::from_env()?;
     let solidcraft = tokio::task::spawn_blocking(openparts_solidcraft::available).await?;
     tracing::info!(
         bundle = loaded_store.bundle.is_some(),

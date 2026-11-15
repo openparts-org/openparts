@@ -9,6 +9,7 @@ thiserror = { workspace = true }
 openparts-mcad = { path = "../mcad/openparts-mcad" }
 serde_json = "1"
 serde = { workspace = true }
+sha2 = "0.10"
 
 [dev-dependencies]
 serde_yaml = { workspace = true }

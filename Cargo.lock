@@ -2788,6 +2788,7 @@ dependencies = [
  "openparts-librepcb",
  "openparts-mcad",
  "openparts-pcbcad",
+ "openparts-review",
  "openparts-solidcraft",
  "openparts-validator",
  "serde",
@@ -2880,6 +2881,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "openparts-review"
+version = "0.1.0"
+dependencies = [
+ "openparts-core",
+ "openparts-data",
+ "openparts-validator",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "openparts-server"
 version = "0.1.0"
 dependencies = [
@@ -2891,6 +2906,7 @@ dependencies = [
  "openparts-core",
  "openparts-data",
  "openparts-mcad",
+ "openparts-review",
  "openparts-solidcraft",
  "openparts-stl",
  "openparts-validator",
@@ -2905,6 +2921,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "ureq",
 ]
 
 [[package]]
@@ -2948,6 +2965,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "thiserror 1.0.69",
 ]
 

@@ -1,6 +1,7 @@
 //! The dataset the server answers from, loaded once at startup into
 //! memory (`openparts_data::Dataset`), plus an optional prebuilt
-//! artifact bundle. Read-only: the server never writes Canonical Data.
+//! artifact bundle. The server never writes Canonical Data (review
+//! submissions go to their own log, `crate::review`).
 
 use openparts_data::Dataset;
 use std::path::Path;
@@ -17,6 +18,14 @@ pub struct Store {
     pub catalog: crate::catalog::CatalogIndex,
     /// `POST /v1/bom/check` and `GET .../alternatives` (openparts-bom).
     pub bom: openparts_bom::BomIndex,
+    /// Every reviewable fact (provenance key) of `dataset`.
+    pub facts: openparts_review::FactIndex,
+    /// Pending review submissions, and whether more are accepted
+    /// (`OPENPARTS_REVIEW_DIR`, `OPENPARTS_REVIEW_TOKEN`).
+    pub review: crate::review::ReviewService,
+    /// Downloaded source documents (`OPENPARTS_SOURCE_CACHE`); `None`:
+    /// documents aren't fetched.
+    pub source_cache: Option<crate::sources::SourceCache>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,7 +61,10 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
         search: crate::search::SearchIndex::build(&dataset),
         catalog: crate::catalog::CatalogIndex::build(&dataset),
         bom: openparts_bom::BomIndex::build(&dataset),
+        facts: openparts_review::FactIndex::build(&dataset),
         dataset,
         bundle: None,
+        review: Default::default(),
+        source_cache: None,
     })
 }

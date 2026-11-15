@@ -20,9 +20,14 @@ mod diagnostic;
 mod package;
 mod parameter;
 mod provenance;
+mod review;
 
 pub use cross::{validate_location, validate_source, DocKind};
 pub use diagnostic::{Diagnostic, Severity};
+pub use review::{
+    fact_hash, facts_of, review_record_problems, validate_review, Fact, MAX_COMMENT_LEN,
+    MAX_CORRECTED_VALUE_LEN, MAX_POINTER_LEN, MAX_REVIEWER_LEN,
+};
 
 use device::*;
 use openparts_core::{Device, Package, Part, SourceId};
@@ -146,6 +151,18 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "source.url",
         meaning: "a Source `url` is not an http(s) link",
+    },
+    Rule {
+        id: "source.checksum",
+        meaning: "a Source `sha256` is not 64 lowercase hex digits",
+    },
+    Rule {
+        id: "review.invalid",
+        meaning: "a review document's id is not `<target_kind>/<target>`, or a record is malformed: a pointer that isn't a JSON Pointer, an empty/padded/over-long reviewer, a date that isn't YYYY-MM-DD, a `value_hash` that isn't `sha256:<hex>`, no `sources`, an over-long comment or corrected value, a dispute without a comment, or two records of one reviewer for one pointer (Canonical Data Specification section 26.1)",
+    },
+    Rule {
+        id: "review.stale",
+        meaning: "warning: a review no longer matches the data -- the fact's value or cited evidence changed since (its `value_hash` differs), or the pointer or the reviewed document is gone; it stops counting until the fact is reviewed again",
     },
     Rule {
         id: "id.location",
@@ -310,6 +327,7 @@ mod tests {
             include_str!("provenance.rs"),
             include_str!("cross.rs"),
             include_str!("parameter.rs"),
+            include_str!("review.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();

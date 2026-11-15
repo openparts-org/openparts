@@ -12,7 +12,7 @@ mod error;
 pub use dataset::{yaml_files, Dataset, LoadIssue, ResolveError};
 pub use error::DataError;
 
-use openparts_core::{Device, Kind, Manufacturer, Package, Part, Source};
+use openparts_core::{Device, Kind, Manufacturer, Package, Part, ReviewDocument, Source};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::Path;
@@ -105,10 +105,61 @@ pub fn save_source<P: AsRef<Path>>(doc: &Source, path: P) -> Result<(), DataErro
     save_yaml(doc, path.as_ref())
 }
 
+pub fn load_review<P: AsRef<Path>>(path: P) -> Result<ReviewDocument, DataError> {
+    let path = path.as_ref();
+    let doc: ReviewDocument = load_yaml(path)?;
+    check_kind(path, Kind::Review, doc.kind)?;
+    Ok(doc)
+}
+
+pub fn save_review<P: AsRef<Path>>(doc: &ReviewDocument, path: P) -> Result<(), DataError> {
+    save_yaml(doc, path.as_ref())
+}
+
+/// Where the review document of `target_kind`/`target` lives, relative
+/// to the dataset root: `reviews/<target_kind>/<target>.yaml`, the id's
+/// `/` segments as directories (characters file systems refuse become
+/// `-`).
+pub fn review_path(target_kind: openparts_core::ReviewTargetKind, target: &str) -> String {
+    let safe: String = target
+        .chars()
+        .map(|c| match c {
+            '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | ' ' => '-',
+            c => c,
+        })
+        .collect();
+    format!("reviews/{}/{safe}.yaml", target_kind.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use openparts_core::{ExistenceStatus, LifecycleStatus};
+
+    #[test]
+    fn review_documents_load_into_the_dataset() {
+        let dir =
+            std::env::temp_dir().join(format!("openparts-data-test-review-{}", std::process::id()));
+        let path = dir.join(review_path(
+            openparts_core::ReviewTargetKind::Part,
+            "ex/EX 1",
+        ));
+        assert!(path.ends_with("reviews/part/ex/EX-1.yaml"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "schema_version: '0.1'\nkind: review\nid: part/ex/EX 1\ntarget_kind: part\ntarget: ex/EX 1\nreviews: []\n",
+        )
+        .unwrap();
+        let doc = load_review(&path).unwrap();
+        let ds = Dataset::load(&dir).unwrap();
+        assert!(ds.issues.is_empty(), "{:?}", ds.issues);
+        assert_eq!(
+            ds.reviews_of(openparts_core::ReviewTargetKind::Part, "ex/EX 1"),
+            Some(&doc)
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn part_round_trips_through_yaml() {
