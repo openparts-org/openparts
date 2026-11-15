@@ -22,6 +22,55 @@ pub(all) struct ArtifactsResponse {
 }
 pub impl @json.FromJson for ArtifactsResponse
 
+#derive(Eq)
+pub(all) struct CatalogFacets {
+  body_height : RangeFacet
+  body_length : RangeFacet
+  body_width : RangeFacet
+  category : Array[FacetValue]
+  existence : Array[FacetValue]
+  lifecycle : Array[FacetValue]
+  manufacturer : Array[FacetValue]
+  mounting : Array[FacetValue]
+  package_family : Array[FacetValue]
+  pins : Array[FacetValue]
+  pitch : Array[FacetValue]
+  size : Array[FacetValue]
+}
+pub impl @json.FromJson for CatalogFacets
+
+#derive(Eq)
+pub(all) struct CatalogItem {
+  body_height : Double?
+  body_length : Double?
+  body_width : Double?
+  category : ComponentCategory?
+  device : String
+  existence : ExistenceStatus
+  lead_count : Int32?
+  lifecycle : LifecycleStatus
+  manufacturer : String
+  manufacturer_name : String
+  mounting : Mounting?
+  mpn : String
+  package_ : String
+  package_family : PackageFamily?
+  pitch : Double?
+  size_code : String?
+  size_code_metric : String?
+}
+pub impl @json.FromJson for CatalogItem
+
+#derive(Eq)
+pub(all) struct CatalogResponse {
+  facets : CatalogFacets
+  items : Array[CatalogItem]
+  limit : Int32
+  offset : Int32
+  total : Int32
+}
+pub impl @json.FromJson for CatalogResponse
+
 #derive(Eq, @debug.Debug)
 pub(all) enum ComponentCategory {
   Microcontroller
@@ -135,6 +184,15 @@ pub(all) struct ExposedPadDimensions {
 }
 pub impl @json.FromJson for ExposedPadDimensions
 
+#derive(Eq)
+pub(all) struct FacetValue {
+  count : Int32
+  label : String
+  selected : Bool
+  value : String
+}
+pub impl @json.FromJson for FacetValue
+
 #derive(Eq, @debug.Debug)
 pub(all) enum GeometryType {
   Parametric
@@ -180,6 +238,16 @@ pub(all) enum LifecycleStatus {
 pub fn LifecycleStatus::all() -> Array[Self]
 pub fn LifecycleStatus::wire(Self) -> String
 pub impl @json.FromJson for LifecycleStatus
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Mounting {
+  Smd
+  Tht
+  Mixed
+}
+pub fn Mounting::all() -> Array[Self]
+pub fn Mounting::wire(Self) -> String
+pub impl @json.FromJson for Mounting
 
 #derive(Eq)
 pub(all) struct Package {
@@ -399,6 +467,13 @@ pub(all) struct ProvenanceResponse {
   part : Map[String, Array[ProvenanceEntry]]
 }
 pub impl @json.FromJson for ProvenanceResponse
+
+#derive(Eq)
+pub(all) struct RangeFacet {
+  max : Double?
+  min : Double?
+}
+pub impl @json.FromJson for RangeFacet
 
 #derive(Eq)
 pub(all) struct RevisionDetection {

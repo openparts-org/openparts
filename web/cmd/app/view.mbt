@@ -61,7 +61,7 @@ fn ext_link(url : String, label : String, class? : String) -> Html {
 fn view(model : Model, emit : Emit[Msg]) -> Html {
   let page = match model.route {
     Home => home_view(model.lang)
-    Search(_) => search_view(model, emit)
+    Search(_) => catalog_view(model, emit)
     Part(_, _) => part_view(model, emit)
     KicadPlugin => kicad_view(model.lang)
     Contributing => contributing_view(model.lang)
@@ -266,64 +266,6 @@ fn chip(label : String, active : Bool, on_click : @rabbita.Cmd) -> Html {
     on_click~,
     label,
   )
-}
-
-///|
-fn search_view(model : Model, emit : Emit[Msg]) -> Html {
-  let lang = model.lang
-  let c = lang.copy()
-  let s = model.search
-  let chips = [chip(c.all, s.category is None, emit(SearchCategory(None)))]
-  for cat in @api.ComponentCategory::all() {
-    chips.push(
-      chip(
-        category_label(lang, cat),
-        s.category == Some(cat),
-        emit(SearchCategory(Some(cat))),
-      ),
-    )
-  }
-  let results = match s.results {
-    Loading => p(class="text-muted", c.loading)
-    Failed(e) =>
-      p(class="text-muted", if e.is_empty() { c.search_failed } else { e })
-    Missing => p(class="text-muted", c.search_failed)
-    Got([]) => p(class="text-muted", c.no_results)
-    Got(parts) =>
-      ul(
-        class="card-list",
-        parts.map(part => {
-          let badges : Array[Html] = []
-          if part.category is Some(cat) {
-            badges.push(
-              span(class="badge badge-neutral", category_label(lang, cat)),
-            )
-          }
-          badges.push(existence_badge(part.existence))
-          badges.push(lifecycle_badge(part.lifecycle))
-          li(class="card", [
-            a(href=href(lang, part_path(part.manufacturer, part.mpn)), [
-              strong(part.mpn),
-            ]),
-            span(class="text-muted", " / \{part.manufacturer}"),
-            div(class="result-badges", badges),
-          ])
-        }),
-      )
-  }
-  div([
-    h1(c.search_title),
-    input(
-      input_type=Search,
-      class="search-input",
-      placeholder=c.search_placeholder,
-      value=s.query,
-      autofocus=true,
-      on_input=emit.map(q => SearchInput(q)),
-    ),
-    div(class="category-filter", chips),
-    div(class="section", [results]),
-  ])
 }
 
 ///|

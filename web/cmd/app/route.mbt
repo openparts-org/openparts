@@ -5,7 +5,7 @@
 #derive(Eq)
 enum Route {
   Home
-  Search(String) // ?q=
+  Search(CatalogQuery) // ?q=&category=&size=... (catalog.mbt)
   Part(String, String) // ?manufacturer=&mpn=
   KicadPlugin
   Contributing
@@ -66,7 +66,7 @@ fn route_of(url : @url.Url) -> (Lang, Route) {
   let params = query_params(url.query)
   let route = match rest {
     "" => Home
-    "search" => Search(params.get("q").unwrap_or(""))
+    "search" => Search(catalog_query_of(params))
     "parts" =>
       match (params.get("manufacturer"), params.get("mpn")) {
         (Some(m), Some(p)) if !m.is_empty() && !p.is_empty() => Part(m, p)
@@ -100,8 +100,7 @@ fn part_path(manufacturer : String, mpn : String) -> String {
 fn route_path(route : Route) -> String {
   match route {
     Home | NotFound => ""
-    Search("") => "search"
-    Search(q) => "search?q=\{encode_uri_component(q)}"
+    Search(q) => catalog_path(q)
     Part(m, p) => part_path(m, p)
     KicadPlugin => "kicad-plugin"
     Contributing => "contributing"

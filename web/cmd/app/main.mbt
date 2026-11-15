@@ -3,16 +3,6 @@
 
 ///|
 #derive(Eq)
-struct SearchState {
-  query : String
-  category : @api.ComponentCategory?
-  /// Bumped per request, so a slow old response can't replace a newer one.
-  seq : Int32
-  results : Fetch[Array[@api.PartSummary]]
-}
-
-///|
-#derive(Eq)
 enum ZipState {
   Idle
   Building
@@ -24,7 +14,7 @@ enum ZipState {
 struct Model {
   lang : Lang
   route : Route
-  search : SearchState
+  catalog : CatalogState
   /// (manufacturer, mpn) the part page has loaded or is loading.
   part_key : (String, String)
   part : Fetch[PartData]
@@ -36,25 +26,11 @@ struct Model {
 enum Msg {
   UrlChanged(@url.Url)
   UrlRequest(@url.UrlRequest)
-  SearchInput(String)
-  SearchCategory(@api.ComponentCategory?)
-  SearchGot(Int32, Fetch[Array[@api.PartSummary]])
+  Catalog(CatalogMsg)
   PartGot((String, String), Fetch[PartData])
   ViewerDone(String?)
   ZipClicked
   ZipDone(String?)
-}
-
-///|
-fn search_cmd(s : SearchState, emit : @rabbita.Emit[Msg]) -> @rabbita.Cmd {
-  let seq = s.seq
-  let mut path = "/v1/search?q=\{encode_uri_component(s.query)}"
-  if s.category is Some(c) {
-    path = path + "&category=" + c.wire()
-  }
-  @rabbita.perform(r => emit(SearchGot(seq, r)), async fn() noraise {
-    get_json(path)
-  })
 }
 
 ///|
@@ -87,23 +63,7 @@ fn enter(
   set_document_title(title_of(lang, route))
   let model = { ..model, lang, route, }
   match route {
-    Search(q) => {
-      // Fetched already (typing replaces the URL, which lands here too)?
-      let stale = model.search.seq == 0 ||
-        q != model.search.query ||
-        model.search.results is Failed(_)
-      if stale {
-        let search = {
-          ..model.search,
-          query: q,
-          seq: model.search.seq + 1,
-          results: Loading,
-        }
-        ({ ..model, search, }, search_cmd(search, emit))
-      } else {
-        (model, @rabbita.none)
-      }
-    }
+    Search(q) => catalog_enter(model, q, emit)
     Part(m, p) => {
       let key = (m, p)
       if key == model.part_key && !(model.part is Failed(_)) {
@@ -150,7 +110,10 @@ fn update(
 ) -> (Model, @rabbita.Cmd) {
   match msg {
     UrlChanged(url) => {
-      scroll_top()
+      // Refining the catalog (a filter, the sort) keeps the scroll.
+      if !(model.route is Search(_) && route_of(url).1 is Search(_)) {
+        scroll_top()
+      }
       enter(model, url, emit)
     }
     UrlRequest(Internal(url)) => {
@@ -163,37 +126,7 @@ fn update(
       }
     }
     UrlRequest(External(href)) => (model, @nav.load(href))
-    SearchInput(q) => {
-      let search = {
-        ..model.search,
-        query: q,
-        seq: model.search.seq + 1,
-        results: Loading,
-      }
-      let path = route_path(Search(q))
-      (
-        { ..model, search, route: Search(q), },
-        @rabbita.batch([
-          search_cmd(search, emit),
-          @nav.replace_url(href(model.lang, path)),
-        ]),
-      )
-    }
-    SearchCategory(category) => {
-      let search = {
-        ..model.search,
-        category,
-        seq: model.search.seq + 1,
-        results: Loading,
-      }
-      ({ ..model, search, }, search_cmd(search, emit))
-    }
-    SearchGot(seq, results) =>
-      if seq == model.search.seq {
-        ({ ..model, search: { ..model.search, results, }, }, @rabbita.none)
-      } else {
-        (model, @rabbita.none)
-      }
+    Catalog(m) => catalog_update(model, m, emit)
     PartGot(key, result) => {
       guard key == model.part_key else { (model, @rabbita.none) }
       let model = { ..model, part: result, }
@@ -229,7 +162,7 @@ fn main {
         let model : Model = {
           lang: Ja,
           route: Home,
-          search: { query: "", category: None, seq: 0, results: Loading, },
+          catalog: CatalogState::new(),
           part_key: ("", ""),
           part: Loading,
           zip: Idle,

@@ -60,7 +60,6 @@ struct Copy {
   loading : String
   search_failed : String
   no_results : String
-  all : String
   // part
   not_found_title : String
   not_found_before : String
@@ -153,11 +152,10 @@ let ja : Copy = {
   ],
   contrib_specs_heading: "関連する仕様書",
   search_title: "部品を探す",
-  search_placeholder: "MPNまたはメーカー名で検索(例: nRF52840)",
+  search_placeholder: "型番・メーカー・パッケージで検索(例: nRF52840, 0603, QFN)",
   loading: "読み込み中...",
   search_failed: "検索に失敗しました。",
   no_results: "該当する部品が見つかりませんでした。",
-  all: "すべて",
   not_found_title: "部品が見つかりません",
   not_found_before: "指定された部品は見つかりませんでした。",
   not_found_link: "検索",
@@ -250,11 +248,10 @@ let en : Copy = {
   ],
   contrib_specs_heading: "Related specifications",
   search_title: "Search parts",
-  search_placeholder: "Search by MPN or manufacturer (e.g. nRF52840)",
+  search_placeholder: "Search by MPN, manufacturer or package (e.g. nRF52840, 0603, QFN)",
   loading: "Loading...",
   search_failed: "Search failed.",
   no_results: "No matching parts found.",
-  all: "All",
   not_found_title: "Part not found",
   not_found_before: "The requested part could not be found. Try ",
   not_found_link: "searching",
@@ -375,5 +372,322 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
       let w = c.wire()
       w[:1].to_owned().to_upper() + w[1:].to_owned()
     }
+  }
+}
+
+// ---- catalog (faceted search, catalog.mbt) ----
+
+///|
+struct CatalogCopy {
+  lead : String
+  browse_all : String
+  by_size : String
+  by_family : String
+  filters : String
+  clear_all : String
+  close : String
+  sort : String
+  ascending : String
+  descending : String
+  min : String
+  max : String
+  prev : String
+  next : String
+  show_less : String
+  electrical_note : String
+  // facet group titles
+  f_category : String
+  f_manufacturer : String
+  f_family : String
+  f_size : String
+  f_pins : String
+  f_pitch : String
+  f_mounting : String
+  f_lifecycle : String
+  f_existence : String
+  f_width : String
+  f_length : String
+  f_height : String
+  // sort orders
+  s_relevance : String
+  s_mpn : String
+  s_manufacturer : String
+  s_pins : String
+  s_pitch : String
+  s_size : String
+  s_height : String
+  // table columns
+  c_mpn : String
+  c_manufacturer : String
+  c_category : String
+  c_package : String
+  c_size : String
+  c_pins : String
+  c_pitch : String
+  c_dims : String
+  c_mounting : String
+  c_lifecycle : String
+}
+
+///|
+let catalog_ja : CatalogCopy = {
+  lead: "カテゴリを選ぶか型番・キーワードで検索し、パッケージ・サイズ・ピン数・ピッチ・寸法で絞り込めます。",
+  browse_all: "すべての部品",
+  by_size: "チップサイズから探す",
+  by_family: "パッケージから探す",
+  filters: "絞り込み",
+  clear_all: "すべてクリア",
+  close: "閉じる",
+  sort: "並び替え",
+  ascending: "昇順",
+  descending: "降順",
+  min: "最小",
+  max: "最大",
+  prev: "前へ",
+  next: "次へ",
+  show_less: "折りたたむ",
+  electrical_note: "容量・抵抗値・定格電圧などの電気的特性は、出典付きのデータがまだ無いため絞り込み項目にしていません。",
+  f_category: "カテゴリ",
+  f_manufacturer: "メーカー",
+  f_family: "パッケージ",
+  f_size: "チップサイズ (インチ / ミリ)",
+  f_pins: "ピン数",
+  f_pitch: "ピッチ (mm)",
+  f_mounting: "実装方式",
+  f_lifecycle: "ライフサイクル",
+  f_existence: "実在確認",
+  f_width: "本体幅 W (mm)",
+  f_length: "本体長 L (mm)",
+  f_height: "本体高さ H (mm)",
+  s_relevance: "関連度順",
+  s_mpn: "型番順",
+  s_manufacturer: "メーカー順",
+  s_pins: "ピン数順",
+  s_pitch: "ピッチ順",
+  s_size: "サイズ順",
+  s_height: "高さ順",
+  c_mpn: "型番",
+  c_manufacturer: "メーカー",
+  c_category: "カテゴリ",
+  c_package: "パッケージ",
+  c_size: "サイズ",
+  c_pins: "ピン数",
+  c_pitch: "ピッチ",
+  c_dims: "W×L×H (mm)",
+  c_mounting: "実装",
+  c_lifecycle: "ライフサイクル",
+}
+
+///|
+let catalog_en : CatalogCopy = {
+  lead: "Pick a category or search by part number or keyword, then narrow by package, size, pin count, pitch and dimensions.",
+  browse_all: "All parts",
+  by_size: "Browse by chip size",
+  by_family: "Browse by package",
+  filters: "Filters",
+  clear_all: "Clear all",
+  close: "Close",
+  sort: "Sort",
+  ascending: "Ascending",
+  descending: "Descending",
+  min: "Min",
+  max: "Max",
+  prev: "Previous",
+  next: "Next",
+  show_less: "Show less",
+  electrical_note: "Electrical parameters such as capacitance, resistance and voltage rating are not filterable yet: the dataset has no sourced values for them.",
+  f_category: "Category",
+  f_manufacturer: "Manufacturer",
+  f_family: "Package",
+  f_size: "Chip size (inch / mm)",
+  f_pins: "Pin count",
+  f_pitch: "Pitch (mm)",
+  f_mounting: "Mounting",
+  f_lifecycle: "Lifecycle",
+  f_existence: "Existence",
+  f_width: "Body width W (mm)",
+  f_length: "Body length L (mm)",
+  f_height: "Body height H (mm)",
+  s_relevance: "Relevance",
+  s_mpn: "Part number",
+  s_manufacturer: "Manufacturer",
+  s_pins: "Pin count",
+  s_pitch: "Pitch",
+  s_size: "Size",
+  s_height: "Height",
+  c_mpn: "Part number",
+  c_manufacturer: "Manufacturer",
+  c_category: "Category",
+  c_package: "Package",
+  c_size: "Size",
+  c_pins: "Pins",
+  c_pitch: "Pitch",
+  c_dims: "W×L×H (mm)",
+  c_mounting: "Mounting",
+  c_lifecycle: "Lifecycle",
+}
+
+///|
+fn Lang::catalog(self : Lang) -> CatalogCopy {
+  match self {
+    Ja => catalog_ja
+    En => catalog_en
+  }
+}
+
+///|
+fn parts_count(lang : Lang, n : Int32) -> String {
+  match lang {
+    Ja => "\{n}件"
+    En => if n == 1 { "1 part" } else { "\{n} parts" }
+  }
+}
+
+///|
+fn results_range(
+  lang : Lang,
+  from : Int32,
+  to : Int32,
+  total : Int32,
+) -> String {
+  match lang {
+    Ja => "\{total}件中 \{from}–\{to}件を表示"
+    En => "Showing \{from}–\{to} of \{total}"
+  }
+}
+
+///|
+fn show_results(lang : Lang, n : Int32) -> String {
+  match lang {
+    Ja => "\{n}件を表示"
+    En => "Show \{n} results"
+  }
+}
+
+///|
+fn show_more(lang : Lang, n : Int32) -> String {
+  match lang {
+    Ja => "さらに\{n}件を表示"
+    En => "Show \{n} more"
+  }
+}
+
+///|
+fn page_of(lang : Lang, page : Int32, pages : Int32) -> String {
+  match lang {
+    Ja => "\{page} / \{pages}ページ"
+    En => "Page \{page} of \{pages}"
+  }
+}
+
+///|
+/// A package family's display name; `fallback` is the server's label.
+fn family_label(lang : Lang, value : String, fallback : String) -> String {
+  match (lang, value) {
+    (Ja, "chip") => "チップ"
+    (Ja, "radial") => "ラジアルリード"
+    (Ja, "axial") => "アキシャルリード"
+    (Ja, "module") => "モジュール"
+    (Ja, "header") => "ピンヘッダ"
+    (Ja, "socket") => "ピンソケット"
+    (Ja, "shrouded_header") => "ボックスヘッダ"
+    (Ja, "right_angle_header") => "L型ピンヘッダ"
+    (Ja, "tact_switch_smd") => "タクトスイッチ(SMD)"
+    (Ja, "tact_switch_tht") => "タクトスイッチ(挿入)"
+    (Ja, "sod_flat") => "SOD(フラットリード)"
+    (En, "chip") => "Chip"
+    (En, "radial") => "Radial lead"
+    (En, "axial") => "Axial lead"
+    (En, "module") => "Module"
+    (En, "header") => "Pin header"
+    (En, "socket") => "Pin socket"
+    (En, "shrouded_header") => "Shrouded header"
+    (En, "right_angle_header") => "Right-angle header"
+    (En, "tact_switch_smd") => "Tact switch (SMD)"
+    (En, "tact_switch_tht") => "Tact switch (THT)"
+    (En, "sod_flat") => "SOD (flat lead)"
+    (_, "usb_c") => "USB Type-C"
+    (_, "sot223") => "SOT-223"
+    (_, "do214") => "DO-214"
+    (_, "to220") => "TO-220"
+    (_, "to92") => "TO-92"
+    (_, "d2pak") => "D2PAK"
+    _ => fallback
+  }
+}
+
+///|
+fn mounting_label(lang : Lang, value : String) -> String {
+  match (lang, value) {
+    (Ja, "smd") => "表面実装 (SMD)"
+    (Ja, "tht") => "挿入実装 (THT)"
+    (Ja, "mixed") => "SMD+THT混在"
+    (En, "smd") => "Surface mount (SMD)"
+    (En, "tht") => "Through hole (THT)"
+    (En, "mixed") => "SMD + THT"
+    _ => value
+  }
+}
+
+///|
+fn mounting_short(lang : Lang, value : String) -> String {
+  match (lang, value) {
+    (_, "smd") => "SMD"
+    (_, "tht") => "THT"
+    (Ja, "mixed") => "混在"
+    (En, "mixed") => "Mixed"
+    _ => value
+  }
+}
+
+///|
+fn lifecycle_label(lang : Lang, value : String) -> String {
+  match (lang, value) {
+    (Ja, "pre_release") => "量産前"
+    (Ja, "active") => "量産中"
+    (Ja, "nrnd") => "新規設計非推奨"
+    (Ja, "eol_announced") => "生産終了予告"
+    (Ja, "obsolete") => "生産終了"
+    (Ja, "unknown") => "不明"
+    (En, "pre_release") => "Pre-release"
+    (En, "active") => "Active"
+    (En, "nrnd") => "NRND"
+    (En, "eol_announced") => "EOL announced"
+    (En, "obsolete") => "Obsolete"
+    (En, "unknown") => "Unknown"
+    _ => value
+  }
+}
+
+///|
+fn existence_label(lang : Lang, value : String) -> String {
+  match (lang, value) {
+    (Ja, "verified") => "実在確認済み"
+    (Ja, "historical_verified") => "過去に実在確認"
+    (Ja, "probable") => "実在の可能性が高い"
+    (Ja, "unverified") => "未確認"
+    (Ja, "rejected") => "却下"
+    (En, "verified") => "Verified"
+    (En, "historical_verified") => "Historically verified"
+    (En, "probable") => "Probable"
+    (En, "unverified") => "Unverified"
+    (En, "rejected") => "Rejected"
+    _ => value
+  }
+}
+
+///|
+fn pins_chip(lang : Lang, n : String) -> String {
+  match lang {
+    Ja => "\{n}ピン"
+    En => "\{n} pins"
+  }
+}
+
+///|
+fn pitch_chip(lang : Lang, mm : String) -> String {
+  match lang {
+    Ja => "ピッチ \{mm} mm"
+    En => "\{mm} mm pitch"
   }
 }

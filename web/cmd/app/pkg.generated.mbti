@@ -6,6 +6,16 @@ package "openparts/site/cmd/app"
 // Errors
 
 // Types and methods
+type CatalogCopy
+
+type CatalogMsg
+
+#derive(Eq)
+type CatalogQuery
+
+#derive(Eq)
+type CatalogState
+
 type Copy
 
 type Feature
@@ -28,9 +38,6 @@ type PartData
 
 #derive(Eq)
 type Route
-
-#derive(Eq)
-type SearchState
 
 #derive(Eq)
 type ZipState
