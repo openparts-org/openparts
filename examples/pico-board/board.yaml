@@ -32,8 +32,10 @@ board:
   # ground plane (the USB pair's microstrip reference, 0.2104 mm below),
   # L3 a 3V3 plane, L4 signal. Planes are zones over the whole layer that
   # the router leaves alone; every 3V3 and GND pad reaches its plane by a
-  # via. `signal` for L3 gives a third routing layer instead (3V3 tracks
-  # there at the inner IPC-2221 width; VBUS, too wide inside, stays out).
+  # via (9 of 24 router configurations complete). `signal` for L3 gives a
+  # third routing layer instead (3V3 tracks there at the inner IPC-2221
+  # width; VBUS, too wide inside, stays out), but none of the 24
+  # configurations completes with it.
   by_layers:
     4:
       fab: {preset: jlcpcb-4layer-standard}

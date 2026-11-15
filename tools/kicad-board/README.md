@@ -109,8 +109,21 @@ every layer) makes the outer routing impossible, and Specctra's class
   inner) (constraint disallow track)` rule.
 
 KiCad's DSN export writes neither `layer_rule` nor `use_layer`; build.py
-adds them (`rules.dsn_layer_rules`). Freerouting 2.5 reads both (its
-`NetClass` keeps a trace width and an active flag per layer).
+adds them (`rules.dsn_layer_rules`). Freerouting 2.5 parses both (its
+`NetClass` keeps a trace width and an active flag per layer); `use_layer`
+is seen to keep a class off the other layers. That it routes a class at
+its `layer_rule` width is not shown yet: in the runs below Freerouting
+never put a current net on the inner signal layer. The DRC rules check
+the width whatever the router does.
+
+Measured on the Pico board, four layers, one sweep of 24 router
+configurations (`route --evaluate-all --rounds 1`, 2026-11-16):
+
+| Stackup | Complete | Notes |
+| --- | --- | --- |
+| signal, GND plane, 3V3 plane, signal (`board.yaml`) | 9 / 24 | 9 of the 12 "inner plane" runs; the outer GND pours as planes too: 0-1 / 12 |
+| signal, GND plane, signal, signal (default) | 0 / 24 | 3V3 and VBUS left with 8-19 connections in every run |
+| either, before plane vias | 0 / 24 | 40-odd GND and 3V3 pads never reach their plane |
 
 ### Escape width (neck-down)
 
