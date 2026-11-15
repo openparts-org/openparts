@@ -53,30 +53,30 @@ fn fixture(name: &str) -> String {
     openparts_bom::decode(&bytes).unwrap()
 }
 
-/// The Pico board's parts, from examples/pico-board/board.yaml.
+/// The parts of the Pico board the fixtures were exported from (its
+/// 33-part build before examples/pico-board took its parts from
+/// reference circuits).
+const PICO_FIXTURE_PARTS: &str = "\
+U1 raspberrypi/RP2040, U2 winbond/W25Q128JVSIQ, U3 onsemi/NCP1117ST33T3G, \
+Y1 abracon/ABM8-272-T3, J1 gct/USB4105-GF-A, J2 wurth/61302011121, J3 wurth/61302011121, \
+SW1 omron/B3FS-1050, D1 kingbright/APT1608SGC, R1 yageo/RC0603FR-0727RL, \
+R2 yageo/RC0603FR-0727RL, R3 yageo/RC0603FR-071KL, R4 yageo/RC0603FR-071KL, \
+R5 yageo/RC0603FR-075K1L, R6 yageo/RC0603FR-075K1L, R7 yageo/RC0603FR-07330RL, \
+C1 samsung/CL10B104KB8NNNC, C2 samsung/CL10B104KB8NNNC, C3 samsung/CL10B104KB8NNNC, \
+C4 samsung/CL10B104KB8NNNC, C5 samsung/CL10B104KB8NNNC, C6 samsung/CL10B104KB8NNNC, \
+C7 samsung/CL10B104KB8NNNC, C8 samsung/CL10B104KB8NNNC, C9 samsung/CL10B104KB8NNNC, \
+C10 samsung/CL10B104KB8NNNC, C11 samsung/CL10B104KB8NNNC, C12 samsung/CL10A105KB8NNNC, \
+C13 samsung/CL10A105KB8NNNC, C14 samsung/CL10A106KP8NNNC, C15 samsung/CL10A106KP8NNNC, \
+C16 samsung/CL10C150JB8NNNC, C17 samsung/CL10C150JB8NNNC";
+
 fn pico_parts() -> Vec<(String, String)> {
-    let board = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/pico-board/board.yaml"),
-    )
-    .unwrap();
-    let mut out = Vec::new();
-    let mut inside = false;
-    for line in board.lines() {
-        if line.starts_with("components:") {
-            inside = true;
-            continue;
-        }
-        if inside {
-            if !line.starts_with("  ") {
-                break;
-            }
-            let Some((reference, id)) = line.trim().split_once(':') else {
-                continue;
-            };
-            let id = id.split('#').next().unwrap().trim().to_string();
-            out.push((reference.trim().to_string(), id));
-        }
-    }
+    let out: Vec<(String, String)> = PICO_FIXTURE_PARTS
+        .split(", ")
+        .map(|e| {
+            let (r, id) = e.trim().split_once(' ').unwrap();
+            (r.to_string(), id.to_string())
+        })
+        .collect();
     assert_eq!(out.len(), 33);
     out
 }
