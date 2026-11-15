@@ -135,20 +135,20 @@ mod tests {
             family: crate::family::PackageFamily::Lqfp,
             lead_count: 4,
             pitch: Dimension {
-                nominal: Some(0.5),
+                typ: Some(0.5),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),

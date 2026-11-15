@@ -25,15 +25,12 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     // A round can's diameter is `body_width` (and `body_length`, equal
     // to it). An oval can (HC-49/U crystal) states a shorter
     // `body_length`: it becomes a stadium `body_width` along X (the
     // lead row) by `body_length` along Y.
-    let diameter = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let diameter = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let depth = defaults::required(&package.dimensions.body_length).unwrap_or(diameter);
     let body_h = defaults::stated(&package.dimensions.body_height)
         .unwrap_or(crate::defaults::radial::BODY_HEIGHT);
@@ -121,26 +118,26 @@ mod tests {
             family: openparts_core::PackageFamily::Radial,
             lead_count: 2,
             pitch: Dimension {
-                nominal: Some(2.0),
+                typ: Some(2.0),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_height: Some(Dimension {
-                    nominal: Some(11.0),
+                    typ: Some(11.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -192,7 +189,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = radial_d5();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_radial(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

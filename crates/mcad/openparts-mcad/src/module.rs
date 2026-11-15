@@ -37,7 +37,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
     }
 
     let d = &package.dimensions;
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
     let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
     let board_t = stated(&d.body_height).unwrap_or(defaults::MODULE.board_thickness);
@@ -236,7 +236,7 @@ mod tests {
 
     fn mm(v: f64) -> Dimension {
         Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -267,7 +267,7 @@ mod tests {
                 aux_row_x: Some(mm(10.5)),
                 aux_row_y: Some(mm(0.8)),
                 mounting_hole_diameter: Some(Dimension {
-                    nominal: Some(2.1),
+                    typ: Some(2.1),
                     min: Some(2.05),
                     max: Some(2.15),
                     unit: "mm".into(),

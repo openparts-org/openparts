@@ -91,9 +91,20 @@ def split_null(schema):
     return schema, False
 
 
+DEFS = {}
+
+
+def inlined(schema):
+    """A transparent list type (`ParameterValues`) is used as its list."""
+    return schema.get("type") == "array" and "items" in schema
+
+
 def mbt_type(schema, where):
     if "$ref" in schema:
-        return ref_name(schema)
+        name = ref_name(schema)
+        if inlined(DEFS.get(name, {})):
+            return mbt_type(DEFS[name], where)
+        return name
     t = schema.get("type")
     if t == "string":
         return "String"
@@ -172,6 +183,7 @@ def gen_struct(name, schema, out):
 
 def main():
     defs = json.load(open(sys.argv[1]))
+    DEFS.update(defs)
     out = [HEADER]
     for name in sorted(defs):
         schema = defs[name]
@@ -180,6 +192,8 @@ def main():
             gen_enum(name, values, out)
         elif schema.get("type") == "object" and "properties" in schema:
             gen_struct(name, schema, out)
+        elif inlined(schema):
+            continue
         else:
             sys.exit(f"{name}: unsupported top-level schema")
     open(sys.argv[2], "w").write("".join(out))

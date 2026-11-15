@@ -91,7 +91,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
         ));
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let d = &package.dimensions;
     // Body size: nominal, else the stated min..max midpoint.
     let body_w = defaults::required(&d.body_width)
@@ -237,7 +237,7 @@ mod tests {
 
     fn mm(v: f64) -> Dimension {
         Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -245,7 +245,7 @@ mod tests {
     }
     fn range(min: f64, max: f64) -> Option<Dimension> {
         Some(Dimension {
-            nominal: None,
+            typ: None,
             min: Some(min),
             max: Some(max),
             unit: "mm".into(),

@@ -125,7 +125,7 @@ fn layout(package: &Package, kind: HeaderKind) -> Result<(u32, u32), McadError> 
 pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
     let kind = kind(package)?;
     let (rows, pins_per_row) = layout(package, kind)?;
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let d = &package.dimensions;
     let row_spacing = if rows > 1 {
         stated(&d.row_spacing).ok_or(McadError::MissingDimension("dimensions.row_spacing"))?
@@ -192,7 +192,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
     kind(package)?;
     let f = header_features(package)?;
     let d = &package.dimensions;
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
     let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
     let hole =
@@ -308,7 +308,7 @@ mod tests {
 
     fn mm(v: f64) -> Dimension {
         Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -329,7 +329,7 @@ mod tests {
                 body_width: mm(5.08),
                 body_length: mm(12.7),
                 body_height: Some(Dimension {
-                    nominal: Some(2.54),
+                    typ: Some(2.54),
                     min: Some(2.39),
                     max: Some(2.69),
                     unit: "mm".into(),
@@ -337,7 +337,7 @@ mod tests {
                 lead_width: Some(mm(0.64)),
                 row_spacing: Some(mm(2.54)),
                 hole_diameter: Some(Dimension {
-                    nominal: Some(1.1),
+                    typ: Some(1.1),
                     min: Some(0.95),
                     max: Some(1.25),
                     unit: "mm".into(),

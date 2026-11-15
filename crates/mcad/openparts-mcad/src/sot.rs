@@ -43,14 +43,11 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
         return Err(invalid());
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_l = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
     let shape = GullWing::resolve(package, &defaults::SOT);
     let body_h = shape.body_height;
@@ -174,20 +171,20 @@ mod tests {
             family: openparts_core::PackageFamily::Sot,
             lead_count: 3,
             pitch: Dimension {
-                nominal: Some(0.95),
+                typ: Some(0.95),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(1.3),
+                    typ: Some(1.3),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(2.9),
+                    typ: Some(2.9),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -244,7 +241,7 @@ mod tests {
         let mut p = sot23_3();
         p.lead_count = layout.iter().sum();
         p.lead_layout = Some(layout);
-        p.pitch.nominal = Some(pitch);
+        p.pitch.typ = Some(pitch);
         p
     }
 
@@ -302,7 +299,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = sot23_3();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_sot(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

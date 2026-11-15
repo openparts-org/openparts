@@ -123,10 +123,14 @@ def net_currents(board, derived=None):
 
 
 def current_from_parameter(param):
-    """Amps from a numeric parameter ({nominal|max, unit}), or None."""
+    """Amps from a numeric parameter ({max|typ, unit}), or None. The API
+    gives a key's values as a list (condition variants): the first is the
+    primary one."""
+    if isinstance(param, list):
+        param = param[0] if param else None
     if not isinstance(param, dict):
         return None
-    value = param.get("max", param.get("nominal"))
+    value = param.get("max", param.get("typ", param.get("nominal")))
     scale = {"A": 1.0, "mA": 1e-3, "uA": 1e-6, "µA": 1e-6, "nA": 1e-9}.get(param.get("unit"))
     return None if value is None or scale is None else float(value) * scale
 

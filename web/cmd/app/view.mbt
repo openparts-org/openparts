@@ -291,13 +291,84 @@ fn format_number(v : Double) -> String {
 fn format_dimension(d : @api.Dimension?) -> String {
   guard d is Some(d) else { "-" }
   let u = d.unit
-  match (d.nominal, d.min, d.max) {
+  match (d.typ, d.min, d.max) {
     (Some(n), _, _) => "\{format_number(n)} \{u}"
     (None, Some(lo), Some(hi)) =>
       "\{format_number(lo)}–\{format_number(hi)} \{u}"
     (None, Some(lo), None) => "≥\{format_number(lo)} \{u}"
     (None, None, Some(hi)) => "≤\{format_number(hi)} \{u}"
     _ => "-"
+  }
+}
+
+///|
+/// A number as the data states it (up to six decimals).
+fn data_number(v : Double) -> String {
+  let r = (v * 1000000.0).round() / 1000000.0
+  if r == r.floor() {
+    r.to_int64().to_string()
+  } else {
+    r.to_string()
+  }
+}
+
+///|
+/// One parameter value with its conditions, compactly:
+/// `18 mΩ (max 26.5 mΩ) @ VGS 10 V, ID 5.7 A`, `±10 %`, `N-channel`.
+fn format_parameter(
+  lang : Lang,
+  key : String,
+  v : @api.ParameterValue,
+) -> String {
+  let q = (x : Double) => {
+    let u = v.unit.unwrap_or("")
+    if u.is_empty() {
+      data_number(x)
+    } else {
+      "\{data_number(x)} \{u}"
+    }
+  }
+  let value = match (v.value, v.min, v.typ, v.max) {
+    (Some(t), _, _, _) => param_value_label(lang, key, t)
+    (None, Some(lo), None, Some(hi)) if lo == -hi => "±" + q(hi)
+    (None, lo, Some(t), hi) => {
+      let extra = []
+      if lo is Some(x) {
+        extra.push("min \{q(x)}")
+      }
+      if hi is Some(x) {
+        extra.push("max \{q(x)}")
+      }
+      if extra.is_empty() {
+        q(t)
+      } else {
+        "\{q(t)} (\{extra.join(", ")})"
+      }
+    }
+    (None, Some(lo), None, Some(hi)) => "\{q(lo)} – \{q(hi)}"
+    (None, Some(lo), None, None) => "≥ " + q(lo)
+    (None, None, None, Some(hi)) => "≤ " + q(hi)
+    _ => "-"
+  }
+  match v.at {
+    Some(at) if !at.is_empty() => {
+      let conds = at
+        .iter()
+        .map(kv => {
+          let (s, c) = kv
+          let n = match (c.value, c.min, c.max) {
+            (Some(x), _, _) => data_number(x)
+            (None, Some(a), Some(b)) => "\{data_number(a)}..\{data_number(b)}"
+            (None, Some(a), None) => "≥ " + data_number(a)
+            (None, None, Some(b)) => "≤ " + data_number(b)
+            _ => ""
+          }
+          "\{s} \{n} \{c.unit}"
+        })
+        .collect()
+      "\{value} @ \{conds.join(", ")}"
+    }
+    _ => value
   }
 }
 
@@ -449,6 +520,51 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       ]),
     ]),
   ]
+  // Electrical parameters: the part's own over its device's, in
+  // vocabulary order; one row per condition variant.
+  let part_params = part.parameters.unwrap_or({})
+  let device_params = device.parameters.unwrap_or({})
+  let param_rows : Array[Html] = []
+  for p in param_names {
+    let key = p.0
+    let (kind, values) = match (part_params.get(key), device_params.get(key)) {
+      (Some(v), _) => ("part", v)
+      (None, Some(v)) => ("device", v)
+      _ => continue
+    }
+    let name = param_name(lang, key)
+    for i, v in values {
+      let ptr = if values.length() == 1 {
+        "/parameters/\{key}"
+      } else {
+        "/parameters/\{key}/\{i}"
+      }
+      let shown = format_parameter(lang, key, v)
+      let label = if kind == "device" {
+        "\{name} (\{parameter_from_device(lang)})"
+      } else {
+        name
+      }
+      param_rows.push(
+        tr([
+          th(label),
+          td([cited_value(lang, data, kind, [ptr, "/parameters/\{key}"], name, shown)]),
+          td([
+            cited_where(lang, data, kind, [ptr, "/parameters/\{key}"]),
+            report_value_link(lang, data, kind, ptr, shown),
+          ]),
+        ]),
+      )
+    }
+  }
+  if !param_rows.is_empty() {
+    sections.push(
+      section(class="section", [
+        h3(parameters_heading(lang)),
+        table(class="cited-table parameter-table", [tbody(param_rows)]),
+      ]),
+    )
+  }
   if !data.revisions.is_empty() {
     sections.push(
       section(class="section", [

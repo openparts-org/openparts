@@ -24,7 +24,7 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
         return Err(McadError::InvalidLeadCount(n));
     }
     let d = &package.dimensions;
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     let body_w = defaults::required(&d.body_width)
         .ok_or(McadError::MissingDimension("dimensions.body_width"))?;
     let body_t = defaults::required(&d.body_length)

@@ -7,7 +7,9 @@
 //! can't make the candidate worse than what the original promised).
 
 use openparts_core::{
-    effective_parameters, parameter_spec, ComponentCategory, Normalized, ParameterSpec, Parameters,
+    condition::{comparable, NormalizedCondition},
+    conditions_label, effective_parameters, parameter_spec, ComponentCategory, Normalized,
+    ParameterSpec, Parameters,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -181,16 +183,72 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
     }
 }
 
+/// One value of a key, normalised, with its measurement conditions.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Variant {
+    pub value: Normalized,
+    /// The conditions in SI (`None`: invalid, never compared).
+    pub at: Option<Vec<(String, NormalizedCondition)>>,
+    /// `VGS 10 V, ID 5.7 A`; empty without conditions.
+    pub at_label: String,
+}
+
+/// One key in force: its values (the first is the primary one).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Effective {
+    pub spec: &'static ParameterSpec,
+    pub variants: Vec<Variant>,
+}
+
+impl Effective {
+    /// The primary value (what the catalog shows and filters by).
+    pub fn primary(&self) -> &Normalized {
+        &self.variants[0].value
+    }
+
+    /// The primary value's display form, with its conditions:
+    /// `18 mΩ @ VGS 10 V`.
+    pub fn label(&self) -> String {
+        variant_label(&self.variants[0], self.spec)
+    }
+
+    /// The variant measured under the same conditions as `other`
+    /// (like-for-like; both without conditions also match).
+    pub fn like(&self, other: &Variant) -> Option<&Variant> {
+        let want = other.at.as_ref()?;
+        self.variants.iter().find(|v| v.at.as_ref() == Some(want))
+    }
+}
+
+fn variant_label(v: &Variant, spec: &ParameterSpec) -> String {
+    let value = v.value.label(spec);
+    if v.at_label.is_empty() {
+        value
+    } else {
+        format!("{value} @ {}", v.at_label)
+    }
+}
+
 /// A part's parameters in force (its Device's included), normalised;
 /// values that don't normalise are left out (the validator reports them).
-pub type EffectiveParameters = BTreeMap<String, (Normalized, &'static ParameterSpec)>;
+pub type EffectiveParameters = BTreeMap<String, Effective>;
 
 pub fn effective(part: &Parameters, device: &Parameters) -> EffectiveParameters {
     effective_parameters(part, device)
         .into_iter()
-        .filter_map(|(k, (v, _))| {
+        .filter_map(|(k, (values, _))| {
             let spec = parameter_spec(k)?;
-            Some((k.to_string(), (v.normalize(spec).ok()?, spec)))
+            let variants: Vec<Variant> = values
+                .iter()
+                .filter_map(|v| {
+                    Some(Variant {
+                        value: v.normalize(spec).ok()?,
+                        at: comparable(&v.at),
+                        at_label: conditions_label(&v.at),
+                    })
+                })
+                .collect();
+            (!variants.is_empty()).then(|| (k.to_string(), Effective { spec, variants }))
         })
         .collect()
 }
@@ -400,7 +458,7 @@ pub fn compare(
     let expected = category.map(identity_keys).unwrap_or_default();
     // Vocabulary order, so the table reads like the catalog.
     for r in PARAMETER_RULES {
-        let Some((o, spec)) = orig.get(r.key) else {
+        let Some(o) = orig.get(r.key) else {
             if expected.contains(&r.key) {
                 unverified = true;
                 out.identity_missing.push(r.key);
@@ -408,17 +466,21 @@ pub fn compare(
                     key: r.key.to_string(),
                     rule: r.kind,
                     original: None,
-                    candidate: cand.get(r.key).map(|(c, spec)| c.label(spec)),
+                    candidate: cand.get(r.key).map(Effective::label),
                     status: CheckStatus::Unverified,
                     identity: true,
                 });
             }
             continue;
         };
-        let c = cand.get(r.key);
-        let status = match c {
+        let spec = o.spec;
+        let primary = &o.variants[0];
+        // Like-for-like only: the candidate's value under the original's
+        // conditions; a value under other conditions is not compared.
+        let like = cand.get(r.key).and_then(|c| c.like(primary));
+        let status = match like {
             None => CheckStatus::Unverified,
-            Some((c, _)) => check_one(r, o, c, spec),
+            Some(c) => check_one(r, &primary.value, &c.value, spec),
         };
         match status {
             CheckStatus::Fail => {
@@ -442,8 +504,10 @@ pub fn compare(
         out.checks.push(ParameterCheck {
             key: r.key.to_string(),
             rule: r.kind,
-            original: Some(o.label(spec)),
-            candidate: c.map(|(c, spec)| c.label(spec)),
+            original: Some(variant_label(primary, spec)),
+            candidate: like
+                .map(|c| variant_label(c, spec))
+                .or_else(|| cand.get(r.key).map(Effective::label)),
             status,
             identity: r.identity,
         });
@@ -479,14 +543,14 @@ mod tests {
     fn params(list: &[(&str, ParameterValue)]) -> EffectiveParameters {
         let p: Parameters = list
             .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
+            .map(|(k, v)| (k.to_string(), v.clone().into()))
             .collect();
         effective(&p, &Parameters::new())
     }
 
     fn num(n: f64, unit: &str) -> ParameterValue {
         ParameterValue {
-            nominal: Some(n),
+            typ: Some(n),
             unit: Some(unit.into()),
             ..Default::default()
         }
@@ -575,6 +639,49 @@ mod tests {
         assert_eq!(status(&c, "rds_on"), CheckStatus::Better);
         let p = params(&[("polarity", word("p_channel"))]);
         assert!(compare(&orig, &p, None).identity_mismatch);
+    }
+
+    #[test]
+    fn values_are_compared_like_for_like() {
+        let at = |v: ParameterValue, vgs: f64| ParameterValue {
+            at: [(
+                "VGS".to_string(),
+                openparts_core::Condition {
+                    value: Some(vgs),
+                    unit: "V".into(),
+                    ..Default::default()
+                },
+            )]
+            .into(),
+            ..v
+        };
+        let orig = params(&[("rds_on", at(num(50.0, "mΩ"), 10.0))]);
+        // The candidate's primary value is at 4.5 V; its 10 V value is
+        // the one compared.
+        let mut p = Parameters::new();
+        p.insert(
+            "rds_on".into(),
+            openparts_core::ParameterValues(vec![
+                at(num(60.0, "mΩ"), 4.5),
+                at(num(35.0, "mΩ"), 10.0),
+            ]),
+        );
+        let cand = effective(&p, &Parameters::new());
+        let c = compare(&orig, &cand, None);
+        assert_eq!(status(&c, "rds_on"), CheckStatus::Better);
+        assert_eq!(c.checks[0].original.as_deref(), Some("50 mΩ @ VGS 10 V"));
+        assert_eq!(c.checks[0].candidate.as_deref(), Some("35 mΩ @ VGS 10 V"));
+        // Only other conditions (or none): not comparable.
+        let other = params(&[("rds_on", at(num(20.0, "mΩ"), 4.5))]);
+        assert_eq!(
+            status(&compare(&orig, &other, None), "rds_on"),
+            CheckStatus::Unverified
+        );
+        let bare = params(&[("rds_on", num(20.0, "mΩ"))]);
+        assert_eq!(
+            status(&compare(&orig, &bare, None), "rds_on"),
+            CheckStatus::Unverified
+        );
     }
 
     #[test]

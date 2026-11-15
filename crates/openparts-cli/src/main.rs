@@ -1,5 +1,6 @@
 mod bom;
 mod bundle;
+mod data;
 mod diff_facts;
 
 use anyhow::Context;
@@ -121,6 +122,43 @@ enum Commands {
         #[command(subcommand)]
         command: BomCommand,
     },
+    /// The data files: format, migrate, check a migration.
+    Data {
+        #[command(subcommand)]
+        command: DataCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum DataCommand {
+    /// Re-write data files in the canonical schema 0.2 layout
+    /// (deterministic: key order, flow/block style, alignment).
+    Fmt {
+        /// Files or directories (default: the current directory).
+        #[arg(default_value = ".")]
+        paths: Vec<PathBuf>,
+        /// Only list the files that are not formatted; fail if any.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Convert data files to another schema version (0.1 -> 0.2: inline
+    /// `src`, unit strings, `typ`, conditions moved from locators into
+    /// `at` where that is mechanical).
+    Migrate {
+        #[arg(default_value = ".")]
+        paths: Vec<PathBuf>,
+        #[arg(long)]
+        to: String,
+    },
+    /// Check that two trees hold the same facts (a migration's proof):
+    /// values, units and provenance equal, apart from conditions the old
+    /// locators print.
+    Equiv {
+        #[arg(long)]
+        before: PathBuf,
+        #[arg(long)]
+        after: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -221,6 +259,15 @@ fn main() -> anyhow::Result<()> {
             json,
             strict,
         }),
+        Commands::Data {
+            command: DataCommand::Fmt { paths, check },
+        } => data::fmt(&paths, check),
+        Commands::Data {
+            command: DataCommand::Migrate { paths, to },
+        } => data::migrate(&paths, &to),
+        Commands::Data {
+            command: DataCommand::Equiv { before, after },
+        } => data::equiv(&before, &after),
     }
 }
 

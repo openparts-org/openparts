@@ -260,6 +260,23 @@ fn package_heading(lang : Lang, id : String) -> String {
 }
 
 ///|
+fn parameters_heading(lang : Lang) -> String {
+  match lang {
+    Ja => "電気的特性"
+    En => "Electrical parameters"
+  }
+}
+
+///|
+/// Where a parameter's value is from: the part, or its device (family).
+fn parameter_from_device(lang : Lang) -> String {
+  match lang {
+    Ja => "デバイス共通"
+    En => "device-wide"
+  }
+}
+
+///|
 fn footprint_alt(lang : Lang, mpn : String) -> String {
   match lang {
     Ja => "\{mpn} のフットプリント（上面図）"

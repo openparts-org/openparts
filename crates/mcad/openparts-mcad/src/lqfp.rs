@@ -23,14 +23,11 @@ pub fn generate_lqfp(package: &Package) -> Result<MechanicalGeometry, McadError>
     }
     let pins_per_side = lead_count / 4;
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_l = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
     let shape = GullWing::resolve(package, &defaults::QFP);
     let body_h = shape.body_height;
@@ -176,20 +173,20 @@ mod tests {
             family: openparts_core::PackageFamily::Lqfp,
             lead_count: 8,
             pitch: Dimension {
-                nominal: Some(0.5),
+                typ: Some(0.5),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(3.0),
+                    typ: Some(3.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(3.0),
+                    typ: Some(3.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -234,7 +231,7 @@ mod tests {
 
     fn mm(v: f64) -> Option<Dimension> {
         Some(Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -250,7 +247,7 @@ mod tests {
         package.dimensions.lead_thickness = mm(0.127);
         package.dimensions.lead_length = mm(0.45);
         package.dimensions.standoff = Some(Dimension {
-            nominal: None,
+            typ: None,
             min: Some(0.05),
             max: Some(0.15),
             unit: "mm".into(),
@@ -287,7 +284,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = lqfp8();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_lqfp(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

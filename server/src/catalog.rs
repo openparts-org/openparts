@@ -25,9 +25,9 @@
 
 use crate::search::{chip_codes, CHIP_SIZES};
 use openparts_core::{
-    effective_parameters, parameter_spec, parse_value, ComponentCategory, Dimension,
-    ExistenceStatus, Gender, LifecycleStatus, Normalized, Orientation, Package, PackageFamily,
-    ParameterShape, PARAMETERS,
+    conditions_label, effective_parameters, parameter_spec, parse_value, ComponentCategory,
+    Dimension, ExistenceStatus, Gender, LifecycleStatus, Normalized, Orientation, Package,
+    PackageFamily, ParameterShape, PARAMETERS,
 };
 use openparts_data::Dataset;
 use serde::Serialize;
@@ -116,7 +116,8 @@ pub struct CatalogParameter {
     /// The value in SI units (a tolerance's larger magnitude); `None`
     /// for an enumerated key.
     pub value: Option<f64>,
-    /// Display form: `100 nF`, `±10%`, `X7R`.
+    /// Display form of the primary value with its conditions: `100 nF`,
+    /// `±10%`, `X7R`, `18 mΩ @ VGS 10 V`.
     pub label: String,
 }
 
@@ -651,16 +652,25 @@ impl CatalogIndex {
             let device_params = device.map_or(&no_params, |d| &d.parameters);
             let mut params = BTreeMap::new();
             let mut item_params = BTreeMap::new();
-            for (key, (value, _)) in effective_parameters(&p.parameters, device_params) {
+            for (key, (values, _)) in effective_parameters(&p.parameters, device_params) {
                 let Some(spec) = parameter_spec(key) else {
                     continue;
                 };
-                // Invalid values are the validator's to report; the
-                // catalog only lists what normalises.
+                // The primary value (the first condition variant). Invalid
+                // values are the validator's to report; the catalog only
+                // lists what normalises.
+                let value = values.primary();
                 let Ok(n) = value.normalize(spec) else {
                     continue;
                 };
-                let label = n.label(spec);
+                let at = conditions_label(&value.at);
+                // A value under other conditions is another option
+                // (like-for-like): `18 mΩ @ VGS 10 V`.
+                let label = if at.is_empty() {
+                    n.label(spec)
+                } else {
+                    format!("{} @ {at}", n.label(spec))
+                };
                 let stated = n.stated(spec);
                 let order = match (&n, spec.shape) {
                     (Normalized::Text(t), ParameterShape::Enumerated(words)) => {
@@ -1216,7 +1226,7 @@ fn mounting(pkg: &Package) -> Option<Mounting> {
 /// A dimension's value as the generators read it: nominal, else the
 /// middle of min/max, else the one stated limit.
 fn stated(d: &Dimension) -> Option<f64> {
-    d.nominal.or(match (d.min, d.max) {
+    d.typ.or(match (d.min, d.max) {
         (Some(min), Some(max)) => Some((min + max) / 2.0),
         (min, max) => min.or(max),
     })

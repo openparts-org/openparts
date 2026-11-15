@@ -75,10 +75,22 @@ fn load_tree(root: &Path) -> anyhow::Result<(BTreeMap<String, Value>, Vec<String
             .unwrap_or(&path)
             .to_string_lossy()
             .replace('\\', "/");
+        // In the in-memory shape (provenance map, `typ` + `unit`), so a
+        // 0.1 and a 0.2 file of the same facts compare equal.
+        // Through the document's type when it loads (0.1 `nominal` and
+        // 0.2 `typ` alike), else as read.
         let parsed = std::fs::read_to_string(&path)
             .ok()
-            .and_then(|t| serde_yaml::from_str::<serde_yaml::Value>(&t).ok())
-            .and_then(|y| serde_json::to_value(y).ok());
+            .and_then(|t| openparts_data::format::read(&t).ok())
+            .map(|y| openparts_data::format::canonical(y.clone()).unwrap_or(y))
+            .and_then(|y| serde_json::to_value(y).ok())
+            .map(|mut v| {
+                drop_nulls(&mut v);
+                if let Some(m) = v.as_object_mut() {
+                    m.remove("schema_version");
+                }
+                v
+            });
         match parsed {
             Some(v) => {
                 docs.insert(rel, v);
@@ -87,6 +99,18 @@ fn load_tree(root: &Path) -> anyhow::Result<(BTreeMap<String, Value>, Vec<String
         }
     }
     Ok((docs, bad))
+}
+
+/// Unset optional fields (`null`) are absent, not values.
+fn drop_nulls(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            m.retain(|_, c| !c.is_null());
+            m.values_mut().for_each(drop_nulls);
+        }
+        Value::Array(items) => items.iter_mut().for_each(drop_nulls),
+        _ => {}
+    }
 }
 
 fn escape_token(key: &str) -> String {
@@ -138,9 +162,41 @@ fn is_within(pointer: &str, ancestor: &str) -> bool {
         || (pointer.starts_with(ancestor) && pointer[ancestor.len()..].starts_with('/'))
 }
 
+/// A quantity (`{typ, min, max, unit, at}`) as the data file writes it:
+/// `typ 18 mΩ, max 26.5 mΩ @ VGS 10 V`.
+fn quantity(map: &serde_json::Map<String, Value>) -> Option<String> {
+    let unit = map.get("unit")?.as_str()?;
+    if !map
+        .keys()
+        .all(|k| matches!(k.as_str(), "min" | "typ" | "max" | "unit" | "at"))
+    {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for k in ["min", "typ", "max"] {
+        if let Some(n) = map.get(k).and_then(Value::as_f64) {
+            parts.push(format!(
+                "{k} {} {unit}",
+                openparts_core::parameter::plain_number(n)
+            ));
+        }
+    }
+    let mut out = parts.join(", ");
+    if let Some(at) = map.get("at") {
+        let at: openparts_core::Conditions = serde_json::from_value(at.clone()).ok()?;
+        if !at.is_empty() {
+            out.push_str(&format!(" @ {}", openparts_core::conditions_label(&at)));
+        }
+    }
+    Some(out)
+}
+
 /// A short, YAML-flow-like rendering of a value.
 pub fn display(v: &Value) -> String {
     match v {
+        Value::Object(map) if quantity(map).is_some() => quantity(map).unwrap_or_default(),
+        // A parameter's single value.
+        Value::Array(items) if items.len() == 1 && items[0].is_object() => display(&items[0]),
         Value::Null => "null".into(),
         Value::String(s) => s.clone(),
         Value::Array(items) => format!(

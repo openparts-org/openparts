@@ -95,9 +95,10 @@ def test_net_widths_never_below_design_track():
 
 
 def test_current_from_parameter():
+    assert rules.current_from_parameter([{"typ": 800, "unit": "mA"}]) == pytest.approx(0.8)
     assert rules.current_from_parameter({"nominal": 800, "unit": "mA"}) == pytest.approx(0.8)
     assert rules.current_from_parameter({"max": 1, "unit": "A"}) == 1.0
-    assert rules.current_from_parameter({"nominal": 1, "unit": "V"}) is None
+    assert rules.current_from_parameter({"typ": 1, "unit": "V"}) is None
     assert rules.current_from_parameter(None) is None
 
 

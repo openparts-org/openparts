@@ -297,6 +297,15 @@ pub fn ComponentCategory::wire(Self) -> String
 pub impl @json.FromJson for ComponentCategory
 
 #derive(Eq)
+pub(all) struct Condition {
+  max : Double?
+  min : Double?
+  unit : String
+  value : Double?
+}
+pub impl @json.FromJson for Condition
+
+#derive(Eq)
 pub(all) struct Coverage {
   expected : Int32
   expected_present : Int32
@@ -320,7 +329,7 @@ pub(all) struct Device {
   id : String
   kind : Kind
   manufacturer : String
-  parameters : Map[String, ParameterValue]?
+  parameters : Map[String, Array[ParameterValue]]?
   pins : Map[String, Pin]
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
@@ -384,7 +393,7 @@ pub impl @json.FromJson for DiffStandard
 pub(all) struct Dimension {
   max : Double?
   min : Double?
-  nominal : Double?
+  typ : Double?
   unit : String
 }
 pub impl @json.FromJson for Dimension
@@ -911,9 +920,10 @@ pub impl @json.FromJson for ParameterKind
 
 #derive(Eq)
 pub(all) struct ParameterValue {
+  at : Map[String, Condition]?
   max : Double?
   min : Double?
-  nominal : Double?
+  typ : Double?
   unit : String?
   value : String?
 }
@@ -929,7 +939,7 @@ pub(all) struct Part {
   manufacturer : String
   mpn : String
   package_ : String
-  parameters : Map[String, ParameterValue]?
+  parameters : Map[String, Array[ParameterValue]]?
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
   schema_version : String

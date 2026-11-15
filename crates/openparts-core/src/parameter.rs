@@ -5,49 +5,141 @@
 //! carry a `parameters` map. Its keys come from a closed vocabulary
 //! ([`PARAMETERS`]); each key has one fixed shape -- a physical quantity
 //! with an SI base unit, or an enumerated text value -- so a value can
-//! always be normalised to SI and compared across manufacturers.
+//! always be normalised to SI and compared across manufacturers. A key
+//! holds one value or a list of condition variants (`at`, section 11.2).
 //!
-//! ```yaml
-//! parameters:
-//!   capacitance: { nominal: 100, unit: nF }
-//!   tolerance: { min: -10, max: 10, unit: "%" }
-//!   rated_voltage: { nominal: 50, unit: V }
-//!   dielectric: { value: X7R }
-//! ```
+//! In memory (and in the API) a value is `min`/`typ`/`max` + `unit`;
+//! the data file writes `{ typ: 100 nF }` (openparts-data's format).
 //!
 //! Nothing here reads a format: the vocabulary, unit table, SI
 //! normalisation, engineering-prefix formatting and the parser for
 //! typed filter values are plain Rust.
 
 use crate::category::ComponentCategory;
+use crate::condition::Conditions;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// One parameter value as the data states it. A numeric key uses
-/// `nominal`/`min`/`max` + `unit` (like a [`crate::Dimension`]; none of
+/// `min`/`typ`/`max` + `unit` (like a [`crate::Dimension`]; none of
 /// the three is invented when the source doesn't state it); an
 /// enumerated key uses `value`. Which shape a key takes is fixed by the
-/// vocabulary; the validator rejects the other one.
+/// vocabulary; the validator rejects the other one. `at` holds the
+/// measurement conditions the source states for the value.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ParameterValue {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub nominal: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
+    /// The typical value (schema 0.1: `nominal`).
+    #[serde(default, alias = "nominal", skip_serializing_if = "Option::is_none")]
+    pub typ: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<f64>,
-    /// Unit of `nominal`/`min`/`max`, e.g. `nF`, `kΩ`, `%`.
+    /// Unit of `min`/`typ`/`max`, e.g. `nF`, `kΩ`, `%`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
     /// The value of an enumerated key, e.g. `X7R`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Measurement conditions (section 11.2), e.g. `VGS: 10 V`.
+    #[serde(
+        default,
+        skip_serializing_if = "Conditions::is_empty",
+        serialize_with = "crate::condition::serialize_ordered"
+    )]
+    pub at: Conditions,
 }
 
-/// Parameter key -> value.
-pub type Parameters = BTreeMap<String, ParameterValue>;
+/// The values of one parameter key: one, or several condition variants
+/// (`rds_on` at VGS 10 V and at 4.5 V). The first is the *primary*
+/// value, the one the catalog, search and filters use. Never empty.
+///
+/// Reads one value or a list; always serialises as a list.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct ParameterValues(pub Vec<ParameterValue>);
+
+impl ParameterValues {
+    pub fn one(v: ParameterValue) -> Self {
+        ParameterValues(vec![v])
+    }
+
+    /// The primary value (the first).
+    pub fn primary(&self) -> &ParameterValue {
+        &self.0[0]
+    }
+
+    pub fn primary_mut(&mut self) -> &mut ParameterValue {
+        &mut self.0[0]
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, ParameterValue> {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The variant stated under exactly the conditions `at` (compared
+    /// in SI), if any: the like-for-like counterpart of another value.
+    pub fn at(&self, at: &Conditions) -> Option<&ParameterValue> {
+        let want = crate::condition::comparable(at)?;
+        self.0
+            .iter()
+            .find(|v| crate::condition::comparable(&v.at).as_ref() == Some(&want))
+    }
+}
+
+impl From<ParameterValue> for ParameterValues {
+    fn from(v: ParameterValue) -> Self {
+        ParameterValues::one(v)
+    }
+}
+
+impl<'a> IntoIterator for &'a ParameterValues {
+    type Item = &'a ParameterValue;
+    type IntoIter = std::slice::Iter<'a, ParameterValue>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'de> Deserialize<'de> for ParameterValues {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::{value, Error, MapAccess, SeqAccess, Visitor};
+        struct OneOrMany;
+        impl<'de> Visitor<'de> for OneOrMany {
+            type Value = Vec<ParameterValue>;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "a parameter value or a list of them")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                Ok(vec![ParameterValue::deserialize(
+                    value::MapAccessDeserializer::new(map),
+                )?])
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                Vec::<ParameterValue>::deserialize(value::SeqAccessDeserializer::new(seq))
+            }
+        }
+        let list = d.deserialize_any(OneOrMany)?;
+        if list.is_empty() {
+            return Err(D::Error::custom("a parameter needs at least one value"));
+        }
+        Ok(ParameterValues(list))
+    }
+}
+
+/// Parameter key -> its values.
+pub type Parameters = BTreeMap<String, ParameterValues>;
 
 /// The physical quantity of a numeric key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +160,10 @@ pub enum Quantity {
     /// Storage capacity in bits. `Kbit`/`Mbit`/`Gbit` are binary
     /// (2^10, 2^20, 2^30), as memory datasheets use them (JEDEC).
     Information,
+    /// A temperature, in °C (measurement conditions only; not SI).
+    Temperature,
+    /// A duration (measurement conditions only).
+    Time,
 }
 
 impl Quantity {
@@ -86,6 +182,8 @@ impl Quantity {
             Quantity::Length => "m",
             Quantity::Force => "N",
             Quantity::Information => "bit",
+            Quantity::Temperature => "°C",
+            Quantity::Time => "s",
         }
     }
 
@@ -168,6 +266,14 @@ impl Quantity {
                 ("Mbit", 1048576.0),
                 ("Gbit", 1073741824.0),
             ],
+            Quantity::Temperature => &[("°C", 1.0)],
+            Quantity::Time => &[
+                ("ns", 1e-9),
+                ("us", 1e-6),
+                ("µs", 1e-6),
+                ("ms", 1e-3),
+                ("s", 1.0),
+            ],
         }
     }
 
@@ -214,6 +320,8 @@ impl Quantity {
                 ],
                 "bit",
             ),
+            Quantity::Temperature => (&[("", 1.0)], "°C"),
+            Quantity::Time => (&SMALL[1..5], "s"),
         }
     }
 }
@@ -221,7 +329,7 @@ impl Quantity {
 /// What a key's value is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParameterShape {
-    /// `nominal`/`min`/`max` + `unit` of this quantity.
+    /// `typ`/`min`/`max` + `unit` of this quantity.
     Numeric(Quantity),
     /// `value`, one of these (case-sensitive) spellings.
     Enumerated(&'static [&'static str]),
@@ -416,7 +524,7 @@ pub enum ParameterError {
     WrongShape(&'static str),
     /// An enumerated value outside the key's vocabulary.
     UnknownValue(String),
-    /// `min <= nominal <= max` does not hold.
+    /// `min <= typ <= max` does not hold.
     OutOfOrder,
 }
 
@@ -435,7 +543,7 @@ impl std::fmt::Display for ParameterError {
             }
             ParameterError::WrongShape(why) => write!(f, "{why}"),
             ParameterError::UnknownValue(v) => write!(f, "\"{v}\" is not one of the key's values"),
-            ParameterError::OutOfOrder => write!(f, "min <= nominal <= max does not hold"),
+            ParameterError::OutOfOrder => write!(f, "min <= typ <= max does not hold"),
         }
     }
 }
@@ -444,7 +552,7 @@ impl std::fmt::Display for ParameterError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Normalized {
     Numeric {
-        nominal: Option<f64>,
+        typ: Option<f64>,
         min: Option<f64>,
         max: Option<f64>,
     },
@@ -459,12 +567,12 @@ impl ParameterValue {
             Numeric(q) => {
                 if self.value.is_some() {
                     return Err(ParameterError::WrongShape(
-                        "a numeric parameter takes nominal/min/max + unit, not value",
+                        "a numeric parameter takes typ/min/max + unit, not value",
                     ));
                 }
-                if self.nominal.is_none() && self.min.is_none() && self.max.is_none() {
+                if self.typ.is_none() && self.min.is_none() && self.max.is_none() {
                     return Err(ParameterError::WrongShape(
-                        "a numeric parameter needs nominal, min or max",
+                        "a numeric parameter needs typ, min or max",
                     ));
                 }
                 let unit = self.unit.as_deref().ok_or(ParameterError::MissingUnit)?;
@@ -474,7 +582,7 @@ impl ParameterValue {
                             unit: unit.to_string(),
                             quantity: q,
                         })?;
-                let (n, lo, hi) = (self.nominal, self.min, self.max);
+                let (n, lo, hi) = (self.typ, self.min, self.max);
                 let le = |a: Option<f64>, b: Option<f64>| match (a, b) {
                     (Some(a), Some(b)) => a <= b,
                     _ => true,
@@ -486,19 +594,19 @@ impl ParameterValue {
                 // 9.999999999999999e-6.
                 let si = |v: Option<f64>| v.map(|v| round_significant(v * factor, 12));
                 Ok(Normalized::Numeric {
-                    nominal: si(n),
+                    typ: si(n),
                     min: si(lo),
                     max: si(hi),
                 })
             }
             Enumerated(values) => {
-                if self.nominal.is_some()
+                if self.typ.is_some()
                     || self.min.is_some()
                     || self.max.is_some()
                     || self.unit.is_some()
                 {
                     return Err(ParameterError::WrongShape(
-                        "an enumerated parameter takes value, not nominal/min/max/unit",
+                        "an enumerated parameter takes value, not typ/min/max/unit",
                     ));
                 }
                 let v = self.value.as_deref().ok_or(ParameterError::WrongShape(
@@ -517,13 +625,13 @@ impl ParameterValue {
 impl Normalized {
     /// The one number a numeric value is compared, sorted and filtered
     /// by (SI): a deviation key's larger magnitude; otherwise
-    /// `nominal`, else the middle of `min`/`max`, else its one limit.
+    /// `typ`, else the middle of `min`/`max`, else its one limit.
     pub fn stated(&self, spec: &ParameterSpec) -> Option<f64> {
-        let Normalized::Numeric { nominal, min, max } = *self else {
+        let Normalized::Numeric { typ, min, max } = *self else {
             return None;
         };
         if spec.deviation {
-            return match (nominal, min, max) {
+            return match (typ, min, max) {
                 (Some(n), None, None) => Some(n.abs()),
                 _ => [min, max]
                     .into_iter()
@@ -532,7 +640,7 @@ impl Normalized {
                     .reduce(f64::max),
             };
         }
-        nominal.or(match (min, max) {
+        typ.or(match (min, max) {
             (Some(a), Some(b)) => Some((a + b) / 2.0),
             (a, b) => a.or(b),
         })
@@ -541,13 +649,13 @@ impl Normalized {
     /// The display form: `100 nF`, `±10%`, `X7R`, `1.2 V typ`... Ranges
     /// show as `min–max`; a lone limit as `≥ x` / `≤ x`.
     pub fn label(&self, spec: &ParameterSpec) -> String {
-        let (nominal, min, max) = match *self {
+        let (typ, min, max) = match *self {
             Normalized::Text(t) => return t.to_string(),
-            Normalized::Numeric { nominal, min, max } => (nominal, min, max),
+            Normalized::Numeric { typ, min, max } => (typ, min, max),
         };
         let f = |v: f64| format_value(v, spec);
         if spec.deviation {
-            return match (nominal, min, max) {
+            return match (typ, min, max) {
                 (_, Some(a), Some(b)) if (a + b).abs() <= 1e-12 * b.abs().max(1e-30) => {
                     format!("±{}", f(b.abs()))
                 }
@@ -558,7 +666,7 @@ impl Normalized {
                 _ => String::new(),
             };
         }
-        match (nominal, min, max) {
+        match (typ, min, max) {
             (Some(n), _, _) => f(n),
             (None, Some(a), Some(b)) => format!("{}–{}", f(a), f(b)),
             (None, Some(a), None) => format!("≥ {}", f(a)),
@@ -607,7 +715,7 @@ pub fn format_value(v: f64, spec: &ParameterSpec) -> String {
 }
 
 /// `v` rounded to `digits` significant digits.
-fn round_significant(v: f64, digits: i32) -> f64 {
+pub(crate) fn round_significant(v: f64, digits: i32) -> f64 {
     if v == 0.0 || !v.is_finite() {
         return v;
     }
@@ -622,6 +730,14 @@ fn round_significant(v: f64, digits: i32) -> f64 {
         (v / s).round() * s
     };
     format!("{r:e}").parse().unwrap_or(r)
+}
+
+/// The shortest decimal that reads back as `v` (`26.5`, `30`, `0.0057`).
+pub fn plain_number(v: f64) -> String {
+    if v == 0.0 {
+        return "0".into();
+    }
+    format!("{v}")
 }
 
 /// Four significant digits, trailing zeros dropped (`100`, `4.7`, `0.25`).
@@ -776,8 +892,8 @@ fn split_prefix(rest: &str) -> (&str, &str) {
 pub fn effective_parameters<'a>(
     part: &'a Parameters,
     device: &'a Parameters,
-) -> BTreeMap<&'a str, (&'a ParameterValue, bool)> {
-    let mut out: BTreeMap<&str, (&ParameterValue, bool)> = device
+) -> BTreeMap<&'a str, (&'a ParameterValues, bool)> {
+    let mut out: BTreeMap<&str, (&ParameterValues, bool)> = device
         .iter()
         .map(|(k, v)| (k.as_str(), (v, true)))
         .collect();
@@ -801,13 +917,14 @@ mod tests {
         parameter_spec(key).unwrap()
     }
 
-    fn val(nominal: Option<f64>, min: Option<f64>, max: Option<f64>, unit: &str) -> ParameterValue {
+    fn val(typ: Option<f64>, min: Option<f64>, max: Option<f64>, unit: &str) -> ParameterValue {
         ParameterValue {
-            nominal,
+            typ,
             min,
             max,
             unit: Some(unit.into()),
             value: None,
+            at: Default::default(),
         }
     }
 
@@ -991,13 +1108,22 @@ mod tests {
     #[test]
     fn part_values_override_device_values() {
         let mut device = Parameters::new();
-        device.insert("capacity".into(), val(Some(128.0), None, None, "Mbit"));
-        device.insert("rated_voltage".into(), val(Some(3.6), None, None, "V"));
+        device.insert(
+            "capacity".into(),
+            val(Some(128.0), None, None, "Mbit").into(),
+        );
+        device.insert(
+            "rated_voltage".into(),
+            val(Some(3.6), None, None, "V").into(),
+        );
         let mut part = Parameters::new();
-        part.insert("rated_voltage".into(), val(Some(1.95), None, None, "V"));
+        part.insert(
+            "rated_voltage".into(),
+            val(Some(1.95), None, None, "V").into(),
+        );
         let eff = effective_parameters(&part, &device);
         assert!(eff["capacity"].1);
-        assert_eq!(eff["rated_voltage"].0.nominal, Some(1.95));
+        assert_eq!(eff["rated_voltage"].0.primary().typ, Some(1.95));
         assert!(!eff["rated_voltage"].1);
     }
 }

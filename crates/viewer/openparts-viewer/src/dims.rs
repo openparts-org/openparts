@@ -120,7 +120,7 @@ fn v3(p: Vec2, z: f32) -> Vec3 {
 }
 
 fn stated(d: &Dimension) -> bool {
-    d.nominal.is_some() || d.min.is_some() || d.max.is_some()
+    d.typ.is_some() || d.min.is_some() || d.max.is_some()
 }
 
 /// The package's dimension annotations. `bounds` is the loaded model's
@@ -258,7 +258,7 @@ pub fn annotations(
     }
 
     // Lead dimensions, around lead 1 and its neighbour one pitch away.
-    let Some(pitch) = package.pitch.nominal.or(g.pitch) else {
+    let Some(pitch) = package.pitch.typ.or(g.pitch) else {
         return out;
     };
     let Some(l1) = leads

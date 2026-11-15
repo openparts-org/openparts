@@ -178,7 +178,7 @@ impl AlternativesIndex {
             existence: p.existence.status,
             parameters: self.params[i]
                 .iter()
-                .map(|(k, (n, spec))| (k.clone(), n.label(spec)))
+                .map(|(k, e)| (k.clone(), e.label()))
                 .collect(),
         }
     }

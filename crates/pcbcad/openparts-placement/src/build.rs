@@ -418,7 +418,7 @@ fn make(
 
 /// A dimension's value as the generators read it.
 fn stated(d: &openparts_core::Dimension) -> Option<f64> {
-    d.nominal.or(match (d.min, d.max) {
+    d.typ.or(match (d.min, d.max) {
         (Some(a), Some(b)) => Some((a + b) / 2.0),
         (a, b) => a.or(b),
     })

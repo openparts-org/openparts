@@ -29,21 +29,17 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
         return Err(McadError::InvalidLeadCount(package.lead_count));
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     // `body_width`/`body_length` both represent the can's diameter, same
     // convention `radial.rs` uses -- a true cylinder has no separate
     // width/length, but the schema has no dedicated "diameter" field.
-    let diameter = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let diameter = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     // `body_height` is reused here as the can's axial length (the
     // dimension along X, not a vertical height) -- same schema field,
     // different physical meaning depending on family, matching how
     // `radial.rs` already reuses `body_height` for its can's length.
-    let length = defaults::stated(&package.dimensions.body_height).ok_or(
-        McadError::MissingDimension("dimensions.body_height.nominal"),
-    )?;
+    let length = defaults::stated(&package.dimensions.body_height)
+        .ok_or(McadError::MissingDimension("dimensions.body_height.typ"))?;
 
     let body = Body {
         position: Point3 {
@@ -129,26 +125,26 @@ mod tests {
             family: openparts_core::PackageFamily::Axial,
             lead_count: 2,
             pitch: Dimension {
-                nominal: Some(10.16),
+                typ: Some(10.16),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(2.7),
+                    typ: Some(2.7),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(2.7),
+                    typ: Some(2.7),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_height: Some(Dimension {
-                    nominal: Some(5.2),
+                    typ: Some(5.2),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -212,7 +208,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = do41_test();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_axial(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

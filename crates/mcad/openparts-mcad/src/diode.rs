@@ -238,7 +238,7 @@ mod tests {
         p.family = openparts_core::PackageFamily::SodFlat;
         p.dimensions.lead_width = None;
         p.dimensions.body_width = openparts_core::Dimension {
-            nominal: Some(0.8),
+            typ: Some(0.8),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -275,7 +275,7 @@ mod tests {
         ));
         let mut p = sma();
         p.dimensions.overall_length = Some(openparts_core::Dimension {
-            nominal: Some(4.3),
+            typ: Some(4.3),
             min: None,
             max: None,
             unit: "mm".into(),

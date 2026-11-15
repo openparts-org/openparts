@@ -97,7 +97,7 @@ fn main() {
 
 fn dim(v: f64) -> Dimension {
     Dimension {
-        nominal: Some(v),
+        typ: Some(v),
         min: None,
         max: None,
         unit: "mm".into(),

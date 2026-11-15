@@ -15,12 +15,9 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
 
     let body_len = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_h = defaults::stated(&package.dimensions.body_height)
         .unwrap_or(crate::defaults::chip::BODY_HEIGHT);
 
@@ -102,26 +99,26 @@ mod tests {
             family: openparts_core::PackageFamily::Chip,
             lead_count: 2,
             pitch: Dimension {
-                nominal: None,
+                typ: None,
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(0.8),
+                    typ: Some(0.8),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(1.6),
+                    typ: Some(1.6),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_height: Some(Dimension {
-                    nominal: Some(0.45),
+                    typ: Some(0.45),
                     min: None,
                     max: None,
                     unit: "mm".into(),

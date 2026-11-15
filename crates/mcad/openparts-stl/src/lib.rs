@@ -39,7 +39,7 @@ mod tests {
 
     fn dim(v: f64) -> Dimension {
         Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -58,7 +58,7 @@ mod tests {
             family: openparts_core::PackageFamily::Chip,
             lead_count: 2,
             pitch: Dimension {
-                nominal: None,
+                typ: None,
                 min: None,
                 max: None,
                 unit: "mm".into(),

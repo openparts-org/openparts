@@ -71,7 +71,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "dimension.out_of_range",
-        meaning: "`nominal` is not within `[min, max]` when all three are present",
+        meaning: "`typ` is not within `[min, max]` when all three are present",
     },
     Rule {
         id: "dimension.inconsistent",
@@ -95,11 +95,19 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "parameter.invalid",
-        meaning: "a parameter value has the wrong shape for its key (`value` on a numeric key, `nominal`/`min`/`max`/`unit` on an enumerated one, or nothing), or an enumerated value outside the key's vocabulary",
+        meaning: "a parameter value has the wrong shape for its key (`value` on a numeric key, `min`/`typ`/`max`/`unit` on an enumerated one, or nothing), or an enumerated value outside the key's vocabulary",
     },
     Rule {
         id: "parameter.out_of_range",
-        meaning: "a parameter's `min <= nominal <= max` does not hold (compared only between stated values)",
+        meaning: "a parameter's `min <= typ <= max` does not hold (compared only between stated values)",
+    },
+    Rule {
+        id: "parameter.condition",
+        meaning: "a parameter value's `at` condition uses a symbol outside the condition vocabulary (`openparts_core::CONDITION_SYMBOLS`) or a unit that doesn't fit the symbol's quantity, or two values of one key state the same conditions (Canonical Data Specification section 11.2)",
+    },
+    Rule {
+        id: "provenance.locator_long",
+        meaning: "warning: a provenance `locator` is longer than 120 characters; a locator is a short identifier (table, figure, row, column, section), not copied text (Canonical Data Specification section 25.1)",
     },
     Rule {
         id: "parameter.implausible",
@@ -429,20 +437,20 @@ mod tests {
             family: openparts_core::PackageFamily::Lqfp,
             lead_count: 4,
             pitch: Dimension {
-                nominal: Some(0.5),
+                typ: Some(0.5),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: Some(4.9),
                     max: Some(5.1),
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(5.0),
+                    typ: Some(5.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -703,7 +711,7 @@ mod tests {
     fn rejects_out_of_range_dimension() {
         let mut package = base_package();
         package.dimensions.body_width = Dimension {
-            nominal: Some(10.0),
+            typ: Some(10.0),
             min: Some(4.9),
             max: Some(5.1),
             unit: "mm".into(),
@@ -748,7 +756,7 @@ mod tests {
 
     fn mm(nominal: f64) -> Option<Dimension> {
         Some(Dimension {
-            nominal: Some(nominal),
+            typ: Some(nominal),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -957,14 +965,20 @@ mod tests {
     #[test]
     fn parameters_are_typed_cited_and_plausible() {
         use openparts_core::ParameterValue;
-        let num =
-            |nominal: Option<f64>, min: Option<f64>, max: Option<f64>, unit: &str| ParameterValue {
-                nominal,
+        let num = |nominal: Option<f64>,
+                   min: Option<f64>,
+                   max: Option<f64>,
+                   unit: &str|
+         -> openparts_core::ParameterValues {
+            ParameterValue {
+                typ: nominal,
                 min,
                 max,
                 unit: Some(unit.into()),
-                value: None,
-            };
+                ..Default::default()
+            }
+            .into()
+        };
         let cite = |part: &mut Part, path: &str| {
             part.provenance.insert(
                 path.into(),
@@ -991,7 +1005,8 @@ mod tests {
             ParameterValue {
                 value: Some("X9Q".into()),
                 ..Default::default()
-            },
+            }
+            .into(),
         );
         part.parameters
             .insert("resistance".into(), num(Some(10.0), None, None, "kΩ"));
@@ -1053,10 +1068,72 @@ mod tests {
     }
 
     #[test]
+    fn conditions_and_variants_are_checked() {
+        use openparts_core::{Condition, ParameterValue, ParameterValues};
+        let cond = |sym: &str, v: f64, u: &str| {
+            (
+                sym.to_string(),
+                Condition {
+                    value: Some(v),
+                    unit: u.into(),
+                    ..Default::default()
+                },
+            )
+        };
+        let rds = |at: Vec<(String, Condition)>| ParameterValue {
+            typ: Some(18.0),
+            unit: Some("mΩ".into()),
+            at: at.into_iter().collect(),
+            ..Default::default()
+        };
+        let mut device = base_device();
+        device.category = openparts_core::ComponentCategory::Transistor;
+        let mut part = base_part();
+        part.parameters.insert(
+            "rds_on".into(),
+            ParameterValues(vec![
+                rds(vec![cond("VGS", 10.0, "V")]),
+                rds(vec![cond("VGS", 10000.0, "mV")]),
+                rds(vec![cond("VGS", 4.5, "A"), cond("VXX", 1.0, "V")]),
+            ]),
+        );
+        let entry = openparts_core::ProvenanceEntry {
+            source: SourceId::from("ex/DS1"),
+            page: Some(2),
+            locator: Some("x".repeat(121)),
+        };
+        part.provenance
+            .insert("/parameters/rds_on/0".into(), vec![entry.clone()]);
+        part.provenance
+            .insert("/parameters/rds_on/1".into(), vec![entry]);
+        let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
+        let paths = |rule: &str| -> Vec<String> {
+            diags
+                .iter()
+                .filter(|d| d.rule_id == rule)
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        assert_eq!(
+            paths("parameter.condition"),
+            vec![
+                "/parameters/rds_on/1",
+                "/parameters/rds_on/2/at/VGS",
+                "/parameters/rds_on/2/at/VXX"
+            ]
+        );
+        assert_eq!(paths("provenance.missing"), vec!["/parameters/rds_on/2"]);
+        assert_eq!(
+            paths("provenance.locator_long"),
+            vec!["/parameters/rds_on/0", "/parameters/rds_on/1"]
+        );
+    }
+
+    #[test]
     fn zener_and_optocoupler_parameters_are_plausible() {
         use openparts_core::{ComponentCategory as C, ParameterValue};
         let num = |nominal: f64, unit: &str| ParameterValue {
-            nominal: Some(nominal),
+            typ: Some(nominal),
             unit: Some(unit.into()),
             ..Default::default()
         };
@@ -1065,7 +1142,7 @@ mod tests {
             device.category = category;
             let mut part = base_part();
             for (key, value) in keys {
-                part.parameters.insert((*key).into(), value.clone());
+                part.parameters.insert((*key).into(), value.clone().into());
                 part.provenance.insert(
                     format!("/parameters/{key}"),
                     vec![openparts_core::ProvenanceEntry {

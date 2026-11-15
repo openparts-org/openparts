@@ -610,8 +610,8 @@ impl BomIndex {
         for &i in alt.in_category(category) {
             let params = alt.parameters(i)?;
             let stated = |k: &str| -> Option<f64> {
-                let (n, s) = params.get(k)?;
-                n.stated(s)
+                let e = params.get(k)?;
+                e.primary().stated(e.spec)
             };
             let Some(v) = stated(key) else { continue };
             if (v - target).abs() > 1e-6 * v.abs().max(target.abs()) {
@@ -633,7 +633,7 @@ impl BomIndex {
             }
             if let Some(d) = dielectric {
                 let rank = |x: &str| DIELECTRIC_RANKS.iter().find(|(n, _)| *n == x).map(|r| r.1);
-                let part_d = params.get("dielectric").and_then(|(n, _)| match n {
+                let part_d = params.get("dielectric").and_then(|e| match e.primary() {
                     Normalized::Text(t) => Some(*t),
                     _ => None,
                 });

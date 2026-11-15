@@ -22,7 +22,7 @@ pub fn number(v: f64) -> String {
 /// "≤11.5 mm", "≥0.2 mm"; `None` when it states no value at all.
 pub fn dimension(d: &Dimension) -> Option<String> {
     let u = if d.unit.is_empty() { "mm" } else { &d.unit };
-    let value = match (d.nominal, d.min, d.max) {
+    let value = match (d.typ, d.min, d.max) {
         (Some(n), Some(lo), Some(hi)) => {
             format!("{} ({}–{})", number(n), number(lo), number(hi))
         }
@@ -48,7 +48,7 @@ mod tests {
 
     fn dim(nominal: Option<f64>, min: Option<f64>, max: Option<f64>) -> Dimension {
         Dimension {
-            nominal,
+            typ: nominal,
             min,
             max,
             unit: "mm".into(),

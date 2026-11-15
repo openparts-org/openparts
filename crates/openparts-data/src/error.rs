@@ -15,6 +15,10 @@ pub enum DataError {
         #[source]
         source: serde_yaml::Error,
     },
+    /// The YAML parses but breaks the file format (a quantity without a
+    /// unit, a malformed `src`, ...).
+    #[error("{path}: {message}")]
+    Format { path: String, message: String },
     #[error("{path}: expected kind \"{expected}\" but document declares kind \"{found}\"")]
     KindMismatch {
         path: String,

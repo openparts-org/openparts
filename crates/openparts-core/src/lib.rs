@@ -5,6 +5,7 @@
 //! It only knows about Rust types and the format-agnostic `serde` traits.
 
 pub mod category;
+pub mod condition;
 pub mod device;
 pub mod dimension;
 pub mod effective_model;
@@ -28,6 +29,10 @@ pub mod structure;
 pub mod text;
 
 pub use category::ComponentCategory;
+pub use condition::{
+    condition_symbol, conditions_label, Condition, ConditionError, ConditionSymbol, Conditions,
+    CONDITION_SYMBOLS,
+};
 pub use device::{Device, DeviceOverrides, DeviceRevision, RevisionDetection};
 pub use dimension::Dimension;
 pub use effective_model::{build_effective_model, EffectiveModel, EffectiveModelError};
@@ -45,7 +50,8 @@ pub use package::{
 };
 pub use parameter::{
     effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,
-    ParameterShape, ParameterSpec, ParameterValue, Parameters, Quantity, PARAMETERS,
+    ParameterShape, ParameterSpec, ParameterValue, ParameterValues, Parameters, Quantity,
+    PARAMETERS,
 };
 pub use part::Part;
 pub use pin::{DiffPair, DiffPolarity, DiffStandard, Pin, PinOverride, PinType};

@@ -63,14 +63,11 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
         _ => return Err(McadError::InvalidLeadCount(n)),
     };
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_l = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
     let shape = Flush::resolve(
         package,
@@ -150,8 +147,8 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
     }
 
     if let Some(ep) = &package.dimensions.exposed_pad {
-        let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.nominal")?;
-        let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.nominal")?;
+        let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.typ")?;
+        let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.typ")?;
         leads.push(Lead {
             number: "EP".to_string(),
             position: Point3 { x: 0.0, y: 0.0, z },
@@ -221,33 +218,33 @@ mod tests {
             family: openparts_core::PackageFamily::Qfn,
             lead_count: 8,
             pitch: Dimension {
-                nominal: Some(0.5),
+                typ: Some(0.5),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(3.0),
+                    typ: Some(3.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(3.0),
+                    typ: Some(3.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 exposed_pad: Some(ExposedPadDimensions {
                     width: Dimension {
-                        nominal: Some(1.5),
+                        typ: Some(1.5),
                         min: None,
                         max: None,
                         unit: "mm".into(),
                     },
                     length: Dimension {
-                        nominal: Some(1.5),
+                        typ: Some(1.5),
                         min: None,
                         max: None,
                         unit: "mm".into(),
@@ -330,7 +327,7 @@ mod tests {
         ));
         package.lead_layout = Some(vec![3, 1, 3, 1]);
         package.dimensions.lead_inset = Some(Dimension {
-            nominal: Some(0.1),
+            typ: Some(0.1),
             min: None,
             max: None,
             unit: "mm".into(),

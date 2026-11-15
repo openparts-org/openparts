@@ -518,7 +518,7 @@ pub(crate) mod to92 {
 /// `None` when neither is stated (a lone min or max isn't enough).
 pub(crate) fn value(dim: &Option<Dimension>) -> Option<f64> {
     let d = dim.as_ref()?;
-    d.nominal.or(match (d.min, d.max) {
+    d.typ.or(match (d.min, d.max) {
         (Some(min), Some(max)) => Some((min + max) / 2.0),
         _ => None,
     })
@@ -531,7 +531,7 @@ pub(crate) fn value(dim: &Option<Dimension>) -> Option<f64> {
 /// value is never written back into Canonical Data, so packages record
 /// exactly what the datasheet prints (Canonical Data Specification 20.1).
 pub(crate) fn required(dim: &Dimension) -> Option<f64> {
-    dim.nominal.or(match (dim.min, dim.max) {
+    dim.typ.or(match (dim.min, dim.max) {
         (Some(min), Some(max)) => Some((min + max) / 2.0),
         (min, max) => min.or(max),
     })
@@ -653,7 +653,7 @@ pub(crate) fn body_height(package: &Package, standoff: f64, default: f64) -> f64
     // keep the family default unless it falls below that floor.
     let floor_only = |dim: &Option<Dimension>| {
         dim.as_ref()
-            .filter(|x| x.nominal.is_none() && x.max.is_none())
+            .filter(|x| x.typ.is_none() && x.max.is_none())
             .and_then(|x| x.min)
     };
     if let Some(min) = floor_only(&d.body_height) {
@@ -676,7 +676,7 @@ mod tests {
 
     fn dim(nominal: Option<f64>, min: Option<f64>, max: Option<f64>) -> Option<Dimension> {
         Some(Dimension {
-            nominal,
+            typ: nominal,
             min,
             max,
             unit: "mm".into(),

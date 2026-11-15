@@ -330,7 +330,7 @@ fn dataset_footprint_pads_do_not_overlap_and_toes_follow_the_lead_span() {
         ] {
             let Some(span) = span.as_ref() else { continue };
             let expected = span
-                .nominal
+                .typ
                 .or(span.min.zip(span.max).map(|(a, b)| (a + b) / 2.0));
             if let Some(expected) = expected {
                 assert!(

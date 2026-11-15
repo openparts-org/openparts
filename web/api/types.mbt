@@ -823,6 +823,29 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
 }
 
 ///|
+/// One condition: a value, or a `min`..`max` range, in `unit`.
+#derive(Eq)
+pub(all) struct Condition {
+  max : Double?
+  min : Double?
+  unit : String
+  value : Double?
+}
+
+///|
+pub impl @json.FromJson for Condition with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a Condition object"))
+  }
+  {
+    max: opt_field(obj, "max", path),
+    min: opt_field(obj, "min", path),
+    unit: field(obj, "unit", path),
+    value: opt_field(obj, "value", path),
+  }
+}
+
+///|
 /// How much of the category's expected data the part states.
 #derive(Eq)
 pub(all) struct Coverage {
@@ -872,7 +895,7 @@ pub(all) struct Device {
   id : String
   kind : Kind
   manufacturer : String
-  parameters : Map[String, ParameterValue]?
+  parameters : Map[String, Array[ParameterValue]]?
   pins : Map[String, Pin]
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
@@ -1051,13 +1074,13 @@ pub impl @json.FromJson for DiffStandard with fn from_json(json, path) {
 
 ///|
 /// Canonical Data Specification section 7 / 9: a physical quantity that
-/// may have `nominal`/`min`/`max`, none of which are invented when a
+/// may have `min`/`typ`/`max`, none of which are invented when a
 /// datasheet doesn't state them.
 #derive(Eq)
 pub(all) struct Dimension {
   max : Double?
   min : Double?
-  nominal : Double?
+  typ : Double?
   unit : String
 }
 
@@ -1069,7 +1092,7 @@ pub impl @json.FromJson for Dimension with fn from_json(json, path) {
   {
     max: opt_field(obj, "max", path),
     min: opt_field(obj, "min", path),
-    nominal: opt_field(obj, "nominal", path),
+    typ: opt_field(obj, "typ", path),
     unit: field(obj, "unit", path),
   }
 }
@@ -2710,15 +2733,17 @@ pub impl @json.FromJson for ParameterKind with fn from_json(json, path) {
 
 ///|
 /// One parameter value as the data states it. A numeric key uses
-/// `nominal`/`min`/`max` + `unit` (like a [`crate::Dimension`]; none of
+/// `min`/`typ`/`max` + `unit` (like a [`crate::Dimension`]; none of
 /// the three is invented when the source doesn't state it); an
 /// enumerated key uses `value`. Which shape a key takes is fixed by the
-/// vocabulary; the validator rejects the other one.
+/// vocabulary; the validator rejects the other one. `at` holds the
+/// measurement conditions the source states for the value.
 #derive(Eq)
 pub(all) struct ParameterValue {
+  at : Map[String, Condition]?
   max : Double?
   min : Double?
-  nominal : Double?
+  typ : Double?
   unit : String?
   value : String?
 }
@@ -2729,9 +2754,10 @@ pub impl @json.FromJson for ParameterValue with fn from_json(json, path) {
     raise @json.JsonDecodeError((path, "expected a ParameterValue object"))
   }
   {
+    at: opt_field(obj, "at", path),
     max: opt_field(obj, "max", path),
     min: opt_field(obj, "min", path),
-    nominal: opt_field(obj, "nominal", path),
+    typ: opt_field(obj, "typ", path),
     unit: opt_field(obj, "unit", path),
     value: opt_field(obj, "value", path),
   }
@@ -2750,7 +2776,7 @@ pub(all) struct Part {
   manufacturer : String
   mpn : String
   package_ : String
-  parameters : Map[String, ParameterValue]?
+  parameters : Map[String, Array[ParameterValue]]?
   provenance : Map[String, Array[ProvenanceEntry]]
   review : DocumentReview?
   schema_version : String

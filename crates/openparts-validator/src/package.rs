@@ -243,14 +243,14 @@ pub(crate) fn check_package_header(entity: &str, package: &Package) -> Vec<Diagn
 /// The largest / smallest value a dimension states (nominal, min or
 /// max) -- comparisons use only stated numbers, never a synthesized one.
 pub(crate) fn largest(dim: &openparts_core::Dimension) -> Option<f64> {
-    [dim.nominal, dim.min, dim.max]
+    [dim.typ, dim.min, dim.max]
         .into_iter()
         .flatten()
         .reduce(f64::max)
 }
 
 pub(crate) fn smallest(dim: &openparts_core::Dimension) -> Option<f64> {
-    [dim.nominal, dim.min, dim.max]
+    [dim.typ, dim.min, dim.max]
         .into_iter()
         .flatten()
         .reduce(f64::min)
@@ -305,7 +305,7 @@ pub(crate) fn check_dimension(
     field_path: &str,
     dim: &openparts_core::Dimension,
 ) -> Option<Diagnostic> {
-    let (Some(nominal), Some(min), Some(max)) = (dim.nominal, dim.min, dim.max) else {
+    let (Some(nominal), Some(min), Some(max)) = (dim.typ, dim.min, dim.max) else {
         // Only checkable when all three are present (Testing and Quality
         // Specification section 6: never synthesize a missing value in
         // order to validate).
@@ -316,7 +316,7 @@ pub(crate) fn check_dimension(
             "dimension.out_of_range",
             entity,
             Some(field_path),
-            format!("nominal ({nominal}) is not within [{min}, {max}]"),
+            format!("typ ({nominal}) is not within [{min}, {max}]"),
         ))
     } else {
         None

@@ -199,13 +199,16 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
         .devices
         .get(&p.device.0)
         .map_or(&no_params, |d| &d.parameters);
-    for (key, (value, _)) in effective_parameters(&p.parameters, device_params) {
+    for (key, (values, _)) in effective_parameters(&p.parameters, device_params) {
         let Some(spec) = parameter_spec(key) else {
             continue;
         };
-        if let Ok(n) = value.normalize(spec) {
-            for text in parameter_terms(&n, spec) {
-                add(Field::Parameter, &text);
+        // Every condition variant is a value the part states.
+        for value in values {
+            if let Ok(n) = value.normalize(spec) {
+                for text in parameter_terms(&n, spec) {
+                    add(Field::Parameter, &text);
+                }
             }
         }
     }
@@ -233,12 +236,12 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
             add(Field::Package, &format!("{fam}{n}"));
         }
         add(Field::Package, &format!("{n}pin"));
-        if let Some(pitch) = pkg.pitch.nominal {
+        if let Some(pitch) = pkg.pitch.typ {
             add(Field::Package, &format!("{pitch}mm"));
         }
         let body = (
-            pkg.dimensions.body_length.nominal,
-            pkg.dimensions.body_width.nominal,
+            pkg.dimensions.body_length.typ,
+            pkg.dimensions.body_width.typ,
         );
         if let (Some(l), Some(w)) = body {
             add(Field::Package, &format!("{l}x{w}"));
@@ -620,7 +623,7 @@ mod tests {
     fn parameter_values_are_searchable_as_typed() {
         let spec = |k: &str| parameter_spec(k).unwrap();
         let value = |n: f64, unit: &str| openparts_core::ParameterValue {
-            nominal: Some(n),
+            typ: Some(n),
             unit: Some(unit.into()),
             ..Default::default()
         };

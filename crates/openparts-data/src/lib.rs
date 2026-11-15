@@ -4,10 +4,14 @@
 //! Specification and to `openparts-core`'s types.
 //!
 //! The `load_*` functions read one file; [`Dataset::load`] reads a whole
-//! `openparts-data` tree.
+//! `openparts-data` tree. [`format`] is the file format: it reads schema
+//! 0.2 (and 0.1 during the transition) and writes 0.2.
 
 mod dataset;
+pub mod equiv;
 mod error;
+pub mod format;
+pub mod migrate;
 
 pub use dataset::{yaml_files, Dataset, LoadIssue, ResolveError};
 pub use error::DataError;
@@ -17,22 +21,39 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::Path;
 
+/// A document of type `T` from a file's text (any schema version).
+pub fn parse_document<T: DeserializeOwned>(path: &Path, text: &str) -> Result<T, DataError> {
+    let yaml = |source| DataError::Yaml {
+        path: path.display().to_string(),
+        source,
+    };
+    let raw: serde_yaml::Value = serde_yaml::from_str(text).map_err(yaml)?;
+    let doc = format::decode(raw).map_err(|message| DataError::Format {
+        path: path.display().to_string(),
+        message,
+    })?;
+    serde_yaml::from_value(doc).map_err(yaml)
+}
+
 fn load_yaml<T: DeserializeOwned>(path: &Path) -> Result<T, DataError> {
     let text = std::fs::read_to_string(path).map_err(|source| DataError::Io {
         path: path.display().to_string(),
         source,
     })?;
-    serde_yaml::from_str(&text).map_err(|source| DataError::Yaml {
-        path: path.display().to_string(),
-        source,
-    })
+    parse_document(path, &text)
 }
 
+/// Writes `value` as a schema 0.2 file.
 fn save_yaml<T: Serialize>(value: &T, path: &Path) -> Result<(), DataError> {
-    let text = serde_yaml::to_string(value).map_err(|source| DataError::Yaml {
+    let doc = serde_yaml::to_value(value).map_err(|source| DataError::Yaml {
         path: path.display().to_string(),
         source,
     })?;
+    let text =
+        format::write(&doc, &format::Comments::default()).map_err(|message| DataError::Format {
+            path: path.display().to_string(),
+            message,
+        })?;
     std::fs::write(path, text).map_err(|source| DataError::Io {
         path: path.display().to_string(),
         source,
@@ -140,7 +161,14 @@ sources: []
         let path2 = dir.join("part-roundtrip.yaml");
         save_part(&part, &path2).unwrap();
         let reloaded = load_part(&path2).unwrap();
-        assert_eq!(part, reloaded);
+        assert_eq!(reloaded.schema_version, "0.2");
+        assert_eq!(
+            Part {
+                schema_version: "0.2".into(),
+                ..part
+            },
+            reloaded
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -278,13 +306,15 @@ dimensions:
             Some(openparts_core::PackageConstruction::Molded)
         );
         assert_eq!(
-            package.dimensions.overall_width.as_ref().unwrap().nominal,
+            package.dimensions.overall_width.as_ref().unwrap().typ,
             Some(9.0)
         );
         let thickness = package.dimensions.lead_thickness.as_ref().unwrap();
-        assert_eq!((thickness.nominal, thickness.max), (None, Some(0.2)));
+        assert_eq!((thickness.typ, thickness.max), (None, Some(0.2)));
 
         save_package(&package, &new).unwrap();
+        let mut package = package;
+        package.schema_version = "0.2".into();
         assert_eq!(load_package(&new).unwrap(), package);
 
         std::fs::remove_dir_all(&dir).ok();

@@ -37,7 +37,7 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
     }
     let pins_per_side = lead_count / 2;
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
     // Body size: nominal, else the stated min..max midpoint (TI and JEDEC
     // tables often give only limits).
     let body_w = defaults::required(&package.dimensions.body_width)
@@ -149,20 +149,20 @@ mod tests {
             family: openparts_core::PackageFamily::Soic,
             lead_count: 8,
             pitch: Dimension {
-                nominal: Some(1.27),
+                typ: Some(1.27),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(3.9),
+                    typ: Some(3.9),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(4.9),
+                    typ: Some(4.9),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -223,7 +223,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = soic8();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_soic(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }
@@ -238,7 +238,7 @@ mod tests {
 
     fn mm(v: f64) -> Option<Dimension> {
         Some(Dimension {
-            nominal: Some(v),
+            typ: Some(v),
             min: None,
             max: None,
             unit: "mm".into(),
@@ -249,9 +249,9 @@ mod tests {
         let mut package = soic8();
         package.family = openparts_core::PackageFamily::Tssop;
         package.lead_count = 20;
-        package.pitch.nominal = Some(0.65);
-        package.dimensions.body_width.nominal = Some(4.4);
-        package.dimensions.body_length.nominal = Some(6.5);
+        package.pitch.typ = Some(0.65);
+        package.dimensions.body_width.typ = Some(4.4);
+        package.dimensions.body_length.typ = Some(6.5);
         package
     }
 
@@ -285,7 +285,7 @@ mod tests {
     fn datasheet_lead_dimensions_override_the_family_defaults() {
         let mut package = tssop20();
         package.dimensions.overall_width = Some(Dimension {
-            nominal: None,
+            typ: None,
             min: Some(6.2),
             max: Some(6.6),
             unit: "mm".into(),
@@ -324,7 +324,7 @@ mod tests {
     fn ssop_and_msop_have_their_own_defaults() {
         let mut ssop = tssop20();
         ssop.family = openparts_core::PackageFamily::Ssop;
-        ssop.dimensions.body_width.nominal = Some(5.3);
+        ssop.dimensions.body_width.typ = Some(5.3);
         let toe = |p: &Package| {
             let g = generate_soic(p).unwrap();
             g.leads[0].position.x - g.leads[0].size.x / 2.0
@@ -332,9 +332,9 @@ mod tests {
         assert!((toe(&ssop) + 7.8 / 2.0).abs() < 1e-9);
         let mut msop = soic8();
         msop.family = openparts_core::PackageFamily::Msop;
-        msop.pitch.nominal = Some(0.65);
-        msop.dimensions.body_width.nominal = Some(3.0);
-        msop.dimensions.body_length.nominal = Some(3.0);
+        msop.pitch.typ = Some(0.65);
+        msop.dimensions.body_width.typ = Some(3.0);
+        msop.dimensions.body_length.typ = Some(3.0);
         assert!((toe(&msop) + 4.9 / 2.0).abs() < 1e-9);
     }
 
@@ -349,10 +349,10 @@ mod tests {
             assert_eq!(crate::generate(&package).is_ok(), ok, "{generator}");
         }
         package.geometry = None;
-        package.pitch.nominal = None;
+        package.pitch.typ = None;
         assert!(matches!(
             generate_soic(&package),
-            Err(McadError::MissingDimension("pitch.nominal"))
+            Err(McadError::MissingDimension("pitch.typ"))
         ));
     }
 }

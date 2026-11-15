@@ -20,14 +20,11 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
         return Err(McadError::InvalidLeadCount(lead_count));
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_l = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
     let body_h = defaults::stated(&package.dimensions.body_height)
         .unwrap_or(crate::defaults::sip::BODY_HEIGHT);
@@ -96,20 +93,20 @@ mod tests {
             family: openparts_core::PackageFamily::Sip,
             lead_count: 8,
             pitch: Dimension {
-                nominal: Some(2.54),
+                typ: Some(2.54),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(19.0),
+                    typ: Some(19.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(3.0),
+                    typ: Some(3.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -161,7 +158,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = sip8();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_sip(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

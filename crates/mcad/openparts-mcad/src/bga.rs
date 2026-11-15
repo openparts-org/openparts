@@ -74,14 +74,11 @@ pub fn generate_bga(package: &Package) -> Result<MechanicalGeometry, McadError> 
         return Err(invalid());
     }
 
-    let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    let body_w = defaults::dim(
-        &package.dimensions.body_width,
-        "dimensions.body_width.nominal",
-    )?;
+    let pitch = defaults::dim(&package.pitch, "pitch.typ")?;
+    let body_w = defaults::dim(&package.dimensions.body_width, "dimensions.body_width.typ")?;
     let body_l = defaults::dim(
         &package.dimensions.body_length,
-        "dimensions.body_length.nominal",
+        "dimensions.body_length.typ",
     )?;
     let body_h = defaults::stated(&package.dimensions.body_height)
         .unwrap_or(crate::defaults::bga::BODY_HEIGHT);
@@ -163,20 +160,20 @@ mod tests {
             family: openparts_core::PackageFamily::Bga,
             lead_count: 48,
             pitch: Dimension {
-                nominal: Some(0.8),
+                typ: Some(0.8),
                 min: None,
                 max: None,
                 unit: "mm".into(),
             },
             dimensions: PackageDimensions {
                 body_width: Dimension {
-                    nominal: Some(8.0),
+                    typ: Some(8.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
                 },
                 body_length: Dimension {
-                    nominal: Some(9.0),
+                    typ: Some(9.0),
                     min: None,
                     max: None,
                     unit: "mm".into(),
@@ -262,7 +259,7 @@ mod tests {
     #[test]
     fn missing_nominal_is_an_error_not_an_invented_value() {
         let mut package = bga_6x8();
-        package.dimensions.body_width.nominal = None;
+        package.dimensions.body_width.typ = None;
         let err = generate_bga(&package).unwrap_err();
         assert!(matches!(err, McadError::MissingDimension(_)));
     }

@@ -165,7 +165,7 @@ fn parse<T: DeserializeOwned>(
     expected: Kind,
     kind_of: impl Fn(&T) -> Kind,
 ) -> Result<T, DataError> {
-    let doc: T = serde_yaml::from_str(text).map_err(|source| yaml_error(path, source))?;
+    let doc: T = crate::parse_document(path, text)?;
     check_kind(path, expected, kind_of(&doc))?;
     Ok(doc)
 }

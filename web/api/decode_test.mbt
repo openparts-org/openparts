@@ -415,20 +415,20 @@ test "decode Package 2" {
     #| "family": "qfn",
     #| "lead_count": 56,
     #| "pitch": {
-    #|  "nominal": 0.4,
+    #|  "typ": 0.4,
     #|  "min": null,
     #|  "max": null,
     #|  "unit": "mm"
     #| },
     #| "dimensions": {
     #|  "body_width": {
-    #|   "nominal": 7.0,
+    #|   "typ": 7.0,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
     #|  },
     #|  "body_length": {
-    #|   "nominal": 7.0,
+    #|   "typ": 7.0,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
@@ -436,38 +436,38 @@ test "decode Package 2" {
     #|  "body_height": null,
     #|  "exposed_pad": {
     #|   "width": {
-    #|    "nominal": 3.1,
+    #|    "typ": 3.1,
     #|    "min": 3.0,
     #|    "max": 3.2,
     #|    "unit": "mm"
     #|   },
     #|   "length": {
-    #|    "nominal": 3.1,
+    #|    "typ": 3.1,
     #|    "min": 3.0,
     #|    "max": 3.2,
     #|    "unit": "mm"
     #|   }
     #|  },
     #|  "standoff": {
-    #|   "nominal": null,
+    #|   "typ": null,
     #|   "min": 0.0,
     #|   "max": 0.05,
     #|   "unit": "mm"
     #|  },
     #|  "lead_width": {
-    #|   "nominal": 0.18,
+    #|   "typ": 0.18,
     #|   "min": 0.13,
     #|   "max": 0.23,
     #|   "unit": "mm"
     #|  },
     #|  "lead_length": {
-    #|   "nominal": 0.4,
+    #|   "typ": 0.4,
     #|   "min": 0.3,
     #|   "max": 0.5,
     #|   "unit": "mm"
     #|  },
     #|  "lead_thickness": {
-    #|   "nominal": 0.203,
+    #|   "typ": 0.203,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
@@ -770,33 +770,33 @@ test "decode Package 8" {
     #| "family": "usb_c",
     #| "lead_count": 16,
     #| "pitch": {
-    #|  "nominal": null,
+    #|  "typ": null,
     #|  "min": null,
     #|  "max": null,
     #|  "unit": "mm"
     #| },
     #| "dimensions": {
     #|  "body_width": {
-    #|   "nominal": 8.94,
+    #|   "typ": 8.94,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
     #|  },
     #|  "body_length": {
-    #|   "nominal": 7.35,
+    #|   "typ": 7.35,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
     #|  },
     #|  "body_height": {
-    #|   "nominal": 3.31,
+    #|   "typ": 3.31,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
     #|  },
     #|  "exposed_pad": null,
     #|  "body_offset": {
-    #|   "nominal": -1.075,
+    #|   "typ": -1.075,
     #|   "min": null,
     #|   "max": null,
     #|   "unit": "mm"
@@ -1240,4 +1240,41 @@ test "decode PartDocuments" {
   assert_eq(d.part.review.map(r => r.by), Some(["alice", "bob"]))
   assert_eq(d.part.review.bind(r => r.pr), Some(12))
   assert_eq(d.package_.path, None)
+}
+
+///|
+test "decode Part with conditional parameters" {
+  let text =
+    #|{
+    #| "schema_version": "0.2",
+    #| "kind": "part",
+    #| "id": "aos/AO3400A",
+    #| "manufacturer": "aos",
+    #| "mpn": "AO3400A",
+    #| "device": "aos/AO3400A",
+    #| "package": "standards/SOT23-2.90x1.60-P1.90-AOS",
+    #| "existence": { "status": "probable" },
+    #| "lifecycle": { "status": "unknown", "replacement": [] },
+    #| "sources": ["aos/AO3400A-DS"],
+    #| "parameters": {
+    #|  "polarity": [{ "value": "n_channel" }],
+    #|  "rds_on": [
+    #|   { "typ": 18.0, "max": 26.5, "unit": "mΩ",
+    #|     "at": { "VGS": { "value": 10.0, "unit": "V" }, "ID": { "value": 5.7, "unit": "A" } } }
+    #|  ]
+    #| },
+    #| "provenance": {
+    #|  "/parameters/rds_on": [{ "source": "aos/AO3400A-DS", "page": 2, "locator": "Elec. Char., RDS(ON)" }]
+    #| }
+    #|}
+  let part : @api.Part = @json.from_json(@json.parse(text))
+  guard part.parameters is Some(params) && params.get("rds_on") is Some(list) else {
+    fail("no rds_on")
+  }
+  assert_eq(list.length(), 1)
+  assert_eq(list[0].typ, Some(18.0))
+  guard list[0].at is Some(at) && at.get("VGS") is Some(vgs) else {
+    fail("no VGS")
+  }
+  assert_eq(vgs.value, Some(10.0))
 }
