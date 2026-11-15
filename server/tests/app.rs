@@ -39,7 +39,7 @@ async fn api_json_gets_a_short_cache_policy() {
 }
 
 #[tokio::test]
-async fn kicad_artifacts_are_cached_for_a_day_with_their_hash_as_etag() {
+async fn kicad_artifacts_revalidate_against_their_hash_as_etag() {
     let app = openparts_server::app::build_app(store(), None);
     let res = get(
         app,
@@ -47,10 +47,7 @@ async fn kicad_artifacts_are_cached_for_a_day_with_their_hash_as_etag() {
     )
     .await;
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(
-        res.headers()[header::CACHE_CONTROL],
-        "public, max-age=86400"
-    );
+    assert_eq!(res.headers()[header::CACHE_CONTROL], "public, no-cache");
     let hash = res.headers()["x-content-hash"]
         .to_str()
         .unwrap()
@@ -85,4 +82,23 @@ async fn the_web_site_is_served_with_hashed_assets_immutable() {
     // The API still wins over the site.
     assert_eq!(get(app, "/api/health").await.status(), StatusCode::OK);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn an_unchanged_artifact_answers_not_modified() {
+    let uri = "/api/v1/parts/raspberrypi/RP2040/artifacts/footprint-svg";
+    let res = get(openparts_server::app::build_app(store(), None), uri).await;
+    let etag = res.headers()[header::ETAG].clone();
+    let res = openparts_server::app::build_app(store(), None)
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header(header::IF_NONE_MATCH, etag.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(res.headers()[header::ETAG], etag);
 }

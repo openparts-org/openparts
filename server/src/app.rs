@@ -8,7 +8,7 @@ use crate::store::Store;
 use axum::body::Body;
 use axum::http::{header, HeaderValue, Request, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::Router;
 use std::path::Path;
 use std::sync::Arc;
@@ -33,13 +33,16 @@ pub fn build_app(store: Arc<Store>, web_dir: Option<&Path>) -> Router {
 }
 
 /// How long a response may be cached, by what it is:
-/// - artifacts (`.../artifacts/<kind>`): a day; their `x-content-hash`
-///   becomes the ETag, so a changed dataset revalidates cleanly;
+/// - artifacts (`.../artifacts/<kind>`): revalidated on every use
+///   (`no-cache`) -- their URL names the part, not the content, so a
+///   fixed dataset must show at once; the `x-content-hash` is the ETag
+///   and an unchanged artifact answers `304 Not Modified`;
 /// - Vite's content-hashed assets (`/assets/`): a year, immutable;
 /// - other API JSON: five minutes;
 /// - web pages: one minute.
 async fn cache_headers(req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
+    let if_none_match = req.headers().get(header::IF_NONE_MATCH).cloned();
     let mut res = next.run(req).await;
     if res.status() != StatusCode::OK || res.headers().contains_key(header::CACHE_CONTROL) {
         return res;
@@ -51,11 +54,20 @@ async fn cache_headers(req: Request<Body>, next: Next) -> Response {
         if let Some(hash) = res.headers().get("x-content-hash").cloned() {
             if let Ok(s) = hash.to_str() {
                 if let Ok(etag) = HeaderValue::from_str(&format!("\"{s}\"")) {
+                    if if_none_match.as_ref() == Some(&etag) {
+                        let mut not_modified = StatusCode::NOT_MODIFIED.into_response();
+                        not_modified.headers_mut().insert(header::ETAG, etag);
+                        not_modified.headers_mut().insert(
+                            header::CACHE_CONTROL,
+                            HeaderValue::from_static("public, no-cache"),
+                        );
+                        return not_modified;
+                    }
                     res.headers_mut().insert(header::ETAG, etag);
                 }
             }
         }
-        "public, max-age=86400"
+        "public, no-cache"
     } else if api {
         "public, max-age=300"
     } else {
