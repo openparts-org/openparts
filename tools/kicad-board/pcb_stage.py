@@ -55,6 +55,42 @@ def flip(fp):
         fp.Flip(pos, False)
 
 
+def place(fp, k):
+    """A footprint at its Placement Model transform in KiCad's terms
+    (build.py's to_kicad; spec section 2.4): flipped first when on the
+    bottom, then turned to its orientation -- KiCad's flip itself changes
+    the orientation (180° − α), so setting it before would turn a bottom
+    part the wrong way."""
+    fp.SetPosition(to_board(k["x"], k["y"]))
+    fp.SetOrientationDegrees(0)
+    if k["flipped"]:
+        flip(fp)
+    fp.SetOrientationDegrees(k["orientation"])
+
+
+HASH_FIELD = "OpenParts placement"
+
+
+def check_footprint(ref, fp, part):
+    """pcbnew's pads where the Placement Model puts them (T · R(θ) · M of
+    each model pad, to 1 µm), and the footprint built from the current
+    model (its placement hash)."""
+    want = {}
+    for number, x, y in part["pads"]:
+        want.setdefault(number, []).append((x, y))
+    for pad in fp.Pads():
+        at = pad.GetPosition()
+        x, y = pcbnew.ToMM(at.x) - ORIGIN, ORIGIN - pcbnew.ToMM(at.y)
+        spots = want.get(pad.GetNumber(), [])
+        if not spots or min(math.hypot(x - a, y - b) for a, b in spots) > 0.001:
+            sys.exit(f"{ref}.{pad.GetNumber()}: KiCad puts the pad at ({x:.4f}, {y:.4f}), "
+                     f"the Placement Model at {spots}")
+    have = fp.GetFieldText(HASH_FIELD) if hasattr(fp, "GetFieldText") else ""
+    if have != part["hash"]:
+        print(f"stale footprint: {ref} ({fp.GetFPID().GetLibItemName()}) was built from "
+              f"{have or 'no placement model'}, the registry's is {part['hash']}: run the fetch stage")
+
+
 def build():
     board = pcbnew.NewBoard(str(PCB))
     spec = PLAN["board"]
@@ -80,7 +116,6 @@ def build():
     board.Add(rect)
 
     placement = PLAN.get("placement") or {}
-    spare_x = w / 2 + 5.0
     for ref, fp_name in PLAN["components"].items():
         fp = pcbnew.FootprintLoad(str(OUT / "openparts.pretty"), fp_name)
         if fp is None:
@@ -89,17 +124,9 @@ def build():
         fp.SetReference(ref)
         fp.SetValue(PLAN["values"][ref])
         board.Add(fp)
-        p = placement.get(ref)
-        if p:
-            fp.SetPosition(to_board(p.get("x", 0.0), p.get("y", 0.0)))
-            fp.SetOrientationDegrees(float(p.get("rot", 0.0)))
-            if p.get("side", "top") == "bottom":
-                flip(fp)
-        else:
-            bbox = fp.GetBoundingBox(False)
-            fw = pcbnew.ToMM(bbox.GetWidth())
-            fp.SetPosition(to_board(spare_x + fw / 2, h / 2 + 10))
-            spare_x += fw + 2.0
+        part = PLAN["parts"][ref]
+        place(fp, part["kicad"])
+        check_footprint(ref, fp, part)
         for pad in fp.Pads():
             name = PLAN["nets"].get(f"{ref}.{pad.GetNumber()}")
             if name:
@@ -146,7 +173,7 @@ def build():
             board.Add(zone)
 
     pcbnew.SaveBoard(str(PCB), board)
-    report(board, w, h)
+    report(board)
 
 
 def prewire(board, items, net):
@@ -323,12 +350,17 @@ def place_references(board, w, h):
                 box.Inflate(mm(0.1))
                 taken[item.GetLayer()].append(box)
     # Largest footprints first: they have the fewest spots to choose from.
-    order = sorted(board.GetFootprints(), key=lambda f: -f.GetBoundingBox(False).GetArea())
+    def courtyard_area(fp):
+        x0, y0, x1, y1 = PLAN["parts"][fp.GetReference()]["courtyard_box"]
+        return (x1 - x0) * (y1 - y0)
+
+    order = sorted(board.GetFootprints(), key=lambda f: -courtyard_area(f))
     for fp in order:
         ref = fp.Reference()
         silk, fab = silk_layers(fp)
-        cy = fp.GetCourtyard(pcbnew.B_CrtYd if fp.IsFlipped() else pcbnew.F_CrtYd)
-        body = cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False)
+        # The Placement Model's courtyard on the board (build.py).
+        x0, y0, x1, y1 = PLAN["parts"][fp.GetReference()]["courtyard_box"]
+        body = pcbnew.BOX2I(to_board(x0, y1), pcbnew.VECTOR2I(mm(x1 - x0), mm(y1 - y0)))
         placed = False
         for size in REF_SIZES:
             ref.SetTextSize(pcbnew.VECTOR2I(mm(size), mm(size)))
@@ -590,29 +622,9 @@ def dist(p, q):
     return math.hypot(p.x - q.x, p.y - q.y)
 
 
-def report(board, w, h):
-    """Placement report: footprints off the board and courtyard overlaps."""
-    edge = pcbnew.BOX2I(to_board(-w / 2, h / 2), pcbnew.VECTOR2I(mm(w), mm(h)))
-    shapes = []
-    for fp in board.GetFootprints():
-        cy = fp.GetCourtyard(pcbnew.F_CrtYd if not fp.IsFlipped() else pcbnew.B_CrtYd)
-        box = cy.BBox() if cy.OutlineCount() else fp.GetBoundingBox(False)
-        shapes.append((fp.GetReference(), fp.IsFlipped(), cy if cy.OutlineCount() else None, box))
-        if not edge.Contains(box):
-            print(f"off-board: {fp.GetReference()}")
-    # Overlap as DRC sees it: the courtyard polygons (the outline's
-    # centre line, not a bounding box grown by the line width) share area.
-    for i, (ra, fa, pa, a) in enumerate(shapes):
-        for rb, fb, pb, b in shapes[i + 1:]:
-            if fa != fb or not a.Intersects(b):
-                continue
-            if pa is None or pb is None:
-                print(f"courtyards overlap (no courtyard, bounding boxes): {ra} {rb}")
-                continue
-            common = pcbnew.SHAPE_POLY_SET(pa)
-            common.BooleanIntersection(pb)
-            if common.OutlineCount() and common.Area() > 0:
-                print(f"courtyards overlap: {ra} {rb}")
+def report(board):
+    """The ratsnest estimate (build.py checks the placement itself, from
+    the Placement Models)."""
     total = 0.0
     for name in board.GetNetsByName().keys():
         pads = [p for p in board.GetPads() if p.GetNetname() == str(name)]

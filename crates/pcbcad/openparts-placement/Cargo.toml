@@ -1,0 +1,20 @@
+[package]
+name = "openparts-placement"
+version.workspace = true
+edition.workspace = true
+description = "The OpenParts Placement Model (docs/spec/placement-model.md): a part's land pattern, courtyard, body and placement frame, built from Mechanical Geometry."
+
+[dependencies]
+openparts-core = { path = "../../openparts-core" }
+openparts-mcad = { path = "../../mcad/openparts-mcad" }
+serde = { workspace = true }
+serde_json = "1"
+sha2 = "0.10"
+schemars = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_yaml = { workspace = true }
+openparts-data = { path = "../../openparts-data" }
+
+[features]
+schema = ["dep:schemars", "openparts-core/schema"]

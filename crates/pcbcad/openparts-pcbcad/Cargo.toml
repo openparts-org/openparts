@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 openparts-core = { path = "../../openparts-core" }
 openparts-mcad = { path = "../../mcad/openparts-mcad" }
+openparts-placement = { path = "../openparts-placement" }

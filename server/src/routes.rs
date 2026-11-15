@@ -27,6 +27,7 @@ pub fn build_router(store: Arc<Store>) -> Router {
             get(get_provenance),
         )
         .route("/v1/parts/:manufacturer/:mpn/revisions", get(get_revisions))
+        .route("/v1/parts/:manufacturer/:mpn/placement", get(get_placement))
         .route("/v1/parts/:manufacturer/:mpn/sources", get(get_sources))
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts",
@@ -359,6 +360,33 @@ fn build_part(
 ) -> Result<PartBuild, ApiError> {
     let part = resolve_part(store, manufacturer, mpn)?;
     Ok(PartBuild::from_dataset(&store.dataset, part, revision)?)
+}
+
+#[derive(Deserialize)]
+struct PlacementQuery {
+    density: Option<String>,
+    silicon_revision: Option<String>,
+}
+
+/// `GET /v1/parts/{manufacturer}/{mpn}/placement?density=N|L|M&silicon_revision=...`
+///
+/// The part's Placement Model (docs/spec/placement-model.md): pads,
+/// courtyard at the IPC-7351B density level (`N` by default), body,
+/// pin 1, board-edge and keep-out statements, 3D alignment, each group's
+/// basis, and the content hash its KiCad footprint carries.
+async fn get_placement(
+    State(store): State<Arc<Store>>,
+    Path((manufacturer, mpn)): Path<(String, String)>,
+    Query(q): Query<PlacementQuery>,
+) -> Result<Json<openparts_placement::PlacementModel>, ApiError> {
+    let density = match q.density.as_deref() {
+        None | Some("") => openparts_placement::Density::N,
+        Some(d) => openparts_placement::Density::parse(d).ok_or_else(|| {
+            ApiError::BadRequest(format!("density must be L, N or M, not \"{d}\""))
+        })?,
+    };
+    let build = build_part(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
+    Ok(Json(build.placement(density)?))
 }
 
 fn artifact_response(content: Vec<u8>, content_type: &str) -> Response {

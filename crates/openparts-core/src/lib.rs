@@ -38,8 +38,9 @@ pub use kind::Kind;
 pub use lifecycle::{Lifecycle, LifecycleStatus};
 pub use manufacturer::{Manufacturer, Website};
 pub use package::{
-    ExposedPadDimensions, GeometryType, Package, PackageConstruction, PackageDimensions,
-    PackageGeometrySpec, PackagePad, PackageTab,
+    EdgeRequirement, ExposedPadDimensions, GeometryType, KeepoutPurpose, KeepoutRestriction,
+    Package, PackageConstruction, PackageDimensions, PackageEdge, PackageGeometrySpec,
+    PackageKeepout, PackagePad, PackageRect, PackageSide, PackageTab,
 };
 pub use parameter::{
     effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,

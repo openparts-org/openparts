@@ -18,7 +18,14 @@ Stages (each needs the ones before it):
          nets, board outline, design rules, zones; footprints whose
          silkscreen had to be clipped to the outline go to the
          project's own `board` library and the schematic's footprint
-         fields follow (DRC's library and parity checks then agree)
+         fields follow (DRC's library and parity checks then agree);
+         every part's Placement Model (GET .../placement) gives its
+         KiCad transform and the placement check: courtyard overlaps,
+         parts off the board, board-edge statements and keep-outs.
+         placement.yaml: {REF: {x, y, rot, side}} in mm from the board
+         centre, Y up; a part lands at T · R(rot) · M (M mirrors x -> -x
+         in the part's frame on the bottom side; rot is counter-clockwise
+         viewed from the top on both sides) -- docs/spec/placement-model.md
   route  route it with Freerouting (Specctra DSN/SES), in parallel over
          ROUTER_VARIANTS cost settings x two plane modes (pours as
          planes on every layer, or only on the top / inner ones), and
@@ -43,6 +50,7 @@ check confirms it).
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -104,6 +112,219 @@ def stage_fetch(spec, out, data=None):
     if data:
         cmd += ["--data", str(Path(data).resolve())]
     subprocess.run(cmd + parts, check=True, cwd=REPO)
+
+
+# ----------------------------------------------------- placement model
+#
+# Every part's Placement Model (docs/spec/placement-model.md) from the
+# registry: its pads, courtyard, body, board-edge and keep-out facts in
+# its own frame (mm, Y up, origin at the land-pattern centroid, pin 1
+# upper left). placement.yaml places a part as the model defines it:
+# board = T · R(rot) · M, M mirroring x -> -x on the bottom side, rot
+# counter-clockwise viewed from the top on either side.
+
+
+def placement_models(spec, out):
+    """{part: model} at the board's density (board.density, default N),
+    fetched once per part; also written to DIR/placement-models.json."""
+    from urllib.parse import quote
+    from urllib.request import urlopen
+
+    density = spec["board"].get("density", "N")
+    models = {}
+    for part in sorted(set(spec["components"].values())):
+        mfr, mpn = part.split("/", 1)
+        url = f"{spec['registry']}/v1/parts/{quote(mfr, safe='')}/{quote(mpn, safe='')}/placement?density={density}"
+        with urlopen(url) as r:
+            models[part] = json.loads(r.read())
+    (out / "placement-models.json").write_text(json.dumps(models, indent=1))
+    return models
+
+
+def place(p, pt):
+    """A part-frame point on the board: T · R(rot) · M."""
+    x, y = pt
+    if p.get("side", "top") == "bottom":
+        x = -x
+    t = math.radians(float(p.get("rot", 0.0)))
+    c, s = math.cos(t), math.sin(t)
+    return (p.get("x", 0.0) + c * x - s * y, p.get("y", 0.0) + s * x + c * y)
+
+
+def normalize(deg):
+    d = math.fmod(deg, 360.0)
+    if d <= -180.0:
+        d += 360.0
+    elif d > 180.0:
+        d -= 360.0
+    return d + 0.0
+
+
+def to_kicad(p):
+    """KiCad's terms for a placement (spec section 2.4): orientation θ on
+    the top, θ + 180° flipped on the bottom. Position stays in board mm,
+    Y up (pcb_stage turns it into KiCad's Y-down page)."""
+    bottom = p.get("side", "top") == "bottom"
+    return {"x": p.get("x", 0.0), "y": p.get("y", 0.0),
+            "orientation": normalize(float(p.get("rot", 0.0)) + (180.0 if bottom else 0.0)),
+            "flipped": bottom}
+
+
+def courtyards(model, p):
+    """The model's courtyard polygons on the board."""
+    return [[place(p, (q["x"], q["y"])) for q in poly] for poly in model["courtyard"]["polygons"]]
+
+
+def box_of(polys):
+    pts = [q for poly in polys for q in poly]
+    return (min(q[0] for q in pts), min(q[1] for q in pts), max(q[0] for q in pts), max(q[1] for q in pts))
+
+
+def area(poly):
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(poly, poly[1:] + poly[:1]))) / 2.0
+
+
+def clip(subject, clipper):
+    """Sutherland-Hodgman: subject ∩ clipper (clipper convex)."""
+    sign = 1.0 if sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(clipper, clipper[1:] + clipper[:1])) > 0 else -1.0
+    out = subject
+    for a, b in zip(clipper, clipper[1:] + clipper[:1]):
+        if not out:
+            break
+
+        def inside(q):
+            return sign * ((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0])) > 1e-9
+
+        def cross(p, q):
+            dx1, dy1 = q[0] - p[0], q[1] - p[1]
+            dx2, dy2 = b[0] - a[0], b[1] - a[1]
+            t = ((a[0] - p[0]) * dy2 - (a[1] - p[1]) * dx2) / (dx1 * dy2 - dy1 * dx2)
+            return (p[0] + t * dx1, p[1] + t * dy1)
+
+        pts, out = out, []
+        for p, q in zip(pts, pts[1:] + pts[:1]):
+            if inside(q):
+                if not inside(p):
+                    out.append(cross(p, q))
+                out.append(q)
+            elif inside(p):
+                out.append(cross(p, q))
+    return out
+
+
+def overlap(a, b):
+    """Shared area of two convex polygons (courtyards are)."""
+    common = clip(a, b)
+    return area(common) if len(common) >= 3 else 0.0
+
+
+def placement_plan(spec, models, placement):
+    """Per reference: the placement (placement.yaml, or a spot in a row
+    beside the board), its KiCad transform, its pads and courtyard on the
+    board, and the model hash."""
+    w, h = spec["board"]["width"], spec["board"]["height"]
+    spare_x = w / 2 + 5.0
+    plan = {}
+    for ref, part in spec["components"].items():
+        m = models[part]
+        p = placement.get(ref)
+        if not p:
+            x0, y0, x1, y1 = box_of(m["courtyard"]["polygons"] and
+                                    [[(q["x"], q["y"]) for q in poly] for poly in m["courtyard"]["polygons"]])
+            p = {"x": spare_x - x0, "y": h / 2 + 10 - (y0 + y1) / 2, "rot": 0.0, "side": "top"}
+            spare_x += x1 - x0 + 2.0
+        cy = courtyards(m, p)
+        plan[ref] = {
+            "placement": p,
+            "kicad": to_kicad(p),
+            "pads": [[pad["number"], *place(p, (pad["position"]["x"], pad["position"]["y"]))] for pad in m["pads"]],
+            "courtyard_box": box_of(cy),
+            "hash": m["hash"],
+        }
+    return plan
+
+
+def check_placement(spec, models, plan):
+    """The placement report, from the Placement Models: courtyard
+    overlaps (per side), parts off the board, board-edge statements and
+    keep-outs. Returns the number of problems."""
+    w, h = spec["board"]["width"], spec["board"]["height"]
+    problems = 0
+    shapes = {ref: courtyards(models[spec["components"][ref]], e["placement"]) for ref, e in plan.items()}
+    refs = sorted(plan)
+    for i, a in enumerate(refs):
+        for b in refs[i + 1:]:
+            if plan[a]["placement"].get("side", "top") != plan[b]["placement"].get("side", "top"):
+                continue
+            shared = sum(overlap(pa, pb) for pa in shapes[a] for pb in shapes[b])
+            if shared > 1e-6:
+                print(f"courtyards overlap: {a} {b} ({shared:.3f} mm²)")
+                problems += 1
+    for ref in refs:
+        m = models[spec["components"][ref]]
+        p = plan[ref]["placement"]
+        edge = m.get("edge")
+        # The board edge the part's edge side faces (by its outward normal).
+        facing = None
+        if edge:
+            n = {"+x": (1, 0), "-x": (-1, 0), "+y": (0, 1), "-y": (0, -1)}[edge["side"]]
+            o = place(p, (0, 0))
+            q = place(p, n)
+            nb = (q[0] - o[0], q[1] - o[1])
+            facing = max([("+x", nb[0]), ("-x", -nb[0]), ("+y", nb[1]), ("-y", -nb[1])], key=lambda t: t[1])
+            board_at = {"+x": w / 2, "-x": w / 2, "+y": h / 2, "-y": h / 2}[facing[0]]
+            if facing[1] < 0.999:
+                print(f"edge: {ref} {edge['side']} side does not face a board edge squarely")
+                problems += 1
+            elif edge.get("pcb_edge") is not None:
+                line = place(p, (n[0] * edge["pcb_edge"], n[1] * edge["pcb_edge"]))
+                at = {"+x": line[0], "-x": -line[0], "+y": line[1], "-y": -line[1]}[facing[0]]
+                off = at - board_at
+                state = "on the board edge" if abs(off) < 0.01 else (
+                    f"{off:.2f} mm beyond the board edge" if off > 0 else f"{-off:.2f} mm inside the board edge")
+                print(f"edge: {ref} datasheet PCB edge line {state} (body overhang past it {edge['overhang']:.2f} mm)")
+                if abs(off) >= 0.01 and edge["requirement"] == "required":
+                    problems += 1
+            else:
+                reach = max(({"+x": x, "-x": -x, "+y": y, "-y": -y}[facing[0]]
+                             for poly in shapes[ref] for x, y in poly))
+                print(f"edge: {ref} should sit at the board edge ({edge['requirement']}, {facing[0]} side); "
+                      f"its courtyard reaches {board_at - reach:.2f} mm short of it")
+        # Off the board: copper and body inside the outline (a problem),
+        # the courtyard too (a note: a header as long as the board), except
+        # on the side an edge part faces out of.
+        def past(points):
+            sides = set()
+            for x, y in points:
+                over = {"+x": x - w / 2, "-x": -w / 2 - x, "+y": y - h / 2, "-y": -h / 2 - y}
+                sides |= {s for s, d in over.items() if d > 1e-6 and not (facing and s == facing[0])}
+            return sorted(sides)
+
+        solid = [place(p, (q["x"], q["y"])) for r in m["body"]["regions"] for q in r["outline"]]
+        for pad in m["pads"]:
+            hx, hy = pad["size"]["x"] / 2, pad["size"]["y"] / 2
+            cx, cy_ = pad["position"]["x"], pad["position"]["y"]
+            solid += [place(p, (cx + sx * hx, cy_ + sy * hy)) for sx in (-1, 1) for sy in (-1, 1)]
+        if past(solid):
+            print(f"off-board: {ref} (pads or body past the {'/'.join(past(solid))} edge)")
+            problems += 1
+        elif past(q for poly in shapes[ref] for q in poly):
+            print(f"note: {ref}'s courtyard reaches past the {'/'.join(past(q for poly in shapes[ref] for q in poly))}"
+                  " edge (pads and body are on the board)")
+        for k in m.get("keepouts", []):
+            if k.get("polygon"):
+                area_poly = [place(p, (q["x"], q["y"])) for q in k["polygon"]]
+                if "components" in k["restricts"]:
+                    for other in refs:
+                        if other != ref and any(overlap(area_poly, pb) > 1e-6 for pb in shapes[other]):
+                            print(f"keep-out: {other} inside {ref}'s {k['purpose']} keep-out")
+                            problems += 1
+            else:
+                size = " x ".join(f"{v:g}" for v in k.get("size") or [])
+                print(f"keep-out: {ref} {k['purpose']} keep-out {size} mm at its {k.get('side') or '?'} side, "
+                      f"restricting {', '.join(k['restricts'])}: not located by the datasheet, check by hand")
+    print(f"placement check: {problems} problem(s)")
+    return problems
 
 
 def net_classes(spec):
@@ -449,6 +670,8 @@ def stage_pcb(spec, out):
     pfile = out / "placement.yaml"
     if pfile.exists():
         placement = yaml.safe_load(pfile.read_text()) or {}
+    models = placement_models(spec, out)
+    parts = placement_plan(spec, models, placement)
     plan = {
         "name": spec["name"],
         "board": spec["board"],
@@ -456,10 +679,15 @@ def stage_pcb(spec, out):
         "values": {ref: mpn_of(p) for ref, p in spec["components"].items()},
         "nets": {**unconnected_nets(spec, out), **{f"{r}.{p}": n for (r, p), n in pin_refs(spec).items()}},
         "placement": placement,
+        # Per reference, from the Placement Models: the KiCad transform,
+        # the pads on the board (checked against pcbnew's), the courtyard
+        # box and the model hash (checked against the footprint's).
+        "parts": parts,
     }
     (out / "plan.json").write_text(json.dumps(plan, indent=1))
     kicad_python(HERE / "pcb_stage.py", out, "pcb")
     sync_sch_footprints(spec, out)
+    check_placement(spec, models, parts)
 
 
 def freerouting_jar():
@@ -691,6 +919,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--stage", default="all", choices=STAGES + ["all", "preview"])
     ap.add_argument("--data", help="build the parts from this openparts-data checkout instead of the registry")
+    ap.add_argument("--registry", help="the OpenParts registry URL, overriding the board file's")
     ap.add_argument("--layers", type=int, choices=(2, 4),
                     help="copper layers, overriding the board file (4: the pour nets also fill both inner layers)")
     ap.add_argument("--evaluate-all", action="store_true",
@@ -702,6 +931,8 @@ def main():
     EVALUATE_ALL = a.evaluate_all
     SWEEP = a.sweep or SWEEP
     spec = load_spec(a.board)
+    if a.registry:
+        spec["registry"] = a.registry.rstrip("/")
     if a.layers:
         spec["board"]["layers"] = a.layers
     out = Path(a.out).resolve()

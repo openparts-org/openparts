@@ -47,6 +47,11 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   new review.
 - **`construction`** (molded, tantalum_molded, glass, ceramic, metal_can)
   only when the source text says it -- never from the name, size or a photo.
+- **`edge`** / **`keepouts`** (Canonical Data Specification 20.3) only when
+  the source states them: a layout's labelled "PCB Edge" line (`pcb_edge`),
+  a datasheet's keep-out area. An unlabelled line is not a PCB edge; an
+  area the source doesn't locate gets `size` (and `side`), never invented
+  coordinates.
 - Data only, in your assignment. Don't edit code, the skill, or another
   agent's files; create files exclusively (never overwrite).
 

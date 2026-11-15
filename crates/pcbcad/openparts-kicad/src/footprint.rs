@@ -1,6 +1,9 @@
 use openparts_mcad::Mounting;
 use openparts_pcbcad::{FpLayer, FpShape, Model3d, Pad, PadShape, PcbFootprint};
 
+/// The footprint property holding the Placement Model hash.
+pub const PLACEMENT_HASH_PROPERTY: &str = "OpenParts placement";
+
 /// Renders a KiCad 6+ `.kicad_mod` footprint file.
 ///
 /// Coordinate frame: the IR (like `MechanicalGeometry` and the
@@ -36,6 +39,14 @@ pub fn render_footprint(footprint: &PcbFootprint) -> String {
     } else {
         "  (attr smd)\n"
     });
+    // The Placement Model hash the footprint was built from: a board tool
+    // compares it with the part's current model to find stale copies.
+    if let Some(hash) = &footprint.placement_hash {
+        out.push_str(&format!(
+            "  (property \"{PLACEMENT_HASH_PROPERTY}\" \"{}\")\n",
+            escape_string(hash)
+        ));
+    }
     // Reference above the courtyard, value below it (KiCad Y-down).
     let (top, bottom) = footprint.courtyard.as_ref().map_or((5.5, -5.5), |c| {
         let ys = c.outline.iter().map(|p| p.y);
@@ -194,14 +205,18 @@ fn flip_y(y: f64) -> f64 {
 /// ```
 ///
 /// `offset` is in mm (KiCad 6+; the pre-6 `(at ...)` in inches is not
-/// emitted), `rotate` in degrees.
+/// emitted), in the model's Y-up frame as the IR's. `rotate` is in
+/// degrees, and KiCad turns a model clockwise (viewed from +Z) for a
+/// positive value (its 3D viewer applies `-rotate`): the IR's
+/// counter-clockwise angles are negated.
 fn render_model(model: &Model3d) -> String {
+    let rotate = model.rotate.map(|a| -a);
     format!(
         "  (model \"{}\"\n    (offset (xyz {}))\n    (scale (xyz {}))\n    (rotate (xyz {}))\n  )\n",
         escape_string(&model.path),
         fmt_xyz(model.offset),
         fmt_xyz(model.scale),
-        fmt_xyz(model.rotate)
+        fmt_xyz(rotate)
     )
 }
 
@@ -218,7 +233,8 @@ fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-/// Read-back of the `(model ...)` block, used by tests.
+/// Read-back of the `(model ...)` block, used by tests; `rotate` in the
+/// IR's sense (counter-clockwise), as [`Model3d`] has it.
 #[derive(Debug, PartialEq)]
 pub struct ParsedModel {
     pub path: String,
@@ -266,7 +282,8 @@ pub fn parse_footprint_model(text: &str) -> Option<ParsedModel> {
         path,
         offset: xyz("offset")?,
         scale: xyz("scale")?,
-        rotate: xyz("rotate")?,
+        // Back to the IR's counter-clockwise angles.
+        rotate: xyz("rotate")?.map(|a| -a + 0.0),
     })
 }
 
@@ -349,6 +366,15 @@ pub fn parse_footprint_pads(text: &str) -> Vec<ParsedPad> {
     pads
 }
 
+/// The Placement Model hash a rendered footprint carries
+/// ([`PLACEMENT_HASH_PROPERTY`]), if any.
+pub fn parse_placement_hash(text: &str) -> Option<String> {
+    let marker = format!("(property \"{PLACEMENT_HASH_PROPERTY}\" \"");
+    let start = text.find(&marker)? + marker.len();
+    let end = start + text[start..].find('"')?;
+    Some(text[start..end].to_string())
+}
+
 fn extract_quoted(s: &str) -> Option<String> {
     let start = s.find('"')? + 1;
     let end = start + s[start..].find('"')?;
@@ -364,6 +390,7 @@ mod tests {
     fn round_trips_pad_number_position_and_size() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![Pad {
                 number: "3".into(),
                 position: Point2 { x: -1.5, y: 2.75 },
@@ -396,6 +423,7 @@ mod tests {
     fn pad_y_is_flipped_into_kicads_y_down_frame() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![
                 Pad {
                     number: "1".into(),
@@ -431,6 +459,7 @@ mod tests {
     fn no_model_block_without_a_model() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![],
             graphics: vec![],
             courtyard: None,
@@ -445,6 +474,7 @@ mod tests {
     fn renders_model_block_after_pads_and_keeps_pads_parseable() {
         let footprint = PcbFootprint {
             name: "LPC1114FBD48/302".into(),
+            placement_hash: None,
             pads: vec![Pad {
                 number: "1".into(),
                 position: Point2 { x: -1.0, y: 0.5 },
@@ -481,6 +511,7 @@ mod tests {
     fn model_path_and_transform_are_escaped_and_formatted() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![],
             graphics: vec![],
             courtyard: None,
@@ -494,7 +525,8 @@ mod tests {
         let text = render_footprint(&footprint);
         assert!(text.contains("(model \"${KIPRJMOD}/odd \\\"name\\\".step\""));
         assert!(text.contains("(offset (xyz 0.25 -1 0))"));
-        assert!(text.contains("(rotate (xyz -90 0 180))"));
+        // KiCad turns models clockwise for a positive angle: negated.
+        assert!(text.contains("(rotate (xyz 90 0 -180))"));
         let model = parse_footprint_model(&text).unwrap();
         assert_eq!(model.path, "${KIPRJMOD}/odd \"name\".step");
         assert_eq!(model.offset, [0.25, -1.0, 0.0]);
@@ -541,6 +573,7 @@ mod tests {
     fn round_trips_through_hole_pads_with_drill_and_pin1_squared() {
         let footprint = PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![
                 Pad {
                     number: "1".into(),

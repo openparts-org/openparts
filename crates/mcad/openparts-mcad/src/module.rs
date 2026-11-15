@@ -280,6 +280,8 @@ mod tests {
             tab: None,
             aux_pads: vec!["D1".into(), "D2".into(), "D3".into()],
             pad_order: vec![],
+            edge: None,
+            keepouts: vec![],
             pads: vec![],
             construction: None,
             geometry: None,

@@ -1073,6 +1073,37 @@ pub impl @json.FromJson for DocumentType with fn from_json(json, path) {
 }
 
 ///|
+#derive(Eq, Debug)
+pub(all) enum EdgeRequirement {
+  Required
+  Recommended
+}
+
+///|
+/// The wire (JSON) string.
+pub fn EdgeRequirement::wire(self : EdgeRequirement) -> String {
+  match self {
+    Required => "required"
+    Recommended => "recommended"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn EdgeRequirement::all() -> Array[EdgeRequirement] {
+  [Required, Recommended]
+}
+
+///|
+pub impl @json.FromJson for EdgeRequirement with fn from_json(json, path) {
+  match json {
+    String("required") => Required
+    String("recommended") => Recommended
+    _ => raise @json.JsonDecodeError((path, "expected a EdgeRequirement"))
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct ErrorBody {
   diagnostics : Array[DiagnosticBody]
@@ -1494,6 +1525,80 @@ pub impl @json.FromJson for IssueCode with fn from_json(json, path) {
 
 ///|
 #derive(Eq, Debug)
+pub(all) enum KeepoutPurpose {
+  Antenna
+  Mechanical
+  Thermal
+  Other
+}
+
+///|
+/// The wire (JSON) string.
+pub fn KeepoutPurpose::wire(self : KeepoutPurpose) -> String {
+  match self {
+    Antenna => "antenna"
+    Mechanical => "mechanical"
+    Thermal => "thermal"
+    Other => "other"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn KeepoutPurpose::all() -> Array[KeepoutPurpose] {
+  [Antenna, Mechanical, Thermal, Other]
+}
+
+///|
+pub impl @json.FromJson for KeepoutPurpose with fn from_json(json, path) {
+  match json {
+    String("antenna") => Antenna
+    String("mechanical") => Mechanical
+    String("thermal") => Thermal
+    String("other") => Other
+    _ => raise @json.JsonDecodeError((path, "expected a KeepoutPurpose"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum KeepoutRestriction {
+  Components
+  Copper
+  Tracks
+  Vias
+}
+
+///|
+/// The wire (JSON) string.
+pub fn KeepoutRestriction::wire(self : KeepoutRestriction) -> String {
+  match self {
+    Components => "components"
+    Copper => "copper"
+    Tracks => "tracks"
+    Vias => "vias"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn KeepoutRestriction::all() -> Array[KeepoutRestriction] {
+  [Components, Copper, Tracks, Vias]
+}
+
+///|
+pub impl @json.FromJson for KeepoutRestriction with fn from_json(json, path) {
+  match json {
+    String("components") => Components
+    String("copper") => Copper
+    String("tracks") => Tracks
+    String("vias") => Vias
+    _ => raise @json.JsonDecodeError((path, "expected a KeepoutRestriction"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
 pub(all) enum Kind {
   Manufacturer
   Part
@@ -1716,9 +1821,11 @@ pub(all) struct Package {
   aux_pads : Array[String]?
   construction : PackageConstruction?
   dimensions : PackageDimensions
+  edge : PackageEdge?
   family : PackageFamily
   geometry : PackageGeometrySpec?
   id : String
+  keepouts : Array[PackageKeepout]?
   kind : Kind
   lead_count : Int32
   lead_layout : Array[Int32]?
@@ -1740,9 +1847,11 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     aux_pads: opt_field(obj, "aux_pads", path),
     construction: opt_field(obj, "construction", path),
     dimensions: field(obj, "dimensions", path),
+    edge: opt_field(obj, "edge", path),
     family: field(obj, "family", path),
     geometry: opt_field(obj, "geometry", path),
     id: field(obj, "id", path),
+    keepouts: opt_field(obj, "keepouts", path),
     kind: field(obj, "kind", path),
     lead_count: field(obj, "lead_count", path),
     lead_layout: opt_field(obj, "lead_layout", path),
@@ -1873,6 +1982,28 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     tab_length: opt_field(obj, "tab_length", path),
     tab_width: opt_field(obj, "tab_width", path),
     tail_length: opt_field(obj, "tail_length", path),
+  }
+}
+
+///|
+/// `Package::edge`: which side of the part faces the board edge, and
+/// where the source draws that edge.
+#derive(Eq)
+pub(all) struct PackageEdge {
+  pcb_edge : Double?
+  requirement : EdgeRequirement?
+  side : PackageSide
+}
+
+///|
+pub impl @json.FromJson for PackageEdge with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackageEdge object"))
+  }
+  {
+    pcb_edge: opt_field(obj, "pcb_edge", path),
+    requirement: opt_field(obj, "requirement", path),
+    side: field(obj, "side", path),
   }
 }
 
@@ -2049,6 +2180,34 @@ pub impl @json.FromJson for PackageGeometrySpec with fn from_json(json, path) {
 }
 
 ///|
+/// `Package::keepouts`: one keep-out area as the source states it --
+/// located (`rect`), or only sized (`size`, the two lengths in the
+/// source's order, orientation not given) and placed against a
+/// package `side`. Exactly one of `rect` / `size`.
+#derive(Eq)
+pub(all) struct PackageKeepout {
+  purpose : KeepoutPurpose
+  rect : PackageRect?
+  restricts : Array[KeepoutRestriction]
+  side : PackageSide?
+  size : Array[Double]?
+}
+
+///|
+pub impl @json.FromJson for PackageKeepout with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackageKeepout object"))
+  }
+  {
+    purpose: field(obj, "purpose", path),
+    rect: opt_field(obj, "rect", path),
+    restricts: field(obj, "restricts", path),
+    side: opt_field(obj, "side", path),
+    size: opt_field(obj, "size", path),
+  }
+}
+
+///|
 /// One pad of an explicit land pattern (`Package::pads`), in mm, top
 /// view, X right and Y up (the family documents the origin). `width` is
 /// the pad along X, `length` along Y. A plated hole has a `drill`
@@ -2080,6 +2239,66 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
     width: field(obj, "width", path),
     x: field(obj, "x", path),
     y: field(obj, "y", path),
+  }
+}
+
+///|
+/// A rectangle in the package frame (mm): centre and size along X/Y.
+#derive(Eq)
+pub(all) struct PackageRect {
+  length : Double
+  width : Double
+  x : Double
+  y : Double
+}
+
+///|
+pub impl @json.FromJson for PackageRect with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PackageRect object"))
+  }
+  {
+    length: field(obj, "length", path),
+    width: field(obj, "width", path),
+    x: field(obj, "x", path),
+    y: field(obj, "y", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PackageSide {
+  PlusX
+  MinusX
+  PlusY
+  MinusY
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PackageSide::wire(self : PackageSide) -> String {
+  match self {
+    PlusX => "+x"
+    MinusX => "-x"
+    PlusY => "+y"
+    MinusY => "-y"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PackageSide::all() -> Array[PackageSide] {
+  [PlusX, MinusX, PlusY, MinusY]
+}
+
+///|
+pub impl @json.FromJson for PackageSide with fn from_json(json, path) {
+  match json {
+    String("+x") => PlusX
+    String("-x") => MinusX
+    String("+y") => PlusY
+    String("-y") => MinusY
+    _ => raise @json.JsonDecodeError((path, "expected a PackageSide"))
   }
 }
 

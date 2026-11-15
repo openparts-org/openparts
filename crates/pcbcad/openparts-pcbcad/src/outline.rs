@@ -1,17 +1,11 @@
-//! A footprint's drawn layers: courtyard (IPC-7351B excess around the
-//! lands and body), fabrication outline (the body, pin 1 corner
-//! chamfered) and silkscreen (the body outline kept clear of the pads,
-//! plus a pin-1 dot).
+//! A footprint's drawn layers: fabrication outline (the body, pin 1
+//! corner chamfered) and silkscreen (the body outline kept clear of the
+//! pads, plus a pin-1 dot). The courtyard is the Placement Model's.
 
-use crate::{Courtyard, FpGraphic, FpLayer, FpShape, Pad, Point2};
-use openparts_mcad::{BodyShape, MechanicalGeometry, Mounting};
+use crate::{FpGraphic, FpLayer, FpShape, Pad, Point2};
+use openparts_mcad::Mounting;
+use openparts_placement::{OutlineShape, PlacementModel};
 
-/// Courtyard excess around the lands and body: IPC-7351B density level
-/// N (0.25 mm SMD), through-hole parts 0.5 mm.
-const COURTYARD_SMD: f64 = 0.25;
-const COURTYARD_THT: f64 = 0.5;
-/// Courtyard corners snap outward to this grid (KiCad's libraries' rule).
-const COURTYARD_GRID: f64 = 0.05;
 /// Stroke width adapters draw the courtyard with.
 pub const COURTYARD_WIDTH: f64 = 0.05;
 pub(crate) const FAB_WIDTH: f64 = 0.1;
@@ -36,14 +30,6 @@ impl Rect {
             y1: self.y1 + d,
         }
     }
-    fn union(self, o: Rect) -> Rect {
-        Rect {
-            x0: self.x0.min(o.x0),
-            y0: self.y0.min(o.y0),
-            x1: self.x1.max(o.x1),
-            y1: self.y1.max(o.y1),
-        }
-    }
 }
 
 fn pad_rect(p: &Pad) -> Rect {
@@ -55,75 +41,39 @@ fn pad_rect(p: &Pad) -> Rect {
     }
 }
 
-fn body_rect(g: &MechanicalGeometry) -> Rect {
-    // A lying cylinder's footprint is its length by its diameter --
-    // `size` already is that; a standing one's bounding square too.
-    let b = &g.body;
-    let (w, l) = (b.size.x, b.size.y);
-    Rect {
-        x0: b.position.x - w / 2.0,
-        y0: b.position.y - l / 2.0,
-        x1: b.position.x + w / 2.0,
-        y1: b.position.y + l / 2.0,
-    }
-}
-
 fn pt(x: f64, y: f64) -> Point2 {
     Point2 { x, y }
 }
 
-/// The courtyard: lands, body and silkscreen, grown by the IPC excess,
-/// snapped outward to the courtyard grid.
-pub(crate) fn courtyard(g: &MechanicalGeometry, pads: &[Pad], drawn: &[FpGraphic]) -> Courtyard {
-    let tht = pads.iter().any(|p| p.mounting != Mounting::Smd);
-    let silk = drawn
-        .iter()
-        .filter(|d| d.layer == FpLayer::Silk)
-        .flat_map(|d| match &d.shape {
-            FpShape::Line(a, b) => vec![*a, *b],
-            FpShape::Polygon(p) => p.clone(),
-            FpShape::Circle { center, radius } => vec![
-                pt(center.x - radius, center.y - radius),
-                pt(center.x + radius, center.y + radius),
-            ],
-        })
-        .map(|p| Rect {
-            x0: p.x,
-            y0: p.y,
-            x1: p.x,
-            y1: p.y,
-        });
-    let r = pads
-        .iter()
-        .map(pad_rect)
-        .chain(silk)
-        .fold(body_rect(g), Rect::union)
-        .grow(if tht { COURTYARD_THT } else { COURTYARD_SMD });
-    let snap_down = |v: f64| (v / COURTYARD_GRID).floor() * COURTYARD_GRID;
-    let snap_up = |v: f64| (v / COURTYARD_GRID).ceil() * COURTYARD_GRID;
-    let (x0, y0, x1, y1) = (
-        snap_down(r.x0),
-        snap_down(r.y0),
-        snap_up(r.x1),
-        snap_up(r.y1),
-    );
-    Courtyard {
-        outline: vec![pt(x0, y0), pt(x1, y0), pt(x1, y1), pt(x0, y1)],
+/// The main body region: (centre, size, round or stadium).
+fn body(m: &PlacementModel) -> (Point2, (f64, f64), Option<OutlineShape>) {
+    match m.body.regions.first() {
+        Some(r) => (
+            pt(r.center.x, r.center.y),
+            (r.size.x, r.size.y),
+            (r.shape != OutlineShape::Rect).then_some(r.shape),
+        ),
+        None => (pt(0.0, 0.0), (0.0, 0.0), None),
     }
 }
 
 /// Fabrication and silkscreen drawings.
-pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
+pub(crate) fn drawings(m: &PlacementModel, pads: &[Pad]) -> Vec<FpGraphic> {
     let mut out = Vec::new();
-    let b = body_rect(g);
+    let (center, (sx, sy), round) = body(m);
+    let b = Rect {
+        x0: center.x - sx / 2.0,
+        y0: center.y - sy / 2.0,
+        x1: center.x + sx / 2.0,
+        y1: center.y + sy / 2.0,
+    };
+    let pin1_number = m.pin1.as_ref().map(|p| p.pad.as_str());
     let pin1 = pads
         .iter()
-        .find(|p| p.number == "1" && p.mounting != Mounting::NonPlated);
+        .find(|p| Some(p.number.as_str()) == pin1_number && p.mounting != Mounting::NonPlated);
 
     // Fabrication: the body, its pin-1 corner chamfered.
-    if g.body.shape == BodyShape::Cylinder {
-        let center = pt(g.body.position.x, g.body.position.y);
-        let (sx, sy) = (g.body.size.x, g.body.size.y);
+    if round.is_some() {
         out.push(FpGraphic {
             layer: FpLayer::Fab,
             width: FAB_WIDTH,
@@ -183,7 +133,7 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
         .iter()
         .map(|p| pad_rect(p).grow(SILK_PAD_CLEARANCE + SILK_WIDTH / 2.0))
         .collect();
-    if g.body.shape != BodyShape::Cylinder {
+    if round.is_none() {
         let s = b.grow(SILK_WIDTH / 2.0 + 0.05);
         let edges = [
             (pt(s.x0, s.y1), pt(s.x1, s.y1)),
@@ -204,8 +154,7 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
         }
     } else {
         let grow = SILK_WIDTH / 2.0 + 0.05;
-        let (sx, sy) = (g.body.size.x + 2.0 * grow, g.body.size.y + 2.0 * grow);
-        let center = pt(g.body.position.x, g.body.position.y);
+        let (sx, sy) = (sx + 2.0 * grow, sy + 2.0 * grow);
         // The outline stays clear when every pad lies wholly inside it
         // (radial can footprints).
         let clear = keep_out.iter().all(|k| {
@@ -241,10 +190,7 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
 
     // A pin-1 dot just outside pin 1's land, away from the body.
     if let Some(p) = pin1.filter(|_| pads.len() > 2) {
-        let (dx, dy) = (
-            p.position.x - g.body.position.x,
-            p.position.y - g.body.position.y,
-        );
+        let (dx, dy) = (p.position.x - center.x, p.position.y - center.y);
         let r = pad_rect(p);
         let gap = SILK_PAD_CLEARANCE + 0.3;
         let at = if dx.abs() / (b.x1 - b.x0).max(1e-9) >= dy.abs() / (b.y1 - b.y0).max(1e-9) {

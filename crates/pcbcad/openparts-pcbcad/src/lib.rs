@@ -12,7 +12,8 @@ pub use outline::COURTYARD_WIDTH;
 pub use svg::render_svg;
 mod symbol;
 
-pub use footprint::{add_shared_pads, build_footprint};
+pub use footprint::{add_shared_pads, build_footprint, footprint_from_placement};
+pub use openparts_placement;
 pub use symbol::{build_symbol, reference_prefix};
 
 use openparts_core::PinType;
@@ -193,6 +194,10 @@ pub struct PcbFootprint {
     /// fills this in by default (see [`default_model_path`]); `None`
     /// means "no 3D model reference is emitted".
     pub model: Option<Model3d>,
+    /// The Placement Model's content hash (`sha256:...`) this footprint
+    /// was built from, when built from a part's full model: a board tool
+    /// compares it with the current model to find stale footprints.
+    pub placement_hash: Option<String>,
 }
 
 impl PcbFootprint {
@@ -214,14 +219,16 @@ impl PcbFootprint {
 /// `path` is passed through to the EDA adapter verbatim (it may contain
 /// tool-specific variables such as KiCad's `${KIPRJMOD}`); the adapter
 /// is responsible only for quoting/escaping it. The transform is the
-/// one applied to the model relative to the footprint origin:
-/// `offset` in mm, `scale` as a unitless factor, `rotate` in degrees
-/// around X/Y/Z.
+/// one applied to the model relative to the footprint origin, in the
+/// footprint's Y-up frame: `offset` in mm, `scale` as a unitless
+/// factor, `rotate` in degrees counter-clockwise (right-handed) about
+/// X/Y/Z, applied before the offset (adapters convert to their tool's
+/// conventions).
 ///
-/// OpenParts' 3D models are generated from the same
-/// `MechanicalGeometry` as the footprint pads, in the same coordinate
-/// frame, so the identity transform ([`Model3d::new`]) is correct for
-/// every generated model.
+/// OpenParts' 3D models are generated in their geometry generator's
+/// frame; the Placement Model's `model3d` says how that frame sits in
+/// the footprint's (a quarter-turn and an offset to the land-pattern
+/// centroid), which [`footprint_from_placement`] copies here.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model3d {
     pub path: String,

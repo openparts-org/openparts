@@ -1,17 +1,24 @@
 # Pico-style placement: USB right, U1 rot -90 (GP0-11 up to J2, GP18-28 down to J3);
-# the crystal group sits 1.2 mm clear of U1 for the fan-out on its left side
-J1: {x: 23.7, y: 0, rot: -90, side: top}
+# the crystal group sits 1.2 mm clear of U1 for the fan-out on its left side.
+# Placement Model frame (docs/spec/placement-model.md): mm from the board
+# centre, Y up; each part's origin is its land-pattern centroid and at rot 0
+# it lies pin 1 upper left (USB-C: opening down; SOT/crystal per IPC-7351B
+# Level A). A part lands at T * R(rot) * M: on the bottom side M mirrors
+# x -> -x in the part's own frame, and rot is counter-clockwise viewed from
+# the top on both sides.
+# J1 sits where its drawing's "PCB Edge" line meets the board edge.
+J1: {x: 20.685, y: 0, rot: 90, side: top}
 J2: {x: 0.0, y: 8.89, rot: -90, side: top}
 J3: {x: 0.0, y: -8.89, rot: 90, side: top}
 U1: {x: 0.0, y: -0.3, rot: -90, side: top}
 U3: {x: -15.0, y: 0, rot: 0, side: bottom}
 C14: {x: -15.0, y: -5.4, rot: 0, side: bottom}
 C15: {x: -15.0, y: 5.4, rot: 0, side: bottom}
-Y1: {x: -7.9, y: 0.6, rot: 180, side: top}
+Y1: {x: -7.9, y: 0.6, rot: -90, side: top}
 C16: {x: -7.4, y: 3.2, rot: 180, side: top}
 R3: {x: -7.4, y: -2.0, rot: 180, side: top}
 C17: {x: -10.7, y: -0.4, rot: 90, side: top}
-SW1: {x: -16.5, y: 0.0, rot: 180, side: top}
+SW1: {x: -16.5, y: 0.0, rot: 0, side: top}
 R7: {x: -17.0, y: -5.0, rot: 180, side: top}
 D1: {x: -20.5, y: -5.0, rot: 0, side: top}
 R1: {x: 14.0, y: 1.0, rot: 180, side: top}
@@ -28,8 +35,8 @@ C11: {x: 4.15, y: 0.6, rot: 180, side: bottom}
 C8: {x: 4.15, y: -1.1, rot: 180, side: bottom}
 C13: {x: 4.15, y: -2.8, rot: 180, side: bottom}
 C7: {x: 4.15, y: -4.5, rot: 180, side: bottom}
-C5: {x: 1.75, y: -4.0, rot: -90, side: bottom}
-C12: {x: 0.05, y: -4.0, rot: -90, side: bottom}
-U2: {x: 8.8, y: 0, rot: 90, side: bottom}
-C9: {x: 12.8, y: 2.8, rot: -90, side: bottom}
-R4: {x: 12.8, y: -2.8, rot: -90, side: bottom}
+C5: {x: 1.75, y: -4.0, rot: 90, side: bottom}
+C12: {x: 0.05, y: -4.0, rot: 90, side: bottom}
+U2: {x: 8.8, y: 0, rot: -90, side: bottom}
+C9: {x: 12.8, y: 2.8, rot: 90, side: bottom}
+R4: {x: 12.8, y: -2.8, rot: 90, side: bottom}

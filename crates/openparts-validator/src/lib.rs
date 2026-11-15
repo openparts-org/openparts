@@ -118,6 +118,14 @@ pub const RULES: &[Rule] = &[
         meaning: "a `header`/`socket`/`shrouded_header`/`right_angle_header` package has no `lead_layout` of `[rows, pins_per_row]` with 1 or 2 rows (1 for `right_angle_header`) multiplying to `lead_count`, no `dimensions.hole_diameter` (the footprint drill), two rows without `dimensions.row_spacing`, or is a `right_angle_header` without `dimensions.body_offset` (where its housing lies)",
     },
     Rule {
+        id: "edge.invalid",
+        meaning: "a package's `edge.pcb_edge` (the PCB edge line its source draws) is not a number, or a land reaches past it",
+    },
+    Rule {
+        id: "keepout.invalid",
+        meaning: "a package keep-out has both or neither of `rect` (located) and `size` (only sized), a non-positive length, or restricts nothing",
+    },
+    Rule {
         id: "mpn.empty",
         meaning: "`part.mpn` is empty",
     },
@@ -279,6 +287,8 @@ pub fn validate_part(
     out.extend(check_package_aux_pads(&package_entity, package));
     out.extend(check_package_header(&package_entity, package));
     out.extend(check_package_pad_order(&package_entity, package));
+    out.extend(check_package_edge(&package_entity, package));
+    out.extend(check_package_keepouts(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,
@@ -437,6 +447,8 @@ mod tests {
             tab: None,
             aux_pads: vec![],
             pad_order: vec![],
+            edge: None,
+            keepouts: vec![],
             pads: vec![],
             construction: None,
             geometry: None,

@@ -587,12 +587,13 @@ mod tests {
         );
         assert!(d.svg.contains("Pitch 0.4 mm"), "{}", d.svg);
         assert!(d.svg.contains("Pad 1: 0.87 × 0.2 mm"));
-        assert!(d.svg.contains("Courtyard X 8.9 mm"));
+        // IPC-7351B N: the lands grown by 0.25 mm.
+        assert!(d.svg.contains("Courtyard X 8.3 mm"));
         assert!(d.svg.contains("Pad span X"));
         assert!(d.svg.contains("class=\"opv-fp-measure\""));
         // The pad drawing itself is render_svg's.
         assert!(d.svg.contains("#c9a227"));
-        assert!(d.view[2] > 8.9 && d.view[3] > 8.9);
+        assert!(d.view[2] > 8.3 && d.view[3] > 8.3);
         let s = pick(&d.snaps, P::new(-3.42, -2.6), 0.1).unwrap();
         assert_eq!(s.kind, SnapKind::PadCenter);
     }

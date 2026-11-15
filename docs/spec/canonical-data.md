@@ -957,6 +957,38 @@ provenance:
       locator: "MECHANICAL DATA: \"Case: DO-41 (DO-204AL), molded epoxy body\""
 ```
 
+## 20.3 Board Edge and Keep-outs
+
+Placement facts a source states about the board around the part. They feed the
+Placement Model ([placement-model.md](placement-model.md), sections 8 and 9).
+Both are optional, both need provenance, and neither is ever filled with a
+generic default: absent means the source states nothing.
+
+`edge`: the part sits at the board edge.
+
+```yaml
+edge:
+  side: "+y"            # the package side (its own frame) facing the edge: +x, -x, +y, -y
+  requirement: required # required (default): the source draws the edge; recommended
+  pcb_edge: 2.6         # the PCB edge line the source draws, along side's axis (y = 2.6); omit if none
+```
+
+`keepouts`: areas the board keeps clear, each either located (`rect`, centre and
+size in the package frame) or only sized (`size`, the two lengths in the source's
+order when it gives no orientation), optionally against a package `side`.
+
+```yaml
+keepouts:
+  - purpose: antenna            # antenna, mechanical, thermal, other
+    restricts: [components, copper]   # components, copper, tracks, vias
+    side: "-y"
+    size: [14, 9]
+```
+
+Rules: `edge.invalid` (a land reaches past `pcb_edge`), `keepout.invalid`
+(both or neither of `rect` and `size`, a non-positive length, nothing restricted),
+`provenance.missing` for `/edge` and `/keepouts`.
+
 ---
 
 # 21. Package Geometry

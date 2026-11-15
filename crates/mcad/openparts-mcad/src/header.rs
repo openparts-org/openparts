@@ -350,6 +350,8 @@ mod tests {
             tab: None,
             aux_pads: vec![],
             pad_order: vec![],
+            edge: None,
+            keepouts: vec![],
             pads: vec![],
             construction: None,
             geometry: None,

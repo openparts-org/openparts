@@ -1,67 +1,77 @@
-//! Footprint: Mechanical Geometry leads (or stated lands) -> pads.
+//! Footprint: the Placement Model's pads and courtyard, plus drawn
+//! fabrication and silkscreen layers.
 
 use crate::*;
 use openparts_mcad::MechanicalGeometry;
+use openparts_placement::{Density, PadKind, PlacementModel};
 
-/// Builds a Footprint by projecting Mechanical Geometry leads onto the
-/// XY plane. Lead size/position from the generator already encode the
-/// correct per-side orientation, so no rotation is needed here.
+/// Builds a Footprint from a geometry alone: its Placement Model
+/// (`openparts_placement::from_geometry`, density level N) through
+/// [`footprint_from_placement`], without a placement hash (that belongs
+/// to a part's full model: `openparts_placement::build`).
+pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprint {
+    let model = openparts_placement::from_geometry(geometry, Density::N);
+    let mut fp = footprint_from_placement(name, &model);
+    fp.placement_hash = None;
+    fp
+}
+
+/// Builds a Footprint from a Placement Model: its pads (in the model's
+/// frame: land-pattern centroid origin, IPC-7351B Level A orientation),
+/// its courtyard, fabrication and silkscreen drawings, the model's
+/// hash, and a 3D model reference ([`default_model_path`]`(name)`, the
+/// STEP that `openparts-cli generate` writes next to the footprint)
+/// carrying the model's 3D alignment. Use [`PcbFootprint::with_model`] /
+/// `without_model` to change that.
 ///
-/// Pads are the package's stated land pattern when it has one
-/// (`MechanicalGeometry::lands`), else the leads' outlines.
-///
-/// Pad shape: SMD pads are `Rect`. A square through-hole pad marks pin 1
-/// as KiCad's own footprints do (`Capacitor_THT.pretty/
+/// Pad shape (the model's): SMD pads are `Rect`. A square through-hole
+/// pad marks pin 1 as KiCad's own footprints do (`Capacitor_THT.pretty/
 /// CP_Radial_D5.0mm_P2.00mm.kicad_mod`): pin "1" `rect`, the others
 /// `circle`; a longer-than-wide through-hole pad (a slotted tab) is
 /// `Oval`.
-///
-/// The footprint carries a 3D model reference by default:
-/// [`default_model_path`]`(name)` with the identity transform, i.e. the
-/// STEP file that `openparts-cli generate` writes next to the
-/// footprint. Use [`PcbFootprint::with_model`] / `without_model` to
-/// change that.
-pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprint {
+pub fn footprint_from_placement(name: &str, model: &PlacementModel) -> PcbFootprint {
     use openparts_mcad::Mounting;
-    // The package's stated land pattern when it has one, else the leads.
-    let lands = if geometry.lands.is_empty() {
-        &geometry.leads
-    } else {
-        &geometry.lands
-    };
-    let pads = lands
+    let pads: Vec<Pad> = model
+        .pads
         .iter()
-        .map(|lead| {
-            let square = (lead.size.x - lead.size.y).abs() < 1e-9;
-            let shape = match lead.mounting {
-                Mounting::Smd => PadShape::Rect,
-                Mounting::ThroughHole if lead.number == "1" && square => PadShape::Rect,
-                Mounting::ThroughHole | Mounting::NonPlated if square => PadShape::Circle,
-                Mounting::ThroughHole | Mounting::NonPlated => PadShape::Oval,
-            };
-            Pad {
-                number: lead.number.clone(),
-                position: Point2 {
-                    x: lead.position.x,
-                    y: lead.position.y,
-                },
-                size: (lead.size.x, lead.size.y),
-                shape,
-                mounting: lead.mounting,
-                drill: lead.drill,
-                slot: lead.slot,
-            }
+        .map(|p| Pad {
+            number: p.number.clone(),
+            position: Point2 {
+                x: p.position.x,
+                y: p.position.y,
+            },
+            size: (p.size.x, p.size.y),
+            shape: match p.shape {
+                openparts_placement::PadShape::Circle => PadShape::Circle,
+                openparts_placement::PadShape::Oval => PadShape::Oval,
+                // The generators draw no rounded or polygon pads yet.
+                _ => PadShape::Rect,
+            },
+            mounting: match p.kind {
+                PadKind::Smd => Mounting::Smd,
+                PadKind::Tht => Mounting::ThroughHole,
+                PadKind::Npth => Mounting::NonPlated,
+            },
+            drill: p.drill,
+            slot: p.slot,
         })
         .collect();
-
-    let pads: Vec<Pad> = pads;
-    let graphics = crate::outline::drawings(geometry, &pads);
+    let graphics = crate::outline::drawings(model, &pads);
+    let courtyard = model.courtyard.polygons.first().map(|poly| Courtyard {
+        outline: poly.iter().map(|q| Point2 { x: q.x, y: q.y }).collect(),
+    });
+    let m3 = &model.model3d;
     PcbFootprint {
         name: name.to_string(),
-        courtyard: Some(crate::outline::courtyard(geometry, &pads, &graphics)),
+        courtyard,
         graphics,
         pads,
-        model: Some(Model3d::new(default_model_path(name))),
+        model: Some(Model3d {
+            offset: m3.offset,
+            rotate: [0.0, 0.0, m3.rotation],
+            ..Model3d::new(default_model_path(name))
+        }),
+        placement_hash: Some(model.hash.clone()),
     }
 }
 
@@ -139,7 +149,10 @@ mod tests {
         let footprint = build_footprint("EX1", &geometry);
         assert_eq!(footprint.pads.len(), 1);
         assert_eq!(footprint.pads[0].number, "1");
-        assert_eq!(footprint.pads[0].position, Point2 { x: 1.0, y: 2.0 });
+        // The origin is the land pattern's centroid: the one pad.
+        assert_eq!(footprint.pads[0].position, Point2 { x: 0.0, y: 0.0 });
+        // The 3D model, drawn in the generator's frame, moves with it.
+        assert_eq!(footprint.model.as_ref().unwrap().offset, [-1.0, -2.0, 0.0]);
         assert_eq!(footprint.pads[0].size, (0.3, 0.2));
     }
 

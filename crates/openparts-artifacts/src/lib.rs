@@ -10,6 +10,7 @@ use openparts_core::{Device, EffectiveModel, Package, Part, SourceId};
 use openparts_data::Dataset;
 use openparts_mcad::MechanicalGeometry;
 use openparts_pcbcad::{PcbFootprint, PcbSymbol};
+pub use openparts_placement::{Density, PlacementModel};
 use openparts_solidcraft::{Format, ModelInput};
 use std::collections::BTreeSet;
 
@@ -255,12 +256,25 @@ impl PartBuild {
             .map_err(|e| BuildError::Geometry(e.clone()))
     }
 
-    /// The footprint, with overlaid pads for pins that share a contact
-    /// (`connected_to`).
+    /// The part's Placement Model at `density`: the package's geometry
+    /// with the device's pin names and shared contacts.
+    pub fn placement(&self, density: Density) -> Result<PlacementModel, BuildError> {
+        Ok(openparts_placement::build(
+            &self.model.package,
+            Some(&self.model.device),
+            self.geometry()?,
+            density,
+        ))
+    }
+
+    /// The footprint: the Placement Model at density level N (with
+    /// overlaid pads for pins that share a contact, `connected_to`),
+    /// carrying the model's hash.
     pub fn footprint(&self) -> Result<PcbFootprint, BuildError> {
-        let mut fp = openparts_pcbcad::build_footprint(self.mpn(), self.geometry()?);
-        openparts_pcbcad::add_shared_pads(&mut fp, &self.model.device);
-        Ok(fp)
+        Ok(openparts_pcbcad::footprint_from_placement(
+            self.mpn(),
+            &self.placement(Density::N)?,
+        ))
     }
 
     /// The 3D model's input: geometry plus the device's category and

@@ -198,10 +198,22 @@ fn render_package(
     out.push_str(&format!(" (footprint {}\n", fmt_uuid(fp_uuid)));
     out.push_str("  (name \"default\")\n");
     out.push_str("  (description \"\")\n");
-    // Identity transform: the STEP is generated from the same
-    // MechanicalGeometry as the pads, and LibrePCB (like the IR and the
-    // STEP) is Y-up, so no offset/rotation/flip is needed.
-    out.push_str("  (3d_position 0.0 0.0 0.0) (3d_rotation 0.0 0.0 0.0)\n");
+    // The STEP sits in the footprint as the Placement Model's `model3d`
+    // says (the IR's model offset and CCW rotation); LibrePCB, like the
+    // IR and the STEP, is Y-up, so they carry over unchanged.
+    let (offset, rotate) = footprint
+        .model
+        .as_ref()
+        .map_or(([0.0; 3], [0.0; 3]), |m| (m.offset, m.rotate));
+    out.push_str(&format!(
+        "  (3d_position {:?} {:?} {:?}) (3d_rotation {:?} {:?} {:?})\n",
+        offset[0] + 0.0,
+        offset[1] + 0.0,
+        offset[2] + 0.0,
+        rotate[0] + 0.0,
+        rotate[1] + 0.0,
+        rotate[2] + 0.0
+    ));
     // Footprint-level reference (`Footprint3DModel` = `(3d_model
     // <uuid>)`), right after 3d_position/3d_rotation and before pads.
     if let Some(model_uuid) = model_uuid {
@@ -647,6 +659,7 @@ mod tests {
     fn synthetic_footprint() -> PcbFootprint {
         PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![
                 Pad {
                     number: "1".into(),
@@ -713,6 +726,7 @@ mod tests {
     fn synthetic_through_hole_footprint() -> PcbFootprint {
         PcbFootprint {
             name: "TEST".into(),
+            placement_hash: None,
             pads: vec![
                 Pad {
                     number: "1".into(),

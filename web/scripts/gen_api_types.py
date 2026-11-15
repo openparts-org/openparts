@@ -45,6 +45,8 @@ def field_ident(name):
 
 
 def ctor(value):
+    # Signed axis names ("+x", "-y") keep their sign.
+    value = re.sub(r"^\+", "plus_", re.sub(r"^-", "minus_", value))
     parts = re.split(r"[^0-9a-zA-Z]+", value)
     name = "".join(p[:1].upper() + p[1:] for p in parts if p)
     return name if name[0].isalpha() else "V" + name

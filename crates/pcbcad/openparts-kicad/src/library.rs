@@ -102,19 +102,25 @@ pub fn safe_filename(name: &str) -> String {
 /// footprint library / project, which is where `openparts-cli` puts the
 /// STEP). The plugin installs the STEP somewhere else
 /// (`${KIPRJMOD}/openparts_3d/`), so that existing block is *replaced*
-/// with this one -- never duplicated. The identity transform is kept:
-/// the STEP is generated in the footprint's own frame.
+/// with this path -- never duplicated -- and its transform is kept: the
+/// Placement Model's 3D alignment (the STEP is drawn in its geometry
+/// generator's frame, the footprint in the model's).
 pub fn patch_footprint_3d_model(footprint_text: &str, step_relative_path: &str) -> String {
     let model_block = format!(
         "  (model \"{step_relative_path}\"\n    (offset (xyz 0 0 0))\n    (scale (xyz 1 1 1))\n    (rotate (xyz 0 0 0))\n  )\n"
     );
     if let Some((start, end)) = find_balanced_block(footprint_text, "(model ") {
-        // `start` points at `(model`, after the existing indentation, so
-        // the replacement must not bring its own leading indentation.
+        // Only the quoted path after `(model ` changes.
+        let block = &footprint_text[start..end];
+        let path_start = "(model ".len();
+        let path_end = block[path_start + 1..]
+            .find('"')
+            .map(|i| path_start + 1 + i + 1)
+            .unwrap_or(path_start);
         format!(
-            "{}{}{}",
+            "{}(model \"{step_relative_path}\"{}{}",
             &footprint_text[..start],
-            model_block.trim(),
+            &block[path_end..],
             &footprint_text[end..]
         )
     } else {
@@ -298,6 +304,18 @@ mod tests {
         assert!(patched.contains("(pad \"1\" smd rect (at 0.000 -1.000)"));
         assert_eq!(patched.matches('(').count(), patched.matches(')').count());
         assert!(patched.trim_end().ends_with(')'));
+    }
+
+    #[test]
+    fn the_model_transform_survives_the_path_patch() {
+        let fetched = FETCHED_FOOTPRINT_WITH_MODEL
+            .replace("(offset (xyz 0 0 0))", "(offset (xyz 0 -2.215 0))")
+            .replace("(rotate (xyz 0 0 0))", "(rotate (xyz 0 0 -180))");
+        let patched = patch_footprint_3d_model(&fetched, "${KIPRJMOD}/openparts_3d/A-B.step");
+        assert!(patched.contains("(model \"${KIPRJMOD}/openparts_3d/A-B.step\""));
+        assert!(patched.contains("(offset (xyz 0 -2.215 0))"));
+        assert!(patched.contains("(rotate (xyz 0 0 -180))"));
+        assert_eq!(patched.matches('(').count(), patched.matches(')').count());
     }
 
     #[test]

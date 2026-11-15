@@ -16,6 +16,7 @@ members = [
     "crates/openparts-artifacts",
     "crates/openparts-bom",
     "crates/pcbcad/openparts-pcbcad",
+    "crates/pcbcad/openparts-placement",
     "crates/pcbcad/openparts-kicad",
     "crates/pcbcad/openparts-librepcb",
     "crates/mcad/openparts-mcad",

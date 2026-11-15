@@ -1,4 +1,4 @@
-//! Package checks: dimensions, their consistency and provenance, and the
+//! Packae checks: dimensions, their consistency and provenance, and the
 //! family-specific fields (tab, aux pads, headers, pad order).
 
 use crate::Diagnostic;
@@ -55,6 +55,12 @@ pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<D
     }
     if !package.aux_pads.is_empty() {
         present.push("/aux_pads");
+    }
+    if package.edge.is_some() {
+        present.push("/edge");
+    }
+    if !package.keepouts.is_empty() {
+        present.push("/keepouts");
     }
     present
         .into_iter()
@@ -338,4 +344,154 @@ pub(crate) fn check_package_pad_order(entity: &str, package: &Package) -> Vec<Di
             distinct.len()
         ),
     )]
+}
+
+/// `edge`: the PCB edge line, when drawn, must leave every land on the
+/// board (in the package frame, along the edge side's normal).
+pub(crate) fn check_package_edge(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let Some(edge) = &package.edge else {
+        return vec![];
+    };
+    let Some(line) = edge.pcb_edge else {
+        return vec![];
+    };
+    if !line.is_finite() {
+        return vec![Diagnostic::error(
+            "edge.invalid",
+            entity,
+            Some("/edge/pcb_edge"),
+            "edge.pcb_edge is not a number".to_string(),
+        )];
+    }
+    let Ok(g) = openparts_mcad::generate(package) else {
+        return vec![];
+    };
+    let (nx, ny) = edge.side.normal();
+    let lands = if g.lands.is_empty() {
+        &g.leads
+    } else {
+        &g.lands
+    };
+    let limit = (nx + ny) * line;
+    lands
+        .iter()
+        .filter(|l| {
+            let reach = nx * l.position.x
+                + ny * l.position.y
+                + (nx.abs() * l.size.x + ny.abs() * l.size.y) / 2.0;
+            reach > limit + 1e-6
+        })
+        .map(|l| {
+            Diagnostic::error(
+                "edge.invalid",
+                entity,
+                Some("/edge/pcb_edge"),
+                format!(
+                    "pad \"{}\" reaches past the PCB edge line ({line} along {})",
+                    l.number,
+                    serde_json::to_string(&edge.side).unwrap_or_default()
+                ),
+            )
+        })
+        .collect()
+}
+
+/// `keepouts`: each either located (`rect`) or only sized (`size`), with
+/// positive lengths and at least one restriction.
+pub(crate) fn check_package_keepouts(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    for (i, k) in package.keepouts.iter().enumerate() {
+        let path = format!("/keepouts/{i}");
+        let mut bad = |msg: &str| {
+            out.push(Diagnostic::error(
+                "keepout.invalid",
+                entity,
+                Some(&path),
+                msg.to_string(),
+            ))
+        };
+        match (&k.rect, &k.size) {
+            (Some(_), Some(_)) | (None, None) => {
+                bad("a keep-out has exactly one of rect (located) or size (only sized)")
+            }
+            (Some(r), None) if !(r.width > 0.0 && r.length > 0.0) => {
+                bad("a keep-out's rect needs a positive width and length")
+            }
+            (None, Some(s)) if !(s[0] > 0.0 && s[1] > 0.0) => {
+                bad("a keep-out's size needs two positive lengths")
+            }
+            _ => {}
+        }
+        if k.restricts.is_empty() {
+            bad("a keep-out restricts something (components, copper, tracks, vias)");
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod edge_keepout_tests {
+    use super::*;
+
+    fn usb(extra: &str) -> Package {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: usb_c\n\
+             lead_count: 2\npitch: {{unit: mm}}\ndimensions:\n\
+             \x20 body_width: {{nominal: 8.94, unit: mm}}\n\
+             \x20 body_length: {{nominal: 7.35, unit: mm}}\n\
+             \x20 body_height: {{nominal: 3.31, unit: mm}}\n\
+             \x20 body_offset: {{nominal: -1.075, unit: mm}}\n\
+             pads:\n\
+             \x20 - {{number: A1, x: 3.2, y: -4.755, width: 0.6, length: 1.15}}\n\
+             \x20 - {{number: SHELL, x: -4.32, y: 0.0, width: 1.0, length: 1.8, drill: 0.6, drill_length: 1.4}}\n\
+             {extra}"
+        ))
+        .unwrap()
+    }
+
+    fn rules(d: &[Diagnostic]) -> Vec<&str> {
+        d.iter().map(|d| d.rule_id).collect()
+    }
+
+    #[test]
+    fn an_edge_line_through_a_land_is_an_error() {
+        let ok = usb("edge: {side: +y, pcb_edge: 2.6}\n");
+        assert!(check_package_edge("p", &ok).is_empty());
+        // The front slot's land reaches y = 0.9.
+        let bad = usb("edge: {side: +y, pcb_edge: 0.5}\n");
+        assert_eq!(rules(&check_package_edge("p", &bad)), ["edge.invalid"]);
+        // No line drawn: nothing to check.
+        let recommended = usb("edge: {side: -y, requirement: recommended}\n");
+        assert!(check_package_edge("p", &recommended).is_empty());
+    }
+
+    #[test]
+    fn edge_and_keepouts_need_provenance() {
+        let p = usb("edge: {side: +y, pcb_edge: 2.6}\n\
+             keepouts:\n  - {purpose: antenna, restricts: [copper], size: [14, 9], side: -y}\n\
+             provenance:\n  /pads: [{source: x/Y}]\n  /dimensions/body_offset: [{source: x/Y}]\n");
+        let missing: Vec<_> = check_package_provenance("p", &p)
+            .into_iter()
+            .filter_map(|d| d.field_path)
+            .collect();
+        assert_eq!(missing, ["/edge", "/keepouts"]);
+    }
+
+    #[test]
+    fn a_keepout_is_located_or_sized_not_both() {
+        let both = usb(
+            "keepouts:\n  - {purpose: other, restricts: [copper], size: [1, 2], \
+             rect: {x: 0, y: 0, width: 1, length: 2}}\n",
+        );
+        assert_eq!(
+            rules(&check_package_keepouts("p", &both)),
+            ["keepout.invalid"]
+        );
+        let empty = usb("keepouts:\n  - {purpose: other, restricts: [], size: [1, 0]}\n");
+        assert_eq!(check_package_keepouts("p", &empty).len(), 2);
+        let ok = usb(
+            "keepouts:\n  - {purpose: antenna, restricts: [components, copper], size: [14, 9]}\n",
+        );
+        assert!(check_package_keepouts("p", &ok).is_empty());
+    }
 }

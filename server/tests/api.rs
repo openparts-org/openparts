@@ -907,3 +907,96 @@ async fn catalog_rejects_bad_numbers() {
     let response = get(app(), "/v1/catalog?sort=price").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+async fn placement(uri: &str) -> serde_json::Value {
+    let response = get(app(), uri).await;
+    assert_eq!(response.status(), StatusCode::OK, "{uri}");
+    serde_json::from_str(&body_string(response).await).unwrap()
+}
+
+/// The footprint's `OpenParts placement` property.
+fn footprint_placement_hash(fp: &str) -> Option<String> {
+    let marker = "(property \"OpenParts placement\" \"";
+    let start = fp.find(marker)? + marker.len();
+    Some(fp[start..start + fp[start..].find('"')?].to_string())
+}
+
+#[tokio::test]
+async fn placement_model_of_the_rp2040() {
+    let m = placement("/v1/parts/raspberrypi/RP2040/placement").await;
+    assert_eq!(m["frame"]["units"], "mm");
+    assert_eq!(m["frame"]["density"], "N");
+    assert_eq!(m["frame"]["zero_orientation"]["rule"], "ipc7351b_level_a");
+    let pads = m["pads"].as_array().unwrap();
+    assert_eq!(pads.len(), 57);
+    let pad = |n: &str| pads.iter().find(|p| p["number"] == n).unwrap();
+    // Pin 1 upper left, with its device pin.
+    assert!(pad("1")["position"]["x"].as_f64().unwrap() < 0.0);
+    assert!(pad("1")["position"]["y"].as_f64().unwrap() > 0.0);
+    assert_eq!(pad("1")["pin"]["name"], "IOVDD");
+    assert_eq!(pad("EP")["exposed"], true);
+    assert_eq!(pad("EP")["position"]["x"], 0.0);
+    assert_eq!(m["pitch"], 0.4);
+    assert_eq!(m["courtyard"]["excess"], 0.25);
+    assert_eq!(m["basis"]["courtyard"]["kind"], "ipc7351");
+    assert_eq!(m["basis"]["pads"]["kind"], "ipc7351");
+    // The KiCad footprint carries the same hash.
+    let hash = m["hash"].as_str().unwrap();
+    assert!(hash.starts_with("sha256:"));
+    let fp = body_string(
+        get(
+            app(),
+            "/v1/parts/raspberrypi/RP2040/artifacts/kicad-footprint",
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(footprint_placement_hash(&fp).as_deref(), Some(hash));
+}
+
+#[tokio::test]
+async fn placement_density_levels() {
+    let width = |m: &serde_json::Value| {
+        let xs: Vec<f64> = m["courtyard"]["polygons"][0]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["x"].as_f64().unwrap())
+            .collect();
+        xs.iter().cloned().fold(f64::MIN, f64::max) - xs.iter().cloned().fold(f64::MAX, f64::min)
+    };
+    let base = "/v1/parts/raspberrypi/RP2040/placement";
+    let l = placement(&format!("{base}?density=L")).await;
+    let n = placement(&format!("{base}?density=n")).await;
+    let m = placement(&format!("{base}?density=M")).await;
+    assert_eq!(l["frame"]["density"], "L");
+    assert_eq!(m["courtyard"]["excess"], 0.5);
+    assert!(width(&l) < width(&n) && width(&n) < width(&m));
+    assert_ne!(l["hash"], n["hash"]);
+    let bad = get(app(), &format!("{base}?density=X")).await;
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    let missing = get(app(), "/v1/parts/nobody/NOPE/placement").await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn placement_of_a_usb_c_receptacle() {
+    let m = placement("/v1/parts/gct/USB4105-GF-A/placement").await;
+    // A1 upper left: the opening faces -Y, the 3D model turned 180°.
+    assert_eq!(m["model3d"]["rotation"], 180.0);
+    let pads = m["pads"].as_array().unwrap();
+    let a1 = pads.iter().find(|p| p["number"] == "A1").unwrap();
+    assert!(a1["position"]["x"].as_f64().unwrap() < 0.0);
+    // Contacts overlaid under a second number (A1 B12).
+    assert!(pads
+        .iter()
+        .any(|p| p["number"] == "B12" && p["shares_contact_with"] == "A1"));
+    assert!(m["tht"].is_object());
+    // The PCB edge the drawing states, where the dataset records it.
+    let package = body_string(get(app(), "/v1/packages/manufacturers/gct/USB4105").await).await;
+    if package.contains("\"edge\"") {
+        assert_eq!(m["edge"]["side"], "-y");
+        assert!(m["edge"]["overhang"].as_f64().unwrap().abs() < 0.01);
+        assert_eq!(m["basis"]["edge"]["kind"], "datasheet");
+    }
+}

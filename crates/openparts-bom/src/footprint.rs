@@ -1,7 +1,9 @@
 //! Land-pattern compatibility: whether a candidate fits the original's
 //! footprint, from the footprint pads OpenParts generates for each
-//! Package (openparts-mcad lands -> openparts-pcbcad pads, the same
-//! pads the KiCad footprint gets).
+//! Package: its Placement Model's pads (openparts-placement; the same
+//! pads the KiCad footprint gets), in the model's frame -- land-pattern
+//! centroid origin, IPC-7351B Level A orientation -- so two vendors'
+//! drawings of one land pattern compare equal whatever their own origin.
 //!
 //! Package ids are vendor-specific (`SOT25-...-DIODES` vs TI `DBV0005A`),
 //! so two packages are compared by their pads: the same number of pads,

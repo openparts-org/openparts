@@ -275,6 +275,135 @@ fn is_plated(p: &bool) -> bool {
     *p
 }
 
+/// A side of the package in its own frame (top view, X right, Y up).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PackageSide {
+    #[serde(rename = "+x")]
+    PlusX,
+    #[serde(rename = "-x")]
+    MinusX,
+    #[serde(rename = "+y")]
+    PlusY,
+    #[serde(rename = "-y")]
+    MinusY,
+}
+
+impl PackageSide {
+    /// The outward unit normal of this side.
+    pub fn normal(self) -> (f64, f64) {
+        match self {
+            PackageSide::PlusX => (1.0, 0.0),
+            PackageSide::MinusX => (-1.0, 0.0),
+            PackageSide::PlusY => (0.0, 1.0),
+            PackageSide::MinusY => (0.0, -1.0),
+        }
+    }
+
+    /// The side whose outward normal is `(x, y)` (axis-aligned).
+    pub fn from_normal(x: f64, y: f64) -> PackageSide {
+        if x.abs() >= y.abs() {
+            if x >= 0.0 {
+                PackageSide::PlusX
+            } else {
+                PackageSide::MinusX
+            }
+        } else if y >= 0.0 {
+            PackageSide::PlusY
+        } else {
+            PackageSide::MinusY
+        }
+    }
+}
+
+/// How firmly the source asks for the part to sit at the board edge.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeRequirement {
+    /// The source draws or states the board edge (a connector's mating
+    /// face must reach past it).
+    #[default]
+    Required,
+    /// The source recommends the edge (an antenna module).
+    Recommended,
+}
+
+/// `Package::edge`: which side of the part faces the board edge, and
+/// where the source draws that edge.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackageEdge {
+    /// The package side (its mating face, its antenna end) that faces
+    /// the board edge, in the package's own frame.
+    pub side: PackageSide,
+    #[serde(default)]
+    pub requirement: EdgeRequirement,
+    /// The PCB edge line the source draws: its coordinate along `side`'s
+    /// axis, in the package frame (mm; `+y` side: the line `y =
+    /// pcb_edge`). Absent when the source asks for the edge but draws no
+    /// line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pcb_edge: Option<f64>,
+}
+
+/// What a keep-out area must stay clear of.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeepoutRestriction {
+    /// No components (on either side).
+    Components,
+    /// No copper of any kind (tracks, pours, pads) on any layer.
+    Copper,
+    /// No tracks (pours allowed).
+    Tracks,
+    /// No vias.
+    Vias,
+}
+
+/// Why the source asks for a keep-out.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeepoutPurpose {
+    Antenna,
+    Mechanical,
+    Thermal,
+    Other,
+}
+
+/// A rectangle in the package frame (mm): centre and size along X/Y.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackageRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub length: f64,
+}
+
+/// `Package::keepouts`: one keep-out area as the source states it --
+/// located (`rect`), or only sized (`size`, the two lengths in the
+/// source's order, orientation not given) and placed against a
+/// package `side`. Exactly one of `rect` / `size`.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackageKeepout {
+    pub purpose: KeepoutPurpose,
+    pub restricts: Vec<KeepoutRestriction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rect: Option<PackageRect>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<[f64; 2]>,
+    /// The package side the area lies at, when the source says so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<PackageSide>,
+}
+
 /// Canonical Data Specification section 21.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -348,6 +477,16 @@ pub struct Package {
     /// `None` when not recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub construction: Option<PackageConstruction>,
+    /// The part sits at the board edge, when the source says so (a
+    /// connector whose layout draws the PCB edge line, a module that is
+    /// to be placed on the edge). Section 20.3; absent: no such statement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<PackageEdge>,
+    /// Areas the board must keep clear, each as the source states it
+    /// (section 20.3). Never a generic default: absent means the source
+    /// states none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keepouts: Vec<PackageKeepout>,
     #[serde(default)]
     pub geometry: Option<PackageGeometrySpec>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]

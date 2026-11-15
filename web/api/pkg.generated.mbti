@@ -385,6 +385,15 @@ pub fn DocumentType::all() -> Array[Self]
 pub fn DocumentType::wire(Self) -> String
 pub impl @json.FromJson for DocumentType
 
+#derive(Eq, @debug.Debug)
+pub(all) enum EdgeRequirement {
+  Required
+  Recommended
+}
+pub fn EdgeRequirement::all() -> Array[Self]
+pub fn EdgeRequirement::wire(Self) -> String
+pub impl @json.FromJson for EdgeRequirement
+
 #derive(Eq)
 pub(all) struct ErrorBody {
   diagnostics : Array[DiagnosticBody]
@@ -515,6 +524,28 @@ pub fn IssueCode::wire(Self) -> String
 pub impl @json.FromJson for IssueCode
 
 #derive(Eq, @debug.Debug)
+pub(all) enum KeepoutPurpose {
+  Antenna
+  Mechanical
+  Thermal
+  Other
+}
+pub fn KeepoutPurpose::all() -> Array[Self]
+pub fn KeepoutPurpose::wire(Self) -> String
+pub impl @json.FromJson for KeepoutPurpose
+
+#derive(Eq, @debug.Debug)
+pub(all) enum KeepoutRestriction {
+  Components
+  Copper
+  Tracks
+  Vias
+}
+pub fn KeepoutRestriction::all() -> Array[Self]
+pub fn KeepoutRestriction::wire(Self) -> String
+pub impl @json.FromJson for KeepoutRestriction
+
+#derive(Eq, @debug.Debug)
 pub(all) enum Kind {
   Manufacturer
   Part
@@ -586,9 +617,11 @@ pub(all) struct Package {
   aux_pads : Array[String]?
   construction : PackageConstruction?
   dimensions : PackageDimensions
+  edge : PackageEdge?
   family : PackageFamily
   geometry : PackageGeometrySpec?
   id : String
+  keepouts : Array[PackageKeepout]?
   kind : Kind
   lead_count : Int32
   lead_layout : Array[Int32]?
@@ -647,6 +680,14 @@ pub(all) struct PackageDimensions {
 }
 pub impl @json.FromJson for PackageDimensions
 
+#derive(Eq)
+pub(all) struct PackageEdge {
+  pcb_edge : Double?
+  requirement : EdgeRequirement?
+  side : PackageSide
+}
+pub impl @json.FromJson for PackageEdge
+
 #derive(Eq, @debug.Debug)
 pub(all) enum PackageFamily {
   Lqfp
@@ -694,6 +735,16 @@ pub(all) struct PackageGeometrySpec {
 pub impl @json.FromJson for PackageGeometrySpec
 
 #derive(Eq)
+pub(all) struct PackageKeepout {
+  purpose : KeepoutPurpose
+  rect : PackageRect?
+  restricts : Array[KeepoutRestriction]
+  side : PackageSide?
+  size : Array[Double]?
+}
+pub impl @json.FromJson for PackageKeepout
+
+#derive(Eq)
 pub(all) struct PackagePad {
   drill : Double?
   drill_length : Double?
@@ -705,6 +756,26 @@ pub(all) struct PackagePad {
   y : Double
 }
 pub impl @json.FromJson for PackagePad
+
+#derive(Eq)
+pub(all) struct PackageRect {
+  length : Double
+  width : Double
+  x : Double
+  y : Double
+}
+pub impl @json.FromJson for PackageRect
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PackageSide {
+  PlusX
+  MinusX
+  PlusY
+  MinusY
+}
+pub fn PackageSide::all() -> Array[Self]
+pub fn PackageSide::wire(Self) -> String
+pub impl @json.FromJson for PackageSide
 
 #derive(Eq)
 pub(all) struct PackageTab {
