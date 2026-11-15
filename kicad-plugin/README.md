@@ -1,32 +1,64 @@
 # openparts-kicad-plugin
 
-A small native GUI companion app for [OpenParts](https://github.com/openparts-org/openparts):
-search the OpenParts registry and install a part's Symbol / Footprint / STEP model into a KiCad
-project's local libraries.
+A small native GUI companion app for [OpenParts](https://github.com/openparts-org/openparts),
+with three tabs:
+
+- **Search**: the registry's faceted catalog (`GET /v1/catalog`): text, the category tree,
+  manufacturer, package family, size code, pins, pitch, mounting, the package structure (rows,
+  gender, orientation, shroud, exposed pad), review state, body size ranges and the electrical
+  parameter facets (values and min/max ranges such as `10n`..`1u`). The results table's columns
+  follow the results: a capacitor search shows size, capacitance, voltage, dielectric; a
+  connector search rows, gender, pitch. Pick a part and **Install into project**.
+- **BOM check**: the open project's BOM against the registry (`POST /v1/bom/check`), with each
+  line's status, issues and match. Select a line to see its candidates (the match, the listed
+  alternatives, or **Find alternatives**: `GET .../alternatives`), each with **Install** and
+  **Use MPN**.
+- **Footprints**: every OpenParts footprint of the project (on its `.kicad_pcb` boards and in its
+  project footprint libraries) whose `OpenParts placement` hash differs from the registry's
+  current Placement Model (`GET .../placement`, see `docs/spec/placement-model.md` section 13).
+  **Update** reinstalls the library footprint; board copies are then updated in KiCad with
+  Tools > Update Footprints from Library.
 
 It does **not** place anything on the schematic or board -- once a part is installed, pick it up
-from KiCad's normal Symbol/Footprint picker as usual, and add it to the sheet/board yourself.
+from KiCad's normal Symbol/Footprint picker as usual.
 
-## What it does
+### Install into project
 
-1. Search the OpenParts registry (`openparts-server`) by manufacturer/MPN.
-2. Pick a result (and optionally a silicon revision).
-3. Point it at a KiCad project directory -- typed in manually, or auto-filled if a running KiCad
-   instance with its IPC API enabled is detected (see [Project-path auto-detect](#project-path-auto-detect)
-   below).
-4. Click Install. This:
-   - downloads the part's KiCad symbol, KiCad footprint, and STEP artifacts (via
-     `openparts-client`, which verifies each download's SHA-256 content hash before trusting it),
-   - writes the STEP file under `<project>/openparts_3d/<MPN>.step`,
-   - writes/merges the footprint into `<project>/openparts.pretty/<MPN>.kicad_mod`, patching its
-     `(model ...)` block to point at the downloaded STEP file so the 3D viewer works immediately,
-   - merges the symbol into `<project>/openparts.kicad_sym` (creating it if needed, replacing an
-     existing entry with the same name if reinstalling),
-   - registers both libraries in the project's `sym-lib-table`/`fp-lib-table` if not already
-     present.
+Installing (the same path as `openparts kicad-install`):
+
+- downloads the part's KiCad symbol, KiCad footprint, and STEP artifacts (via
+  `openparts-client`, which verifies each download's SHA-256 content hash before trusting it),
+- writes the STEP file under `<project>/openparts_3d/<MPN>.step`,
+- writes/merges the footprint into `<project>/openparts.pretty/<MPN>.kicad_mod`, patching its
+  `(model ...)` block to point at the downloaded STEP file so the 3D viewer works immediately,
+- merges the symbol into `<project>/openparts.kicad_sym` (creating it if needed, replacing an
+  existing entry with the same name if reinstalling),
+- registers both libraries in the project's `sym-lib-table`/`fp-lib-table` if not already
+  present.
 
 All of this is idempotent: installing the same part twice updates the existing entries in place
 rather than duplicating them.
+
+### How the BOM is read
+
+The root schematic is `<name>.kicad_sch` of the project's `.kicad_pro`. The app walks the sheet
+hierarchy (`Sheetfile`), reads every placed symbol's Reference (per sheet instance), Value,
+Footprint, MPN (`MPN`, `Manufacturer Part Number`, ...), Manufacturer and DNP fields, skips power
+symbols and `in_bom no`, merges the units of multi-unit symbols, and groups identical lines into a
+KiCad-style BOM CSV. With the source set to "kicad-cli / schematic" and `kicad-cli` on `PATH` (or
+`KICAD_CLI`), kicad-cli's netlist is sent instead; the symbol locations still come from the
+schematic.
+
+**Use MPN** writes the MPN (and the manufacturer, where the symbol has that field) into the
+symbols' existing MPN field, rewriting only that string in the `.kicad_sch`. It does so only when
+every symbol of the line has an MPN field on every unit and sits on a sheet used once; otherwise
+it copies the MPN to the clipboard and says why. Reload an open schematic afterwards
+(File > Revert).
+
+### Command line
+
+`openparts kicad-check-stale <project>` is the Footprints tab's check (`--all`, `--json`,
+`--strict`).
 
 > **Verified end-to-end** on a real Windows machine with KiCad 10: `install.ps1` downloading and
 > installing the binary + launcher, the "OpenParts" toolbar button in the PCB editor, searching,
@@ -84,8 +116,8 @@ OpenParts/
 cargo run --release
 ```
 
-Enter your `openparts-server` URL (defaults to `http://localhost:8080`), search, select a part,
-set the target project directory, and click Install. The project directory can also be pre-filled
+Enter your `openparts-server` URL (defaults to `$OPENPARTS_REGISTRY_URL`, else
+`http://localhost:8080`) and the project directory. The project directory can also be pre-filled
 via `--project-dir <path>` on the command line, which is how the KiCad launcher below invokes it.
 
 ## Launching from inside KiCad
@@ -137,9 +169,13 @@ needs.
 cargo test
 ```
 
-`src/library_sync.rs` (all the `.kicad_sym`/`.kicad_mod`/lib-table file manipulation) and the
-`install_part` orchestration in `src/main.rs` are covered by unit/integration tests that run
-entirely offline against local fixtures -- no KiCad install or running `openparts-server` needed.
+Everything but drawing is tested offline: the search state and its columns (`src/search.rs`),
+schematic reading, BOM grouping and MPN writing against a trimmed copy of a Raspberry Pi Pico
+board (`tests/fixtures/pico`, `src/schematic.rs`, `src/bom.rs`), the stale scan
+(`src/stale.rs`, `openparts-client`'s `kicad_stale`), and installing from a pre-filled client
+cache (`src/install.rs`). `src/ui.rs` only draws. With a server running,
+`OPENPARTS_TEST_REGISTRY=http://127.0.0.1:8080 cargo test -- --ignored --nocapture` checks the
+fixture's BOM against it.
 
 `src/kicad_detect.rs`'s real IPC path (behind the `kicad-ipc` feature) could not be exercised in
 the environment this was developed in (no `cmake` available to build `nng-sys`, no running KiCad
