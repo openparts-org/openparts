@@ -94,6 +94,123 @@ def test_net_widths_never_below_design_track():
     assert widths["VBUS"]["inner"] is None
 
 
+FAB4 = {**FAB, "copper": {"outer_oz": 1.0, "inner_oz": 0.5}, "stackup": {"thickness": 1.6, "dielectric": 0.2104, "er": 4.4}}
+
+
+# ------------------------------------------------------------- stackup
+
+
+def test_default_stackups():
+    assert [s["role"] for s in rules.load_stackup({"layers": 2})] == ["signal", "signal"]
+    four = rules.load_stackup({"layers": 4, "zones": ["GND"]})
+    assert [s["layer"] for s in four] == ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
+    # The ground plane right under the top (the microstrip reference).
+    assert four[1] == {"layer": "In1.Cu", "role": "plane", "net": "GND"}
+    assert [s["role"] for s in four] == ["signal", "plane", "signal", "signal"]
+
+
+def test_stackup_from_board_and_checks():
+    board = {"layers": 4, "zones": ["GND"], "stackup": ["signal", {"plane": "GND"}, {"plane": "3V3"}, "signal"]}
+    st = rules.load_stackup(board, nets={"GND", "3V3"})
+    assert rules.plane_nets(st) == ["3V3", "GND"] and rules.signal_layers(st) == ["F.Cu", "B.Cu"]
+    assert rules.pour_nets(board, st) == ["3V3", "GND"]
+    with pytest.raises(ValueError, match="not a net"):
+        rules.load_stackup(board, nets={"GND"})
+    with pytest.raises(ValueError, match="lists 3 layers"):
+        rules.load_stackup({**board, "stackup": ["signal", "signal", "signal"]})
+    with pytest.raises(ValueError, match="outer layer"):
+        rules.load_stackup({**board, "stackup": [{"plane": "GND"}, "signal", "signal", "signal"]})
+    with pytest.raises(ValueError, match="signal"):
+        rules.load_stackup({**board, "stackup": ["signal", "ground", "signal", "signal"]})
+
+
+def test_per_layer_widths():
+    currents = {"VBUS": (1.0, "t"), "3V3": (0.3, "t")}
+    # Inner layers all planes: no inner tracks, the class width is the
+    # outer one (not the 5x wider inner one).
+    planes = rules.load_stackup({"layers": 4, "stackup": ["signal", {"plane": "GND"}, {"plane": "3V3"}, "signal"]})
+    w = rules.net_widths(FAB4, currents, planes)
+    assert w["VBUS"]["inner"] is None and w["VBUS"]["track"] == pytest.approx(0.305)
+    assert w["VBUS"]["layers"] == ["F.Cu", "B.Cu"]
+    # An inner signal layer: its own width (0.5 oz, k = 0.024), and a
+    # net too wide for it inside keeps to the outer layers.
+    sig = rules.load_stackup({"layers": 4, "zones": ["GND"]})
+    w = rules.net_widths(FAB4, currents, sig)
+    assert w["VBUS"]["inner"] == pytest.approx(rules.ipc2221_width(1.0, 0.5 * rules.OZ_MM, False))
+    assert w["VBUS"]["inner_track"] > rules.INNER_MAX_WIDTH and w["VBUS"]["layers"] == ["F.Cu", "B.Cu"]
+    assert w["VBUS"]["track"] == pytest.approx(0.305)
+    assert w["3V3"]["inner_track"] == pytest.approx(0.300) and w["3V3"]["track"] == FAB["design"]["track"]
+    assert w["3V3"]["layers"] == ["F.Cu", "In2.Cu", "B.Cu"]
+
+
+DSN = """(pcb x
+  (structure
+    (layer F.Cu
+      (type signal)
+    )
+    (layer In1.Cu
+      (type signal)
+    )
+    (layer In2.Cu
+      (type signal)
+    )
+    (layer B.Cu
+      (type signal)
+    )
+  )
+  (network
+    (class I_VBUS VBUS
+      (circuit
+        (use_via "Via[0-3]_450:250_um")
+      )
+      (rule
+        (width 305)
+        (clearance 150)
+      )
+    )
+    (class I_3V3 3V3
+      (circuit
+        (use_via "Via[0-3]_450:250_um")
+      )
+      (rule
+        (width 150)
+        (clearance 150)
+      )
+    )
+  )
+)
+"""
+
+
+def test_dsn_layer_rules():
+    st = rules.load_stackup({"layers": 4, "zones": ["GND"]})
+    w = rules.net_widths(FAB4, {"VBUS": (1.0, "t"), "3V3": (0.3, "t")}, st)
+    text = rules.dsn_layer_rules(DSN, w, st)
+    assert balanced(text)
+    assert re.search(r"\(layer In1\.Cu\s+\(type power\)", text)
+    assert re.search(r"\(layer In2\.Cu\s+\(type signal\)", text)
+    vbus = text[text.index("(class I_VBUS"):text.index("(class I_3V3")]
+    assert "(use_layer F.Cu B.Cu)" in vbus and "layer_rule" not in vbus
+    v33 = text[text.index("(class I_3V3"):]
+    assert "(layer_rule In2.Cu (rule (width 300)))" in v33 and "use_layer" not in v33
+    # Two layers: nothing to add.
+    two = rules.load_stackup({"layers": 2})
+    assert rules.dsn_layer_rules(DSN, rules.net_widths(FAB, {"VBUS": (1.0, "t")}, two), two) == DSN
+
+
+def test_dru_inner_rules():
+    sig = rules.load_stackup({"layers": 4, "zones": ["GND"]})
+    w = rules.net_widths(FAB4, {"VBUS": (1.0, "t"), "3V3": (0.3, "t")}, sig)
+    text = rules.dru_text(FAB4, w, {}, [], layers=4)
+    assert balanced(text)
+    assert '(rule "current 3V3 0.3 A inner"\n  (layer inner)' in text and "(min 0.299mm) (opt 0.300mm)" in text
+    assert '(rule "VBUS on the outer layers only"' in text and "(constraint disallow track)" in text
+    assert "3V3 on the outer layers only" not in text
+    planes = rules.load_stackup({"layers": 4, "stackup": ["signal", {"plane": "GND"}, {"plane": "3V3"}, "signal"]})
+    text = rules.dru_text(FAB4, rules.net_widths(FAB4, {"VBUS": (1.0, "t")}, planes), {}, [], layers=4)
+    assert "(layer inner)" not in text
+
+
 def test_current_from_parameter():
     assert rules.current_from_parameter([{"typ": 800, "unit": "mA"}]) == pytest.approx(0.8)
     assert rules.current_from_parameter({"nominal": 800, "unit": "mA"}) == pytest.approx(0.8)
@@ -282,6 +399,63 @@ def test_fanout_diff_pair_is_coupled():
     lp = sum(math.dist(i["a"], i["b"]) for i in dp if i["net"] == "D+")
     ln = sum(math.dist(i["a"], i["b"]) for i in dp if i["net"] == "D-")
     assert abs(lp - ln) < 0.5
+
+
+def test_fanout_diff_pair_wider_than_the_pin_pitch_allows():
+    # Four layers: 90 Ω is 0.265 mm at a 0.15 mm gap over the 0.21 mm
+    # prepreg, wider than 0.4 mm-pitch pins allow at the stubs' ends
+    # (0.4 - 0.265 = 0.135 mm < 0.15). The traces keep the escape width
+    # until they are a lane apart, then widen.
+    spec, models = board_spec(), board_models()
+    spec["components"].update({"R1": "x/cap", "R2": "x/cap"})
+    spec["board"]["layers"] = 4
+    placement = {"U1": {"x": 0, "y": 0}, "J1": {"x": 0, "y": 7}, "C1": {"x": -6, "y": -5, "side": "bottom"},
+                 "R1": {"x": 9, "y": 1.0, "rot": 180}, "R2": {"x": 9, "y": -1.0, "rot": 180}}
+    models["x/qfn"]["pads"][10]["pin"] = {"diff_pair": {"partner": "10", "polarity": "p", "standard": "usb2"}}
+    models["x/qfn"]["pads"][9]["pin"] = {"diff_pair": {"partner": "11", "polarity": "n", "standard": "usb2"}}
+    nets = {("U1", "11"): "D+", ("U1", "10"): "D-", ("R1", "2"): "D+", ("R2", "2"): "D-"}
+    pairs = rules.diff_pairs(spec, models, nets)
+    esc, _ = rules.escape_plan(spec, models, placement, nets, FAB4, {})
+    g = rules.pair_geometry(FAB4, "usb2", 0.2, 0.4)
+    assert g["matched"] and g["width"] == pytest.approx(0.265) and g["zdiff"] == pytest.approx(89, abs=1)
+    pairs[0]["geometry"] = g
+    items, report = rules.fanout(spec, models, placement, nets, FAB4, {}, esc, pairs, layers=4)
+    dp = [i for i in items if i.get("role") == "diff-pair"]
+    assert dp and any("coupled" in line for line in report), report
+    assert {round(i["width"], 3) for i in dp} == {0.2, 0.265}
+    for i in dp:
+        others = [o for o in dp if o["net"] != i["net"]]
+        assert rules.conflicts(i, others, FAB4["design"]["clearance"] - 1e-6) is None
+
+
+def test_fanout_plane_vias():
+    # Four layers, GND and VDD planes inside: every surface pad of a plane
+    # net reaches its plane through a via of its own (the QFN's through
+    # its escape stub and a dog-bone, the capacitor's beside its pad),
+    # clear of everything; `stubs: false` keeps the plane nets' stubs.
+    spec, models = board_spec(), board_models()
+    spec["board"]["layers"] = 4
+    spec["stackup"] = rules.load_stackup({"layers": 4, "stackup": ["signal", {"plane": "GND"}, {"plane": "VDD"},
+                                                                   "signal"]})
+    placement = {"U1": {"x": 0, "y": 0}, "J1": {"x": 0, "y": 7}, "C1": {"x": -6, "y": -5, "side": "bottom"}}
+    nets = {("U1", "13"): "A", ("J1", "1"): "A", ("U1", "1"): "VDD", ("C1", "1"): "VDD", ("C1", "2"): "GND",
+            ("U1", "EP"): "GND", ("J1", "6"): "GND"}
+    esc, _ = rules.escape_plan(spec, models, placement, nets, FAB4, {})
+    items, report = rules.fanout(spec, models, placement, nets, FAB4, {}, esc, [], {"stubs": False}, layers=4)
+    taps = [i for i in items if i["kind"] == "via" and i.get("role") == "plane-tap"]
+    assert sorted(v["net"] for v in taps) == ["GND", "VDD"]  # C1's two pads
+    assert [v["net"] for v in items if v["kind"] == "via" and v.get("role") == "dog-bone"] == ["VDD"]  # U1.1
+    assert not any(i.get("role") == "escape" and i["net"] == "A" for i in items)  # stubs: false
+    assert all(v["layers"] == {"F.Cu", "In1.Cu", "In2.Cu", "B.Cu"} for v in taps)
+    obstacles = rules.board_obstacles(spec, models, placement, nets, 4)
+    for v in taps:
+        # Beside the pad, not in it.
+        box = next(o["box"] for o in obstacles if o["ref"] == "C1" and nets[("C1", o["number"])] == v["net"])
+        assert not rules.in_box(v["at"], box)
+    for i in items:
+        others = [o for o in items + obstacles if o is not i]
+        assert rules.conflicts(i, others, FAB4["design"]["clearance"] - 1e-6) is None, i
+    assert "2 plane via(s)" in report[0]
 
 
 def test_offset_and_octilinear():

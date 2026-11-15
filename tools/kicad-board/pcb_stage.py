@@ -38,6 +38,12 @@ PCB = OUT / f"{NAME}.kicad_pcb"
 # Board coordinates: the outline's centre at (ORIGIN, ORIGIN) in KiCad's
 # page; placement.yaml uses mm from the board centre, X right, Y up.
 ORIGIN = 100.0
+# The nets carried by copper areas: the board's pours (outer layers) and
+# the stackup's planes (inner layers).
+POURS = PLAN.get("pours") or PLAN["board"].get("zones", [])
+# Per copper layer, top to bottom: {"layer", "role": signal|plane, "net"}.
+STACKUP = PLAN.get("stackup") or [{"layer": "F.Cu", "role": "signal", "net": None},
+                                  {"layer": "B.Cu", "role": "signal", "net": None}]
 
 
 def mm(v):
@@ -132,7 +138,7 @@ def build():
             name = PLAN["nets"].get(f"{ref}.{pad.GetNumber()}")
             if name:
                 pad.SetNet(net(name))
-            if pad.HasHole() and name in spec.get("zones", []):
+            if pad.HasHole() and name in POURS:
                 # Thermal spokes on the diagonals: a header's spokes along
                 # and across its row run into the next pins and into the
                 # tracks alongside the row (starved_thermal); the
@@ -147,32 +153,35 @@ def build():
     (OUT / "footprints.json").write_text(json.dumps(fitted, indent=1, sort_keys=True))
     place_references(board, w, h)
 
-    # Copper pours.
+    # Copper pours: the board's pour nets on the outer layers, and each
+    # plane of the stackup over its whole layer (typed `power`, so the
+    # router leaves it to the plane).
     inset = 0.3
-    copper = list(board.GetEnabledLayers().CuStack())
-    # On four layers the second inner layer is left to signals: the
-    # router gets three routing layers and a ground plane under the top.
-    poured = copper if len(copper) == 2 else [l for l in copper if l != copper[2]]
-    for name in spec.get("zones", []):
-        for layer_id in poured:
-            zone = pcbnew.ZONE(board)
-            zone.SetLayer(layer_id)
-            zone.SetNet(net(name))
-            outline = zone.Outline()
-            outline.NewOutline()
-            for x, y in ((-1, 1), (1, 1), (1, -1), (-1, -1)):
-                p = to_board(x * (w / 2 - inset), y * (h / 2 - inset))
-                outline.Append(p.x, p.y)
-            # The board's own clearance: a wider one keeps the pour out
-            # of the gaps between tracks and cuts it into islands.
-            zone.SetLocalClearance(mm(spec["rules"]["clearance"]))
-            zone.SetMinThickness(mm(0.15))
-            # SMD pads joined solid (a thermal relief on a small pad
-            # between tracks is easily starved); plated holes through
-            # thermal reliefs, for hand soldering, except where the
-            # routing starves them (see fix_thermals).
-            zone.SetPadConnection(pcbnew.ZONE_CONNECTION_THT_THERMAL)
-            board.Add(zone)
+    fills = [(name, layer_id) for name in spec.get("zones", []) for layer_id in (pcbnew.F_Cu, pcbnew.B_Cu)]
+    for s in STACKUP:
+        if s["role"] == "plane":
+            layer_id = board.GetLayerID(s["layer"])
+            board.SetLayerType(layer_id, pcbnew.LT_POWER)
+            fills.append((s["net"], layer_id))
+    for name, layer_id in fills:
+        zone = pcbnew.ZONE(board)
+        zone.SetLayer(layer_id)
+        zone.SetNet(net(name))
+        outline = zone.Outline()
+        outline.NewOutline()
+        for x, y in ((-1, 1), (1, 1), (1, -1), (-1, -1)):
+            p = to_board(x * (w / 2 - inset), y * (h / 2 - inset))
+            outline.Append(p.x, p.y)
+        # The board's own clearance: a wider one keeps the pour out
+        # of the gaps between tracks and cuts it into islands.
+        zone.SetLocalClearance(mm(spec["rules"]["clearance"]))
+        zone.SetMinThickness(mm(0.15))
+        # SMD pads joined solid (a thermal relief on a small pad
+        # between tracks is easily starved); plated holes through
+        # thermal reliefs, for hand soldering, except where the
+        # routing starves them (see fix_thermals).
+        zone.SetPadConnection(pcbnew.ZONE_CONNECTION_THT_THERMAL)
+        board.Add(zone)
 
     pcbnew.SaveBoard(str(PCB), board)
     report(board)
@@ -444,7 +453,7 @@ def tie_pads_in_footprints(board):
     width, gap = mm(rules["track"]), mm(rules["clearance"]) + mm(0.01)
     done = set()
     for fp in board.GetFootprints():
-        for net in PLAN["board"].get("zones", []):
+        for net in POURS:
             pads = [p for p in fp.Pads() if p.GetNetname() == net]
             for a in pads:
                 for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
@@ -484,7 +493,7 @@ def bridge_pads_in_footprints(board):
     The router then has nothing left to cross there, which it often
     fails to do on its own. Several such nets in one footprint are
     fitted together (a small search over each net's bridges)."""
-    pours = set(PLAN["board"].get("zones", []))
+    pours = set(POURS)
     for fp in board.GetFootprints():
         by_net = {}
         for pad in fp.Pads():
@@ -656,7 +665,7 @@ def report(board):
     total = 0.0
     for name in board.GetNetsByName().keys():
         pads = [p for p in board.GetPads() if p.GetNetname() == str(name)]
-        if len(pads) > 1 and str(name) not in PLAN["board"].get("zones", []):
+        if len(pads) > 1 and str(name) not in POURS:
             pts = [p.GetPosition() for p in pads]
             # Length of a nearest-neighbour chain: a ratsnest estimate.
             left, cur = pts[1:], pts[0]
@@ -718,7 +727,7 @@ def import_ses():
     pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     stitch(board)
     fix_thermals(board)
-    cut_off = sum(len(pads) for net in PLAN["board"].get("zones", [])
+    cut_off = sum(len(pads) for net in POURS
                   for pads, _ in clusters(board, net)[1:])
     # Read by build.py to pick among routing results.
     print(f"pour pads cut off: {cut_off}")
@@ -726,11 +735,11 @@ def import_ses():
 
 
 def prune_dangling_vias(board):
-    """A via of a signal net that nothing reaches on one of its sides (a
+    """A via of a signal net that joins fewer than two layers (a
     bridge's exit via the router did not use: DRC's via_dangling) goes,
     with the stub tracks that only led to it."""
-    pours = set(PLAN["board"].get("zones", []))
-    layers = (pcbnew.F_Cu, pcbnew.B_Cu)
+    pours = set(POURS)
+    layers = list(board.GetEnabledLayers().CuStack())
     doomed, removed = {}, []
 
     def meets(point, reach, net, layer, skip):
@@ -741,7 +750,7 @@ def prune_dangling_vias(board):
     for via in [t for t in board.GetTracks() if t.GetClass() == "PCB_VIA" and t.GetNetname() not in pours]:
         net, at, reach = via.GetNetname(), via.GetPosition(), via.GetWidth(pcbnew.F_Cu) // 2
         touching = {l: meets(at, reach, net, l, ()) for l in layers}
-        if all(touching[l] for l in layers):
+        if sum(1 for l in layers if touching[l]) >= 2:
             continue
         doomed[via.m_Uuid.AsString()] = via
         for l in layers:
@@ -765,14 +774,16 @@ def prune_dangling_vias(board):
 def prune_dangling_stubs(board):
     """Locked fan-out tracks of a signal net with an end that meets
     nothing of its net (a dog-bone the router did not use, after its
-    via went), repeatedly, back to where the net continues."""
-    pours = set(PLAN["board"].get("zones", []))
+    via went), repeatedly, back to where the net continues. A track of a
+    pour net on a layer with its pour ends in the pour; on another layer
+    (a plane net's stub on the top) it is a track like any other."""
+    poured = {(z.GetNetname(), z.GetLayer()) for z in board.Zones()}
     dropped = 0
     while True:
         doomed = []
         tracks = [t for t in board.GetTracks() if t.GetClass() == "PCB_TRACK"]
         for t in tracks:
-            if not t.IsLocked() or t.GetNetname() in pours:
+            if not t.IsLocked() or (t.GetNetname(), t.GetLayer()) in poured:
                 continue
             net, layer = t.GetNetname(), t.GetLayer()
             # Something joining it part-way along (a T) keeps it.
@@ -811,15 +822,17 @@ def fix_thermals(board):
         if net not in gaps or not pad.HasHole() or pad.GetLocalZoneConnection() == pcbnew.ZONE_CONNECTION_FULL:
             continue
         gap = gaps[net]
-        for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
+        for layer in board.GetEnabledLayers().CuStack():
             ring = as_polygon(pad, layer, gap - mm(0.05))
             ring.BooleanSubtract(as_polygon(pad, layer, mm(0.05)))
-            spokes = 0
+            # Spokes per pour fragment: DRC wants two into one piece of
+            # the pour (three spokes into three slivers are starved too).
+            spokes = []
             for f in fragments(board, net, layer):
                 common = pcbnew.SHAPE_POLY_SET(ring)
                 common.BooleanIntersection(f)
-                spokes += common.OutlineCount()
-            if spokes == 1:
+                spokes.append(common.OutlineCount())
+            if sum(spokes) and max(spokes) < 2:
                 pad.SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
                 fixed.append(f"{pad.GetParentFootprint().GetReference()}.{pad.GetNumber()}")
                 break
@@ -852,7 +865,7 @@ def stitch(board):
     if board.GetCopperLayerCount() != 2:
         return
     added = 0
-    for net in PLAN["board"].get("zones", []):
+    for net in POURS:
         netinfo = board.FindNet(net)
         for _ in range(4):
             holes = [(p.GetPosition(), max(p.GetDrillSize().x, p.GetDrillSize().y) // 2)
@@ -929,7 +942,7 @@ def stitch(board):
                 break
             pcbnew.ZONE_FILLER(board).Fill(board.Zones())
     print(f"stitching vias: {added}")
-    for net in PLAN["board"].get("zones", []):
+    for net in POURS:
         tie_isolated_pads(board, net)
         drop_dead_islands(board, net)
 
@@ -1080,7 +1093,7 @@ def tie_isolated_pads(board, net):
             break
         pad = todo[0]
         layer = pcbnew.F_Cu if pad.IsOnLayer(pcbnew.F_Cu) else pcbnew.B_Cu
-        other = pcbnew.B_Cu if layer == pcbnew.F_Cu else pcbnew.F_Cu
+        others = [l for l in main_copper if l != layer]
         start = pad.GetPosition()
         ends = [q.GetPosition() for q in main_pads if q.IsOnLayer(layer)
                 and math.hypot(q.GetPosition().x - start.x, q.GetPosition().y - start.y) < mm(3)]
@@ -1104,7 +1117,7 @@ def tie_isolated_pads(board, net):
             # The end only has to lie in the main group's copper: the
             # collision checks below keep the clearance to other nets.
             own_side = inside(main_copper[layer], end, 0)
-            via_side = not own_side and inside(main_copper[other], end, 0)
+            via_side = not own_side and any(inside(main_copper[l], end, 0) for l in others)
             if not (own_side or via_side) or (in_pad and not via_side):
                 continue
             if in_pad and not inside([as_polygon(pad, layer)], end, via_d // 2):
@@ -1124,7 +1137,7 @@ def tie_isolated_pads(board, net):
                 via.SetWidth(via_d)
                 via.SetDrill(drill)
                 via.SetNet(netinfo)
-                if (collides(board, via, layer, net, gap) or collides(board, via, other, net, gap)
+                if (collides(board, via, layer, net, gap) or any(collides(board, via, l, net, gap) for l in others)
                         or not hole_clear(board, end, drill)):
                     continue
             if not in_pad:

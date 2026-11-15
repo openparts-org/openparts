@@ -58,6 +58,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import uuid
@@ -348,6 +349,20 @@ def apply_fab(spec, preset=None):
     board["rules"] = {"track": d["track"], "clearance": d["clearance"],
                       "via_diameter": d["via_diameter"], "via_drill": d["via_drill"]}
     spec["fab"] = fab
+    try:
+        spec["stackup"] = rules.load_stackup(board, set(spec["nets"]))
+    except ValueError as e:
+        sys.exit(str(e))
+
+
+def apply_layers(spec, layers=None):
+    """`--layers` over board.layers, then board.by_layers.<n> (the fab
+    preset and stackup for that layer count, say) merged over board."""
+    board = spec["board"]
+    if layers:
+        board["layers"] = layers
+    extra = (board.pop("by_layers", None) or {}).get(board.get("layers", 2)) or {}
+    board.update(extra)
 
 
 def routing_of(spec, out):
@@ -356,7 +371,7 @@ def routing_of(spec, out):
     f = out / "routing.json"
     if f.exists():
         return json.loads(f.read_text())
-    widths = rules.net_widths(spec["fab"], rules.net_currents(spec["board"]))
+    widths = rules.net_widths(spec["fab"], rules.net_currents(spec["board"]), spec["stackup"])
     return {"widths": widths, "pairs": []}
 
 
@@ -740,7 +755,7 @@ def routing_rules(spec, models, placement, out):
     layers = spec["board"].get("layers", 2)
     declared = rules.net_currents(spec["board"])
     currents = rules.net_currents(spec["board"], derived_currents(spec, models, nets, declared))
-    widths = rules.net_widths(fab, currents)
+    widths = rules.net_widths(fab, currents, spec["stackup"])
     escapes, errors = rules.escape_plan(spec, models, placement, nets, fab, widths)
     pairs = rules.diff_pairs(spec, models, nets)
     for p in pairs:
@@ -755,10 +770,16 @@ def routing_rules(spec, models, placement, out):
           f"retrieved {src.get('retrieved')}): min track/clearance {fab['min_track']}/{fab['min_clearance']} mm, "
           f"via {fab['min_via_drill']}/{fab['min_via_diameter']} mm; design track {fab['design']['track']}, "
           f"clearance {fab['design']['clearance']}, via {fab['design']['via_drill']}/{fab['design']['via_diameter']}")
+    print("stackup: " + ", ".join(f"{s['layer']} {s['role']}" + (f" {s['net']}" if s["net"] else "")
+                                  for s in spec["stackup"]))
     for net, w in sorted(widths.items()):
-        inner = f", inner {w['inner']:.3f}" if w["inner"] is not None else ""
-        print(f"current: {net} {w['current']:g} A ({w['from']}): IPC-2221 outer {w['outer']:.3f}{inner} mm "
-              f"-> class track {w['track']:.3f} mm")
+        inner = ""
+        if w["inner"] is not None:
+            inner = f"; inner {w['inner']:.3f} mm -> {w['inner_track']:.3f} mm"
+            if all(name in rules.OUTER for name in w["layers"]):
+                inner += f" (wider than {rules.INNER_MAX_WIDTH} mm: outer layers only)"
+        print(f"current: {net} {w['current']:g} A ({w['from']}): IPC-2221 outer {w['outer']:.3f} mm "
+              f"-> class track {w['track']:.3f} mm{inner}; routed on {', '.join(w['layers'])}")
     for ref, e in sorted(escapes.items()):
         ws = {}
         for num, pad in e["pads"].items():
@@ -778,6 +799,7 @@ def routing_rules(spec, models, placement, out):
         print(line)
     routing = {
         "fab": {k: v for k, v in fab.items() if k != "source"},
+        "stackup": spec["stackup"],
         "widths": widths,
         "escapes": escapes,
         "pairs": pairs,
@@ -807,6 +829,10 @@ def stage_pcb(spec, out):
     plan = {
         "name": spec["name"],
         "board": spec["board"],
+        # Per copper layer, top to bottom: signal, or a plane of a net.
+        "stackup": spec["stackup"],
+        # The nets carried by copper areas: the pours and the planes.
+        "pours": rules.pour_nets(spec["board"], spec["stackup"]),
         "components": {ref: safe(mpn_of(p)) for ref, p in spec["components"].items()},
         "values": {ref: mpn_of(p) for ref, p in spec["components"].items()},
         "nets": {**unconnected_nets(spec, out), **{f"{r}.{p}": n for (r, p), n in pin_refs(spec).items()}},
@@ -934,8 +960,11 @@ def stage_route(spec, out):
     second = "inner" if spec["board"].get("layers", 2) == 4 else "top"
     kicad_python(HERE / "pcb_stage.py", out, "dsn-from", out / f"{name}.kicad_pcb",
                  out / f"{name}-{second}.dsn", second)
+    widths = routing_of(spec, out)["widths"]
     for dsn in (out / f"{name}.dsn", out / f"{name}-{second}.dsn"):
         split_wire_paths(dsn)
+        # Plane layers typed `power`, per-layer widths, outer-only nets.
+        dsn.write_text(rules.dsn_layer_rules(dsn.read_text(), widths, spec["stackup"]))
     ses = out / f"{name}.ses"
     ses.unlink(missing_ok=True)
     freerouting_jar()
@@ -1007,8 +1036,20 @@ def stage_check(spec, out):
         f"cd {sh_quote(str(out))} && {cli} pcb render --side top --width 1600 --height 900 -o out/{name}-top.png {name}.kicad_pcb",
         f"cd {sh_quote(str(out))} && {cli} pcb render --side bottom --width 1600 --height 900 -o out/{name}-bottom.png {name}.kicad_pcb",
     ]
+    # Each copper layer on its own (the 3D renders show only the outer
+    # ones): out/<name>-<layer>.svg, and .png where ImageMagick is.
+    copper = [s["layer"] for s in spec["stackup"]]
+    for layer in copper:
+        cmds.append(f"cd {sh_quote(str(out))} && {cli} pcb export svg --mode-single --page-size-mode 2 "
+                    f"--exclude-drawing-sheet --layers {layer},Edge.Cuts -o out/{name}-{layer}.svg {name}.kicad_pcb")
     for c in cmds:
         subprocess.run(["flatpak", "run", f"--filesystem={out}", "--command=sh", "org.kicad.KiCad", "-c", c])
+    magick = next((m for m in ("magick", "convert") if shutil.which(m)), None)
+    for layer in copper if magick else []:
+        svg = res / f"{name}-{layer}.svg"
+        if svg.exists():
+            subprocess.run([magick, "-density", "600", str(svg), "-background", "white", "-flatten",
+                            str(svg.with_suffix(".png"))], capture_output=True)
     for kind in ("erc", "drc"):
         f = res / f"{kind}.json"
         if not f.exists():
@@ -1089,8 +1130,11 @@ def main():
     ap.add_argument("--data", help="build the parts from this openparts-data checkout instead of the registry")
     ap.add_argument("--registry", help="the OpenParts registry URL, overriding the board file's")
     ap.add_argument("--layers", type=int, choices=(2, 4),
-                    help="copper layers, overriding the board file (4: the pour nets also fill both inner layers)")
+                    help="copper layers, overriding the board file (then board.by_layers.N applies)")
     ap.add_argument("--fab", help="fab profile preset (tools/kicad-board/fab/NAME.yaml), overriding the board file's")
+    ap.add_argument("--stackup", metavar="L1,L2,...",
+                    help="copper layers top to bottom, each `signal` or a plane's net (signal,GND,3V3,signal), "
+                         "overriding board.stackup")
     ap.add_argument("--no-fanout", action="store_true",
                     help="pcb: no pre-placed escape stubs, vias or diff-pair paths (for comparing)")
     ap.add_argument("--evaluate-all", action="store_true",
@@ -1107,8 +1151,9 @@ def main():
     spec = load_spec(a.board)
     if a.registry:
         spec["registry"] = a.registry.rstrip("/")
-    if a.layers:
-        spec["board"]["layers"] = a.layers
+    apply_layers(spec, a.layers)
+    if a.stackup:
+        spec["board"]["stackup"] = ["signal" if s == "signal" else {"plane": s} for s in a.stackup.split(",")]
     apply_fab(spec, a.fab)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -1117,8 +1162,11 @@ def main():
         print(f"== {s}", flush=True)
         if s == "fetch":
             stage_fetch(spec, out, a.data)
-        else:
-            globals()[f"stage_{s}"](spec, out)
+            continue
+        if s in ("route", "check") and (out / "routing.json").exists():
+            # The board's own stackup, as the pcb stage built it.
+            spec["stackup"] = json.loads((out / "routing.json").read_text()).get("stackup", spec["stackup"])
+        globals()[f"stage_{s}"](spec, out)
 
 
 if __name__ == "__main__":

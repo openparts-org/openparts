@@ -135,19 +135,148 @@ def current_from_parameter(param):
     return None if value is None or scale is None else float(value) * scale
 
 
-def net_widths(fab, currents, rise=10.0):
-    """{net: {"current", "outer", "inner", "track"}}: the IPC-2221 width
-    per layer kind, and the net-class track (never below the design
-    track)."""
+# The widest inner-layer track taken as practical (mm). An inner layer
+# carries half the copper of an outer one (0.5 oz against 1 oz) and
+# IPC-2221 halves its k, so a current needs about 5x the outer width there
+# (1 A: 0.30 mm outer, 1.57 mm inner); a net that would need more than
+# this inside keeps to the outer layers.
+INNER_MAX_WIDTH = 0.5
+
+
+def net_widths(fab, currents, stackup=None, rise=10.0):
+    """{net: {"current", "outer", "inner", "track", "inner_track",
+    "layers"}}: the IPC-2221 width per layer kind; the net-class track
+    (the outer width, never below the design track: the class is what
+    the router and KiCad use on the outer layers); the inner track (the
+    inner width, for the stackup's inner signal layers; None without
+    any); and the signal layers the net may be routed on (all of them,
+    or only the outer ones when its inner width is wider than
+    INNER_MAX_WIDTH)."""
     out = {}
-    four = fab["copper"].get("inner_oz") is not None
+    signal = signal_layers(stackup) if stackup else list(OUTER)
+    inner_signal = [name for name in signal if name not in OUTER]
     for net, (amps, why) in currents.items():
         outer = ipc2221_width(amps, copper_mm(fab, True), True, rise)
-        inner = ipc2221_width(amps, copper_mm(fab, False), False, rise) if four else None
-        need = max(outer, inner or 0.0)
+        inner = ipc2221_width(amps, copper_mm(fab, False), False, rise) if inner_signal else None
+        track = round_up(max(fab["design"]["track"], outer))
+        inner_track = round_up(max(fab["design"]["track"], inner)) if inner is not None else None
+        layers = list(signal)
+        if inner_track is not None and inner_track > INNER_MAX_WIDTH + 1e-9:
+            layers = [name for name in signal if name in OUTER]
         out[net] = {"current": amps, "from": why, "outer": outer, "inner": inner,
-                    "track": round_up(max(fab["design"]["track"], need))}
+                    "track": track, "inner_track": inner_track, "layers": layers}
     return out
+
+
+# --------------------------------------------------------------- stackup
+#
+# board.yaml `board.stackup`: one entry per copper layer, top to bottom,
+# each `signal` or `{plane: NET}` (a solid zone of that net over the
+# whole layer, which the router does not route on). The outer layers are
+# signal layers: the parts sit on them.
+
+OUTER = ("F.Cu", "B.Cu")
+
+
+def layer_names(layers):
+    return ["F.Cu"] + [f"In{i}.Cu" for i in range(1, layers - 1)] + ["B.Cu"]
+
+
+def default_stackup(layers, zones=()):
+    """Two layers: both signal. Four: signal, a plane of the board's
+    first pour net (its ground, right under the top layer: the diff
+    pairs' microstrip reference), signal, signal. A board with a supply
+    to spare names it for L3 itself (`[signal, {plane: GND}, {plane:
+    3V3}, signal]`)."""
+    if layers == 2:
+        return ["signal", "signal"]
+    if layers == 4:
+        return ["signal", {"plane": zones[0]} if zones else "signal", "signal", "signal"]
+    raise ValueError(f"no default stackup for {layers} layers")
+
+
+def load_stackup(board, nets=None):
+    """[{"layer": "F.Cu", "role": "signal"|"plane", "net": NET|None}], top
+    to bottom, from board.stackup (or the default), checked against the
+    layer count and (when given) the board's net names."""
+    layers = board.get("layers", 2)
+    given = board.get("stackup") or default_stackup(layers, board.get("zones") or [])
+    if len(given) != layers:
+        raise ValueError(f"board.stackup lists {len(given)} layers, the board has {layers}")
+    out = []
+    for name, entry in zip(layer_names(layers), given):
+        if entry == "signal":
+            out.append({"layer": name, "role": "signal", "net": None})
+        elif isinstance(entry, dict) and set(entry) == {"plane"}:
+            if name in OUTER:
+                raise ValueError(f"board.stackup: {name} is an outer layer (the parts' side), not a plane")
+            if nets is not None and entry["plane"] not in nets:
+                raise ValueError(f"board.stackup: {name}'s plane net {entry['plane']!r} is not a net of the board")
+            out.append({"layer": name, "role": "plane", "net": str(entry["plane"])})
+        else:
+            raise ValueError(f"board.stackup: {name}: `signal` or `{{plane: NET}}`, not {entry!r}")
+    return out
+
+
+def signal_layers(stackup):
+    return [s["layer"] for s in stackup if s["role"] == "signal"]
+
+
+def plane_nets(stackup):
+    return sorted({s["net"] for s in stackup if s["role"] == "plane"})
+
+
+def pour_nets(board, stackup=None):
+    """The nets carried by copper areas rather than tracks: the board's
+    pours (`zones`, on the outer layers) and the stackup's planes."""
+    return sorted(set(board.get("zones") or []) | set(plane_nets(stackup or [])))
+
+
+def balanced_end(text, start):
+    """The index just past the S-expression opening at `start`."""
+    depth, i, in_str = 0, start, False
+    while i < len(text):
+        c = text[i]
+        if c == '"':
+            in_str = not in_str
+        elif not in_str:
+            depth += {"(": 1, ")": -1}.get(c, 0)
+            if depth == 0:
+                return i + 1
+        i += 1
+    raise ValueError("unbalanced S-expression")
+
+
+def dsn_layer_rules(text, widths, stackup, unit=1000.0):
+    """A KiCad-exported Specctra DSN with the stackup's rules, which
+    KiCad does not write: plane layers typed `power` (Freerouting routes
+    no track on a power layer; the zone there stays a plane), and in
+    each current net's class (`I_<net>`) a `layer_rule` with the inner
+    width on each inner signal layer it may use and, when it keeps to the
+    outer layers, `use_layer` naming them (Freerouting reads both:
+    per-layer trace widths and a class's routing layers). `unit`: DSN
+    units per mm (KiCad writes um)."""
+    import re
+
+    for s in stackup:
+        if s["role"] == "plane":
+            text = re.sub(r"(\(layer " + re.escape(s["layer"]) + r"\s*\(type )signal\)", r"\1power)", text)
+    signal = signal_layers(stackup)
+    inner_signal = [name for name in signal if name not in OUTER]
+    for net, w in sorted(widths.items()):
+        m = re.search(r"\(class " + re.escape(f"I_{net}") + r"\s", text)
+        if not m:
+            continue
+        start, end = m.start(), balanced_end(text, m.start())
+        block = text[start:end]
+        if set(w.get("layers") or signal) != set(signal):
+            block = block.replace("(circuit", "(circuit\n        (use_layer " + " ".join(w["layers"]) + ")", 1)
+        rules_ = "".join(f"\n      (layer_rule {name} (rule (width {w['inner_track'] * unit:g})))"
+                         for name in inner_signal if w.get("inner_track") is not None and name in w["layers"])
+        if rules_:
+            block = block[:-1].rstrip() + rules_ + "\n    )"
+        text = text[:start] + block + text[end:]
+    return text
 
 
 def round_up(v, step=0.005):
@@ -562,11 +691,20 @@ def dru_text(fab, widths, escapes, pairs, layers=2):
         o.append("  (layer outer)")
         o.append(f"  (condition \"A.NetName == '{net}'\")")
         o.append(f"  (constraint track_width (min {mm(max(w['outer'], fab['min_track']))}) (opt {mm(w['track'])})))")
-        if layers > 2 and w["inner"] is not None:
+        if layers > 2 and w.get("inner") is not None:
+            # The inner layers' own width (half the copper, half the k).
             o.append(f'(rule "current {net} {w["current"]:g} A inner"')
             o.append("  (layer inner)")
             o.append(f"  (condition \"A.NetName == '{net}'\")")
-            o.append(f"  (constraint track_width (min {mm(max(w['inner'], fab['min_track']))}) (opt {mm(w['track'])})))")
+            o.append(f"  (constraint track_width (min {mm(max(w['inner'], fab['min_track']))}) "
+                     f"(opt {mm(w.get('inner_track') or w['track'])})))")
+            if all(name in OUTER for name in w.get("layers") or OUTER):
+                # Too wide to be practical inside: the net keeps to the
+                # outer layers (as the router was told).
+                o.append(f'(rule "{net} on the outer layers only"')
+                o.append("  (layer inner)")
+                o.append(f"  (condition \"A.NetName == '{net}'\")")
+                o.append("  (constraint disallow track))")
     for p in pairs:
         if not p.get("geometry"):
             continue
@@ -677,7 +815,8 @@ def fanout(spec, models, placement, nets, fab, widths, escapes, pairs, overrides
     pair_pads = {(r, q) for p in pairs for r, a, b in p["ends"] for q in (a, b)}
     if not overrides.pop("pairs", True):
         pairs = []
-    pours = set(spec["board"].get("zones", []))
+    pours = set(pour_nets(spec["board"], spec.get("stackup")))
+    planes = set(plane_nets(spec.get("stackup") or []))
     design = fab["design"]
     clear = design["clearance"]
     hole_gap = max(fab.get("min_hole_clearance", 0.2), 0.25)
@@ -713,8 +852,8 @@ def fanout(spec, models, placement, nets, fab, widths, escapes, pairs, overrides
             net = esc["net"]
             if (ref, net) in bridged or pad.get("shares_contact_with"):
                 continue
-            if not all_stubs and (ref, num) not in pair_pads:
-                continue
+            if not all_stubs and (ref, num) not in pair_pads and net not in planes:
+                continue  # (a plane net's pad still needs its stub and via to the plane)
             if net in pours and net in exposed_nets:
                 continue  # tied to the exposed pad (pcb stage) and its thermal vias
             d = esc["direction"]
@@ -776,11 +915,68 @@ def fanout(spec, models, placement, nets, fab, widths, escapes, pairs, overrides
             items += placed
         else:
             report.append(f"fan-out: no room for a via at {ref}.{num} ({net}); straight stub only")
+
+    # Plane taps: every other surface pad of a plane net gets its own via
+    # beside it (Freerouting leaves pads of a net whose plane is on a
+    # power layer unrouted: 0 of 24 configurations without these).
+    tapped = {(r, q) for r, q in stubs}
+    for ref, part in sorted(spec["components"].items()):
+        p = placement_of(placement, ref)
+        if ref not in placement:
+            continue
+        layer = layer_of(p["side"])
+        for pad in models[part]["pads"]:
+            net = nets.get((ref, pad["number"]))
+            if (net not in planes or pad["kind"] != "smd" or pad.get("exposed") or (ref, pad["number"]) in tapped
+                    or (ref, net) in bridged or pad.get("shares_contact_with")):
+                continue
+            if ref in escapes and net in {nets.get((ref, q["number"])) for q in models[part]["pads"] if q.get("exposed")}:
+                continue  # tied to the exposed pad and its thermal vias
+            box = board_box(pad_box(pad), p)
+            placed = plane_tap(box, place(p, (0.0, 0.0)), net, layer, class_width(net), design, clear, hole_gap,
+                               obstacles + reserved, items, on_board, layers)
+            if placed:
+                items += placed
+            else:
+                report.append(f"fan-out: no room for a plane via at {ref}.{pad['number']} ({net})")
     n_stub = sum(1 for i in items if i.get("role") == "escape")
     n_via = sum(1 for i in items if i["kind"] == "via" and i.get("role") == "dog-bone")
     n_th = sum(1 for i in items if i.get("role") == "thermal")
-    report.insert(0, f"fan-out: {n_stub} escape segment(s), {n_via} dog-bone via(s), {n_th} thermal via(s)")
+    n_tap = sum(1 for i in items if i["kind"] == "via" and i.get("role") == "plane-tap")
+    report.insert(0, f"fan-out: {n_stub} escape segment(s), {n_via} dog-bone via(s), {n_th} thermal via(s), "
+                     f"{n_tap} plane via(s)")
     return items, report
+
+
+def plane_tap(box, centre, net, layer, width, design, clear, hole_gap, obstacles, items, on_board, layers):
+    """A via just off a pad (`box`, board frame) with a track from the
+    pad's centre: away from the part's centre first, then across, then
+    back, nearest spot first. Never in the pad (solder would wick into
+    the hole)."""
+    r = design["via_diameter"] / 2
+    pc = ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+    hx, hy = (box[2] - box[0]) / 2, (box[3] - box[1]) / 2
+    away = (pc[0] - centre[0], pc[1] - centre[1])
+    dirs = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
+    # Away from the part's centre first, then the two across, then back.
+    dirs.sort(key=lambda d: -(d[0] * away[0] + d[1] * away[1]))
+    for extra in (0.05, 0.15, 0.3, 0.5, 0.75, 1.0):
+        for d in dirs:
+            half = hx if d[0] else hy
+            for lat in (0.0, 0.3, -0.3, 0.6, -0.6):
+                n = (-d[1], d[0])
+                at = (pc[0] + d[0] * (half + r + extra) + n[0] * lat, pc[1] + d[1] * (half + r + extra) + n[1] * lat)
+                if not on_board(at, r):
+                    continue
+                via = via_item(at, net, design, layers, "plane-tap")
+                if conflicts(via, obstacles + items, clear, hole_gap):
+                    continue
+                track = {"kind": "track", "net": net, "layers": {layer}, "a": pc, "b": at, "width": width,
+                         "role": "plane-tap"}
+                if conflicts(track, obstacles + items, clear):
+                    continue
+                return [track, via]
+    return None
 
 
 RESERVE = 1.6  # mm kept clear ahead of a straight escape stub
@@ -833,8 +1029,8 @@ def dog_bone(end, bd, net, layer, width, design, clear, hole_gap, obstacles, ite
     either side, nearest first; with the track from the stub's end."""
     r = design["via_diameter"] / 2
     nx, ny = -bd[1], bd[0]  # left of the outward direction
-    for out in (r + 0.05, r + 0.25, r + 0.45, r + 0.7, r + 1.0, r + 1.4):
-        for lat in (0.0, 0.3, -0.3, 0.5, -0.5, 0.7, -0.7, 0.9, -0.9, 1.2, -1.2):
+    for out in (r + 0.05, r + 0.25, r + 0.45, r + 0.7, r + 1.0, r + 1.4, r + 1.8, r + 2.2):
+        for lat in (0.0, 0.3, -0.3, 0.5, -0.5, 0.7, -0.7, 0.9, -0.9, 1.2, -1.2, 1.5, -1.5, 1.8, -1.8):
             if abs(lat) > out:
                 continue
             at = (end[0] + bd[0] * out + nx * lat, end[1] + bd[1] * out + ny * lat)
@@ -918,8 +1114,8 @@ def route_pair(pair, stubs, spec, models, placement, nets, fab, obstacles, items
     for ref, pp, nn in pair["ends"]:
         if (ref, pp) not in stubs or (ref, nn) not in stubs:
             continue
-        lay_p, end_p, d, _, _, _ = stubs[(ref, pp)]
-        lay_n, end_n, _, _, _, _ = stubs[(ref, nn)]
+        lay_p, end_p, d, _, _, ew_p = stubs[(ref, pp)]
+        lay_n, end_n, _, _, _, ew_n = stubs[(ref, nn)]
         if lay_p != lay_n:
             continue
         # The far pads: the nearest surface pad of each net on another
@@ -942,6 +1138,11 @@ def route_pair(pair, stubs, spec, models, placement, nets, fab, obstacles, items
         tp, tn = targets[pair["p"]][1], targets[pair["n"]][1]
         width, gap = g["width"], g["gap"]
         half = (width + gap) / 2
+        # From the stubs' ends (the pin pitch apart) to the coupled lanes
+        # (width + gap apart) the traces keep the escape width: at the
+        # pair's own width they would come closer than the gap there
+        # (0.265 mm traces on a 0.4 mm pitch leave 0.135 mm).
+        neck = min(width, ew_p, ew_n)
         nx, ny = -d[1], d[0]
         # Which side of the centreline P lies on (left: +1).
         side = 1.0 if (end_p[0] - mid0[0]) * nx + (end_p[1] - mid0[1]) * ny > 0 else -1.0
@@ -974,7 +1175,8 @@ def route_pair(pair, stubs, spec, models, placement, nets, fab, obstacles, items
                         break
                     full = dedupe(path + tail[0][1:])
                     tracks.append([{"kind": "track", "net": net, "layers": {lay_p}, "a": a, "b": b,
-                                    "width": width, "role": "diff-pair"} for a, b in zip(full, full[1:])])
+                                    "width": neck if k == 0 else width, "role": "diff-pair"}
+                                   for k, (a, b) in enumerate(zip(full, full[1:]))])
                 if not ok:
                     continue
                 every = tracks[0] + tracks[1]

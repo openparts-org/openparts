@@ -7,7 +7,8 @@ schematic, placed board, Freerouting, ERC/DRC and renders.
 ```sh
 tools/kicad-board/build.py examples/pico-board/board.yaml --out DIR \
     [--stage fetch|sch|pcb|route|check|all|preview] [--registry URL] \
-    [--layers 2|4] [--fab PRESET] [--no-fanout] [--evaluate-all] [--sweep N]
+    [--layers 2|4] [--fab PRESET] [--stackup L1,L2,...] [--no-fanout] \
+    [--evaluate-all] [--rounds N] [--sweep N]
 ```
 
 `build.py` (stages, schematic, project, routing sweep) runs with any
@@ -57,8 +58,8 @@ rise in °C, k = 0.048 outer / 0.024 inner), ΔT = 10 °C, copper thickness
 from the fab's oz (1 oz = 1.37 mil = 34.8 µm). IPC-2152 replaced this
 chart with measured data and finds it conservative for most cases
 (especially inner layers), but its charts have no closed form, so the
-IPC-2221 fit is used. A net's class width is that width, never below the
-design track.
+IPC-2221 fit is used. A net's class width is its outer-layer width, never
+below the design track; inner layers have their own (below).
 
 A net without a declared current takes one from the parts only when a
 part states it: a `power_out` pin of a part with an `output_current`
@@ -69,6 +70,47 @@ Several pins of one IC on the same net share its current equally (the
 RP2040's six IOVDD pins each carry a sixth of 3V3's budget); this is an
 assumption, not a measurement, and only sizes the escape inside the
 courtyard.
+
+### Stackup and per-layer widths
+
+```yaml
+board:
+  layers: 2
+  by_layers:                 # merged over board for that layer count (--layers 4)
+    4:
+      fab: {preset: jlcpcb-4layer-standard}
+      stackup: [signal, {plane: GND}, {plane: 3V3}, signal]   # L1 .. L4
+```
+
+`stackup` lists the copper layers top to bottom, each `signal` or
+`{plane: NET}`. A plane is a zone of its net over the whole layer, and
+the layer is typed `power` (KiCad and the DSN), so the router puts no
+track on it and reaches it with vias. The outer layers are signal layers.
+Without `stackup`: two layers both signal; four layers signal, a plane of
+the board's first pour net (`zones[0]`, the ground: right under the top,
+the microstrip reference of the diff pairs), signal, signal.
+`--stackup signal,GND,3V3,signal` overrides it from the command line.
+The board's `zones` stay pours on the outer layers.
+
+An inner layer has half the copper of an outer one (JLCPCB: 0.5 oz
+against 1 oz) and IPC-2221 halves its k, so a current needs about five
+times the outer width there (1 A: 0.302 mm outer, 1.572 mm inner).
+Folding that into one class width (the old behaviour: VBUS 1.575 mm on
+every layer) makes the outer routing impossible, and Specctra's class
+`rule` has one width. So each current net keeps two widths:
+
+- the class width (KiCad net class, DSN `rule`): the outer width;
+- the inner width, for the inner *signal* layers only (there is none
+  when the inner layers are all planes): DSN `layer_rule <layer> (rule
+  (width …))` in the net's class, and a `(layer inner)` rule in
+  `<name>.kicad_dru`;
+- a net whose inner width exceeds 0.5 mm (`INNER_MAX_WIDTH`) keeps to
+  the outer layers: DSN `circuit (use_layer F.Cu B.Cu)` and a `(layer
+  inner) (constraint disallow track)` rule.
+
+KiCad's DSN export writes neither `layer_rule` nor `use_layer`; build.py
+adds them (`rules.dsn_layer_rules`). Freerouting 2.5 reads both (its
+`NetClass` keeps a trace width and an active flag per layer).
 
 ### Escape width (neck-down)
 
@@ -97,7 +139,8 @@ carry the pad's share of its net's current.
 ### `<name>.kicad_dru`
 
 KiCad custom rules (KiCad 7 or later; checked with KiCad 10.0): the
-current width per net (outer, and inner on four layers), the diff pairs'
+current width per net (outer, and inner where the stackup has an inner
+signal layer; `disallow track` inside for a net too wide there), the diff pairs'
 width and gap, then per fine-pitch part and group of nets
 `A.intersectsCourtyard('U1')` with `track_width (min need) (opt w) (max w)`.
 Later rules take precedence, so the neck-down overrides the current width
@@ -131,11 +174,18 @@ stage places locked copper before routing (`rules.fanout`):
   straight stub. `placement.yaml` `fanout: {U1: {via: [...], straight: [...]}}`
   (pad numbers or nets) overrides the choice;
 - a grid of thermal vias in an exposed pad of a pour net;
-- the diff pairs' coupled paths (below), before the dog-bones.
+- the diff pairs' coupled paths (below), before the dog-bones;
+- plane vias: every other surface pad of a plane net (stackup) gets a
+  via of its own just beside it (away from its part's centre first,
+  never in the pad), with a track from the pad's centre. Freerouting does
+  not connect pads to a plane on a `power` layer by itself: on the
+  four-layer Pico board, without these, all 24 configurations left 40-odd
+  GND and 3V3 connections unrouted.
 
 `placement.yaml` `fanout:` also takes `dogbone: [pour, other_side]`
 (which automatic reasons apply), `stubs: false` (stubs only where a diff
-pair starts) and `pairs: false` (pairs left to the router).
+pair starts, or for a plane net's pad, which needs its via) and
+`pairs: false` (pairs left to the router).
 `--no-fanout` leaves all of it out, and `route --evaluate-all --rounds 1`
 scores all 24 router configurations of one sweep, for comparing.
 
@@ -162,8 +212,18 @@ neck down to the escape width; outside, a width up to 0.5 mm (or the
 escape width, if wider) is taken as practical. When the solution is not
 (out of the formula's range, or wider, as on a 1.6 mm two-layer board,
 where 90 Ω needs ~1.2 mm tracks), the pair is coupled at the escape width
-and pin-pitch gap, and the estimated impedance is reported. Full-speed USB (12 Mbit/s, the RP2040's) over a few centimetres
-is not impedance-critical.
+and pin-pitch gap, and the estimated impedance is reported. Full-speed
+USB (12 Mbit/s, the RP2040's) over a few centimetres is not
+impedance-critical.
+
+The microstrip's h and εr are the fab profile's trace-to-plane
+dielectric: on four layers L1 to L2 (JLC04161H-7628: one 7628 prepreg,
+0.2104 mm, εr 4.4), so L2 must be the ground plane (the default
+stackup's); it gives 0.265 mm at a 0.150 mm gap, about 89 Ω. That is
+wider than 0.4 mm-pitch pins allow where the stubs end (0.4 − 0.265 =
+0.135 mm < 0.15 mm), so the first segment of each trace, from its stub
+to the coupled lanes (width + gap apart), keeps the escape width; on four
+layers the coupled path failed for exactly this reason before.
 
 Freerouting 2.5 has no differential-pair routing, so the pair is
 pre-placed: both traces as offsets of one octilinear centreline from the
@@ -180,3 +240,7 @@ its copper. The check stage reports each pair's track lengths and skew
 track with its net's current width outside the escape zones (inside: its
 pad share's), and writes `out/routing-check.json` with the violations and
 the diff-pair lengths.
+
+It renders the board top and bottom (`out/<name>-top.png`, `-bottom.png`)
+and each copper layer on its own (`out/<name>-<layer>.svg`, and `.png`
+where ImageMagick is installed), the inner planes included.
