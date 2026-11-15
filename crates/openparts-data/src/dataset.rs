@@ -3,9 +3,7 @@
 //! loader the CLI, the server, the tests and the gallery share.
 
 use crate::{check_kind, DataError};
-use openparts_core::{
-    Device, Kind, Manufacturer, Package, Part, ReviewDocument, ReviewTargetKind, Source, SourceId,
-};
+use openparts_core::{Device, Kind, Manufacturer, Package, Part, Source, SourceId};
 use serde::de::DeserializeOwned;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -36,9 +34,6 @@ pub struct Dataset {
     pub devices: BTreeMap<String, Device>,
     pub packages: BTreeMap<String, Package>,
     pub sources: BTreeMap<String, Source>,
-    /// Human review records (`reviews/`), by their id
-    /// (`<target_kind>/<target>`).
-    pub reviews: BTreeMap<String, ReviewDocument>,
     /// Every loaded document's (kind, id) -> its file (relative to
     /// `root`). Ids are unique per kind only: a Part and its Device may
     /// share one.
@@ -115,20 +110,9 @@ impl Dataset {
                     .insert((doc.kind, doc.id.to_string()), rel.clone());
                 self.manufacturers.insert(doc.id.to_string(), doc);
             }
-            Some(Kind::Review) => {
-                let doc: ReviewDocument =
-                    parse(path, &text, Kind::Review, |d: &ReviewDocument| d.kind)?;
-                self.paths.insert((doc.kind, doc.id.clone()), rel.clone());
-                self.reviews.insert(doc.id.clone(), doc);
-            }
             _ => {}
         }
         Ok(())
-    }
-
-    /// The review document of `target`, if it has one.
-    pub fn reviews_of(&self, kind: ReviewTargetKind, target: &str) -> Option<&ReviewDocument> {
-        self.reviews.get(&ReviewDocument::id_for(kind, target))
     }
 
     /// The file a document of `kind` with `id` was loaded from.

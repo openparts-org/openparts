@@ -77,6 +77,7 @@ mod tests {
             construction: None,
             geometry: None,
             provenance: Default::default(),
+            review: None,
         };
         let geometry = openparts_mcad::generate(&package).unwrap();
         let input = ModelInput {

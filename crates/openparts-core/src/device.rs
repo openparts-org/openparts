@@ -73,4 +73,7 @@ pub struct Device {
     pub parameters: Parameters,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
     pub provenance: ProvenanceMap,
+    /// Human review status (section 26.1); `None`: unreviewed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<crate::review::DocumentReview>,
 }

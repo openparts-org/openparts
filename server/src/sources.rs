@@ -12,10 +12,15 @@
 //! agent, a timeout and a size limit, and must be a PDF (by content
 //! type and by the `%PDF-` signature); a recorded `sha256` must match.
 //! A publisher that refuses (403, a bot check page) gets a clear error
-//! and the site opens the original link instead. Off unless
-//! `OPENPARTS_SOURCE_CACHE` is set: documents are kept for viewing on
-//! this server, not redistributed (Canonical Data Specification section
-//! 23).
+//! and the site opens the original link instead.
+//!
+//! Off unless `OPENPARTS_SOURCE_CACHE` is set, and it must stay off on
+//! a public deployment: serving the PDFs redistributes manufacturer
+//! documents (Architecture Specification section 20, Canonical Data
+//! Specification section 23). It is for a private or local server.
+//! Without it the site links each value to the original PDF at the
+//! cited page. The cache is capped (`OPENPARTS_SOURCE_CACHE_MAX_MB`,
+//! default 500): the least recently used documents go first.
 
 use crate::store::Store;
 use axum::extract::{Path, State};
@@ -40,18 +45,22 @@ pub fn routes() -> Router<Arc<Store>> {
     Router::new().route("/v1/sources/*rest", get(source_route))
 }
 
-/// Where downloaded documents are kept, and the download limits.
+/// Where downloaded documents are kept, and the limits.
 #[derive(Debug, Clone)]
 pub struct SourceCache {
     pub dir: PathBuf,
+    /// Largest single document.
     pub max_bytes: u64,
+    /// Largest total size of the cached documents.
+    pub max_total_bytes: u64,
     pub timeout: Duration,
 }
 
 impl SourceCache {
     /// From `OPENPARTS_SOURCE_CACHE` (the directory; unset: off),
-    /// `OPENPARTS_SOURCE_MAX_MB` (default 50) and
-    /// `OPENPARTS_SOURCE_TIMEOUT_SECS` (default 30).
+    /// `OPENPARTS_SOURCE_MAX_MB` (one document, default 50),
+    /// `OPENPARTS_SOURCE_CACHE_MAX_MB` (the whole cache, default 500)
+    /// and `OPENPARTS_SOURCE_TIMEOUT_SECS` (default 30).
     pub fn from_env() -> std::io::Result<Option<SourceCache>> {
         let Some(dir) = std::env::var_os("OPENPARTS_SOURCE_CACHE") else {
             return Ok(None);
@@ -62,21 +71,51 @@ impl SourceCache {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(d)
         };
-        SourceCache::new(
+        let mut cache = SourceCache::new(
             PathBuf::from(dir),
             num("OPENPARTS_SOURCE_MAX_MB", 50) * 1024 * 1024,
             Duration::from_secs(num("OPENPARTS_SOURCE_TIMEOUT_SECS", 30)),
-        )
-        .map(Some)
+        )?;
+        cache.max_total_bytes = num("OPENPARTS_SOURCE_CACHE_MAX_MB", 500) * 1024 * 1024;
+        Ok(Some(cache))
     }
 
+    /// A cache in `dir` with the default total cap (500 MB).
     pub fn new(dir: PathBuf, max_bytes: u64, timeout: Duration) -> std::io::Result<SourceCache> {
         std::fs::create_dir_all(&dir)?;
         Ok(SourceCache {
             dir,
             max_bytes,
+            max_total_bytes: 500 * 1024 * 1024,
             timeout,
         })
+    }
+
+    /// Removes the least recently used documents until the cache holds
+    /// at most `max_total_bytes`. A document is "used" when it is
+    /// downloaded or served (its modification time).
+    pub fn evict(&self) {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
+        };
+        let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = entries
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pdf"))
+            .filter_map(|e| {
+                let meta = e.metadata().ok()?;
+                Some((meta.modified().ok()?, meta.len(), e.path()))
+            })
+            .collect();
+        let mut total: u64 = files.iter().map(|f| f.1).sum();
+        files.sort();
+        for (_, len, path) in files {
+            if total <= self.max_total_bytes {
+                break;
+            }
+            if std::fs::remove_file(&path).is_ok() {
+                total -= len;
+            }
+        }
     }
 
     fn path_of(&self, url: &str) -> PathBuf {
@@ -186,6 +225,10 @@ fn fetch_cached(
             .as_deref()
             .is_none_or(|h| h == sha256_hex(&bytes))
         {
+            // Recently used: evicted last.
+            if let Ok(f) = std::fs::File::options().append(true).open(&path) {
+                f.set_modified(std::time::SystemTime::now()).ok();
+            }
             return Ok(bytes);
         }
     }
@@ -260,6 +303,10 @@ fn fetch_cached(
             )));
         }
     }
+    if bytes.len() as u64 > cache.max_total_bytes {
+        // Served, but larger than the whole cache: not kept.
+        return Ok(bytes);
+    }
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
     if std::fs::write(&tmp, &bytes)
         .and_then(|_| std::fs::rename(&tmp, &path))
@@ -268,5 +315,6 @@ fn fetch_cached(
         std::fs::remove_file(&tmp).ok();
         tracing::warn!(path = %path.display(), "could not cache a source document");
     }
+    cache.evict();
     Ok(bytes)
 }

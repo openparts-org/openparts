@@ -121,6 +121,7 @@ mod tests {
             },
             sources: vec![],
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -161,6 +162,7 @@ mod tests {
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -218,6 +220,7 @@ mod tests {
             pins,
             revisions,
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 

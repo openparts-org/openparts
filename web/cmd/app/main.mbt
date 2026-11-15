@@ -24,7 +24,6 @@ struct Model {
   bom : BomState
   /// The part page's alternatives (alternatives.mbt).
   alts : AltState
-  review : ReviewState
 }
 
 ///|
@@ -32,7 +31,6 @@ enum Msg {
   UrlChanged(@url.Url)
   UrlRequest(@url.UrlRequest)
   Catalog(CatalogMsg)
-  Review(ReviewMsg)
   PartGot((String, String), Fetch[PartData])
   ViewerDone(String?)
   ZipClicked
@@ -51,7 +49,6 @@ fn title_of(lang : Lang, route : Route) -> String {
     KicadPlugin => c.kicad_title
     Contributing => c.contrib_title
     Bom => lang.bom().title
-    Reviews(_) => lang.review().title
     NotFound => c.not_found_title
   }
   if page.is_empty() {
@@ -71,7 +68,6 @@ fn enter(
   let (lang, route) = route_of(url)
   set_document_lang(lang.code())
   set_document_title(title_of(lang, route))
-  datasheet_set_labels(datasheet_labels(lang))
   let model = { ..model, lang, route, }
   if !(route is Part(_, _)) {
     // Off the part page: the viewer's views (and listeners) go too.
@@ -80,7 +76,6 @@ fn enter(
   match route {
     Search(q) => catalog_enter(model, q, emit)
     Bom => bom_enter(model, emit)
-    Reviews(q) => review_enter(model, q, emit)
     Part(m, p) => {
       let key = (m, p)
       let (model, alt_cmd) = alt_enter(model, m, p, emit)
@@ -149,7 +144,6 @@ fn update(
     }
     UrlRequest(External(href)) => (model, @nav.load(href))
     Catalog(m) => catalog_update(model, m, emit)
-    Review(m) => review_update(model, m, emit)
     PartGot(key, result) => {
       guard key == model.part_key else { (model, @rabbita.none) }
       let model = { ..model, part: result, }
@@ -194,22 +188,16 @@ fn main {
           viewer_error: None,
           bom: BomState::new(),
           alts: AltState::new(),
-          review: ReviewState::new(),
         }
         let url = try! @url.parse(current_href())
         enter(model, url, emit)
       },
       update~,
-      subscriptions=(model, emit) => {
-        let subs = [
+      subscriptions=(_, emit) => {
+        @sub.batch([
           @sub.on_url_changed(emit.map(u => UrlChanged(u))),
           @sub.on_url_request(emit.map(r => UrlRequest(r))),
-        ]
-        // The review queue's keyboard shortcuts.
-        if model.route is Reviews(_) {
-          subs.push(@sub.on_key_down(emit.map(k => Review(RevKey(k.key())))))
-        }
-        @sub.batch(subs)
+        ])
       },
     )
     model.view(m => view(m, emit))

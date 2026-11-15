@@ -90,6 +90,8 @@ pub struct CatalogItem {
     pub mounting: Option<Mounting>,
     pub lifecycle: LifecycleStatus,
     pub existence: ExistenceStatus,
+    /// Which of the part, its device and its package are reviewed.
+    pub review: crate::documents::ReviewSummary,
     /// The Part's electrical parameters (its Device's family-wide ones
     /// included), by vocabulary key.
     pub parameters: BTreeMap<String, CatalogParameter>,
@@ -194,6 +196,8 @@ pub struct CatalogFacets {
     pub mounting: Vec<FacetValue>,
     pub lifecycle: Vec<FacetValue>,
     pub existence: Vec<FacetValue>,
+    /// `reviewed` (part, device and package), `partly`, `unreviewed`.
+    pub review: Vec<FacetValue>,
     pub body_width: RangeFacet,
     pub body_length: RangeFacet,
     pub body_height: RangeFacet,
@@ -225,9 +229,14 @@ enum Group {
     Mounting,
     Lifecycle,
     Existence,
+    /// Whether the part, its device and its package are reviewed
+    /// (`crate::documents::ReviewState`).
+    Review,
 }
 
-const GROUPS: [Group; 9] = [
+const GROUP_COUNT: usize = 10;
+
+const GROUPS: [Group; GROUP_COUNT] = [
     Group::Category,
     Group::Manufacturer,
     Group::Family,
@@ -237,6 +246,7 @@ const GROUPS: [Group; 9] = [
     Group::Mounting,
     Group::Lifecycle,
     Group::Existence,
+    Group::Review,
 ];
 
 impl Group {
@@ -252,6 +262,7 @@ impl Group {
             Group::Mounting => &["mounting"],
             Group::Lifecycle => &["lifecycle"],
             Group::Existence => &["existence"],
+            Group::Review => &["review"],
         }
     }
 
@@ -344,7 +355,7 @@ pub const MAX_LIMIT: usize = 500;
 pub struct CatalogQuery {
     pub q: String,
     /// Selected values per [`GROUPS`] entry (normalised).
-    filters: [BTreeSet<String>; 9],
+    filters: [BTreeSet<String>; GROUP_COUNT],
     /// (min, max) per [`AXES`] entry, mm.
     ranges: [(Option<f64>, Option<f64>); 3],
     /// Parameter filters by vocabulary key.
@@ -531,7 +542,7 @@ struct ParamFact {
 #[derive(Debug)]
 struct Facts {
     /// The facet key per [`GROUPS`] entry (`None`: not stated).
-    keys: [Option<String>; 9],
+    keys: [Option<String>; GROUP_COUNT],
     dims: [Option<f64>; 3],
     params: BTreeMap<&'static str, ParamFact>,
     item: CatalogItem,
@@ -549,7 +560,7 @@ struct OptionInfo {
 #[derive(Debug, Default)]
 pub struct CatalogIndex {
     facts: Vec<Facts>,
-    options: [BTreeMap<String, OptionInfo>; 9],
+    options: [BTreeMap<String, OptionInfo>; GROUP_COUNT],
     /// Display labels of parameter options, by key then option key.
     param_labels: BTreeMap<&'static str, BTreeMap<String, String>>,
 }
@@ -643,9 +654,10 @@ impl CatalogIndex {
                 mounting,
                 lifecycle: p.lifecycle.status,
                 existence: p.existence.status,
+                review: crate::documents::ReviewSummary::of(p, device, pkg),
                 parameters: item_params,
             };
-            let mut keys: [Option<String>; 9] = Default::default();
+            let mut keys: [Option<String>; GROUP_COUNT] = Default::default();
             for (i, g) in GROUPS.iter().enumerate() {
                 let opt = match g {
                     Group::Category => {
@@ -678,6 +690,15 @@ impl CatalogIndex {
                     Group::Existence => {
                         let s = p.existence.status;
                         Some((wire(&s), title_case(&wire(&s)), s as u8 as f64))
+                    }
+                    Group::Review => {
+                        let s = item.review.state;
+                        let label = match s {
+                            crate::documents::ReviewState::Reviewed => "Reviewed",
+                            crate::documents::ReviewState::Partly => "Partly reviewed",
+                            crate::documents::ReviewState::Unreviewed => "Unreviewed",
+                        };
+                        Some((s.wire().to_string(), label.to_string(), s as u8 as f64))
                     }
                 };
                 if let Some((key, label, order)) = opt {
@@ -985,6 +1006,7 @@ impl CatalogIndex {
                 mounting: next(),
                 lifecycle: next(),
                 existence: next(),
+                review: next(),
                 body_width: range(),
                 body_length: range(),
                 body_height: range(),

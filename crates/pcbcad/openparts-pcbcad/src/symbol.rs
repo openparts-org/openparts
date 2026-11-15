@@ -594,6 +594,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -696,6 +697,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         };
         let symbol = build_symbol("LONGNAMES", &device);
         let mut xs: Vec<f64> = symbol.pins.iter().map(|p| p.position.x).collect();
@@ -777,6 +779,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -970,6 +973,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -1064,6 +1068,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         };
         let symbol = build_symbol("TWOPOWER", &device);
         let mut top_xs: Vec<f64> = symbol
@@ -1179,6 +1184,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 

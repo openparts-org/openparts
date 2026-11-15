@@ -24,10 +24,7 @@ mod review;
 
 pub use cross::{validate_location, validate_source, DocKind};
 pub use diagnostic::{Diagnostic, Severity};
-pub use review::{
-    fact_hash, facts_of, review_record_problems, validate_review, Fact, MAX_COMMENT_LEN,
-    MAX_CORRECTED_VALUE_LEN, MAX_POINTER_LEN, MAX_REVIEWER_LEN,
-};
+pub use review::{check_review, is_github_login};
 
 use device::*;
 use openparts_core::{Device, Package, Part, SourceId};
@@ -157,12 +154,8 @@ pub const RULES: &[Rule] = &[
         meaning: "a Source `sha256` is not 64 lowercase hex digits",
     },
     Rule {
-        id: "review.invalid",
-        meaning: "a review document's id is not `<target_kind>/<target>`, or a record is malformed: a pointer that isn't a JSON Pointer, an empty/padded/over-long reviewer, a date that isn't YYYY-MM-DD, a `value_hash` that isn't `sha256:<hex>`, no `sources`, an over-long comment or corrected value, a dispute without a comment, or two records of one reviewer for one pointer (Canonical Data Specification section 26.1)",
-    },
-    Rule {
-        id: "review.stale",
-        meaning: "warning: a review no longer matches the data -- the fact's value or cited evidence changed since (its `value_hash` differs), or the pointer or the reviewed document is gone; it stops counting until the fact is reviewed again",
+        id: "review.block",
+        meaning: "a document's `review` block is incomplete or malformed: `by` (GitHub logins, no duplicates) and `pr` (the openparts-data pull request, 1 or more) are required, `date` is YYYY-MM-DD (Canonical Data Specification section 26.1)",
     },
     Rule {
         id: "id.location",
@@ -256,6 +249,13 @@ pub fn validate_part(
         &format!("package:{}", package.id),
         &package.provenance,
         known_sources,
+    ));
+
+    out.extend(review::check_review(&part_entity, part.review.as_ref()));
+    out.extend(review::check_review(&device_entity, device.review.as_ref()));
+    out.extend(review::check_review(
+        &format!("package:{}", package.id),
+        package.review.as_ref(),
     ));
 
     out.extend(check_duplicate_pin_names(&device_entity, device));
@@ -375,6 +375,7 @@ mod tests {
             },
             sources: vec![],
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -400,6 +401,7 @@ mod tests {
             pins,
             revisions: BTreeMap::new(),
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 
@@ -439,6 +441,7 @@ mod tests {
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 

@@ -656,16 +656,24 @@ Golden tests
 
 初期運用では、AIが生成したCanonical Data変更は原則としてHuman Reviewを要求する。
 
-Beyond reviewing a pull request as a whole, each fact an agent records
-(every provenance key) can be reviewed individually against the
-location it cites, and the verdict is kept as a review record
-(Canonical Data Specification section 26.1): confirmed, or disputed
-with a comment. Facts from an agent start unreviewed. Agents never
-write review records, never mark their own output as reviewed, and
-treat a disputed fact as a reason to re-read the source, not to
-overwrite the reviewer. A data change that alters a reviewed value
-makes its review stale (the validator warns `review.stale`); say so in
-the pull request, since the fact then needs reviewing again.
+In practice agents push their data changes directly to openparts-data,
+without a pull request, to keep the cycle fast; what they write is a
+candidate until a person reviews it. Human review happens afterwards,
+in pull requests to openparts-data (typically from external
+contributors), and is recorded as the document's `review` block
+(Canonical Data Specification section 26.1). For agents:
+
+- **Never set `status: reviewed`** and never write or edit a `review`
+  block's `by`, `pr` or `date`. Only a person, in a pull request they
+  reviewed, does.
+- **Editing a reviewed document drops its `review` block** in the same
+  change: a changed value (or pin, dimension, provenance entry) needs a
+  new review. This holds however small the edit. The validator cannot
+  detect a reviewed document that changed afterwards, so the rule is
+  the agent's to follow.
+- A review does not make a value immune to correction: if a source
+  contradicts a reviewed value, fix it with provenance as usual and drop
+  the block, and say so in the commit message.
 
 将来的に十分成熟した場合、
 

@@ -1141,104 +1141,6 @@ pub impl @json.FromJson for FacetValue with fn from_json(json, path) {
 }
 
 ///|
-/// Where a fact's value is cited, with the Source it cites.
-#derive(Eq)
-pub(all) struct FactEvidence {
-  date : String
-  locator : String?
-  page : Int32?
-  revision : String
-  source : String
-  title : String
-  url : String
-}
-
-///|
-pub impl @json.FromJson for FactEvidence with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a FactEvidence object"))
-  }
-  {
-    date: field(obj, "date", path),
-    locator: opt_field(obj, "locator", path),
-    page: opt_field(obj, "page", path),
-    revision: field(obj, "revision", path),
-    source: field(obj, "source", path),
-    title: field(obj, "title", path),
-    url: field(obj, "url", path),
-  }
-}
-
-///|
-#derive(Eq, Debug)
-pub(all) enum FactReviewStatus {
-  Unreviewed
-  Confirmed
-  Disputed
-}
-
-///|
-/// The wire (JSON) string.
-pub fn FactReviewStatus::wire(self : FactReviewStatus) -> String {
-  match self {
-    Unreviewed => "unreviewed"
-    Confirmed => "confirmed"
-    Disputed => "disputed"
-  }
-}
-
-///|
-/// Every value, in declaration order.
-pub fn FactReviewStatus::all() -> Array[FactReviewStatus] {
-  [Unreviewed, Confirmed, Disputed]
-}
-
-///|
-pub impl @json.FromJson for FactReviewStatus with fn from_json(json, path) {
-  match json {
-    String("unreviewed") => Unreviewed
-    String("confirmed") => Confirmed
-    String("disputed") => Disputed
-    _ => raise @json.JsonDecodeError((path, "expected a FactReviewStatus"))
-  }
-}
-
-///|
-/// One fact and its review status.
-#derive(Eq)
-pub(all) struct FactView {
-  evidence : Array[FactEvidence]
-  pending : Bool
-  pointer : String
-  reviews : Array[ReviewView]
-  stale : Int32
-  status : FactReviewStatus
-  target : String
-  target_kind : ReviewTargetKind
-  value : String
-  value_hash : String
-}
-
-///|
-pub impl @json.FromJson for FactView with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a FactView object"))
-  }
-  {
-    evidence: field(obj, "evidence", path),
-    pending: field(obj, "pending", path),
-    pointer: field(obj, "pointer", path),
-    reviews: field(obj, "reviews", path),
-    stale: field(obj, "stale", path),
-    status: field(obj, "status", path),
-    target: field(obj, "target", path),
-    target_kind: field(obj, "target_kind", path),
-    value: field(obj, "value", path),
-    value_hash: field(obj, "value_hash", path),
-  }
-}
-
-///|
 /// The footprint side of an alternative.
 #derive(Eq)
 pub(all) struct FootprintCheck {
@@ -1550,7 +1452,6 @@ pub(all) enum Kind {
   Source
   Erratum
   Rejected
-  Review
 }
 
 ///|
@@ -1564,14 +1465,13 @@ pub fn Kind::wire(self : Kind) -> String {
     Source => "source"
     Erratum => "erratum"
     Rejected => "rejected"
-    Review => "review"
   }
 }
 
 ///|
 /// Every value, in declaration order.
 pub fn Kind::all() -> Array[Kind] {
-  [Manufacturer, Part, Device, Package, Source, Erratum, Rejected, Review]
+  [Manufacturer, Part, Device, Package, Source, Erratum, Rejected]
 }
 
 ///|
@@ -1584,7 +1484,6 @@ pub impl @json.FromJson for Kind with fn from_json(json, path) {
     String("source") => Source
     String("erratum") => Erratum
     String("rejected") => Rejected
-    String("review") => Review
     _ => raise @json.JsonDecodeError((path, "expected a Kind"))
   }
 }
@@ -2477,37 +2376,6 @@ pub impl @json.FromJson for PartBrief with fn from_json(json, path) {
 }
 
 ///|
-/// `GET /v1/parts/{manufacturer}/{mpn}/reviews`.
-#derive(Eq)
-pub(all) struct PartReviews {
-  confirmed : Int32
-  disputed : Int32
-  facts : Array[FactView]
-  manufacturer : String
-  mpn : String
-  pending : Int32
-  total : Int32
-  unreviewed : Int32
-}
-
-///|
-pub impl @json.FromJson for PartReviews with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a PartReviews object"))
-  }
-  {
-    confirmed: field(obj, "confirmed", path),
-    disputed: field(obj, "disputed", path),
-    facts: field(obj, "facts", path),
-    manufacturer: field(obj, "manufacturer", path),
-    mpn: field(obj, "mpn", path),
-    pending: field(obj, "pending", path),
-    total: field(obj, "total", path),
-    unreviewed: field(obj, "unreviewed", path),
-  }
-}
-
-///|
 #derive(Eq)
 pub(all) struct PartSource {
   cited_by : Array[String]
@@ -2760,28 +2628,6 @@ pub impl @json.FromJson for ProvenanceResponse with fn from_json(json, path) {
 }
 
 ///|
-#derive(Eq)
-pub(all) struct QueueItem {
-  category : ComponentCategory?
-  fact : FactView
-  manufacturer : String
-  mpn : String
-}
-
-///|
-pub impl @json.FromJson for QueueItem with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a QueueItem object"))
-  }
-  {
-    category: opt_field(obj, "category", path),
-    fact: field(obj, "fact", path),
-    manufacturer: field(obj, "manufacturer", path),
-    mpn: field(obj, "mpn", path),
-  }
-}
-
-///|
 /// The span of a dimension over the parts that pass every other
 /// filter (`None` when none of them states it).
 #derive(Eq)
@@ -2796,139 +2642,6 @@ pub impl @json.FromJson for RangeFacet with fn from_json(json, path) {
     raise @json.JsonDecodeError((path, "expected a RangeFacet object"))
   }
   { max: opt_field(obj, "max", path), min: opt_field(obj, "min", path), }
-}
-
-///|
-#derive(Eq)
-pub(all) struct ReviewConfig {
-  documents_enabled : Bool
-  writes_enabled : Bool
-}
-
-///|
-pub impl @json.FromJson for ReviewConfig with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a ReviewConfig object"))
-  }
-  {
-    documents_enabled: field(obj, "documents_enabled", path),
-    writes_enabled: field(obj, "writes_enabled", path),
-  }
-}
-
-///|
-/// `GET /v1/reviews/queue`.
-#derive(Eq)
-pub(all) struct ReviewQueue {
-  items : Array[QueueItem]
-  limit : Int32
-  offset : Int32
-  total : Int32
-}
-
-///|
-pub impl @json.FromJson for ReviewQueue with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a ReviewQueue object"))
-  }
-  {
-    items: field(obj, "items", path),
-    limit: field(obj, "limit", path),
-    offset: field(obj, "offset", path),
-    total: field(obj, "total", path),
-  }
-}
-
-///|
-#derive(Eq, Debug)
-pub(all) enum ReviewStatus {
-  Confirmed
-  Disputed
-}
-
-///|
-/// The wire (JSON) string.
-pub fn ReviewStatus::wire(self : ReviewStatus) -> String {
-  match self {
-    Confirmed => "confirmed"
-    Disputed => "disputed"
-  }
-}
-
-///|
-/// Every value, in declaration order.
-pub fn ReviewStatus::all() -> Array[ReviewStatus] {
-  [Confirmed, Disputed]
-}
-
-///|
-pub impl @json.FromJson for ReviewStatus with fn from_json(json, path) {
-  match json {
-    String("confirmed") => Confirmed
-    String("disputed") => Disputed
-    _ => raise @json.JsonDecodeError((path, "expected a ReviewStatus"))
-  }
-}
-
-///|
-#derive(Eq, Debug)
-pub(all) enum ReviewTargetKind {
-  Part
-  Device
-  Package
-}
-
-///|
-/// The wire (JSON) string.
-pub fn ReviewTargetKind::wire(self : ReviewTargetKind) -> String {
-  match self {
-    Part => "part"
-    Device => "device"
-    Package => "package"
-  }
-}
-
-///|
-/// Every value, in declaration order.
-pub fn ReviewTargetKind::all() -> Array[ReviewTargetKind] {
-  [Part, Device, Package]
-}
-
-///|
-pub impl @json.FromJson for ReviewTargetKind with fn from_json(json, path) {
-  match json {
-    String("part") => Part
-    String("device") => Device
-    String("package") => Package
-    _ => raise @json.JsonDecodeError((path, "expected a ReviewTargetKind"))
-  }
-}
-
-///|
-/// One current review of a fact.
-#derive(Eq)
-pub(all) struct ReviewView {
-  comment : String?
-  corrected_value : String?
-  date : String
-  pending : Bool
-  reviewer : String
-  status : ReviewStatus
-}
-
-///|
-pub impl @json.FromJson for ReviewView with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a ReviewView object"))
-  }
-  {
-    comment: opt_field(obj, "comment", path),
-    corrected_value: opt_field(obj, "corrected_value", path),
-    date: field(obj, "date", path),
-    pending: field(obj, "pending", path),
-    reviewer: field(obj, "reviewer", path),
-    status: field(obj, "status", path),
-  }
 }
 
 ///|
@@ -3055,7 +2768,6 @@ pub(all) struct Source {
   retrieved : String?
   revision : String
   schema_version : String
-  sha256 : String?
   url : String
 }
 
@@ -3074,24 +2786,8 @@ pub impl @json.FromJson for Source with fn from_json(json, path) {
     retrieved: opt_field(obj, "retrieved", path),
     revision: field(obj, "revision", path),
     schema_version: field(obj, "schema_version", path),
-    sha256: opt_field(obj, "sha256", path),
     url: field(obj, "url", path),
   }
-}
-
-///|
-#derive(Eq)
-pub(all) struct SubmitResponse {
-  fact : FactView
-  id : String
-}
-
-///|
-pub impl @json.FromJson for SubmitResponse with fn from_json(json, path) {
-  guard json is Object(obj) else {
-    raise @json.JsonDecodeError((path, "expected a SubmitResponse object"))
-  }
-  { fact: field(obj, "fact", path), id: field(obj, "id", path), }
 }
 
 ///|

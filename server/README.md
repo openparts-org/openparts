@@ -81,12 +81,11 @@ OPENPARTS_DATA_DIR=/path/to/openparts-data OPENPARTS_ARTIFACT_DIR=/path/to/bundl
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/3mf?silicon_revision=...` | 3MF with a colour per body |
 | `GET /v1/devices/{id}` | Device (`id` may contain `/`, e.g. `raspberrypi/RP2040`) |
 | `GET /v1/packages/{id}` | Package |
+| `GET /v1/parts/{manufacturer}/{mpn}/documents` | the part's, device's and package's file in openparts-data and `review` block, and the combined status (`reviewed` / `partly` / `unreviewed`) |
+| `GET /v1/catalog?...&review=reviewed,partly,unreviewed` | the catalog; each item carries its `review` summary |
+| `GET /v1/config` | `{source_documents}`: whether the endpoint below is on |
 | `GET /v1/sources/{id}` | Source |
 | `GET /v1/sources/{id}/document` | the Source's PDF, fetched and cached (opt-in, below) |
-| `GET /v1/parts/{manufacturer}/{mpn}/reviews` | review status of every fact of the part, its device and package, with counts |
-| `GET /v1/reviews/queue?category=&manufacturer=&mpn=&status=&offset=&limit=` | facts to review (`status`: `unreviewed` (default), `disputed`, `confirmed`, `all`), parts with electrical parameters first |
-| `GET /v1/reviews/config` | `{writes_enabled, documents_enabled}` |
-| `POST /v1/reviews` | submit one review (`Authorization: Bearer <token>`; opt-in, below) |
 
 Artifact responses carry an `X-Content-Hash: sha256:<hex>` header
 (Architecture Specification section 24, Content Addressing). Missing
@@ -95,52 +94,27 @@ a diagnostic body rather than guessing (Testing and Quality
 Specification section 7). A 3D model that is neither bundled nor
 buildable here (no SolidCraft) returns `503`.
 
-## Reviews (opt-in writes)
-
-The server never writes openparts-data. With `OPENPARTS_REVIEW_DIR`
-(a directory) and `OPENPARTS_REVIEW_TOKEN` (a shared secret of at least
-16 characters) set, `POST /v1/reviews` accepts one review of one fact
-(Canonical Data Specification section 26.1):
-
-```json
-{"target_kind": "package", "target": "standards/QFN56-RP2040",
- "pointer": "/dimensions/body_width", "status": "confirmed",
- "reviewer": "alice", "value_hash": "sha256:..."}
-```
-
-(`disputed` needs a `comment`; `corrected_value` is optional.) It is
-checked -- the token (`401`), the body (at most 16 KiB, no unknown
-fields, the record limits; `400`/`413`), that the fact exists (`404`)
-and that `value_hash` is the fact's current hash (`409`: the data
-changed while the reviewer looked) -- and appended to
-`OPENPARTS_REVIEW_DIR/submissions.jsonl`. The status endpoints show
-such submissions as pending. Without the token the endpoint answers
-`403` and the site is read-only. The reviewer name is what the
-submitter typed: anyone holding the token is trusted, and the commit
-is the real gate. To publish them:
-
-```sh
-openparts reviews export --data ../openparts-data --from "$OPENPARTS_REVIEW_DIR"
-# review the diff of reviews/, validate, commit or open a PR
-```
-
-Export is idempotent; submissions of a value that changed since are
-left out (reported as stale). The log may be rotated after an export.
-
-## Source documents (opt-in)
+## Source documents (opt-in, never on a public deployment)
 
 With `OPENPARTS_SOURCE_CACHE` set (a directory), `GET
 /v1/sources/{id}/document` downloads the PDF the Source's `url` names
-and keeps it there, for the site's datasheet viewer (manufacturer
-sites don't allow cross-origin reads). Only `url`s of loaded Sources
-are fetched; downloads use the user agent `openparts-server/<version>
-(datasheet cache; +https://github.com/openparts-org/openparts)`, a
-timeout (`OPENPARTS_SOURCE_TIMEOUT_SECS`, 30) and a size limit
+and keeps it there, so the site's datasheet panel can show the cited
+page (manufacturer sites don't allow cross-origin reads). Only `url`s
+of loaded Sources are fetched; downloads use the user agent
+`openparts-server/<version> (datasheet cache;
++https://github.com/openparts-org/openparts)`, a timeout
+(`OPENPARTS_SOURCE_TIMEOUT_SECS`, 30) and a size limit per document
 (`OPENPARTS_SOURCE_MAX_MB`, 50), must be a PDF, and must match the
-Source's `sha256` when it records one. A refusal (403, an HTML
-challenge page) is a `502` with the reason, and the site opens the
-original link instead. The cache is for viewing on this server, not
-for redistribution.
+Source's `sha256` when it records one. The whole cache is capped by
+`OPENPARTS_SOURCE_CACHE_MAX_MB` (default 500): the least recently used
+documents are deleted first. A refusal (403, an HTML challenge page) is
+a `502` with the reason.
+
+Leave it unset on any public server: serving the PDFs redistributes
+manufacturer documents (Architecture Specification section 20). Without
+it the endpoint answers `503`, `GET /v1/config` says
+`source_documents: false`, and the site links each value to the
+original PDF at `#page=N` with the locator shown.
 
 ## Self-hosting on a Raspberry Pi
 

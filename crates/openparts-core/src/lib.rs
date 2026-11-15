@@ -49,5 +49,5 @@ pub use part::Part;
 pub use pin::{Pin, PinOverride, PinType};
 pub use provenance::{ProvenanceEntry, ProvenanceMap};
 pub use rejected::Rejected;
-pub use review::{FactReview, ReviewDocument, ReviewStatus, ReviewTargetKind};
+pub use review::{DocumentReview, ReviewStatus};
 pub use source::{DocumentType, Source};

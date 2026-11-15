@@ -787,23 +787,27 @@ Serverの責務：
 
 Canonical Data編集機能はServerの責務に含めない。
 
-Two opt-in exceptions serve the site without touching Canonical Data:
+Review of the data is not a server function either: it happens in
+pull requests to openparts-data and is recorded in each document's
+`review` block (Canonical Data Specification section 26.1). The server
+only reports it (`GET /v1/parts/{m}/{mpn}/documents`: each document's
+repository path and `review` block; the catalog's `review` facet).
 
-- **Review submissions** (`POST /v1/reviews`, enabled only with
-  `OPENPARTS_REVIEW_TOKEN` and `OPENPARTS_REVIEW_DIR`): a reviewer's
-  verdict on one fact is validated and appended to
-  `OPENPARTS_REVIEW_DIR/submissions.jsonl`. The server shows them as
-  pending next to the committed reviews; `openparts reviews export`
-  turns them into `reviews/*.yaml` (Canonical Data Specification
-  section 26.1), and a person commits them. The server never writes the
-  data repository; Git stays the review database (section 4.7).
-- **Source documents** (`GET /v1/sources/{id}/document`, enabled only
-  with `OPENPARTS_SOURCE_CACHE`): the PDF a Source's `url` names,
-  fetched with a plain, honestly identified HTTP client (timeout, size
-  limit, PDF only, a recorded `sha256` checked) and cached on disk, so
-  the site's datasheet viewer can open the cited page. Only `url`s of
-  loaded Sources are fetched -- it is not a proxy. A publisher that
-  refuses gets a clear error, and the site links to the original.
+**Source documents (opt-in, private deployments only).**
+`GET /v1/sources/{id}/document` serves the PDF a loaded Source's `url`
+names, fetched with an honestly identified HTTP client (timeout, size
+limit, PDF only, a recorded `sha256` checked) and cached on disk, so the
+site's datasheet panel can render the cited page. It is enabled only by
+`OPENPARTS_SOURCE_CACHE` (a directory); the cache is capped by
+`OPENPARTS_SOURCE_CACHE_MAX_MB` (default 500), least recently used
+documents evicted first. Only `url`s of loaded Sources are fetched -- a
+request cannot name a URL.
+
+A public deployment must not enable it: serving the PDFs redistributes
+manufacturer documents, which OpenParts only links to (Canonical Data
+Specification section 23). Without it (`GET /v1/config` answers
+`source_documents: false`) the site links each value to the original
+PDF at `#page=N` and shows the locator beside it.
 
 ---
 

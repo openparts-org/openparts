@@ -14,8 +14,6 @@ pub enum Kind {
     Source,
     Erratum,
     Rejected,
-    /// Human review records of facts (section 26.1).
-    Review,
 }
 
 impl Kind {
@@ -28,7 +26,6 @@ impl Kind {
             Kind::Source => "source",
             Kind::Erratum => "erratum",
             Kind::Rejected => "rejected",
-            Kind::Review => "review",
         }
     }
 }

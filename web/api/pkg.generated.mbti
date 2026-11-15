@@ -407,43 +407,6 @@ pub(all) struct FacetValue {
 pub impl @json.FromJson for FacetValue
 
 #derive(Eq)
-pub(all) struct FactEvidence {
-  date : String
-  locator : String?
-  page : Int32?
-  revision : String
-  source : String
-  title : String
-  url : String
-}
-pub impl @json.FromJson for FactEvidence
-
-#derive(Eq, @debug.Debug)
-pub(all) enum FactReviewStatus {
-  Unreviewed
-  Confirmed
-  Disputed
-}
-pub fn FactReviewStatus::all() -> Array[Self]
-pub fn FactReviewStatus::wire(Self) -> String
-pub impl @json.FromJson for FactReviewStatus
-
-#derive(Eq)
-pub(all) struct FactView {
-  evidence : Array[FactEvidence]
-  pending : Bool
-  pointer : String
-  reviews : Array[ReviewView]
-  stale : Int32
-  status : FactReviewStatus
-  target : String
-  target_kind : ReviewTargetKind
-  value : String
-  value_hash : String
-}
-pub impl @json.FromJson for FactView
-
-#derive(Eq)
 pub(all) struct FootprintCheck {
   difference : FootprintDifference?
   max_offset_mm : Double?
@@ -540,7 +503,6 @@ pub(all) enum Kind {
   Source
   Erratum
   Rejected
-  Review
 }
 pub fn Kind::all() -> Array[Self]
 pub fn Kind::wire(Self) -> String
@@ -845,19 +807,6 @@ pub(all) struct PartBrief {
 pub impl @json.FromJson for PartBrief
 
 #derive(Eq)
-pub(all) struct PartReviews {
-  confirmed : Int32
-  disputed : Int32
-  facts : Array[FactView]
-  manufacturer : String
-  mpn : String
-  pending : Int32
-  total : Int32
-  unreviewed : Int32
-}
-pub impl @json.FromJson for PartReviews
-
-#derive(Eq)
 pub(all) struct PartSource {
   cited_by : Array[String]
   source : Source
@@ -946,66 +895,11 @@ pub(all) struct ProvenanceResponse {
 pub impl @json.FromJson for ProvenanceResponse
 
 #derive(Eq)
-pub(all) struct QueueItem {
-  category : ComponentCategory?
-  fact : FactView
-  manufacturer : String
-  mpn : String
-}
-pub impl @json.FromJson for QueueItem
-
-#derive(Eq)
 pub(all) struct RangeFacet {
   max : Double?
   min : Double?
 }
 pub impl @json.FromJson for RangeFacet
-
-#derive(Eq)
-pub(all) struct ReviewConfig {
-  documents_enabled : Bool
-  writes_enabled : Bool
-}
-pub impl @json.FromJson for ReviewConfig
-
-#derive(Eq)
-pub(all) struct ReviewQueue {
-  items : Array[QueueItem]
-  limit : Int32
-  offset : Int32
-  total : Int32
-}
-pub impl @json.FromJson for ReviewQueue
-
-#derive(Eq, @debug.Debug)
-pub(all) enum ReviewStatus {
-  Confirmed
-  Disputed
-}
-pub fn ReviewStatus::all() -> Array[Self]
-pub fn ReviewStatus::wire(Self) -> String
-pub impl @json.FromJson for ReviewStatus
-
-#derive(Eq, @debug.Debug)
-pub(all) enum ReviewTargetKind {
-  Part
-  Device
-  Package
-}
-pub fn ReviewTargetKind::all() -> Array[Self]
-pub fn ReviewTargetKind::wire(Self) -> String
-pub impl @json.FromJson for ReviewTargetKind
-
-#derive(Eq)
-pub(all) struct ReviewView {
-  comment : String?
-  corrected_value : String?
-  date : String
-  pending : Bool
-  reviewer : String
-  status : ReviewStatus
-}
-pub impl @json.FromJson for ReviewView
 
 #derive(Eq)
 pub(all) struct RevisionDetection {
@@ -1055,17 +949,9 @@ pub(all) struct Source {
   retrieved : String?
   revision : String
   schema_version : String
-  sha256 : String?
   url : String
 }
 pub impl @json.FromJson for Source
-
-#derive(Eq)
-pub(all) struct SubmitResponse {
-  fact : FactView
-  id : String
-}
-pub impl @json.FromJson for SubmitResponse
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Verdict {

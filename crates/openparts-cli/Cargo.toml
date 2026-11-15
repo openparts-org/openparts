@@ -11,7 +11,6 @@ path = "src/main.rs"
 openparts-core = { path = "../openparts-core" }
 openparts-data = { path = "../openparts-data" }
 openparts-validator = { path = "../openparts-validator" }
-openparts-review = { path = "../openparts-review" }
 openparts-mcad = { path = "../mcad/openparts-mcad" }
 openparts-solidcraft = { path = "../mcad/openparts-solidcraft" }
 openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }

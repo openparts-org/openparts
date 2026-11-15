@@ -53,16 +53,6 @@ type Msg
 #derive(Eq)
 type PartData
 
-type ReviewCopy
-
-type ReviewMsg
-
-#derive(Eq)
-type ReviewQuery
-
-#derive(Eq)
-type ReviewState
-
 #derive(Eq)
 type Route
 

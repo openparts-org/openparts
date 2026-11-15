@@ -63,6 +63,7 @@ mod tests {
             construction: None,
             geometry: None,
             provenance: Default::default(),
+            review: None,
         }
     }
 

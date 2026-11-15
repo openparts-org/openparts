@@ -161,6 +161,7 @@ mod tests {
             construction: None,
             geometry: None,
             provenance: BTreeMap::new(),
+            review: None,
         }
     }
 

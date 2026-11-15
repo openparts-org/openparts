@@ -164,11 +164,12 @@ pub fn validate_source(source: &Source) -> Vec<Diagnostic> {
             ));
         }
     }
+    out.extend(crate::review::check_review(&entity, source.review.as_ref()));
     out
 }
 
 /// `s` is a date with at least `min_parts` of year, month, day.
-fn is_date(s: &str, min_parts: usize) -> bool {
+pub(crate) fn is_date(s: &str, min_parts: usize) -> bool {
     let parts: Vec<&str> = s.split('-').collect();
     let widths = [4, 2, 2];
     (min_parts..=3).contains(&parts.len())
@@ -188,8 +189,6 @@ pub enum DocKind {
     Package,
     Source,
     Manufacturer,
-    /// A review document: its id is `<target_kind>/<target>`.
-    Review,
 }
 
 /// Where a document of `kind` with `id` belongs in the dataset tree:
@@ -219,16 +218,6 @@ pub fn validate_location(kind: DocKind, id: &str, rel_path: &str) -> Vec<Diagnos
         ),
         DocKind::Source => (path.starts_with(&format!("sources/{first}/")), true),
         DocKind::Manufacturer => (path == format!("manufacturers/{id}.yaml"), true),
-        DocKind::Review => {
-            let safe_id: String = id
-                .chars()
-                .map(|c| match c {
-                    '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | ' ' => '-',
-                    c => c,
-                })
-                .collect();
-            (path == format!("reviews/{safe_id}.yaml"), true)
-        }
     };
     if dir_ok && name_ok {
         return vec![];
@@ -302,16 +291,6 @@ mod tests {
             "packages/manufacturers/bosch/LGA10.yaml"
         ));
         assert!(!ok(DocKind::Device, "ti/A", "devices/ti/B.yaml"));
-        assert!(ok(
-            DocKind::Review,
-            "part/raspberrypi/RP2040",
-            "reviews/part/raspberrypi/RP2040.yaml"
-        ));
-        assert!(!ok(
-            DocKind::Review,
-            "part/raspberrypi/RP2040",
-            "reviews/raspberrypi/RP2040.yaml"
-        ));
     }
 
     #[test]

@@ -1,9 +1,7 @@
 //! Versioned REST API (Architecture Specification section 46-49).
 //! Canonical Data editing is intentionally out of scope for this crate
 //! (section 4.8 / section 20: "Canonical Data編集機能はServerの責務に
-//!含めない") -- every route here is read-only, except the opt-in review
-//! submissions of `crate::review`, which go to their own log and never
-//! into openparts-data.
+//!含めない") -- every route here is read-only.
 
 use crate::error::ApiError;
 use crate::store::Store;
@@ -61,7 +59,7 @@ pub fn build_router(store: Arc<Store>) -> Router {
         .route("/v1/devices/*id", get(get_device))
         .route("/v1/packages/*id", get(get_package))
         .merge(crate::bom::router())
-        .merge(crate::review::routes())
+        .merge(crate::documents::router())
         .merge(crate::sources::routes())
         .with_state(store)
 }
@@ -487,7 +485,7 @@ mod schema_export {
         gen.subschema_for::<ProvenanceResponse>();
         crate::error::subschemas(&mut gen);
         crate::bom::subschemas(&mut gen);
-        crate::review::subschemas(&mut gen);
+        crate::documents::subschemas(&mut gen);
         let defs = serde_json::Value::Object(gen.definitions().clone());
         std::fs::write(out, serde_json::to_string_pretty(&defs).unwrap()).unwrap();
     }

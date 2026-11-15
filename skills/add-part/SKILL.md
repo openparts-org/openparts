@@ -40,6 +40,11 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   unverified and move on. Distributor-hosted copies (DigiKey/Mouser) of a
   manufacturer PDF are acceptable only when the existing dataset already
   relies on them for that manufacturer -- say so in the Source comment.
+- **Never mark anything reviewed.** A `review:` block (Canonical Data
+  Specification section 26.1) is written only by a person in an
+  openparts-data pull request. When you edit a document that has one,
+  delete the whole block in the same change: the changed data needs a
+  new review.
 - **`construction`** (molded, tantalum_molded, glass, ceramic, metal_can)
   only when the source text says it -- never from the name, size or a photo.
 - Data only, in your assignment. Don't edit code, the skill, or another

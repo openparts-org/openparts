@@ -21,16 +21,6 @@ The OpenParts web site: a single-page app written in
   package JSON), so dimension lines sit exactly on the model, which it
   loads from the API's 3MF (STL as the fallback). Its UI strings come
   from `i18n.mbt` (`viewer_labels`).
-- Review and datasheet jump: `cmd/app/review*.mbt` -- the `/review`
-  queue (one fact beside its datasheet page; Confirm / Dispute / Skip,
-  keys C / D / S, reviewer name and token kept in localStorage) and the
-  part page's review badges and fact table. `src/datasheet.js` opens a
-  fact's Source at the cited page with PDF.js (`pdfjs-dist`, legacy
-  build, lazy-loaded; the PDF via the server's
-  `/v1/sources/{id}/document`) and highlights the locator
-  (`src/locator-match.js`); any element with `data-op-source` opens it.
-  `node scripts/locator-hit-rate.mjs <api>` measures how often the
-  locator is found on its page.
 - `api/` -- MoonBit types of every JSON document openparts-server
   returns. `api/types.mbt` is **generated** from the Rust types
   (schemars JSON Schema -> `scripts/gen_api_types.py`); never edit it,

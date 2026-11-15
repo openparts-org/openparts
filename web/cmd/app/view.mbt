@@ -66,7 +66,6 @@ fn view(model : Model, emit : Emit[Msg]) -> Html {
     KicadPlugin => kicad_view(model.lang)
     Contributing => contributing_view(model.lang)
     Bom => bom_view(model, emit)
-    Reviews(_) => review_view(model, emit)
     NotFound => not_found_view(model.lang)
   }
   div([
@@ -83,7 +82,6 @@ fn nav_view(model : Model) -> Html {
   let links = [
     ("search", c.nav_search),
     ("bom", lang.bom().nav),
-    ("review", lang.review().nav_review),
     ("kicad-plugin", c.nav_kicad),
     ("contributing", c.nav_contributing),
   ].map(l => li([a(href=href(lang, l.0), l.1)]))
@@ -416,15 +414,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     let alt = pin.alternate_functions.join(", ")
     tr([
       td(n),
-      td(
-        reviewed_cell(
-          lang,
-          data.reviews,
-          Device,
-          ["/pins/\{n}/name", "/pins/\{n}", "/pins"],
-          pin.name,
-        ),
-      ),
+      td(pin.name),
       td(pin.type_.wire()),
       td(if alt.is_empty() { "-" } else { alt }),
     ])
@@ -433,11 +423,8 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     h1([text(part.mpn + " "), span(class="text-muted", "/ \{m}")]),
     div(class="result-badges", [
       existence_badge(part.existence.status),
-      fact_dot(lang, find_fact(data.reviews, Part, ["/existence"])),
       lifecycle_badge(part.lifecycle.status),
-      fact_dot(lang, find_fact(data.reviews, Part, ["/lifecycle"])),
     ]),
-    review_summary_view(lang, data),
     section(class="section", downloads),
     section(class="section", [h3(c.preview3d), ..viewer]),
     section(class="section", [
@@ -478,42 +465,20 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
   let pkg = data.package_
   let dims = pkg.dimensions
   let rows = [
-    (c.family, pkg.family.wire(), "/family"),
-    (c.lead_count, pkg.lead_count.to_string(), "/lead_count"),
-    (c.pitch, format_dimension(Some(pkg.pitch)), "/pitch"),
-    (
-      c.body_width,
-      format_dimension(Some(dims.body_width)),
-      "/dimensions/body_width",
-    ),
-    (
-      c.body_length,
-      format_dimension(Some(dims.body_length)),
-      "/dimensions/body_length",
-    ),
-    (
-      c.body_height,
-      format_dimension(dims.body_height),
-      "/dimensions/body_height",
-    ),
+    (c.family, pkg.family.wire()),
+    (c.lead_count, pkg.lead_count.to_string()),
+    (c.pitch, format_dimension(Some(pkg.pitch))),
+    (c.body_width, format_dimension(Some(dims.body_width))),
+    (c.body_length, format_dimension(Some(dims.body_length))),
+    (c.body_height, format_dimension(dims.body_height)),
   ]
   sections.push(
     section(class="section", [
       h3(package_heading(lang, pkg.id)),
-      table([
-        tbody(
-          rows.map(r => {
-            tr([
-              th(r.0),
-              td(reviewed_cell(lang, data.reviews, Package, [r.2], r.1)),
-            ])
-          }),
-        ),
-      ]),
+      table([tbody(rows.map(r => tr([th(r.0), td(r.1)])))]),
     ]),
   )
   sections.push(alternatives_section(model, emit))
-  sections.push(facts_section(lang, data))
   sections.push(
     section(class="section", [
       h3(c.sources_heading),
