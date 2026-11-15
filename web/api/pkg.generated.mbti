@@ -968,10 +968,11 @@ pub impl @json.FromJson for PackageKeepout
 pub(all) struct PackagePad {
   drill : Double?
   drill_length : Double?
-  length : Double
+  length : Double?
   number : String
   plated : Bool?
-  width : Double
+  slot_axis : SlotAxis?
+  width : Double?
   x : Double
   y : Double
 }
@@ -1328,6 +1329,15 @@ pub(all) enum Severity {
 pub fn Severity::all() -> Array[Self]
 pub fn Severity::wire(Self) -> String
 pub impl @json.FromJson for Severity
+
+#derive(Eq, @debug.Debug)
+pub(all) enum SlotAxis {
+  X
+  Y
+}
+pub fn SlotAxis::all() -> Array[Self]
+pub fn SlotAxis::wire(Self) -> String
+pub impl @json.FromJson for SlotAxis
 
 #derive(Eq)
 pub(all) struct Source {

@@ -270,7 +270,10 @@ pub struct PackageTab {
 /// view, X right and Y up (the family documents the origin). `width` is
 /// the pad along X, `length` along Y. A plated hole has a `drill`
 /// diameter; a slotted hole also a `drill_length` (the slot's overall
-/// length, along the pad's longer side).
+/// length, along the pad's longer side). A plated hole whose source draws
+/// no land around it leaves `width`/`length` out (0): the connector
+/// families then draw a generator-default annular ring, and a slot needs
+/// `slot_axis` (Canonical Data Specification 20.6).
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -278,17 +281,43 @@ pub struct PackagePad {
     pub number: String,
     pub x: f64,
     pub y: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub width: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub length: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drill: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drill_length: Option<f64>,
+    /// The axis a slot runs along, for a slotted hole without a stated
+    /// land (with a land, the slot runs along the land's longer side).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slot_axis: Option<SlotAxis>,
     /// `false` for a non-plated hole (an alignment peg): `drill` is the
     /// hole, `width`/`length` its size, and the pad has no copper (its
     /// number may be empty).
     #[serde(default = "plated_default", skip_serializing_if = "is_plated")]
     pub plated: bool,
+}
+
+/// The axis a slotted hole runs along (`PackagePad::slot_axis`).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SlotAxis {
+    X,
+    Y,
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+impl PackagePad {
+    /// The source draws no land around this hole.
+    pub fn land_unstated(&self) -> bool {
+        self.width == 0.0 && self.length == 0.0
+    }
 }
 
 fn plated_default() -> bool {

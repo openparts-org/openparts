@@ -495,6 +495,17 @@ pub(crate) mod connector {
     /// The board an edge-mount connector straddles (its axis on the
     /// board's mid-plane): 1.6 mm, the common FR-4 thickness.
     pub const EDGE_BOARD_THICKNESS: f64 = 1.6;
+    /// A plated hole the source draws without a land: the land is the
+    /// hole (or slot) grown by this ring on every side, as the header
+    /// families' default, shrunk where it would come closer than
+    /// `MIN_COPPER_GAP` to another pad.
+    pub const ANNULAR_RING: f64 = 0.35;
+    pub const MIN_COPPER_GAP: f64 = 0.25;
+    /// The smallest ring kept when shrinking.
+    pub const MIN_RING: f64 = 0.1;
+    /// An RF connector's base (flange) height when the source doesn't
+    /// print it.
+    pub const RF_BASE_HEIGHT: f64 = 1.5;
 }
 
 /// `radial` generator defaults.

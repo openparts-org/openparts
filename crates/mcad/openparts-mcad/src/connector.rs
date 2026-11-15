@@ -34,15 +34,21 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
     let d = &package.dimensions;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
     let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
-    let body_h = defaults::stated(&d.body_height)
-        .ok_or(McadError::MissingDimension("dimensions.body_height"))?;
-    let features = connector_features(package, body_w, body_h);
+    let body_h = match defaults::stated(&d.body_height) {
+        Some(h) => h,
+        // An RF base's height is often not printed (3D only).
+        None if package.family == F::RfCoax => defaults::connector::RF_BASE_HEIGHT,
+        None => return Err(McadError::MissingDimension("dimensions.body_height")),
+    };
+    let features = connector_features(package, [body_w, body_l, body_h]);
     let z = if features.edge_mount {
         -defaults::connector::EDGE_BOARD_THICKNESS / 2.0
     } else {
         value(&d.standoff).unwrap_or(0.0) + body_h / 2.0
     };
-    let leads = crate::land::from_pads_with(package, z - body_h / 2.0)?;
+    let mut with_lands = package.clone();
+    with_lands.pads = default_lands(package)?;
+    let leads = crate::land::from_pads_with(&with_lands, z - body_h / 2.0)?;
     if leads.iter().all(|l| l.mounting == Mounting::NonPlated) {
         return Err(McadError::MissingDimension("pads (a plated pad)"));
     }
@@ -67,6 +73,66 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
     })
 }
 
+/// The pads with a land for every plated hole the source draws without
+/// one: the hole (a slot along its `slot_axis`) grown by the default
+/// annular ring, shrunk to keep the minimum copper gap to every other
+/// pad (never below the minimum ring).
+fn default_lands(package: &Package) -> Result<Vec<openparts_core::PackagePad>, McadError> {
+    use defaults::connector as dc;
+    let mut pads = package.pads.clone();
+    for (i, (p, out)) in package.pads.iter().zip(pads.iter_mut()).enumerate() {
+        if !(p.drill.is_some() && p.land_unstated()) {
+            continue;
+        }
+        let (hole_x, hole_y) = hole_size(p).ok_or_else(|| {
+            McadError::InconsistentDimensions(format!(
+                "pad \"{}\": a slot without a land needs slot_axis",
+                p.number
+            ))
+        })?;
+        // The ring that keeps the gap to every other pad (its stated
+        // land, or its bare hole).
+        let mut ring = dc::ANNULAR_RING;
+        for (j, q) in package.pads.iter().enumerate() {
+            if j == i {
+                continue;
+            }
+            let bare = q.land_unstated();
+            let (qx, qy) = if bare {
+                hole_size(q).unwrap_or((0.0, 0.0))
+            } else {
+                (q.width, q.length)
+            };
+            let gap_x = (q.x - p.x).abs() - (qx + hole_x) / 2.0;
+            let gap_y = (q.y - p.y).abs() - (qy + hole_y) / 2.0;
+            // Both rings grow into a gap between two bare holes.
+            let share = if bare && q.plated { 2.0 } else { 1.0 };
+            ring = ring.min((gap_x.max(gap_y) - dc::MIN_COPPER_GAP) / share);
+        }
+        // A non-plated hole has no copper: its size is the hole.
+        let ring = if p.plated {
+            ring.max(dc::MIN_RING)
+        } else {
+            0.0
+        };
+        out.width = hole_x + 2.0 * ring;
+        out.length = hole_y + 2.0 * ring;
+    }
+    Ok(pads)
+}
+
+/// A hole's extent along X and Y: round, or a slot along its
+/// `slot_axis` (`None`: a slot without one).
+fn hole_size(p: &openparts_core::PackagePad) -> Option<(f64, f64)> {
+    let d = p.drill?;
+    match (p.drill_length, p.slot_axis) {
+        (None, _) => Some((d, d)),
+        (Some(l), Some(openparts_core::SlotAxis::X)) => Some((l, d)),
+        (Some(l), Some(openparts_core::SlotAxis::Y)) => Some((d, l)),
+        (Some(_), None) => None,
+    }
+}
+
 /// What a connector's 3D model needs beyond its body and pads: each
 /// value is the package's own when it states one, else a generator
 /// default (`defaults::connector`).
@@ -89,11 +155,27 @@ pub struct ConnectorFeatures {
     pub pin_diameter: f64,
 }
 
-pub fn connector_features(package: &Package, body_w: f64, body_h: f64) -> ConnectorFeatures {
+pub fn connector_features(package: &Package, body: [f64; 3]) -> ConnectorFeatures {
     use defaults::connector as dc;
+    let [body_w, body_l, body_h] = body;
     let d = &package.dimensions;
     let c = package.connector.as_ref();
-    let across = body_w.min(body_h);
+    let orientation = c
+        .and_then(|c| c.orientation)
+        .unwrap_or(Orientation::RightAngle);
+    let vertical = orientation == Orientation::Vertical && !c.is_some_and(|c| c.edge_mount);
+    // The barrel stands on the body's top face (vertical) or leaves its
+    // +Y face: its size follows that face.
+    let across = if vertical {
+        body_w.min(body_l)
+    } else {
+        body_w.min(body_h)
+    };
+    // A vertical connector's barrel reaches the stated overall height.
+    let to_top = value(&d.overall_height)
+        .filter(|_| vertical)
+        .map(|top| top - value(&d.standoff).unwrap_or(0.0) - body_h)
+        .filter(|l| *l > 0.0);
     let mating_diameter = value(&d.mating_diameter).unwrap_or(
         across
             * if package.family == F::BarrelJack {
@@ -103,14 +185,14 @@ pub fn connector_features(package: &Package, body_w: f64, body_h: f64) -> Connec
             },
     );
     ConnectorFeatures {
-        orientation: c
-            .and_then(|c| c.orientation)
-            .unwrap_or(Orientation::RightAngle),
+        orientation,
         edge_mount: c.is_some_and(|c| c.edge_mount),
         tail_length: value(&d.tail_length).unwrap_or(dc::TAIL_LENGTH),
         shell_thickness: dc::SHELL_THICKNESS,
         mating_diameter,
-        mating_length: value(&d.mating_length).unwrap_or(mating_diameter * dc::BARREL_LENGTH_RATIO),
+        mating_length: value(&d.mating_length)
+            .or(to_top)
+            .unwrap_or(mating_diameter * dc::BARREL_LENGTH_RATIO),
         pin_diameter: value(&d.pin_diameter).unwrap_or(mating_diameter * dc::PIN_RATIO),
     }
 }
@@ -229,6 +311,61 @@ mod tests {
             panic!()
         };
         assert!(f.edge_mount);
+    }
+
+    #[test]
+    fn holes_without_a_land_get_the_default_ring_shrunk_to_the_gap() {
+        // Terminal block holes at 2.54 mm with no land; a slot along Y.
+        let p = pkg(
+            "family: terminal_block\nlead_count: 3\npitch: {typ: 2.54, unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {typ: 8.0, unit: mm}\n\
+             \x20 body_length: {typ: 6.0, unit: mm}\n\
+             \x20 body_height: {typ: 9.0, unit: mm}\n\
+             pads:\n\
+             \x20 - {number: '1', x: -2.54, y: 0, drill: 1.0}\n\
+             \x20 - {number: '2', x: 0, y: 0, drill: 1.0}\n\
+             \x20 - {number: '3', x: 6.0, y: 0, drill: 1.0, drill_length: 2.0, slot_axis: y}\n",
+        );
+        let g = generate(&p).unwrap();
+        let ring = defaults::connector::ANNULAR_RING;
+        // 2.54 - 1.0 = 1.54 between holes, 0.25 kept: (1.54 - 0.25) / 2 = 0.645
+        // > 0.35, so the full ring.
+        assert!((g.leads[0].size.x - (1.0 + 2.0 * ring)).abs() < 1e-9);
+        let slot = &g.leads[2];
+        assert!((slot.size.x - 1.7).abs() < 1e-9 && (slot.size.y - 2.7).abs() < 1e-9);
+        assert_eq!(slot.slot, Some(2.0));
+        // Holes 1.2 apart: (1.2 - 1.0 - 0.25) < 0: the minimum ring.
+        let mut tight = p.clone();
+        tight.pads[1].x = -1.34;
+        let g = generate(&tight).unwrap();
+        let min = defaults::connector::MIN_RING;
+        assert!((g.leads[0].size.x - (1.0 + 2.0 * min)).abs() < 1e-9);
+        // A slot without a land needs its axis.
+        let mut bad = p.clone();
+        bad.pads[2].slot_axis = None;
+        assert!(generate(&bad).is_err());
+    }
+
+    #[test]
+    fn an_rf_base_without_a_height_and_a_barrel_to_the_overall_height() {
+        let p = pkg("family: rf_coax\nlead_count: 2\npitch: {unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {typ: 5.88, unit: mm}\n\
+             \x20 body_length: {typ: 5.88, unit: mm}\n\
+             \x20 overall_height: {typ: 6.0, unit: mm}\n\
+             connector: {orientation: vertical, interface: mcx}\n\
+             pads:\n\
+             \x20 - {number: '1', x: 0, y: 0, width: 1.65, length: 1.65}\n\
+             \x20 - {number: '2', x: 2.22, y: 2.22, width: 2.1, length: 2.1}\n");
+        let g = generate(&p).unwrap();
+        let base = defaults::connector::RF_BASE_HEIGHT;
+        assert!((g.body.size.z - base).abs() < 1e-9);
+        let crate::Details::Connector(f) = g.details else {
+            panic!()
+        };
+        assert!((f.mating_length - (6.0 - base)).abs() < 1e-9);
+        assert!((f.mating_diameter - 5.88 * defaults::connector::BARREL_RATIO).abs() < 1e-9);
     }
 
     #[test]

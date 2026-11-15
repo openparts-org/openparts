@@ -203,6 +203,26 @@ fn micro_usb_and_fpc_turn_contact_1_upper_left() {
 }
 
 #[test]
+fn holes_without_a_land_say_the_land_is_a_default() {
+    let p = pkg(
+        "family: terminal_block\nlead_count: 2\npitch: {typ: 3.5, unit: mm}\n\
+         dimensions:\n\
+         \x20 body_width: {typ: 7.0, unit: mm}\n\
+         \x20 body_length: {typ: 7.0, unit: mm}\n\
+         \x20 body_height: {typ: 8.0, unit: mm}\n\
+         pads:\n\
+         \x20 - {number: '1', x: -1.75, y: 0, drill: 1.1}\n\
+         \x20 - {number: '2', x: 1.75, y: 0, drill: 1.1}\n",
+    );
+    let (g, m) = model(&p);
+    assert!(aligned(&g, &m));
+    assert_eq!(m.basis.pads.kind, BasisKind::Datasheet);
+    assert_eq!(m.basis.pads.defaults, ["/pads/land"]);
+    assert!((pad(&m, "2").size.x - 1.8).abs() < 1e-9);
+    assert_eq!(pad(&m, "1").drill, Some(1.1));
+}
+
+#[test]
 fn zero_orientation_rows_name_the_connector_families() {
     use openparts_core::PackageFamily as F;
     for f in [

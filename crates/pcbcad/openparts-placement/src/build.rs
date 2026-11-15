@@ -695,10 +695,19 @@ fn basis(package: &Package, g: &MechanicalGeometry, tht: bool) -> Basis {
         _ => &[],
     };
     let pads = if !package.pads.is_empty() {
+        let ring = package
+            .pads
+            .iter()
+            .any(|p| p.drill.is_some() && p.land_unstated());
         BasisEntry {
             kind: BasisKind::Datasheet,
             sources: sources(package, &["/pads"]),
-            defaults: vec![],
+            // Holes the source draws without a land: the generator's ring.
+            defaults: if ring {
+                vec!["/pads/land".into()]
+            } else {
+                vec![]
+            },
         }
     } else {
         let mut pointers: Vec<&str> = vec!["/pitch"];

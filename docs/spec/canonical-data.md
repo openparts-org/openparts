@@ -1165,8 +1165,28 @@ shell sheet 0.2 mm, barrel 0.7 × the body's smaller cross dimension and
 1.5 diameters long, bore 0.6 ×, centre pin 0.33 × the bore, a 1.6 mm board
 under an edge-mount part) are drawing defaults and are never written back.
 
+Many through-hole layouts (terminal blocks, barrel jacks, RF connectors) draw
+only the hole. Such a pad leaves `width`/`length` out; a slot then states
+`slot_axis` (`x` or `y`). The generator draws the land as the hole grown by a
+0.35 mm annular ring (the header families' default), shrunk to keep 0.25 mm
+copper to every other pad but never below 0.1 mm, and the Placement Model lists
+`/pads/land` among the pad basis's defaults. A non-plated hole without a size
+is the hole.
+
+```yaml
+pads:
+  value:
+    - { number: "1", x: -2.5, y: -1.2, drill: 1.3 }                                  # no land drawn
+    - { number: "3", x: 4.7, y: 0, drill: 1.0, drill_length: 3.0, slot_axis: y }
+```
+
+An RF connector's base height is often not printed: `body_height` may be left
+out for `rf_coax` (the generator draws a 1.5 mm base), and a vertical one's
+barrel reaches `overall_height` when that is stated.
+
 Rule `connector.invalid`: a connector family without `pads`, with a
-`lead_count` other than its plated pad count, or without `body_height`; a
+`lead_count` other than its plated pad count, or without `body_height` (except
+`rf_coax`); an SMD pad without a size, a land-less slot without `slot_axis`; a
 missing required `connector` field; a `connector` field outside its family; an
 `edge_mount` part without `edge.pcb_edge`.
 

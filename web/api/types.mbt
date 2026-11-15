@@ -2835,15 +2835,19 @@ pub impl @json.FromJson for PackageKeepout with fn from_json(json, path) {
 /// view, X right and Y up (the family documents the origin). `width` is
 /// the pad along X, `length` along Y. A plated hole has a `drill`
 /// diameter; a slotted hole also a `drill_length` (the slot's overall
-/// length, along the pad's longer side).
+/// length, along the pad's longer side). A plated hole whose source draws
+/// no land around it leaves `width`/`length` out (0): the connector
+/// families then draw a generator-default annular ring, and a slot needs
+/// `slot_axis` (Canonical Data Specification 20.6).
 #derive(Eq)
 pub(all) struct PackagePad {
   drill : Double?
   drill_length : Double?
-  length : Double
+  length : Double?
   number : String
   plated : Bool?
-  width : Double
+  slot_axis : SlotAxis?
+  width : Double?
   x : Double
   y : Double
 }
@@ -2856,10 +2860,11 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
   {
     drill: opt_field(obj, "drill", path),
     drill_length: opt_field(obj, "drill_length", path),
-    length: field(obj, "length", path),
+    length: opt_field(obj, "length", path),
     number: field(obj, "number", path),
     plated: opt_field(obj, "plated", path),
-    width: field(obj, "width", path),
+    slot_axis: opt_field(obj, "slot_axis", path),
+    width: opt_field(obj, "width", path),
     x: field(obj, "x", path),
     y: field(obj, "y", path),
   }
@@ -3868,6 +3873,37 @@ pub impl @json.FromJson for Severity with fn from_json(json, path) {
     String("info") => Info
     String("warning") => Warning
     _ => raise @json.JsonDecodeError((path, "expected a Severity"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum SlotAxis {
+  X
+  Y
+}
+
+///|
+/// The wire (JSON) string.
+pub fn SlotAxis::wire(self : SlotAxis) -> String {
+  match self {
+    X => "x"
+    Y => "y"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn SlotAxis::all() -> Array[SlotAxis] {
+  [X, Y]
+}
+
+///|
+pub impl @json.FromJson for SlotAxis with fn from_json(json, path) {
+  match json {
+    String("x") => X
+    String("y") => Y
+    _ => raise @json.JsonDecodeError((path, "expected a SlotAxis"))
   }
 }
 

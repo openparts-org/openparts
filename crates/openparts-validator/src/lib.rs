@@ -140,7 +140,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "connector.invalid",
-        meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height`, or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
+        meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height` (except `rf_coax`), an SMD pad without a size or a land-less slot without `slot_axis`, or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
     },
     Rule {
         id: "keepout.invalid",

@@ -50,11 +50,26 @@ pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Di
                 ),
             );
         }
-        if package.dimensions.body_height.is_none() {
+        // An RF connector's base height is often not printed (3D default).
+        if package.dimensions.body_height.is_none() && family != F::RfCoax {
             bad(
                 "/dimensions/body_height",
                 format!("a {family} package states dimensions.body_height"),
             );
+        }
+        for (i, p) in package.pads.iter().enumerate() {
+            let problem = if !p.land_unstated() {
+                None
+            } else if p.drill.is_none() {
+                Some("an SMD pad states its width and length")
+            } else if p.drill_length.is_some() && p.slot_axis.is_none() {
+                Some("a slot without a land states slot_axis")
+            } else {
+                None
+            };
+            if let Some(problem) = problem {
+                bad(&format!("/pads/{i}"), problem.to_string());
+            }
         }
         let c = package.connector.clone().unwrap_or_default();
         let required: &[(&str, bool)] = match family {
@@ -198,6 +213,24 @@ mod tests {
         // Other families aren't concerned.
         let mut p = pkg("usb_c", "");
         p.lead_count = 9;
+        assert!(check_package_connector("p", &p).is_empty());
+    }
+
+    #[test]
+    fn a_pad_without_a_land_must_be_a_hole_and_a_slot_needs_its_axis() {
+        let mut p = pkg("barrel_jack", "");
+        p.pads[0].width = 0.0;
+        p.pads[0].length = 0.0;
+        p.pads[1].width = 0.0;
+        p.pads[1].length = 0.0;
+        p.pads[1].drill = Some(1.0);
+        p.pads[1].drill_length = Some(2.0);
+        assert_eq!(
+            paths(&check_package_connector("p", &p)),
+            ["connector.invalid /pads/0", "connector.invalid /pads/1"]
+        );
+        p.pads[0].drill = Some(1.0);
+        p.pads[1].slot_axis = Some(openparts_core::SlotAxis::Y);
         assert!(check_package_connector("p", &p).is_empty());
     }
 }
