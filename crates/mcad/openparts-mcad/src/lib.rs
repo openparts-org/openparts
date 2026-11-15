@@ -122,7 +122,9 @@ pub enum BodyShape {
     Box,
     /// An exact cylinder, axis along Z (vertical -- "standing up" on the
     /// board, e.g. a radial electrolytic can) -- `size.x`/`size.y`
-    /// (equal) are the diameter, `size.z` is the height. Deliberately
+    /// (equal) are the diameter, `size.z` is the height. Unequal, the
+    /// section is a stadium (an oval can such as an HC-49/U crystal):
+    /// `size.x` by `size.y`, half circles on the shorter side. Deliberately
     /// exact, not pre-tessellated: turning this into a renderable shape
     /// (a true curved STEP surface, or a tessellated STL mesh) is
     /// `openparts-brep`'s job, not a fact about the part, so that choice

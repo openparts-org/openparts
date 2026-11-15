@@ -122,12 +122,18 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
 
     // Fabrication: the body, its pin-1 corner chamfered.
     if g.body.shape == BodyShape::Cylinder {
+        let center = pt(g.body.position.x, g.body.position.y);
+        let (sx, sy) = (g.body.size.x, g.body.size.y);
         out.push(FpGraphic {
             layer: FpLayer::Fab,
             width: FAB_WIDTH,
-            shape: FpShape::Circle {
-                center: pt(g.body.position.x, g.body.position.y),
-                radius: g.body.size.x / 2.0,
+            shape: if is_round(sx, sy) {
+                FpShape::Circle {
+                    center,
+                    radius: sx / 2.0,
+                }
+            } else {
+                FpShape::Polygon(stadium(center, sx, sy))
             },
         });
     } else {
@@ -197,28 +203,39 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
             }
         }
     } else {
-        let r = g.body.size.x / 2.0 + SILK_WIDTH / 2.0 + 0.05;
+        let grow = SILK_WIDTH / 2.0 + 0.05;
+        let (sx, sy) = (g.body.size.x + 2.0 * grow, g.body.size.y + 2.0 * grow);
         let center = pt(g.body.position.x, g.body.position.y);
+        // The outline stays clear when every pad lies wholly inside it
+        // (radial can footprints).
         let clear = keep_out.iter().all(|k| {
-            // The circle stays clear when every pad lies wholly inside it
-            // (radial can footprints) or outside its ring.
-            let far = [
+            [
                 pt(k.x0, k.y0),
                 pt(k.x1, k.y0),
                 pt(k.x0, k.y1),
                 pt(k.x1, k.y1),
             ]
             .iter()
-            .map(|c| (c.x - center.x).hypot(c.y - center.y))
-            .fold(0.0, f64::max);
-            far < r
+            .all(|c| inside_stadium(center, sx, sy, *c))
         });
-        if clear {
+        if clear && is_round(sx, sy) {
             out.push(FpGraphic {
                 layer: FpLayer::Silk,
                 width: SILK_WIDTH,
-                shape: FpShape::Circle { center, radius: r },
+                shape: FpShape::Circle {
+                    center,
+                    radius: sx / 2.0,
+                },
             });
+        } else if clear {
+            let pts = stadium(center, sx, sy);
+            for (i, a) in pts.iter().enumerate() {
+                out.push(FpGraphic {
+                    layer: FpLayer::Silk,
+                    width: SILK_WIDTH,
+                    shape: FpShape::Line(*a, pts[(i + 1) % pts.len()]),
+                });
+            }
         }
     }
 
@@ -245,6 +262,47 @@ pub(crate) fn drawings(g: &MechanicalGeometry, pads: &[Pad]) -> Vec<FpGraphic> {
         });
     }
     out
+}
+
+/// A standing cylinder's outline is a circle when its two sizes agree.
+fn is_round(sx: f64, sy: f64) -> bool {
+    (sx - sy).abs() < 1e-9
+}
+
+/// Segments per half circle of a [`stadium`] outline.
+const STADIUM_ARC_SEGMENTS: usize = 16;
+
+/// The closed outline of a stadium (a slot: two half circles joined by
+/// straight sides) `sx` by `sy` around `center`, its long axis along the
+/// larger size.
+fn stadium(center: Point2, sx: f64, sy: f64) -> Vec<Point2> {
+    let along_x = sx >= sy;
+    let r = sx.min(sy) / 2.0;
+    let half = (sx.max(sy) / 2.0 - r).max(0.0);
+    let mut out = Vec::new();
+    for (end, start_angle) in [(1.0, -0.5), (-1.0, 0.5)] {
+        for i in 0..=STADIUM_ARC_SEGMENTS {
+            let t = (start_angle + i as f64 / STADIUM_ARC_SEGMENTS as f64) * std::f64::consts::PI;
+            let (u, v) = (end * half + r * t.cos(), r * t.sin());
+            out.push(if along_x {
+                pt(center.x + u, center.y + v)
+            } else {
+                pt(center.x + v, center.y + u)
+            });
+        }
+    }
+    out
+}
+
+fn inside_stadium(center: Point2, sx: f64, sy: f64, p: Point2) -> bool {
+    let (u, v) = if sx >= sy {
+        (p.x - center.x, p.y - center.y)
+    } else {
+        (p.y - center.y, p.x - center.x)
+    };
+    let r = sx.min(sy) / 2.0;
+    let half = (sx.max(sy) / 2.0 - r).max(0.0);
+    (u.abs() - half).max(0.0).hypot(v) < r
 }
 
 /// The parts of the axis-aligned segment a..z outside every rectangle.

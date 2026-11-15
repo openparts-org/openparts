@@ -17,13 +17,16 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     match input.category {
         Some(ComponentCategory::Led) => led(s, input, &leads),
         Some(ComponentCategory::Crystal) if b.x >= 8.0 => {
-            // A slot outline takes plain numbers, so the can is fixed here;
-            // its thickness is the HC-49/U proportion (a generator default).
-            let (hw, t) = (b.x / 2.0, b.x * 0.42);
+            // A slot outline takes plain numbers, so the can is fixed here.
+            // The stated outline (`b.x` by `b.y`) is the rim's; the can
+            // sits 0.25 mm inside it. A round-envelope package (no
+            // separate thickness stated) gets the HC-49/U proportion.
+            let thickness = if b.y < b.x { b.y } else { b.x * 0.42 };
+            let (hw, t) = (b.x / 2.0 - 0.25, thickness - 0.5);
             s.fragment(
                 fragment!("hc49"),
                 &vars!(
-                    can_w = mm(b.x),
+                    can_w = mm(2.0 * hw),
                     can_h = mm(b.z),
                     half_w = hw,
                     neg_half_w = -hw,

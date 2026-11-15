@@ -26,14 +26,15 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
     }
 
     let pitch = defaults::dim(&package.pitch, "pitch.nominal")?;
-    // Both represent the can's diameter -- a true radial can has no
-    // separate width/length, but the schema has no dedicated
-    // "diameter" field, so this generator expects (without enforcing)
-    // that the two agree.
+    // A round can's diameter is `body_width` (and `body_length`, equal
+    // to it). An oval can (HC-49/U crystal) states a shorter
+    // `body_length`: it becomes a stadium `body_width` along X (the
+    // lead row) by `body_length` along Y.
     let diameter = defaults::dim(
         &package.dimensions.body_width,
         "dimensions.body_width.nominal",
     )?;
+    let depth = defaults::required(&package.dimensions.body_length).unwrap_or(diameter);
     let body_h = defaults::stated(&package.dimensions.body_height)
         .unwrap_or(crate::defaults::radial::BODY_HEIGHT);
 
@@ -45,7 +46,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
         },
         size: Size3 {
             x: diameter,
-            y: diameter,
+            y: depth,
             z: body_h,
         },
         shape: BodyShape::Cylinder,
