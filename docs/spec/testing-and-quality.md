@@ -74,7 +74,7 @@ YAMLの重複キーは黙って上書きせず拒否する。未対応項目やS
 
 - `A1`、`EP`等のPin keyを数値に変換しない。
 - Overrideが別RevisionやBase Definitionを変更しない。
-- `nominal`がない寸法に平均値を補完しない。
+- `typ`がない寸法に平均値を補完しない。
 - 存在しないSource参照を受理しない。
 - Hash不一致のArtifactを有効な結果として返さない。
 
@@ -104,7 +104,7 @@ Validatorの変更では、既存Datasetに対する新しいエラー、警告�
 
 JSON Schema等による構造検証と、Entityをまたぐ意味的検証を分離する。Schemaを通過することは技術的な正しさを保証しない。
 
-`min`、`nominal`、`max`が存在する範囲で大小関係を検証する。存在しない値を検証のために生成しない。
+`min`、`typ`、`max`が存在する範囲で大小関係を検証する。存在しない値を検証のために生成しない。
 
 ---
 
@@ -126,7 +126,7 @@ Revision不明時は差異の影響を判定し、一意に安全な生成結果
 
 - 同じDeviceを共有する複数MPN。
 - 複数Packageや異なるPin構成。
-- `nominal`がない寸法。
+- `typ`がない寸法。
 - 露出パッド、NC、Reserved。
 - Revisionによる差分。
 - 出典の競合や情報不足。

@@ -70,6 +70,48 @@ implicit application-specific types
 
 単純なYAMLを優先する。
 
+## 3.3 Schema 0.2 Layout
+
+A file keeps each fact next to its evidence and writes quantities as a
+reader would:
+
+```yaml
+schema_version: "0.2"
+kind: part
+id: aos/AO3400A
+manufacturer: aos
+mpn: AO3400A
+device: aos/AO3400A
+package: standards/SOT23-2.90x1.60-P1.90-AOS
+source: aos/AO3400A-DS            # the file's default source
+
+existence: { status: probable, src: p1 "Title" }
+
+parameters:
+  drain_current: { typ: 5.7 A, at: { TA: 25 °C }, src: p1 "Abs. Max. Ratings, ID" }
+  rds_on:
+    - { typ: 18 mΩ, max: 26.5 mΩ, at: { VGS: 10 V, ID: 5.7 A }, src: p2 "Elec. Char., RDS(ON)" }
+    - { typ: 24 mΩ, max: 32 mΩ, at: { VGS: 4.5 V, ID: 5 A }, src: p2 "Elec. Char., RDS(ON)" }
+```
+
+- **Quantities** are unit strings: `26.5 mΩ`, `0.4 mm`; a symmetric
+  tolerance is `tol: ±10 %` (= `min: -10 %, max: 10 %`). `min`, `typ`
+  and `max` of one value use one unit. Coordinates (`pads`, `rect`,
+  `size`, `pcb_edge`) stay plain numbers in mm.
+- **`src`** cites the fact it sits in (section 25). **`at`** holds the
+  measurement conditions (section 11.2).
+- **Layout** is fixed by `openparts data fmt` (deterministic key order,
+  flow style for an entry that fits in 100 columns, block style
+  otherwise); CI fails on an unformatted file (`fmt --check`). Comments
+  are kept: before a top-level key, or at the top of the file.
+- Schema 0.1 files (a `provenance:` map at the end, `nominal`, separate
+  `unit`) are converted with `openparts data migrate --to 0.2`. Readers
+  accept 0.1 during the transition.
+
+In memory and in the API the model is unchanged in shape: quantities
+are `min`/`typ`/`max` + `unit`, evidence is a `provenance` map keyed by
+JSON Pointer, and a parameter key holds a list of values.
+
 ---
 
 # 4. Required Document Header
@@ -77,7 +119,7 @@ implicit application-specific types
 各Canonical Documentは最低限、
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: part
 id: st/STM32G431CBT6
 ```
@@ -142,16 +184,13 @@ Manufacturerが製品名表記を変更してもStable IDを不用意に変更�
 値が存在しない場合は原則としてFieldを省略する。
 
 ```yaml
-body_width:
-  min: 6.9
-  max: 7.1
-  unit: mm
+body_width: { min: 6.9 mm, max: 7.1 mm }
 ```
 
-Datasheetにnominalが存在しない場合、
+Datasheetにtyp（nominal）が存在しない場合、
 
 ```yaml
-nominal: 7.0
+typ: 7.0 mm
 ```
 
 を勝手に生成してはならない。
@@ -162,14 +201,12 @@ nominal: 7.0
 
 # 8. Units
 
-物理量にはUnitを明記する。
+物理量にはUnitを明記する。値とUnitは一つの文字列に書く（section 3.3）。
 
 例：
 
 ```yaml
-pitch:
-  nominal: 0.5
-  unit: mm
+pitch: { typ: 0.5 mm }
 ```
 
 初期Canonical Unit候補：
@@ -208,13 +245,7 @@ Unit StringはSchemaで管理する。
 Electrical parameters (section 11.1) use a per-quantity unit table
 with SI prefixes (`nF`, `kΩ`, `ppm/°C`); their values normalise to SI.
 
-値のString埋め込み、
-
-```yaml
-width: "7.0 mm"
-```
-
-は使用しない。
+Unitの無い数値（`typ: 7.0`）はエラーとする。Unitは上の表とsection 11.1の表で検証する。
 
 ---
 
@@ -223,16 +254,12 @@ width: "7.0 mm"
 寸法やElectrical Specificationは必要に応じて、
 
 ```yaml
-body_width:
-  nominal: 7.0
-  min: 6.9
-  max: 7.1
-  unit: mm
+body_width: { min: 6.9 mm, typ: 7.0 mm, max: 7.1 mm }
 ```
 
 として表す。
 
-すべてのFieldに`nominal/min/max`を要求しない。
+すべてのFieldに`min/typ/max`を要求しない。`typ`はschema 0.1の`nominal`である。
 
 ---
 
@@ -241,7 +268,7 @@ body_width:
 例：
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: manufacturer
 id: st
 
@@ -260,7 +287,7 @@ Manufacturer Entityには製品情報を直接含めない。
 PartはOrderable MPNを表す。
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: part
 id: st/STM32G431CBT6
 
@@ -289,25 +316,12 @@ orderable MPN (capacitance, rated voltage, resistance, ...). It is
 optional: an absent key means Unknown (section 7), never a default.
 
 ```yaml
+source: murata/GRM155R71C104KA88
 parameters:
-  capacitance:
-    nominal: 100
-    unit: nF
-  tolerance:
-    min: -10
-    max: 10
-    unit: "%"
-  rated_voltage:
-    nominal: 50
-    unit: V
-  dielectric:
-    value: X7R
-
-provenance:
-  "/parameters/capacitance":
-    - source: murata/GRM155R71C104KA88
-      page: 1
-      locator: "Specifications table, Capacitance: 0.10µF ±10%"
+  capacitance:   { typ: 100 nF, src: p1 "Specifications, Capacitance" }
+  tolerance:     { tol: ±10 %, src: p1 "Specifications, Capacitance" }
+  rated_voltage: { typ: 50 V, src: p1 "Specifications, Rated voltage" }
+  dielectric:    { value: X7R, src: p1 "Specifications, Temperature characteristics" }
 ```
 
 **Part vs Device.** Parameters are per MPN, so they live on the Part.
@@ -322,9 +336,9 @@ Device value into each Part.
 **Closed, typed vocabulary.** Keys come from a closed vocabulary
 (`openparts_core::PARAMETERS`). Each key has exactly one shape:
 
-- *numeric*: `nominal`/`min`/`max` + `unit`, like a Dimension (section
-  9). Only what the source states is recorded; a `nominal` is never
-  computed from `min`/`max` (section 7). `min <= nominal <= max`.
+- *numeric*: `min`/`typ`/`max` as unit strings, like a Dimension
+  (section 9). Only what the source states is recorded; a `typ` is never
+  computed from `min`/`max` (section 7). `min <= typ <= max`.
 - *enumerated*: `value`, one of the key's listed spellings
   (case-sensitive).
 
@@ -370,7 +384,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `forward_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `reverse_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `forward_current` | current (an optocoupler's: its input LED) | diode, LED, optocoupler |
-| `zener_voltage` | voltage (Vz at the test current; nominal/min/max as printed) | diode |
+| `zener_voltage` | voltage (Vz at the test current; min/typ/max as printed) | diode |
 | `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
 | `wavelength` | length (dominant wavelength; peak only if that is all the source gives -- say so in the locator) | LED |
@@ -381,7 +395,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
 | `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor) | transistor, optocoupler |
 | `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
-| `isolation_voltage` | voltage (input-output isolation, BVs; the rms/duration condition goes into the locator) | optocoupler |
+| `isolation_voltage` | voltage (input-output isolation, BVs; the rms/duration condition goes into the locator, or `at: { t: 60 s }`) | optocoupler |
 | `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
 | `output_type` | `fixed` `adjustable` | `power` |
 | `output_voltage` | voltage | `power` |
@@ -397,22 +411,21 @@ A group in the last column covers its subcategories (section 14.1);
 (contact ratings).
 
 A *deviation* key (a tolerance) records signed bounds: ±10 % is
-`min: -10, max: 10, unit: "%"`; an asymmetric -20/+80 % is
-`min: -20, max: 80`. It is compared and filtered by its larger
+`tol: ±10 %` (`min: -10 %, max: 10 %`); an asymmetric -20/+80 % is
+`{ min: -20 %, max: 80 % }`. It is compared and filtered by its larger
 magnitude (10 %).
 
-A rating with conditions (power at 70 °C, current at a temperature
-rise) records the number; the condition goes into the provenance
-`locator`. When a value depends on a condition the Part does not fix
-(a different power per operation mode, a range across output options),
+A value measured under stated conditions carries them in `at` (section
+11.2). When a value depends on a condition the Part does not fix (a
+different power per operation mode, a range across output options),
 leave the key out rather than pick one.
 
 Mounting style is not a parameter: it is derived from the Package
 geometry (SMD/THT) and never duplicated.
 
-**Provenance is mandatory per value.** Every key has a provenance entry
-at `/parameters/<key>` in the same document. Two rules for where values
-may come from:
+**Provenance is mandatory per value.** Every value has a `src` (section
+25; in memory `/parameters/<key>`, or `/parameters/<key>/<i>` for one of
+several variants). Two rules for where values may come from:
 
 1. Never derive a value by decoding an MPN, unless the datasheet's
    ordering-code (part numbering) table explicitly maps that code to the
@@ -424,12 +437,12 @@ may come from:
 
 **Validation** (openparts-validator): an unknown key, a unit
 incompatible with the key's quantity, the wrong shape for the key or an
-enumerated value outside its list, `min <= nominal <= max` not holding,
-and a missing `/parameters/<key>` provenance entry are errors
+enumerated value outside its list, `min <= typ <= max` not holding,
+a bad condition (section 11.2) and an uncited value are errors
 (`parameter.unknown_key`, `parameter.unit`, `parameter.invalid`,
-`parameter.out_of_range`, `provenance.missing`). A key that is unusual
-for the Device's category (capacitance on a resistor) is a warning
-(`parameter.implausible`).
+`parameter.out_of_range`, `parameter.condition`, `provenance.missing`).
+A key that is unusual for the Device's category (capacitance on a
+resistor) is a warning (`parameter.implausible`).
 
 The vocabulary grows like `PinType` (section 15): a new component type
 adds keys here, in `PARAMETERS`, in the web catalog's labels and in the
@@ -437,6 +450,40 @@ alternatives' comparison rules (`PARAMETER_RULES`: whether a value must
 be equal, at least or at most the original's;
 [Alternative Parts and BOM Checking](alternatives-and-bom.md) section
 1.4), in one change. A key is never reused for another quantity.
+
+## 11.2 Measurement Conditions
+
+`at` maps a condition symbol to the quantity the source states the value
+under: `at: { VGS: 10 V, ID: 5.7 A }`, a range as `TA: -40..85 °C`. Record
+only conditions the source prints for that value (its row, or its
+table's heading when the heading states it without "unless otherwise
+noted").
+
+A key may hold a list of condition variants, each with its own `at` and
+`src`. The **first** is the *primary* value: the catalog, search facets,
+filters and sorting use it (shown as `18 mΩ @ VGS 10 V`). List the
+variant a reader would look for first (the datasheet's headline
+condition) first.
+
+Comparisons are like-for-like only: alternatives (`PARAMETER_RULES`)
+compare the original's primary value with the candidate's variant under
+the same conditions (compared in SI); a candidate without one is
+*unverified*. Two values without conditions compare as before.
+
+Symbols (closed vocabulary, `openparts_core::CONDITION_SYMBOLS`; units
+from the quantity's table in section 11.1):
+
+| Quantity | Symbols |
+|---|---|
+| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VIN` `VOUT` `VR` `VF` |
+| current | `ID` `IC` `IB` `IF` `IR` `IZT` `IPP` `IOUT` `IL` |
+| temperature (`°C`) | `TA` (ambient) `TJ` (junction) `TC` (case) `TL` (lead) `TS` (solder point) `TT` (terminal) |
+| frequency | `f` |
+| time (`ns` `µs` `ms` `s`) | `t` |
+
+An unknown symbol, a unit that doesn't fit it, or two variants with the
+same conditions are errors (`parameter.condition`). Grow the table like
+the parameter vocabulary.
 
 ---
 
@@ -500,7 +547,7 @@ section 1).
 例：
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: device
 id: st/STM32G431CB
 
@@ -604,17 +651,14 @@ a receptacle's Dp1/Dn1). Two pins that merely look alike are not a pair.
 
 ```yaml
 pins:
-  "46": { name: USB_DM, type: io, diff_pair: { partner: "47", polarity: n, standard: usb2 } }
-  "47": { name: USB_DP, type: io, diff_pair: { partner: "46", polarity: p, standard: usb2 } }
+  "46": { name: USB_DM, type: io, diff_pair: { partner: "47", polarity: n, standard: usb2, src: p615 "Table 620" } }
+  "47": { name: USB_DP, type: io, diff_pair: { partner: "46", polarity: p, standard: usb2, src: p615 "Table 620" } }
   # A pair carried only in an alternate function (ESP32-C6 GPIO12/13):
-  "18": { name: GPIO12, type: io, alternate_functions: [USB_D_MINUS],
-          diff_pair: { partner: "19", polarity: n, standard: usb2, function: USB_D_MINUS } }
-
-provenance:
-  "/pins/47/diff_pair":
-    - source: raspberrypi/RP-008371-DS@rev1
-      page: 615
-      locator: "Table 620 \"USB pins\": USB_DP 47 \"USB Data +ve\", USB_DM 46 \"USB Data -ve\""
+  "18":
+    name: GPIO12
+    type: io
+    alternate_functions: [USB_D_MINUS]
+    diff_pair: { partner: "19", polarity: n, standard: usb2, function: USB_D_MINUS, src: p12 "Table 2-1" }
 ```
 
 | Field | Meaning |
@@ -634,8 +678,8 @@ the Device; its `diff_pair` names this pin back, with the opposite
 polarity and the same standard; either both halves name a `function` or
 neither does, and a `function` is one of the pin's
 `alternate_functions`; `impedance_ohm` is positive. Every `diff_pair`
-needs a provenance entry at `/pins/<n>/diff_pair` or `/pins/<n>`
-(`provenance.missing`; a document-wide `/pins` entry does not cover it,
+needs a `src` of its own or of its pin (`/pins/<n>/diff_pair` or `/pins/<n>`)
+(`provenance.missing`; the pin table's `src` does not cover it,
 since the pair is a claim of its own).
 
 ---
@@ -756,29 +800,19 @@ RevisionごとにDevice全体を複製しない。
 例：
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: package
 id: st/LQFP48-7x7-P0.5
 
 family: lqfp
 lead_count: 48
+source: st/DS12589@rev8
 
-pitch:
-  nominal: 0.5
-  unit: mm
+pitch: { typ: 0.5 mm, src: p142 "Table 123, e" }
 
 dimensions:
-  body_width:
-    nominal: 7.0
-    min: 6.9
-    max: 7.1
-    unit: mm
-
-  body_length:
-    nominal: 7.0
-    min: 6.9
-    max: 7.1
-    unit: mm
+  body_width:  { min: 6.9 mm, typ: 7.0 mm, max: 7.1 mm, src: p142 "Table 123, E1" }
+  body_length: { min: 6.9 mm, typ: 7.0 mm, max: 7.1 mm, src: p142 "Table 123, D1" }
 ```
 
 Package Parameter NameはCanonical Vocabularyとして段階的に標準化する。
@@ -792,7 +826,7 @@ Generatorが黙って多数派の慣習を仮定することはせず、`lead_la
 操作は停止する）。
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: package
 id: standards/SOT23-3
 
@@ -800,17 +834,11 @@ family: sot
 lead_count: 3
 lead_layout: [2, 1]   # pin 1-2側の本数, pin 3側の本数 (pin番号順)
 
-pitch:
-  nominal: 0.95
-  unit: mm
+pitch: { typ: 0.95 mm }
 
 dimensions:
-  body_width:
-    nominal: 1.3
-    unit: mm
-  body_length:
-    nominal: 2.9
-    unit: mm
+  body_width:  { typ: 1.3 mm }
+  body_length: { typ: 2.9 mm }
 ```
 
 `lqfp`/`qfn`/`soic`のように`lead_count`から均等に辺数で割り切れるFamilyは
@@ -821,7 +849,7 @@ dimensions:
 ## 20.1 Package Dimensions
 
 `dimensions`の各値はDatasheetのPackage Outline（Mechanical Data表）の記号に対応する
-`Dimension`（`nominal`/`min`/`max`/`unit`）である。`body_width`はPackage座標系のX方向、
+`Dimension`（`min`/`typ`/`max`、単位付き）である。`body_width`はPackage座標系のX方向、
 `body_length`はY方向を表し、`overall_*`は同名のbody寸法と同じ軸で測る。
 
 | Field | 意味 | JEDEC記号（例） | 必須 |
@@ -857,8 +885,8 @@ dimensions:
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
-近似であり、Canonical Dataへ書き戻さない（section 7）。表に`nominal`が無く`min`/`max`
-だけが記載されている場合は`min`/`max`だけを記録し、中央値を`nominal`として捏造しない
+近似であり、Canonical Dataへ書き戻さない（section 7）。表に`typ`が無く`min`/`max`
+だけが記載されている場合は`min`/`max`だけを記録し、中央値を`typ`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
 新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`pads`には、Fieldごとの
@@ -868,20 +896,9 @@ Provenance（Source、page、表名＋記号のlocator）を必須とする（Va
 
 ```yaml
 dimensions:
-  body_width:            # E1
-    nominal: 7.0
-    min: 6.8
-    max: 7.2
-    unit: mm
-  overall_width:         # E
-    nominal: 9.0
-    min: 8.8
-    max: 9.2
-    unit: mm
-  lead_thickness:        # c -- nominal無記載
-    min: 0.09
-    max: 0.20
-    unit: mm
+  body_width:     { min: 6.8 mm, typ: 7.0 mm, max: 7.2 mm, src: p12 "Package outline, E1" }
+  overall_width:  { min: 8.8 mm, typ: 9.0 mm, max: 9.2 mm, src: p12 "Package outline, E" }
+  lead_thickness: { min: 0.09 mm, max: 0.20 mm, src: p12 "Package outline, c" }   # typ無記載
 ```
 
 SOT-223やTO-252のようにTabを持つPackageは、Tabの番号をPackage直下の`tab`に記録する。
@@ -960,9 +977,9 @@ family: shrouded_header
 lead_count: 4
 lead_layout: [1, 4]
 dimensions:
-  body_width: {nominal: 5.75, unit: mm}       # Housing奥行き（X）
-  body_offset: {nominal: -0.525, unit: mm}    # 5.75/2 - (2.35)、-X向き
-  hole_diameter: {nominal: 0.9, min: 0.9, max: 1.0, unit: mm}
+  body_width: { typ: 5.75 mm }             # Housing奥行き（X）
+  body_offset: { typ: -0.525 mm }          # 5.75/2 - (2.35)、-X向き
+  hole_diameter: { min: 0.9 mm, typ: 0.9 mm, max: 1.0 mm }
 ```
 
 ```yaml
@@ -970,8 +987,8 @@ family: header
 lead_count: 10
 lead_layout: [2, 5]      # 2列 x 5ピン、pin 2はpin 1の隣の列
 dimensions:
-  row_spacing: {nominal: 2.54, min: 2.39, max: 2.69, unit: mm}
-  hole_diameter: {nominal: 1.1, min: 0.95, max: 1.25, unit: mm}
+  row_spacing: { min: 2.39 mm, typ: 2.54 mm, max: 2.69 mm }
+  hole_diameter: { min: 0.95 mm, typ: 1.1 mm, max: 1.25 mm }
 ```
 
 ## 20.2 Package Construction
@@ -991,13 +1008,7 @@ metal_can        金属Can（水晶振動子、アルミ電解コンデンサ）
 ```
 
 ```yaml
-construction: molded
-
-provenance:
-  "/construction":
-    - source: vishay/88503
-      page: 1
-      locator: "MECHANICAL DATA: \"Case: DO-41 (DO-204AL), molded epoxy body\""
+construction: { value: molded, src: p1 "MECHANICAL DATA, Case" }
 ```
 
 ## 20.3 Board Edge and Keep-outs
@@ -1087,7 +1098,7 @@ Land Patternの詳細SchemaはPCB CAD Model側で定義する。
 例：
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: source
 id: st/DS12589@rev8
 
@@ -1137,37 +1148,47 @@ Document IDのみをProvenanceとして使用しない。
 
 # 25. Provenance
 
-ProvenanceはField単位で指定可能とする。
-
-Canonical Data本体へSource Wrapperを大量に埋め込むのではなく、Document内の`provenance` Mapを使用する。
-
-Path表現にはJSON Pointer形式を採用する。
-
-例：
+ProvenanceはField単位で指定する。A fact's evidence sits next to it, as
+`src`:
 
 ```yaml
-provenance:
-  "/dimensions/body_width":
-    - source: st/DS12589@rev8
-      page: 142
-      locator: "Table 123, D"
-
-  "/pins/1/name":
-    - source: st/DS12589@rev8
-      page: 73
-      locator: "Pin definitions"
-```
-
-これにより、
-
-```yaml
+source: st/DS12589@rev8                       # the file's default source
 dimensions:
-  body_width:
-    nominal: 7.0
-    unit: mm
+  body_width: { typ: 7.0 mm, src: p142 "Table 123, D" }
+pins:
+  src: p73 "Table 17"                         # covers the whole table (/pins)
+  "1": { name: VBAT, type: power }
+  "2": { name: { value: PC13, src: st/RM0440@rev5 p91 "Table 3" }, type: io }
 ```
 
-自体を単純に保てる。
+**Citation.** `[<source-id>] [p<page>] ["<locator>"]`; the source id
+defaults to the file's `source:`. The full form is
+`{ source: st/RM0440@rev5, page: 91, locator: "Table 3" }`. Several
+citations are a list: `src: [p73 "Table 17", st/RM0440@rev5 p91]`.
+
+**Where `src` lives.** It cites the value it is in:
+
+| Fact | `src` |
+|---|---|
+| a record (`existence`, a dimension, a parameter value, `edge`, `tab`, `review`, a pin, a `diff_pair`) | inside it, last |
+| a table (`pins`, `dimensions`, `revisions`) | inside it, first: covers every entry without its own |
+| a scalar or list (`package`, `lead_count`, `construction`, a pin's `name`, `pad_order`, `keepouts`) | wrap it: `{ value: <fact>, src: ... }` |
+| one of several parameter variants | inside that variant |
+
+In memory and in the API the same evidence is a `provenance` map keyed
+by the fact's JSON Pointer (`/dimensions/body_width`, `/pins`,
+`/parameters/rds_on/1`); `openparts-data` converts both ways. A pointer
+the layout can't place (none exists today) stays in a trailing
+`provenance:` map of that form.
+
+## 25.1 Locators
+
+A locator is a short identifier of where on the page the fact is: a
+table or figure number, a row and column name, a section title
+(`"Table 3, RT0805 column"`, `"Elec. Char., RDS(ON)"`). It is not copied
+text: the value lives in the fact, its conditions in `at` (section
+11.2). A locator over 120 characters is a warning
+(`provenance.locator_long`).
 
 ---
 
@@ -1192,13 +1213,7 @@ Replacement
 同じFieldについて複数Sourceを持ってよい。
 
 ```yaml
-provenance:
-  "/pins/1/name":
-    - source: st/DS12589@rev8
-      page: 73
-
-    - source: st/RM0440@rev5
-      page: 91
+"1": { name: { value: VBAT, src: [p73, st/RM0440@rev5 p91] }, type: power }
 ```
 
 ## 26.1 Review Status
@@ -1242,6 +1257,26 @@ review:
 - A Part's review status as the site shows it combines the Part, its
   Device and its Package: reviewed only when all three are.
 
+## 26.2 Copyright and Source Use
+
+Engineering policy, not legal advice.
+
+- **Facts only.** Store values, units, conditions, min/typ/max and
+  identifiers. Never reproduce a source's table layout, prose, figures,
+  graphs or drawings.
+- **No curve digitizing.** Take only values printed as numbers in text
+  or tables; never read values off a graph.
+- **Short locators** (section 25.1): table/figure numbers, row/column
+  names, section titles.
+- **Manufacturer documents only** as sources of facts (datasheets,
+  package drawings, application notes). No bulk extraction from
+  manufacturer or distributor parametric databases or search tools:
+  database rights (in the EU, Directive 96/9/EC) and site terms of use
+  apply to them.
+- **No rehosting.** Sources are cited by URL; PDFs are never published
+  ([Architecture Specification](architecture.md) sections 3 and 20: the
+  document cache is opt-in and off on public deployments).
+
 ---
 
 # 27. Conflicting Sources
@@ -1266,7 +1301,7 @@ Source間で情報が競合する場合、AIやContributorが勝手に一方を�
 Erratumを独立Entityとして保持できる。
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: erratum
 id: st/STM32G431/ES0431/item-2.3.4
 
@@ -1364,7 +1399,7 @@ related
 例：
 
 ```yaml
-schema_version: "0.1"
+schema_version: "0.2"
 kind: rejected
 id: rejected/st/STM32G431CBT66
 

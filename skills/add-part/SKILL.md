@@ -15,10 +15,10 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
 
 - **Unknown is better than invented.** Leave out what the source doesn't
   state. Never estimate, average, or copy from a "similar" part. A range
-  given only as min/max is recorded as min/max -- never add a nominal (the
+  given only as min/max is recorded as min/max -- never add a `typ` (the
   generators draw such a dimension at its midpoint without storing it). A
-  lone "1.80 max" is recorded as `max: 1.80` only -- never copy it into
-  `nominal` (the generator draws at the max; a min-only height is treated
+  lone "1.80 max" is recorded as `max: 1.80 mm` only -- never copy it into
+  `typ` (the generator draws at the max; a min-only height is treated
   as a floor).
 - **Record the land pattern.** When the datasheet gives a recommended
   PCB land ("Recommended Land Pattern", "Example Board Layout", "PCB
@@ -40,6 +40,10 @@ read, with a page and locator. Read once: `docs/spec/canonical-data.md`
   unverified and move on. Distributor-hosted copies (DigiKey/Mouser) of a
   manufacturer PDF are acceptable only when the existing dataset already
   relies on them for that manufacturer -- say so in the Source comment.
+- **Facts, not copies** (Canonical Data Specification 26.2): values,
+  units, conditions, identifiers. No table layouts, prose, figures or
+  graph-read values; locators are short ("Table 5, VGS(th)"); facts from
+  manufacturer documents only, never scraped from parametric databases.
 - **Never mark anything reviewed.** A `review:` block (Canonical Data
   Specification section 26.1) is written only by a person in an
   openparts-data pull request. When you edit a document that has one,
@@ -72,6 +76,12 @@ Copy the shape of an existing file (`parts/onsemi/2n7002et1g/2N7002ET1G.yaml`,
 `devices/onsemi/2N7002E.yaml`, `sources/onsemi/2N7002E-D.yaml`,
 `packages/standards/lqfp/LQFP48-7x7-P0.5.yaml`) and give every new file a
 comment header saying what you verified where.
+
+Files are schema 0.2 (canonical-data.md 3.3 and 25): `source:` names the
+file's main document, every fact carries `src: p<page> "<locator>"`,
+quantities are unit strings (`0.4 mm`, `±10 %`), conditions go in `at`.
+Run `openparts data fmt <files>` before committing; CI runs
+`openparts data fmt --check`.
 
 - **Ids share one namespace across kinds**: a Source id equal to a Device
   id (`aos/AO3400A`) breaks resolution. Suffix datasheet sources
@@ -116,7 +126,7 @@ comment header saying what you verified where.
 - Electrical parameters (`parameters:` capacitance, resistance, rated
   voltage...) follow the Parameter Ingestion Guide,
   docs/spec/agent-ingestion.md section 19.1: closed key list, a unit of
-  the key's quantity, a `/parameters/<key>` provenance entry for each,
+  the key's quantity, a `src` and the printed conditions (`at`) for each,
   and no values decoded from the MPN unless the ordering-code table maps
   the code (cite that table).
 
@@ -202,8 +212,8 @@ given -- then don't also add `overall_height`), `overall_width`/
 (A1), `lead_width` (b), `lead_length` (L: the gull-wing **foot** -- NXP's
 `Lp`, not its `L`; on QFN the terminal length; DIP lead length to the
 seating plane is *not* `lead_length`), `lead_thickness` (c, A3 on QFN),
-`exposed_pad`, `tab_width`, `tab_length`. Each has its own provenance
-pointer; `"/lead_layout"` and `"/tab"` are valid pointers too.
+`exposed_pad`, `tab_width`, `tab_length`. Each has its own `src`
+(`lead_layout: { value: [2, 1], src: ... }` and `tab` can be cited too).
 
 - Parenthesised values ("(0.2)") are reference values: record only if the
   table marks them as such and say so; "BSC" values are nominal.
@@ -369,7 +379,7 @@ it the hard way (the full list is `RULES` in openparts-validator):
   a pin are warnings (`pad.no_pin`).
 - **Provenance keys must name a field the document has**
   (`provenance.unknown_path`).
-- **`existence: verified` needs an `/existence` provenance entry** (page
+- **`existence: verified` needs a `src` on `existence`** (page
   + locator of the orderable list) -- a warning today, for older parts.
 - Source `date` is `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or `unknown`;
   `retrieved` is `YYYY-MM-DD`; `url` is http(s).

@@ -116,7 +116,7 @@ Canonical Data Specification section 11.1):
 
 - A rating compares its guaranteed limit when both parts state one
   (an `at_least` key's `min`, an `at_most` key's `max`), else the stated
-  value (nominal, else the middle of min/max). A tolerance compares its
+  value (typ, else the middle of min/max). A tolerance compares its
   larger magnitude.
 - A key the original states and the candidate doesn't is `unverified`,
   never a pass. A key only the candidate states is not checked.

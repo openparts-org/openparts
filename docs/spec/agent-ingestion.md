@@ -100,7 +100,7 @@ AI Agentは主に以下を担当できる。
 Agentは以下を行ってはならない。
 
 - 根拠のない値を補完する
-- Datasheet上にないnominal値を平均で作る
+- Datasheet上にないtyp値を平均で作る
 - Search result snippetだけをPrimary Evidenceとして採用する
 - Third-party CADをCanonical Factの代わりに使用する
 - 競合するSourceから黙って一方を選ぶ
@@ -109,9 +109,27 @@ Agentは以下を行ってはならない。
 - Canonical Main BranchへReviewなしで直接commitする
 - 未確認のPartを`verified`へ昇格させる
 - Access制御を回避する（User-Agent等のHeader偽装、TLS証明書検証の無効化、Bot判定（Challenge）の突破・回避、Login壁の回避、非公式Mirrorの利用）。拒否時に別の標準的なToolで1回再試行することは回避に当たらない
-- min/maxのみのDimensionへnominalを書き込む（Generatorは描画時のみ中間値を使い、Canonical Dataへ書き戻さない）
+- min/maxのみのDimensionへtypを書き込む（Generatorは描画時のみ中間値を使い、Canonical Dataへ書き戻さない）
 
 拒否・到達不能なSourceは未確認として記録し、Candidate Reportへ理由を残す。
+
+## 5.1 Copyright
+
+Engineering policy, not legal advice; the rules are Canonical Data
+Specification section 26.2. For an agent:
+
+- Extract facts only: values, units, conditions, min/typ/max,
+  identifiers. Don't copy table layouts, prose, figures, graphs or
+  drawings, and don't paste them into reports or commit messages.
+- Take values printed as numbers in text or tables. Never digitize a
+  curve from a graph; leave the key out.
+- Write short locators (table/figure number, row/column, section title).
+- Read manufacturer documents only. Don't bulk-extract manufacturer or
+  distributor parametric databases or search pages (EU database right,
+  Directive 96/9/EC; site terms of use). A distributor page may help
+  *find* a datasheet (section 7), never supply the facts.
+- Never commit or upload a PDF; cite its URL (Architecture
+  Specification sections 3 and 20).
 
 ---
 
@@ -311,16 +329,10 @@ Locator
 例：
 
 ```yaml
-fact_path: "/pins/1/name"
-value: VBAT
-
-evidence:
-  source: st/DS12589@rev8
-  page: 73
-  locator: "Table 17, pin 1"
+"1": { name: VBAT, type: power, src: st/DS12589@rev8 p73 "Table 17" }
 ```
 
-最終Merge時にはCanonical Provenance形式へ変換する。
+Canonical Dataではこの`src`がそのまま残る（Canonical Data Specification section 25）。
 
 ---
 
@@ -522,63 +534,55 @@ If the applicable row depends on something the MPN doesn't fix (an
 operation mode, an option not encoded in the MPN), don't record the
 key.
 
-**4. Write the value exactly as stated.**
+**4. Write the value exactly as stated** (schema 0.2, Canonical Data
+Specification section 3.3).
 
-- Numeric: `nominal` for a single stated value; `min`/`max` for stated
-  limits; never compute a `nominal` from them. Use the datasheet's unit
-  when it is in the accepted list (`uF`, `kΩ`, `ppm/°C`, `Vdc` -> `V`).
+- Numeric: unit strings, `typ` for a single stated value ("typ."),
+  `min`/`max` for stated limits; never compute a `typ` from them. Vf
+  "typ 2.0, max 2.6" -> `{ typ: 2.0 V, max: 2.6 V }`. Use the
+  datasheet's unit when it is in the accepted list (`uF`, `kΩ`,
+  `ppm/°C`; `Vdc` -> `V`).
 - Tolerances (`tolerance`, `frequency_tolerance`,
-  `temperature_coefficient`, `capacitance_tolerance`) are signed bounds:
-  ±10 % -> `min: -10, max: 10, unit: "%"`.
-- Ratings with conditions (power at 70 °C, Id at 25 °C): the number in
-  the value, the condition in the locator.
-- "typ." -> `nominal`; "max." -> `max`; "min." -> `min`. Vf "typ 2.0,
-  max 2.6" -> `nominal: 2.0, max: 2.6`.
-- Zener voltage: record `nominal`/`min`/`max` exactly as the table
-  prints them for this MPN's row, and `zener_test_current` (Izt) from
-  the same row; the test condition goes in both locators.
-- Current transfer ratio: the CTR limits that apply to this MPN, in
-  `%` (`min: 50, max: 600`). When the MPN doesn't fix a CTR rank (rank
-  marking is an ordering option), record the unranked limits and say
-  so in the locator. Isolation voltage: the number as printed (`5000`,
-  `unit: V`), with "Vrms, AC 1 min" etc. in the locator.
+  `temperature_coefficient`, `capacitance_tolerance`): ±10 % ->
+  `tol: ±10 %`; -20/+80 % -> `{ min: -20 %, max: 80 % }`.
+- Conditions the source prints for the value go in `at` (section 11.2):
+  Id at 25 °C -> `at: { TA: 25 °C }`; Rds(on) at VGS 10 V and 4.5 V ->
+  a list of two values, the datasheet's headline condition first. A
+  table default "(TA = 25 °C unless otherwise noted)" is not a
+  condition of a row that doesn't state it. A condition with no symbol
+  in the vocabulary (ΔT = 40 K) stays in the locator.
+- Zener voltage: `min`/`typ`/`max` as the table prints them for this
+  MPN's row, `at: { IZT: 5 mA }`, and `zener_test_current` from the
+  same row.
+- Current transfer ratio: the limits that apply to this MPN, in `%`
+  (`{ min: 50 %, max: 600 % }`, `at: { IF: 5 mA, VCE: 5 V }`). When the
+  MPN doesn't fix a CTR rank, record the unranked limits and say so in
+  the locator. Isolation voltage: the number as printed (`5000 V`),
+  "Vrms" in the locator, `at: { t: 60 s }`.
 - Enumerated keys: the exact listed spelling (`X7R`, `n_channel`,
   `adjustable`). `X7R(EIA)` is `X7R`. A value not in the list: leave the
   key out and report it.
 - A fact all Parts of a Device share (one capacity for the whole
-  Device): put it on the Device, cited in the Device's provenance.
+  Device): put it on the Device.
 
 ```yaml
+source: yageo/RC0201-SPEC
 parameters:
-  resistance:
-    nominal: 10
-    unit: kΩ
-  tolerance:
-    min: -1
-    max: 1
-    unit: "%"
-
-provenance:
-  "/parameters/resistance":
-    - source: yageo/RC0201-SPEC
-      page: 1
-      locator: "Specifications, Resistance: 10 kOhms"
-  "/parameters/tolerance":
-    - source: yageo/RC0201-SPEC
-      page: 1
-      locator: "Specifications, Resistance Tolerance: 1%"
+  resistance: { typ: 10 kΩ, src: p1 "Specifications, Resistance" }
+  tolerance:  { tol: ±1 %, src: p1 "Specifications, Resistance Tolerance" }
 ```
 
-**5. Provenance for every key.** One entry per key at
-`/parameters/<key>`: `source`, `page` (the PDF page you read, not a
-guess) and a `locator` that quotes the table/row and the value. Two
-keys read from one cell (capacitance and tolerance from
-`0.10µF ±10%`) each get their own entry.
+**5. A `src` for every value**: page (the PDF page you read, not a
+guess) and a short locator naming the table and the row/column for this
+MPN (section 5.1; no copied text). Two keys read from one cell each get
+their own `src`. Run `openparts data fmt` on the files you changed.
 
 **6. Validate.** `scripts/validate.sh` in openparts-data (or
-`openparts validate --data <dir>`) must report no errors; with
-`OPENPARTS_SHOW_WARNINGS=1` it lists `parameter.implausible`
-warnings -- each one needs a reason in the report or a fix.
+`openparts validate --data <dir>`) must report no errors, and
+`openparts data fmt --check` must pass; with
+`OPENPARTS_SHOW_WARNINGS=1` it lists `parameter.implausible` and
+`provenance.locator_long` warnings -- each one needs a reason in the
+report or a fix.
 
 **7. Commit and report.** Commit messages say
 `... (AI candidates, needs review)`. The report lists per part the keys
