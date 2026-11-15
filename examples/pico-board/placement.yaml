@@ -1,0 +1,35 @@
+# Pico-style placement: USB right, U1 rot -90 (GP0-11 up to J2, GP18-28 down to J3);
+# the crystal group sits 1.2 mm clear of U1 for the fan-out on its left side
+J1: {x: 23.7, y: 0, rot: -90, side: top}
+J2: {x: 0.0, y: 8.89, rot: -90, side: top}
+J3: {x: 0.0, y: -8.89, rot: 90, side: top}
+U1: {x: 0.0, y: -0.3, rot: -90, side: top}
+U3: {x: -15.0, y: 0, rot: 0, side: bottom}
+C14: {x: -15.0, y: -5.4, rot: 0, side: bottom}
+C15: {x: -15.0, y: 5.4, rot: 0, side: bottom}
+Y1: {x: -7.9, y: 0.6, rot: 180, side: top}
+C16: {x: -7.4, y: 3.2, rot: 180, side: top}
+R3: {x: -7.4, y: -2.0, rot: 180, side: top}
+C17: {x: -10.7, y: -0.4, rot: 90, side: top}
+SW1: {x: -16.5, y: 0.0, rot: 180, side: top}
+R7: {x: -17.0, y: -5.0, rot: 180, side: top}
+D1: {x: -20.5, y: -5.0, rot: 0, side: top}
+R1: {x: 14.0, y: 1.0, rot: 180, side: top}
+R2: {x: 14.0, y: -1.0, rot: 180, side: top}
+R6: {x: 14.0, y: 3.0, rot: 180, side: top}
+R5: {x: 14.0, y: -3.0, rot: 180, side: top}
+C2: {x: -4.15, y: 1.9, rot: 0, side: bottom}
+C3: {x: -4.15, y: 0.2, rot: 0, side: bottom}
+C10: {x: -4.15, y: -1.5, rot: 0, side: bottom}
+C4: {x: -4.15, y: -3.2, rot: 0, side: bottom}
+C1: {x: 4.15, y: 4.0, rot: 180, side: bottom}
+C6: {x: 4.15, y: 2.3, rot: 180, side: bottom}
+C11: {x: 4.15, y: 0.6, rot: 180, side: bottom}
+C8: {x: 4.15, y: -1.1, rot: 180, side: bottom}
+C13: {x: 4.15, y: -2.8, rot: 180, side: bottom}
+C7: {x: 4.15, y: -4.5, rot: 180, side: bottom}
+C5: {x: 1.75, y: -4.0, rot: -90, side: bottom}
+C12: {x: 0.05, y: -4.0, rot: -90, side: bottom}
+U2: {x: 8.8, y: 0, rot: 90, side: bottom}
+C9: {x: 12.8, y: 2.8, rot: -90, side: bottom}
+R4: {x: 12.8, y: -2.8, rot: -90, side: bottom}

@@ -4,6 +4,7 @@
 # USB (USB-C here, with its CC pull-downs), BOOTSEL button, LED on
 # GPIO25. Every part is fetched from the OpenParts registry.
 #
+#   cp examples/pico-board/placement.yaml <dir>/
 #   tools/kicad-board/build.py examples/pico-board/board.yaml --out <dir>
 name: pico
 registry: http://127.0.0.1:8080/api
