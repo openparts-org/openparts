@@ -110,6 +110,18 @@ jobs:
       - uses: cargo-bins/cargo-binstall@main
       - name: Install wasm-bindgen-cli (the Cargo.lock version)
         run: cargo binstall -y --force "wasm-bindgen-cli@$(scripts/build-wasm.sh --bindgen-version)"
+      # wasm-opt shrinks the viewer (build-wasm.sh pins the release).
+      - name: Install binaryen (wasm-opt)
+        run: |
+          v="$(scripts/build-wasm.sh --binaryen-version)"
+          f="binaryen-version_$v-x86_64-linux.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://github.com/WebAssembly/binaryen/releases/download/version_$v/$f"
+          curl -fsSLO "https://github.com/WebAssembly/binaryen/releases/download/version_$v/$f.sha256"
+          sha256sum -c "$f.sha256"
+          tar xzf "$f"
+          echo "$RUNNER_TEMP/binaryen-version_$v/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/binaryen-version_$v/bin/wasm-opt" --version
       # Fetches the MoonBit dependencies into .mooncakes/.
       - run: moon update && moon check --target js
       - run: bun install --frozen-lockfile

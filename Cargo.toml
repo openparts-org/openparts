@@ -49,3 +49,18 @@ openparts-stl = { path = "crates/mcad/openparts-stl" }
 openparts-solidcraft = { path = "crates/mcad/openparts-solidcraft" }
 openparts-pcbcad = { path = "crates/pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "crates/pcbcad/openparts-kicad" }
+
+# The web site's part viewer (crates/viewer/openparts-viewer) compiled to
+# wasm by web/scripts/build-wasm.sh, built for size: every part page
+# downloads it. Only that script uses this profile; the other crates
+# keep `release`. strip = "debuginfo", not true: wasm-bindgen reads the
+# `target_features` section (it removes the name section itself).
+# panic = "abort" is wasm32-unknown-unknown's own strategy anyway
+# (console_error_panic_hook still reports the message).
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "debuginfo"
+panic = "abort"

@@ -48,7 +48,12 @@ Needs `moon`, `bun` (or npm), and for the viewer Rust with the
 `wasm-bindgen` version in `Cargo.lock`
 (`scripts/build-wasm.sh --bindgen-version` prints it). When the default
 rustup toolchain lacks wasm32 (e.g. a nightly default), the script uses
-`stable`'s if that has it; `RUSTUP_TOOLCHAIN` overrides.
+`stable`'s if that has it; `RUSTUP_TOOLCHAIN` overrides. The viewer is
+built with the workspace's size profile (`wasm-release`) and then shrunk
+with binaryen's `wasm-opt` when that is on the PATH (CI installs the
+release `scripts/build-wasm.sh --binaryen-version` prints; without it the
+script warns and the viewer is just bigger; `WASM_OPT_FLAGS` overrides
+the passes).
 
 ```sh
 rustup target add wasm32-unknown-unknown
