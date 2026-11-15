@@ -2,18 +2,32 @@
 """Builds a KiCad project from a board description (YAML) whose parts all
 come from an OpenParts registry.
 
-  build.py BOARD.yaml --out DIR [--stage fetch|sch|pcb|route|check|all]
+  build.py BOARD.yaml --out DIR [--stage fetch|sch|pcb|route|check|all|preview]
+           [--data OPENPARTS_DATA_DIR]
 
 Stages (each needs the ones before it):
   fetch  install every part into DIR's own libraries (`openparts
-         kicad-install`: symbol, footprint and STEP from the registry)
-  sch    write DIR/<name>.kicad_sch: each symbol placed on a grid, a net
-         label on every connected pin, no-connect flags on open ones
+         kicad-install`: symbol, footprint and STEP from the registry,
+         or built from a local openparts-data checkout with --data)
+  sch    write DIR/<name>.kicad_sch: each symbol placed on a grid, a
+         global net label on every connected pin (so the schematic's net
+         names equal the board's, without a sheet prefix), no-connect
+         flags on open ones
   pcb    write DIR/<name>.kicad_pcb (KiCad's pcbnew, in its Flatpak):
          footprints at their place in DIR/placement.yaml (or a grid),
          nets, board outline, design rules, zones
-  route  route it with Freerouting (Specctra DSN/SES) and refill zones
+  route  route it with Freerouting (Specctra DSN/SES): every net,
+         the pour nets too (exported without their zones, so each pad
+         gets a real connection rather than relying on a pour that may
+         leave islands), then refill the zones
   check  ERC, DRC with schematic parity, and renders under DIR/out/
+  preview  `pcb` plus an unrouted render and DRC's placement findings
+
+Net classes: `board.net_classes: {Name: {track: mm, nets: [...]}}`
+(the older `board.power_nets: {track, nets}` is the class "Power").
+Keep nets that reach a fine-pitch part (0.4 mm QFN) at a track that
+fits between its pads: Freerouting's automatic neck-down is turned off,
+so no track is ever narrower than its class.
 
 The netlist is the board description, so the schematic and the board
 are built from the same data and agree by construction (DRC's parity
@@ -71,14 +85,27 @@ def pin_refs(spec):
 
 
 def openparts_cli():
+    if os.environ.get("OPENPARTS_CLI"):
+        return [os.environ["OPENPARTS_CLI"]]
     built = REPO / "target" / "debug" / "openparts"
     return [str(built)] if built.exists() else ["cargo", "run", "-q", "-p", "openparts-cli", "--"]
 
 
-def stage_fetch(spec, out):
+def stage_fetch(spec, out, data=None):
     parts = sorted(set(spec["components"].values()))
-    cmd = openparts_cli() + ["--registry", spec["registry"], "kicad-install", "--project", str(out)] + parts
-    subprocess.run(cmd, check=True, cwd=REPO)
+    cmd = openparts_cli() + ["--registry", spec["registry"], "kicad-install", "--project", str(out)]
+    if data:
+        cmd += ["--data", str(Path(data).resolve())]
+    subprocess.run(cmd + parts, check=True, cwd=REPO)
+
+
+def net_classes(spec):
+    """{class name: (track, [nets])} from the board spec."""
+    board = spec["board"]
+    classes = {n: (c["track"], list(c.get("nets", []))) for n, c in (board.get("net_classes") or {}).items()}
+    if board.get("power_nets"):
+        classes.setdefault("Power", (board["power_nets"]["track"], list(board["power_nets"].get("nets", []))))
+    return classes
 
 
 # --------------------------------------------------------- s-expressions
@@ -197,7 +224,7 @@ def stage_sch(spec, out):
         row_h = max(row_h, h)
 
     o = []
-    o.append(f'(kicad_sch (version 20231120) (generator "openparts") (generator_version "0.1")')
+    o.append('(kicad_sch (version 20231120) (generator "openparts") (generator_version "0.1")')
     o.append(f'  (uuid "{root}")')
     o.append('  (paper "A0")')
     o.append("  (lib_symbols")
@@ -238,11 +265,7 @@ def stage_sch(spec, out):
                 continue
             # The label reads away from the symbol.
             label_angle = {0: 180, 180: 0, 90: 270, 270: 90}[int(angle) % 360]
-            justify = "right" if label_angle in (180, 270) else "left"
-            o.append(
-                f'  (label "{net}" (at {ax:.2f} {ay:.2f} {label_angle})'
-                f' (effects (font (size 1.27 1.27)) (justify {justify} bottom)) (uuid "{uid()}"))'
-            )
+            o.append(global_label(net, ax, ay, label_angle))
     # Power flags: these nets are fed from outside / by passive pins.
     fx, fy = 25.4, snap(y + row_h + 25.4)
     for net in spec.get("power_flags", []):
@@ -256,15 +279,24 @@ def stage_sch(spec, out):
         o.append(f'    (pin "1" (uuid "{uid()}"))')
         o.append(f'    (instances (project "{name}" (path "/{root}" (reference "#FLG0{flag_n}") (unit 1))))')
         o.append("  )")
-        o.append(
-            f'  (label "{net}" (at {fx:.2f} {fy:.2f} 270)'
-            f' (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "{uid()}"))'
-        )
+        o.append(global_label(net, fx, fy, 270))
         fx += 15.24
     o.append('  (sheet_instances (path "/" (page "1")))')
     o.append(")")
     (out / f"{name}.kicad_sch").write_text("\n".join(o) + "\n")
     write_project(spec, out)
+
+
+def global_label(net, x, y, angle):
+    """A global label: its net is named `net` on the board too (a local
+    label would name it `/net`, and DRC's parity check would disagree)."""
+    justify = "right" if angle in (180, 270) else "left"
+    return (
+        f'  (global_label "{net}" (shape passive) (at {x:.2f} {y:.2f} {angle}) (fields_autoplaced yes)'
+        f' (effects (font (size 1.27 1.27)) (justify {justify})) (uuid "{uid()}")'
+        f' (property "Intersheetrefs" "${{INTERSHEET_REFS}}" (at {x:.2f} {y:.2f} 0)'
+        f" (effects (font (size 1.27 1.27)) (justify {justify}) hide)))"
+    )
 
 
 def pwr_flag_lib():
@@ -282,7 +314,8 @@ def write_project(spec, out):
     """The project file: design rules and net classes from the board spec."""
     pro = out / f"{spec['name']}.kicad_pro"
     r = spec["board"]["rules"]
-    power = spec["board"].get("power_nets", {})
+    classes = net_classes(spec)
+    widths = [r["track"]] + [t for t, _ in classes.values()]
 
     def netclass(name, track):
         return {
@@ -308,7 +341,9 @@ def write_project(spec, out):
             "design_settings": {
                 "rules": {
                     "min_clearance": r["clearance"],
-                    "min_track_width": min(r["track"], 0.15),
+                    # No track narrower than the narrowest class (and
+                    # Freerouting is told not to neck down below it).
+                    "min_track_width": min(widths),
                     "min_via_diameter": r["via_diameter"] - 0.1,
                     "min_through_hole_diameter": r["via_drill"],
                     "min_copper_edge_clearance": 0.25,
@@ -319,9 +354,11 @@ def write_project(spec, out):
         "meta": {"filename": pro.name, "version": 3},
         "net_settings": {
             "classes": [netclass("Default", r["track"])]
-            + ([netclass("Power", power["track"])] if power else []),
+            + [netclass(name, track) for name, (track, _) in classes.items()],
             "meta": {"version": 4},
-            "netclass_patterns": [{"netclass": "Power", "pattern": n} for n in power.get("nets", [])],
+            "netclass_patterns": [
+                {"netclass": name, "pattern": n} for name, (_, nets) in classes.items() for n in nets
+            ],
         },
     }
     pro.write_text(json.dumps(project, indent=2) + "\n")
@@ -330,18 +367,43 @@ def write_project(spec, out):
 # ------------------------------------------------------------------ pcb
 
 
-def kicad_python(script, *args):
-    """Runs `script` with KiCad's own Python (pcbnew), in its Flatpak."""
+def kicad_python(script, *args, capture=False):
+    """Runs `script` with KiCad's own Python (pcbnew), in its Flatpak;
+    returns its output when `capture` (it is echoed either way)."""
     cmd = " ".join(["python3", sh_quote(str(script))] + [sh_quote(str(a)) for a in args])
-    subprocess.run(
+    run = subprocess.run(
         ["flatpak", "run", f"--filesystem={REPO}", f"--filesystem={args[0] if args else REPO}",
          "--command=sh", "org.kicad.KiCad", "-c", cmd],
-        check=True,
+        check=True, capture_output=capture, text=True,
     )
+    if capture:
+        out = "\n".join(l for l in run.stdout.splitlines() if not l.startswith("swig/python detected"))
+        print(out, flush=True)
+        return out
+    return None
 
 
 def sh_quote(s):
     return "'" + s.replace("'", "'\\''") + "'"
+
+
+def unconnected_nets(spec, out):
+    """{"REF.PIN": net} for the pins left open: the single-pin net KiCad
+    gives a pin with a no-connect flag (`unconnected-(U1-SWD-Pad25)`),
+    so that DRC's schematic parity finds the same net on the pad."""
+    lib = (out / "openparts.kicad_sym").read_text()
+    used = pin_refs(spec)
+    nets = {}
+    for ref, part in spec["components"].items():
+        span = find_block(lib, f'(symbol "{mpn_of(part)}"')
+        for pin in re.finditer(r'\(name "((?:[^"\\]|\\.)*)".*?\(number "((?:[^"\\]|\\.)*)"',
+                               lib[span[0]:span[1]], re.S):
+            name, number = pin.group(1), pin.group(2)
+            if (ref, number) in used:
+                continue
+            label = "" if name in ("", "~") or name == number else f"-{name}"
+            nets[f"{ref}.{number}"] = f"unconnected-({ref}{label}-Pad{number})".replace("/", "{slash}")
+    return nets
 
 
 def stage_pcb(spec, out):
@@ -357,7 +419,7 @@ def stage_pcb(spec, out):
         "board": spec["board"],
         "components": {ref: safe(mpn_of(p)) for ref, p in spec["components"].items()},
         "values": {ref: mpn_of(p) for ref, p in spec["components"].items()},
-        "nets": {f"{r}.{p}": n for (r, p), n in pin_refs(spec).items()},
+        "nets": {**unconnected_nets(spec, out), **{f"{r}.{p}": n for (r, p), n in pin_refs(spec).items()}},
         "placement": placement,
     }
     (out / "plan.json").write_text(json.dumps(plan, indent=1))
@@ -377,23 +439,103 @@ def freerouting_jar():
     return jar
 
 
+# Freerouting is deterministic for a given board and cost setting, and
+# a dense board can end a few connections short with one setting and
+# complete with another: `route` runs these in parallel and keeps the
+# result with the fewest unrouted connections (the first, on a tie).
+ROUTER_VARIANTS = [
+    {},
+    {"via_costs": 100, "start_ripup_costs": 200},
+    {"via_costs": 80, "start_ripup_costs": 250},
+    {"via_costs": 120, "start_ripup_costs": 150},
+    {"via_costs": 70},
+    {"via_costs": 60, "start_ripup_costs": 150},
+    {"via_costs": 90, "start_ripup_costs": 120},
+    {"via_costs": 70, "start_ripup_costs": 300},
+    {"via_costs": 50, "start_ripup_costs": 100},
+    {"via_costs": 60, "start_ripup_costs": 200},
+    {"via_costs": 80, "start_ripup_costs": 150},
+    {"via_costs": 100, "start_ripup_costs": 100},
+]
+# Parallel Freerouting runs (each takes up to ~1 GB of heap).
+ROUTER_JOBS = 6
+
+
+def freerouting(dsn, ses, costs):
+    """Runs Freerouting; returns (unrouted connections, log)."""
+    cmd = [
+        "java", "-jar", str(freerouting_jar()), "-de", str(dsn), "-do", str(ses),
+        "--gui.enabled=false",
+        "--router.autorouter.max_passes=40",
+        # Never narrower than the net class (KiCad's minimum track
+        # width): no automatic neck-down, and no fan-out stage (its pin
+        # escapes neck down below the class width regardless).
+        "--router.automatic_neckdown=false",
+        "--router.fanout.enabled=false",
+        "--router.optimizer.max_threads=2",
+    ] + [f"--router.scoring.{k}={v}" for k, v in costs.items()]
+    run = subprocess.run(cmd, capture_output=True, text=True)
+    log = run.stdout + run.stderr
+    if run.returncode != 0 or not Path(ses).exists():
+        return None, log
+    # The routing stage's own final count (the list of failed
+    # connections is not always printed).
+    final = re.findall(r"Auto-routing stage completed.*?\((\d+) unrouted", log)
+    if not final:
+        return None, log
+    return int(final[-1]), log
+
+
 def stage_route(spec, out):
+    from concurrent.futures import ThreadPoolExecutor
+
     kicad_python(HERE / "pcb_stage.py", out, "dsn")
-    dsn, ses = out / f"{spec['name']}.dsn", out / f"{spec['name']}.ses"
+    name = spec["name"]
+    ses = out / f"{name}.ses"
     ses.unlink(missing_ok=True)
-    subprocess.run(
-        ["java", "-jar", str(freerouting_jar()), "-de", str(dsn), "-do", str(ses),
-         "-mp", "40", "--gui.enabled=false"],
-        check=True,
-    )
-    kicad_python(HERE / "pcb_stage.py", out, "ses")
+    freerouting_jar()
+    tries = [(f"{label} {costs or 'defaults'}", dsn, costs)
+             for label, dsn in (("both planes", out / f"{name}.dsn"), ("top plane", out / f"{name}-top.dsn"))
+             for costs in ROUTER_VARIANTS]
+    tries = [(what, dsn, costs, out / f".route-{i}.ses") for i, (what, dsn, costs) in enumerate(tries)]
+    with ThreadPoolExecutor(max_workers=ROUTER_JOBS) as pool:
+        results = list(pool.map(lambda t: freerouting(t[1], t[3], t[2]), tries))
+    for (what, *_), (unrouted, log) in zip(tries, results):
+        print(f"freerouting {what}: " + ("failed" if unrouted is None else f"{unrouted} unrouted"), flush=True)
+    done = [(unrouted, i) for i, (unrouted, _) in enumerate(results) if unrouted is not None]
+    if not done:
+        sys.exit("Freerouting failed:\n" + results[0][1][-2000:])
+    # Scored by what stays unconnected: connections Freerouting left
+    # unrouted plus pour-net pads the stitched pour cannot reach (walled
+    # in by tracks on both sides). Candidates are imported in order of
+    # unrouted count until none can beat the best so far.
+    best = None
+    for unrouted, i in sorted(done):
+        if best and unrouted >= best[0] + best[1]:
+            break
+        board = out / f".route-{i}.kicad_pcb"
+        report = kicad_python(HERE / "pcb_stage.py", out, "ses", tries[i][3], board, capture=True)
+        cut_off = int(re.search(r"pour pads cut off: (\d+)", report).group(1))
+        if best is None or unrouted + cut_off < best[0] + best[1]:
+            best = (unrouted, cut_off, board, i)
+        if best[0] + best[1] == 0:
+            break
+    unrouted, cut_off, board, i = best
+    print(f"kept freerouting {tries[i][0]}: {unrouted} unrouted, {cut_off} pour pad(s) cut off")
+    board.replace(out / f"{name}.kicad_pcb")
+    tries[i][3].replace(ses)
+    (out / "out").mkdir(exist_ok=True)
+    (out / "out" / "freerouting.log").write_text(results[i][1])
+    # (SaveBoard also writes a project file beside each candidate.)
+    for other in out.glob(".route-*"):
+        other.unlink()
 
 
 def stage_check(spec, out):
     name = spec["name"]
     res = out / "out"
     res.mkdir(exist_ok=True)
-    cli = f"kicad-cli"
+    cli = "kicad-cli"
     cmds = [
         f"cd {sh_quote(str(out))} && {cli} sch erc --format json -o out/erc.json {name}.kicad_sch",
         f"cd {sh_quote(str(out))} && {cli} pcb drc --schematic-parity --format json -o out/drc.json {name}.kicad_pcb",
@@ -450,6 +592,7 @@ def main():
     ap.add_argument("board")
     ap.add_argument("--out", required=True)
     ap.add_argument("--stage", default="all", choices=STAGES + ["all", "preview"])
+    ap.add_argument("--data", help="build the parts from this openparts-data checkout instead of the registry")
     a = ap.parse_args()
     spec = load_spec(a.board)
     out = Path(a.out).resolve()
@@ -457,7 +600,10 @@ def main():
     stages = STAGES if a.stage == "all" else [a.stage]
     for s in stages:
         print(f"== {s}", flush=True)
-        globals()[f"stage_{s}"](spec, out)
+        if s == "fetch":
+            stage_fetch(spec, out, a.data)
+        else:
+            globals()[f"stage_{s}"](spec, out)
 
 
 if __name__ == "__main__":

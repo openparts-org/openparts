@@ -68,6 +68,11 @@ enum Commands {
     KicadInstall {
         #[arg(long)]
         project: PathBuf,
+        /// Build the parts from a local openparts-data checkout instead
+        /// of fetching them from the registry (works offline, and sees
+        /// data the running server has not loaded yet).
+        #[arg(long)]
+        data: Option<PathBuf>,
         /// `<manufacturer>/<mpn>` (the MPN may itself contain `/`).
         parts: Vec<String>,
     },
@@ -122,9 +127,16 @@ fn main() -> anyhow::Result<()> {
             anyhow::bail!("validate needs --data <dir>, or --part, --device and --package")
         }
         Commands::Search { query } => cmd_search(&cli.registry, &query),
-        Commands::KicadInstall { project, parts } => {
-            cmd_kicad_install(&cli.registry, &project, &parts)
-        }
+        Commands::KicadInstall {
+            project,
+            data: Some(data),
+            parts,
+        } => cmd_kicad_install_local(&data, &project, &parts),
+        Commands::KicadInstall {
+            project,
+            data: None,
+            parts,
+        } => cmd_kicad_install(&cli.registry, &project, &parts),
         Commands::Show { manufacturer, mpn } => cmd_show(&cli.registry, &manufacturer, &mpn),
         Commands::Bundle {
             data,
@@ -356,6 +368,38 @@ fn cmd_kicad_install(
             step.content.as_bytes(),
         )
         .with_context(|| format!("installing {spec}"))?;
+        println!("installed {spec}");
+    }
+    Ok(())
+}
+
+/// `openparts kicad-install --data <dir>`: the same installation, with
+/// each part built from a local openparts-data checkout.
+fn cmd_kicad_install_local(
+    data: &std::path::Path,
+    project: &std::path::Path,
+    parts: &[String],
+) -> anyhow::Result<()> {
+    use openparts_artifacts::{ArtifactKind, PartBuild};
+    let dataset = openparts_data::Dataset::load(data)
+        .with_context(|| format!("loading {}", data.display()))?;
+    std::fs::create_dir_all(project)?;
+    for spec in parts {
+        let (manufacturer, mpn) = spec
+            .split_once('/')
+            .with_context(|| format!("{spec}: expected <manufacturer>/<mpn>"))?;
+        let part = dataset
+            .part(manufacturer, mpn)
+            .with_context(|| format!("{spec}: no such part in {}", data.display()))?;
+        let build = PartBuild::from_dataset(&dataset, part, None)
+            .with_context(|| format!("building {spec}"))?;
+        let symbol = String::from_utf8(build.render(ArtifactKind::KicadSymbol)?)?;
+        let footprint = String::from_utf8(build.render(ArtifactKind::KicadFootprint)?)?;
+        let step = build
+            .models(&[ArtifactKind::Step])
+            .with_context(|| format!("generating the 3D model of {spec} with SolidCraft"))?;
+        openparts_kicad::library::install_into_project(project, mpn, &symbol, &footprint, &step[0])
+            .with_context(|| format!("installing {spec}"))?;
         println!("installed {spec}");
     }
     Ok(())

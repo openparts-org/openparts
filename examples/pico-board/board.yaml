@@ -17,9 +17,11 @@ board:
     clearance: 0.15
     via_diameter: 0.6
     via_drill: 0.3
-  power_nets:
-    track: 0.4
-    nets: [GND, VBUS, 3V3, 1V1]
+  net_classes:
+    # Only VBUS stays clear of the RP2040's 0.4 mm-pitch QFN; the supply
+    # nets that reach its pins get a track that fits between them.
+    Power: {track: 0.4, nets: [VBUS]}
+    Supply: {track: 0.2, nets: [GND, 3V3, 1V1]}
   # Copper pours on both layers.
   zones: [GND]
 
@@ -29,8 +31,8 @@ components:
   U3: onsemi/NCP1117ST33T3G
   Y1: abracon/ABM8-272-T3
   J1: gct/USB4105-GF-A
-  J2: wurth/61302021121
-  J3: wurth/61302021121
+  J2: wurth/61302011121           # 1 x 20, 2.54 mm
+  J3: wurth/61302011121
   SW1: omron/B3FS-1050
   D1: kingbright/APT1608SGC
   R1: yageo/RC0603FR-0727RL      # USB D+ series
