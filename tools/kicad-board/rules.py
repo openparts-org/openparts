@@ -913,6 +913,12 @@ def fanout(spec, models, placement, nets, fab, widths, escapes, pairs, overrides
                           obstacles + reserved, items, on_board, layers)
         if placed:
             items += placed
+        elif not all_stubs and net in planes and (ref, num) not in pair_pads:
+            # The stub was only there for its via: without one it would
+            # end in nothing (the pad is left to the router, or to a tie).
+            items = [i for i in items if not (i.get("role") == "escape" and i["net"] == net
+                                              and (math.dist(i["a"], start) < 1e-6 or math.dist(i["b"], end) < 1e-6))]
+            report.append(f"fan-out: no room for a via at {ref}.{num} ({net}); no stub")
         else:
             report.append(f"fan-out: no room for a via at {ref}.{num} ({net}); straight stub only")
 

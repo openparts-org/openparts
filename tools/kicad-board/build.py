@@ -1021,6 +1021,29 @@ def stage_route(spec, out):
     # (SaveBoard also writes a project file beside each candidate.)
     for other in out.glob(".route-*"):
         other.unlink()
+    fix_starved_thermals(spec, out)
+
+
+def fix_starved_thermals(spec, out, tries=3):
+    """DRC's starved_thermal findings on the kept board (a relief whose
+    spokes reach only slivers of the pour; KiCad's own judgement, which
+    the ses stage's spoke count does not always match on four layers)
+    joined solid, until DRC finds none."""
+    name = spec["name"]
+    for _ in range(tries):
+        report = out / "out" / ".thermal-drc.json"
+        subprocess.run(["flatpak", "run", f"--filesystem={out}", "--command=sh", "org.kicad.KiCad", "-c",
+                        f"cd {sh_quote(str(out))} && kicad-cli pcb drc --format json -o out/.thermal-drc.json "
+                        f"{name}.kicad_pcb"], capture_output=True)
+        if not report.exists():
+            return
+        found = json.loads(report.read_text()).get("violations", [])
+        report.unlink()
+        # (Each finding names the zone and the pad; `solid` acts on pads.)
+        pads = sorted({i["uuid"] for v in found if v["type"] == "starved_thermal" for i in v["items"] if "uuid" in i})
+        if not pads:
+            return
+        kicad_python(HERE / "pcb_stage.py", out, "solid", *pads)
 
 
 def stage_check(spec, out):

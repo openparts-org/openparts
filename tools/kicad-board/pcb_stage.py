@@ -1177,4 +1177,20 @@ def dump_tracks():
     print(json.dumps(out))
 
 
-{"pcb": build, "dsn": export_dsn, "dsn-from": export_dsn_from, "ses": import_ses, "tracks": dump_tracks}[MODE]()
+def join_solid():
+    """solid UUID...: the pads with these UUIDs (DRC's starved_thermal
+    findings, which fix_thermals' own spoke count missed) joined to their
+    zones solid; zones refilled, board saved."""
+    wanted = set(sys.argv[3:])
+    board = pcbnew.LoadBoard(str(PCB))
+    done = []
+    for pad in board.GetPads():
+        if pad.m_Uuid.AsString() in wanted:
+            pad.SetLocalZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
+            done.append(f"{pad.GetParentFootprint().GetReference()}.{pad.GetNumber()}")
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    pcbnew.SaveBoard(str(PCB), board)
+    print("thermal reliefs joined solid (DRC starved_thermal):", " ".join(done))
+
+
+{"pcb": build, "dsn": export_dsn, "solid": join_solid, "dsn-from": export_dsn_from, "ses": import_ses, "tracks": dump_tracks}[MODE]()
