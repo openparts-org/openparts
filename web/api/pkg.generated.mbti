@@ -354,6 +354,33 @@ pub(all) struct DiagnosticBody {
 pub impl @json.FromJson for DiagnosticBody
 
 #derive(Eq)
+pub(all) struct DiffPair {
+  function : String?
+  impedance_ohm : Double?
+  partner : String
+  polarity : DiffPolarity
+  standard : DiffStandard
+}
+pub impl @json.FromJson for DiffPair
+
+#derive(Eq, @debug.Debug)
+pub(all) enum DiffPolarity {
+  P
+  N
+}
+pub fn DiffPolarity::all() -> Array[Self]
+pub fn DiffPolarity::wire(Self) -> String
+pub impl @json.FromJson for DiffPolarity
+
+#derive(Eq, @debug.Debug)
+pub(all) enum DiffStandard {
+  Usb2
+}
+pub fn DiffStandard::all() -> Array[Self]
+pub fn DiffStandard::wire(Self) -> String
+pub impl @json.FromJson for DiffStandard
+
+#derive(Eq)
 pub(all) struct Dimension {
   max : Double?
   min : Double?
@@ -957,6 +984,7 @@ pub impl @json.FromJson for PartSummary
 pub(all) struct Pin {
   alternate_functions : Array[String]
   connected_to : String?
+  diff_pair : DiffPair?
   name : String
   type_ : PinType
 }
@@ -982,6 +1010,7 @@ pub impl @json.FromJson for PinComparison
 pub(all) struct PinOverride {
   alternate_functions : Array[String]?
   connected_to : String?
+  diff_pair : DiffPair?
   name : String?
   type_ : PinType?
 }

@@ -48,7 +48,7 @@ pub use parameter::{
     ParameterShape, ParameterSpec, ParameterValue, Parameters, Quantity, PARAMETERS,
 };
 pub use part::Part;
-pub use pin::{Pin, PinOverride, PinType};
+pub use pin::{DiffPair, DiffPolarity, DiffStandard, Pin, PinOverride, PinType};
 pub use provenance::{ProvenanceEntry, ProvenanceMap};
 pub use rejected::Rejected;
 pub use review::{DocumentReview, ReviewStatus};

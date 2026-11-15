@@ -962,6 +962,94 @@ pub impl @json.FromJson for DiagnosticBody with fn from_json(json, path) {
 }
 
 ///|
+/// A pin's membership in a differential pair (Canonical Data
+/// Specification section 14.2). Recorded only where the source names
+/// the pair (USB_DP/USB_DM, D+/D-). The impedance a standard asks for
+/// (USB 2.0: 90 ohm differential) is that standard's, not a fact of the
+/// part, and is not recorded here.
+#derive(Eq)
+pub(all) struct DiffPair {
+  function : String?
+  impedance_ohm : Double?
+  partner : String
+  polarity : DiffPolarity
+  standard : DiffStandard
+}
+
+///|
+pub impl @json.FromJson for DiffPair with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a DiffPair object"))
+  }
+  {
+    function: opt_field(obj, "function", path),
+    impedance_ohm: opt_field(obj, "impedance_ohm", path),
+    partner: field(obj, "partner", path),
+    polarity: field(obj, "polarity", path),
+    standard: field(obj, "standard", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum DiffPolarity {
+  P
+  N
+}
+
+///|
+/// The wire (JSON) string.
+pub fn DiffPolarity::wire(self : DiffPolarity) -> String {
+  match self {
+    P => "p"
+    N => "n"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn DiffPolarity::all() -> Array[DiffPolarity] {
+  [P, N]
+}
+
+///|
+pub impl @json.FromJson for DiffPolarity with fn from_json(json, path) {
+  match json {
+    String("p") => P
+    String("n") => N
+    _ => raise @json.JsonDecodeError((path, "expected a DiffPolarity"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum DiffStandard {
+  Usb2
+}
+
+///|
+/// The wire (JSON) string.
+pub fn DiffStandard::wire(self : DiffStandard) -> String {
+  match self {
+    Usb2 => "usb2"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn DiffStandard::all() -> Array[DiffStandard] {
+  [Usb2]
+}
+
+///|
+pub impl @json.FromJson for DiffStandard with fn from_json(json, path) {
+  match json {
+    String("usb2") => Usb2
+    _ => raise @json.JsonDecodeError((path, "expected a DiffStandard"))
+  }
+}
+
+///|
 /// Canonical Data Specification section 7 / 9: a physical quantity that
 /// may have `nominal`/`min`/`max`, none of which are invented when a
 /// datasheet doesn't state them.
@@ -2800,6 +2888,7 @@ pub impl @json.FromJson for PartSummary with fn from_json(json, path) {
 pub(all) struct Pin {
   alternate_functions : Array[String]
   connected_to : String?
+  diff_pair : DiffPair?
   name : String
   type_ : PinType
 }
@@ -2812,6 +2901,7 @@ pub impl @json.FromJson for Pin with fn from_json(json, path) {
   {
     alternate_functions: field_or(obj, "alternate_functions", path, []),
     connected_to: opt_field(obj, "connected_to", path),
+    diff_pair: opt_field(obj, "diff_pair", path),
     name: field(obj, "name", path),
     type_: field(obj, "type", path),
   }
@@ -2864,6 +2954,7 @@ pub impl @json.FromJson for PinComparison with fn from_json(json, path) {
 pub(all) struct PinOverride {
   alternate_functions : Array[String]?
   connected_to : String?
+  diff_pair : DiffPair?
   name : String?
   type_ : PinType?
 }
@@ -2876,6 +2967,7 @@ pub impl @json.FromJson for PinOverride with fn from_json(json, path) {
   {
     alternate_functions: opt_field(obj, "alternate_functions", path),
     connected_to: opt_field(obj, "connected_to", path),
+    diff_pair: opt_field(obj, "diff_pair", path),
     name: opt_field(obj, "name", path),
     type_: opt_field(obj, "type", path),
   }

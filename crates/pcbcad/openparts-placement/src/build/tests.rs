@@ -345,3 +345,44 @@ fn every_dataset_package_is_level_a() {
     }
     assert!(n > 100);
 }
+
+/// A device pin's differential pair reaches its pad, with the partner's
+/// pad; the hash does not change with it (pins are not hashed).
+#[test]
+fn pads_carry_the_device_diff_pairs() {
+    let device: openparts_core::Device = serde_yaml::from_str(
+        "schema_version: '0.1'\nkind: device\nid: ex/TEST\nmanufacturer: ex\ncategory: interface\n\
+         pins:\n\
+         \x20 '1': {name: DP, type: io, diff_pair: {partner: '2', polarity: p, standard: usb2}}\n\
+         \x20 '2': {name: DM, type: io, diff_pair: {partner: '1', polarity: n, standard: usb2}}\n\
+         \x20 '3': {name: VDD, type: power}\n",
+    )
+    .unwrap();
+    let p = soic8();
+    let g = openparts_mcad::generate(&p).unwrap();
+    let with = build(&p, Some(&device), &g, Density::N);
+    let pair = pad(&with, "1")
+        .pin
+        .as_ref()
+        .unwrap()
+        .diff_pair
+        .as_ref()
+        .unwrap();
+    assert_eq!(pair.partner, "2");
+    assert_eq!(pair.partner_pad.as_deref(), Some("2"));
+    assert_eq!(pair.polarity, openparts_core::DiffPolarity::P);
+    assert_eq!(pair.standard, openparts_core::DiffStandard::Usb2);
+    assert!(pad(&with, "3").pin.as_ref().unwrap().diff_pair.is_none());
+    let json = serde_json::to_value(&with).unwrap();
+    let second = &json["pads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["number"] == "2")
+        .unwrap()["pin"];
+    assert_eq!(
+        second["diff_pair"],
+        serde_json::json!({"partner": "1", "partner_pad": "1", "polarity": "n", "standard": "usb2"})
+    );
+    assert_eq!(with.hash, model(&p, Density::N).hash);
+}

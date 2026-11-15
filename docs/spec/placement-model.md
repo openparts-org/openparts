@@ -152,7 +152,7 @@ Each pad has:
 | `drill`, `slot`, `plated` | Hole diameter; a slot's overall length along the pad's longer side (`drill` is then its width). |
 | `mask_expansion` | mm; `null` uses the board's rule. |
 | `paste` | `{mode: full}` (the land), `{mode: windowed, windows: [...]}` (segmented exposed-pad paste), or `null` (holes). |
-| `pin` | `{name, type}` of the device pin (with a device). |
+| `pin` | `{name, type, diff_pair?}` of the device pin (with a device). `diff_pair`: `{partner, partner_pad, polarity, standard, function?, impedance_ohm?}` from the Device pin's `diff_pair` (Canonical Data Specification section 14.2); `partner_pad` is the pad of this footprint carrying the partner pin, `null` if none. |
 | `exposed` | The package's exposed (thermal) pad. |
 | `castellated` | Cut by the part's own edge (a module's half-holes). |
 | `shares_contact_with` | This pad repeats another pad's contact under a second number (USB-C "A1 B12"). Same copper as that pad. |
@@ -348,6 +348,11 @@ viewed from the top, applied after the mirror.
   is one piece of copper with two numbers: don't route between them.
 - `pin.type` (`power`, `ground`, `io`, ...) identifies supply pins for IPC-2152
   width rules. The current itself is not in the model.
+- `pin.diff_pair` marks the two pads of a differential pair (`partner_pad`
+  is the other one) and the standard it carries. The pair's impedance is the
+  standard's (USB 2.0: 90 ohm differential), which the board tool supplies;
+  the model gives an `impedance_ohm` only when the part's own source states
+  one.
 - A `castellated` pad sits at the module's edge, and the host board's copper
   under it is the land.
 

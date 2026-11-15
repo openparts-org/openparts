@@ -580,6 +580,7 @@ mod tests {
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -683,6 +684,7 @@ mod tests {
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -724,6 +726,7 @@ mod tests {
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -735,6 +738,7 @@ mod tests {
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -745,6 +749,7 @@ mod tests {
                 pin_type: PinType::Reserved,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         for n in ["15", "16", "17"] {
@@ -755,6 +760,7 @@ mod tests {
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -765,6 +771,7 @@ mod tests {
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
 
@@ -941,6 +948,7 @@ mod tests {
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -951,6 +959,7 @@ mod tests {
                 pin_type: PinType::Power,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         pins.insert(
@@ -960,6 +969,7 @@ mod tests {
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         Device {
@@ -1054,6 +1064,7 @@ mod tests {
                     pin_type: PinType::Power,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }
@@ -1170,6 +1181,7 @@ mod tests {
                     pin_type: PinType::Io,
                     alternate_functions: vec![],
                     connected_to: None,
+                    diff_pair: None,
                 },
             );
         }

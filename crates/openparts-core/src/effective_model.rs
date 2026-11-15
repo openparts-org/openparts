@@ -77,6 +77,7 @@ pub fn build_effective_model(
                         .clone()
                         .unwrap_or_default(),
                     connected_to: pin_override.connected_to.clone(),
+                    diff_pair: pin_override.diff_pair.clone(),
                 },
             };
             effective_device.pins.insert(number.clone(), merged);
@@ -177,6 +178,7 @@ mod tests {
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         pins.insert(
@@ -186,6 +188,7 @@ mod tests {
                 pin_type: PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
 
@@ -197,6 +200,7 @@ mod tests {
                 pin_type: None,
                 alternate_functions: None,
                 connected_to: None,
+                diff_pair: None,
             },
         );
         let mut revisions = BTreeMap::new();

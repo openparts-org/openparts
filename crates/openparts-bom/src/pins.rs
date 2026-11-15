@@ -349,6 +349,7 @@ mod tests {
             pin_type: t,
             alternate_functions: vec![],
             connected_to: None,
+            diff_pair: None,
         }
     }
 

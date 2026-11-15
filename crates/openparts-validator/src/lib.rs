@@ -66,6 +66,10 @@ pub const RULES: &[Rule] = &[
         meaning: "a pin's `connected_to` names no other pin of the Device",
     },
     Rule {
+        id: "pin.diff_pair.invalid",
+        meaning: "a pin's `diff_pair` is not one half of a consistent pair: its partner is not another pin of the Device, or the partner's `diff_pair` does not point back, has the same polarity, another standard, or only one of the two names a `function`; or its `function` is not one of the pin's `alternate_functions`; or `impedance_ohm` is not positive",
+    },
+    Rule {
         id: "dimension.out_of_range",
         meaning: "`nominal` is not within `[min, max]` when all three are present",
     },
@@ -79,7 +83,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "provenance.missing",
-        meaning: "a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path (these fields were added with field-level provenance required from the start)",
+        meaning: "a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path, or a pin's `diff_pair` has none at `/pins/<n>/diff_pair` or `/pins/<n>` (these fields were added with field-level provenance required from the start)",
     },
     Rule {
         id: "parameter.unknown_key",
@@ -267,6 +271,7 @@ pub fn validate_part(
     ));
 
     out.extend(check_duplicate_pin_names(&device_entity, device));
+    out.extend(check_diff_pairs(&device_entity, device));
     if device.category == openparts_core::ComponentCategory::Other {
         out.push(Diagnostic::warning(
             "category.other",
@@ -398,6 +403,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         Device {
@@ -485,6 +491,7 @@ mod tests {
             pin_type: openparts_core::PinType::Passive,
             alternate_functions: vec![],
             connected_to: to.map(str::to_string),
+            diff_pair: None,
         };
         let mut device = base_device();
         device.pins.clear();
@@ -505,6 +512,117 @@ mod tests {
     }
 
     #[test]
+    fn diff_pairs_must_be_symmetric_opposite_and_cited() {
+        use openparts_core::{DiffPair, DiffPolarity, DiffStandard, Pin, PinType};
+        let pin =
+            |name: &str, alts: &[&str], pair: Option<(&str, DiffPolarity, Option<&str>)>| Pin {
+                name: name.into(),
+                pin_type: PinType::Io,
+                alternate_functions: alts.iter().map(|a| a.to_string()).collect(),
+                connected_to: None,
+                diff_pair: pair.map(|(partner, polarity, function)| DiffPair {
+                    partner: partner.into(),
+                    polarity,
+                    standard: DiffStandard::Usb2,
+                    function: function.map(str::to_string),
+                    impedance_ohm: None,
+                }),
+            };
+        let cite = |device: &mut Device, path: &str| {
+            device.provenance.insert(
+                path.into(),
+                vec![openparts_core::ProvenanceEntry {
+                    source: SourceId::from("x/y"),
+                    page: Some(1),
+                    locator: None,
+                }],
+            );
+        };
+        let ids = |device: &Device| {
+            check_diff_pairs("d", device)
+                .into_iter()
+                .map(|d| d.rule_id)
+                .collect::<Vec<_>>()
+        };
+        let mut device = base_device();
+        device.pins.clear();
+        device.pins.insert(
+            "1".into(),
+            pin("DP", &[], Some(("2", DiffPolarity::P, None))),
+        );
+        device.pins.insert(
+            "2".into(),
+            pin("DM", &[], Some(("1", DiffPolarity::N, None))),
+        );
+        assert_eq!(
+            ids(&device),
+            vec!["provenance.missing", "provenance.missing"]
+        );
+        cite(&mut device, "/pins/1/diff_pair");
+        cite(&mut device, "/pins/2");
+        assert!(ids(&device).is_empty(), "{:?}", ids(&device));
+        // Same polarity on both halves.
+        device.pins.insert(
+            "2".into(),
+            pin("DM", &[], Some(("1", DiffPolarity::P, None))),
+        );
+        assert_eq!(
+            ids(&device),
+            vec!["pin.diff_pair.invalid", "pin.diff_pair.invalid"]
+        );
+        // Not pointing back.
+        device.pins.insert("2".into(), pin("DM", &[], None));
+        assert_eq!(ids(&device), vec!["pin.diff_pair.invalid"]);
+        // Unknown partner, and the pin itself.
+        device.pins.insert(
+            "2".into(),
+            pin("DM", &[], Some(("9", DiffPolarity::N, None))),
+        );
+        assert!(ids(&device).iter().all(|i| *i == "pin.diff_pair.invalid"));
+        device.pins.insert(
+            "2".into(),
+            pin("DM", &[], Some(("2", DiffPolarity::N, None))),
+        );
+        assert!(ids(&device).contains(&"pin.diff_pair.invalid"));
+        // A function must be one of the pin's alternate functions, and
+        // both halves name one or neither does.
+        device.pins.insert(
+            "1".into(),
+            pin(
+                "GPIO13",
+                &["USB_D+"],
+                Some(("2", DiffPolarity::P, Some("USB_D+"))),
+            ),
+        );
+        device.pins.insert(
+            "2".into(),
+            pin(
+                "GPIO12",
+                &["USB_D-"],
+                Some(("1", DiffPolarity::N, Some("USB_D-"))),
+            ),
+        );
+        assert!(ids(&device).is_empty(), "{:?}", ids(&device));
+        device.pins.insert(
+            "2".into(),
+            pin(
+                "GPIO12",
+                &["USB_D-"],
+                Some(("1", DiffPolarity::N, Some("USB_DM"))),
+            ),
+        );
+        assert_eq!(ids(&device), vec!["pin.diff_pair.invalid"]);
+        device.pins.insert(
+            "2".into(),
+            pin("GPIO12", &["USB_D-"], Some(("1", DiffPolarity::N, None))),
+        );
+        assert_eq!(
+            ids(&device),
+            vec!["pin.diff_pair.invalid", "pin.diff_pair.invalid"]
+        );
+    }
+
+    #[test]
     fn rejects_duplicate_signal_pin_names() {
         let mut device = base_device();
         device.pins.insert(
@@ -514,6 +632,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Io,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         device.pins.insert(
@@ -523,6 +642,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Io,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());
@@ -542,6 +662,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         device.pins.insert(
@@ -551,6 +672,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Power,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         device.pins.insert(
@@ -560,6 +682,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         device.pins.insert(
@@ -569,6 +692,7 @@ mod tests {
                 pin_type: openparts_core::PinType::Ground,
                 alternate_functions: vec![],
                 connected_to: None,
+                diff_pair: None,
             },
         );
         let diags = validate_part(&base_part(), &device, &base_package(), &BTreeSet::new());

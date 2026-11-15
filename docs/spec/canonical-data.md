@@ -595,6 +595,49 @@ the node here, in `openparts_core::ComponentCategory` (with its parent)
 and in the web catalog's labels, in one change. Never rename or remove
 a node that data uses.
 
+## 14.2 Differential Pairs
+
+A pin that is one half of a differential pair carries `diff_pair`, but
+only where the source names the pair: both halves as the positive and
+negative line of one interface (USB_DP/USB_DM "USB Data +ve/-ve", D+/D-,
+a receptacle's Dp1/Dn1). Two pins that merely look alike are not a pair.
+
+```yaml
+pins:
+  "46": { name: USB_DM, type: io, diff_pair: { partner: "47", polarity: n, standard: usb2 } }
+  "47": { name: USB_DP, type: io, diff_pair: { partner: "46", polarity: p, standard: usb2 } }
+  # A pair carried only in an alternate function (ESP32-C6 GPIO12/13):
+  "18": { name: GPIO12, type: io, alternate_functions: [USB_D_MINUS],
+          diff_pair: { partner: "19", polarity: n, standard: usb2, function: USB_D_MINUS } }
+
+provenance:
+  "/pins/47/diff_pair":
+    - source: raspberrypi/RP-008371-DS@rev1
+      page: 615
+      locator: "Table 620 \"USB pins\": USB_DP 47 \"USB Data +ve\", USB_DM 46 \"USB Data -ve\""
+```
+
+| Field | Meaning |
+|---|---|
+| `partner` | The pin number of the other half. |
+| `polarity` | `p` (D+, DP, _P) or `n` (D-, DM, _N). |
+| `standard` | The interface the pair carries. Closed vocabulary: `usb2`. It grows like `PinType` (section 15). |
+| `function` | Optional. The alternate function the pin carries the pair in, when it is not the pin's primary function. One of the pin's `alternate_functions`. |
+| `impedance_ohm` | Optional. A differential impedance *the part's own source* states. |
+
+The impedance an interface asks for (USB 2.0: 90 ohm differential) is a
+fact of the standard, not of the part: it is not recorded here. Board
+tools apply it per `standard` (documented and cited there).
+
+**Validation** (`pin.diff_pair.invalid`): the partner is another pin of
+the Device; its `diff_pair` names this pin back, with the opposite
+polarity and the same standard; either both halves name a `function` or
+neither does, and a `function` is one of the pin's
+`alternate_functions`; `impedance_ohm` is positive. Every `diff_pair`
+needs a provenance entry at `/pins/<n>/diff_pair` or `/pins/<n>`
+(`provenance.missing`; a document-wide `/pins` entry does not cover it,
+since the pair is a claim of its own).
+
 ---
 
 # 15. Pin Type

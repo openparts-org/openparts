@@ -24,7 +24,7 @@ mod transform;
 pub use build::{build, from_geometry};
 pub use transform::{normalize, BoardSide, Placement};
 
-use openparts_core::{KeepoutPurpose, KeepoutRestriction, PinType};
+use openparts_core::{DiffPolarity, DiffStandard, KeepoutPurpose, KeepoutRestriction, PinType};
 use serde::{Deserialize, Serialize};
 
 /// The model's schema version (`frame.schema_version`).
@@ -192,6 +192,31 @@ pub struct PadPin {
     pub name: String,
     #[serde(rename = "type")]
     pub pin_type: PinType,
+    /// The device pin's differential pair, when the source names one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff_pair: Option<PadDiffPair>,
+}
+
+/// Section 4: a pad's pin in a differential pair (the Device pin's
+/// `diff_pair`, Canonical Data Specification section 14.2), with the pad
+/// that carries the partner's copper.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PadDiffPair {
+    /// The partner's pin number.
+    pub partner: String,
+    /// The pad of this footprint carrying the partner pin (`null` when
+    /// the package has no pad for it).
+    pub partner_pad: Option<String>,
+    pub polarity: DiffPolarity,
+    pub standard: DiffStandard,
+    /// The alternate function the pair belongs to, if only in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    /// A differential impedance stated by the part's own source (ohm);
+    /// a standard's impedance is not given here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impedance_ohm: Option<f64>,
 }
 
 /// Section 4: one pad.

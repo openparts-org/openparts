@@ -40,6 +40,65 @@ pub struct Pin {
     /// (Canonical Data Specification section 14).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connected_to: Option<String>,
+    /// The other half of a differential pair this pin belongs to, when
+    /// the source names the pair (Canonical Data Specification
+    /// section 14.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff_pair: Option<DiffPair>,
+}
+
+/// A pin's membership in a differential pair (Canonical Data
+/// Specification section 14.2). Recorded only where the source names
+/// the pair (USB_DP/USB_DM, D+/D-). The impedance a standard asks for
+/// (USB 2.0: 90 ohm differential) is that standard's, not a fact of the
+/// part, and is not recorded here.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiffPair {
+    /// The pin number of the other half of the pair.
+    pub partner: String,
+    pub polarity: DiffPolarity,
+    /// The interface standard the pair carries.
+    pub standard: DiffStandard,
+    /// The alternate function the pair belongs to, when the pin carries
+    /// the pair only in that function (an ESP32 GPIO muxed to USB_D+).
+    /// One of the pin's `alternate_functions`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    /// A differential impedance the part's own source states (ohm).
+    /// Normally absent: the standard's impedance is not a part fact.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impedance_ohm: Option<f64>,
+}
+
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffPolarity {
+    /// The positive half (D+, DP, _P).
+    P,
+    /// The negative half (D-, DM, _N).
+    N,
+}
+
+impl DiffPolarity {
+    pub fn opposite(self) -> Self {
+        match self {
+            DiffPolarity::P => DiffPolarity::N,
+            DiffPolarity::N => DiffPolarity::P,
+        }
+    }
+}
+
+/// The interface a differential pair carries. A closed vocabulary that
+/// grows with the data, like `PinType`.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiffStandard {
+    /// USB 2.0 (low/full/high speed D+/D-).
+    Usb2,
 }
 
 /// A partial Pin used inside `DeviceRevision.overrides.pins` (Canonical
@@ -57,6 +116,8 @@ pub struct PinOverride {
     pub alternate_functions: Option<Vec<String>>,
     #[serde(default)]
     pub connected_to: Option<String>,
+    #[serde(default)]
+    pub diff_pair: Option<DiffPair>,
 }
 
 impl Pin {
@@ -75,6 +136,7 @@ impl Pin {
                 .connected_to
                 .clone()
                 .or_else(|| self.connected_to.clone()),
+            diff_pair: ov.diff_pair.clone().or_else(|| self.diff_pair.clone()),
         }
     }
 }
@@ -90,12 +152,14 @@ mod tests {
             pin_type: PinType::Ground,
             alternate_functions: vec!["FOO".to_string()],
             connected_to: None,
+            diff_pair: None,
         };
         let ov = PinOverride {
             name: Some("PDR_ON".to_string()),
             pin_type: None,
             alternate_functions: None,
             connected_to: None,
+            diff_pair: None,
         };
         let merged = base.apply_override(&ov);
         assert_eq!(merged.name, "PDR_ON");

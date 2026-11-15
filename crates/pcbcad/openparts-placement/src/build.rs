@@ -243,11 +243,27 @@ fn make(
             }));
         }
         pads.extend(extra);
+        let numbers: Vec<String> = pads.iter().map(|p| p.number.clone()).collect();
+        let pad_of = |pin: &str| -> Option<String> {
+            if numbers.iter().any(|n| n == pin) {
+                return Some(pin.to_string());
+            }
+            let to = device.pins.get(pin)?.connected_to.as_ref()?;
+            numbers.iter().find(|n| *n == to).cloned()
+        };
         for pad in &mut pads {
             if let Some(pin) = device.pins.get(&pad.number) {
                 pad.pin = Some(PadPin {
                     name: pin.name.clone(),
                     pin_type: pin.pin_type,
+                    diff_pair: pin.diff_pair.as_ref().map(|d| PadDiffPair {
+                        partner: d.partner.clone(),
+                        partner_pad: pad_of(&d.partner),
+                        polarity: d.polarity,
+                        standard: d.standard,
+                        function: d.function.clone(),
+                        impedance_ohm: d.impedance_ohm,
+                    }),
                 });
             }
         }
