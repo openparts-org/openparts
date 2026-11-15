@@ -116,11 +116,11 @@ def test_pair_width_solves_and_falls_back():
     w = rules.solve_pair_width(90.0, 0.15, 0.2104, 0.035, 4.4)
     assert rules.edge_coupled_zdiff(w, 0.15, 0.2104, 0.035, 4.4) == pytest.approx(90.0, abs=0.01)
     four = {**FAB, "stackup": {"dielectric": 0.2104, "er": 4.4}}
-    g = rules.pair_geometry(four, "usb2", max_width=0.4)
+    g = rules.pair_geometry(four, "usb2", escape=0.2)
     assert g["matched"] and g["zdiff"] == pytest.approx(90, abs=3)
     # On a 1.5 mm two-layer board 90 Ω needs ~1.2 mm tracks: not between
     # 0.4 mm-pitch pins. The pair is coupled at the escape width instead.
-    g = rules.pair_geometry(FAB, "usb2", max_width=0.2, pitch=0.4)
+    g = rules.pair_geometry(FAB, "usb2", escape=0.2, pitch=0.4)
     assert not g["matched"] and g["width"] == 0.2 and g["gap"] == pytest.approx(0.2)
     assert "not reachable" in g["note"]
 

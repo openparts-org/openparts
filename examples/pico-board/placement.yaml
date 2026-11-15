@@ -40,3 +40,9 @@ C12: {x: 0.05, y: -4.0, rot: 90, side: bottom}
 U2: {x: 8.8, y: 0, rot: -90, side: bottom}
 C9: {x: 12.8, y: 2.8, rot: 90, side: bottom}
 R4: {x: 12.8, y: -2.8, rot: 90, side: bottom}
+# Pre-placed copper before Freerouting (tools/kicad-board/README.md,
+# "Fan-out"): the USB D+/D- pair as a coupled path from U1's pins to
+# R1/R2, and thermal vias in U1's exposed pad; no per-pin escape stubs.
+# Measured over one sweep of 24 router settings (2026-11-15): no fan-out
+# 3/24 complete; stubs on every pin with dog-bones 1/24; this 5/24.
+fanout: {stubs: false}

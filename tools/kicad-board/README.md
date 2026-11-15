@@ -157,11 +157,12 @@ Zdiff = 2 · Z0 · (1 − 0.48 · e^(−0.96 s/h))
 ```
 
 solved for w at s = the design clearance. It is an approximation (no
-solder mask, no coplanar ground). When the width is not practical (wider
-than the pins' escape width, or out of the formula's range, as on a 1.6 mm
-two-layer board, where 90 Ω needs ~1.2 mm tracks), the pair is coupled at
-the escape width and pin-pitch gap, and the estimated impedance is
-reported. Full-speed USB (12 Mbit/s, the RP2040's) over a few centimetres
+solder mask, no coplanar ground). Inside the pins' courtyard the traces
+neck down to the escape width; outside, a width up to 0.5 mm (or the
+escape width, if wider) is taken as practical. When the solution is not
+(out of the formula's range, or wider, as on a 1.6 mm two-layer board,
+where 90 Ω needs ~1.2 mm tracks), the pair is coupled at the escape width
+and pin-pitch gap, and the estimated impedance is reported. Full-speed USB (12 Mbit/s, the RP2040's) over a few centimetres
 is not impedance-critical.
 
 Freerouting 2.5 has no differential-pair routing, so the pair is

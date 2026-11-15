@@ -197,32 +197,39 @@ DIFF_STANDARDS = {
 }
 
 
-def pair_geometry(fab, standard, max_width, pitch=None):
+# The widest coupled trace taken as practical (mm): beyond the pins'
+# courtyard the pair may be wider than their escape stubs, not wider.
+PAIR_MAX_WIDTH = 0.5
+
+
+def pair_geometry(fab, standard, escape, pitch=None, max_width=PAIR_MAX_WIDTH):
     """Width and gap for a pair: the standard's impedance on the fab's
-    stackup at the design clearance as gap, when that width is
-    practical (no wider than `max_width`, the formula in its range);
-    else the escape width at the pin pitch's gap, with the impedance it
-    gives. Returns a dict with `width`, `gap`, `zdiff`, `target`,
-    `matched` and a note."""
+    stackup at the design clearance as gap, when that width is practical
+    (no wider than max(max_width, escape), the formula in its range);
+    else the pins' escape width at the pin pitch's gap, with the
+    impedance that gives. Returns a dict with `width`, `gap`, `zdiff`,
+    `target`, `matched` and a note."""
     st = fab["stackup"]
     h, er = st["dielectric"], st["er"]
     t = copper_mm(fab, True)
     std = DIFF_STANDARDS.get(standard, {"zdiff": None})
     gap = fab["design"]["clearance"]
     target = std.get("zdiff")
+    limit = max(max_width, escape)
     w = solve_pair_width(target, gap, h, t, er) if target else None
-    if w is not None and 0.1 <= w / h <= 2.0 and w <= max_width + 1e-9:
+    if w is not None and 0.1 <= w / h <= 2.0 and w <= limit + 1e-9:
         w = max(round_up(w, 0.005), fab["design"]["track"])
         return {"width": w, "gap": gap, "zdiff": edge_coupled_zdiff(w, gap, h, t, er), "target": target,
                 "matched": True, "note": f"IPC-2141A edge-coupled microstrip, h={h} mm, εr={er} (approximation)"}
-    width = max_width
+    width = escape
     gap = max(fab["design"]["clearance"], (pitch - width) if pitch else 0.0)
     z = edge_coupled_zdiff(width, gap, h, t, er)
     why = ("no width in the formula's range" if w is None or not 0.1 <= w / h <= 2.0
-           else f"needs {w:.2f} mm, wider than the {max_width:.2f} mm the pins allow")
+           else f"needs {w:.2f} mm, wider than the practical {limit:.2f} mm")
     return {"width": width, "gap": gap, "zdiff": z, "target": target, "matched": False,
             "note": f"{target} Ω not reachable on h={h} mm, εr={er}: {why}; "
-                    f"coupled at {width:.3f}/{gap:.3f} mm, ≈{z:.0f} Ω (IPC-2141A approximation)"}
+                    f"coupled at the pins' {width:.3f} mm escape width, {gap:.3f} mm gap, "
+                    f"about {z:.0f} Ω (IPC-2141A approximation)"}
 
 
 # ------------------------------------------------------------- geometry
