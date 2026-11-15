@@ -10,14 +10,13 @@ struct DataReviewCopy {
   /// "{by}" and "{pr}" are replaced.
   reviewed_by : String
   not_reviewed : String
-  candidate_note : String
-  reviewed_note : String
+  candidate_tip : String
   doc_part : String
   doc_device : String
   doc_package : String
   edit_on_github : String
-  edit_note : String
   report_error : String
+  report_value : String
   how_to_review : String
   heading : String
   page_short : String
@@ -34,14 +33,13 @@ let data_review_ja : DataReviewCopy = {
   partly: "一部レビュー済み",
   reviewed_by: "{by} が PR #{pr} でレビュー",
   not_reviewed: "AI候補(未レビュー)",
-  candidate_note: "この部品のデータはAIエージェントがデータシートから抽出した候補で、まだ人が確認していません。各値のリンクから出典のページを開いて照合できます。",
-  reviewed_note: "部品・デバイス・パッケージのすべてのデータを、人がデータシートと照合済みです。",
+  candidate_tip: "AIがデータシートから抽出した値(人による確認前)",
   doc_part: "部品",
   doc_device: "デバイス",
   doc_package: "パッケージ",
   edit_on_github: "GitHubで編集",
-  edit_note: "値の誤りを見つけたら、GitHubで該当ファイルを編集してください。GitHubがフォークとPull Requestの作成を案内します。PRには変更した値と出典ページの一覧が自動でコメントされます。",
   report_error: "誤りを報告",
+  report_value: "この値の誤りを報告",
   how_to_review: "レビューの手順",
   heading: "データのレビュー",
   page_short: "p.",
@@ -58,14 +56,13 @@ let data_review_en : DataReviewCopy = {
   partly: "Partly reviewed",
   reviewed_by: "Reviewed by {by} in PR #{pr}",
   not_reviewed: "AI candidate (not reviewed)",
-  candidate_note: "This part's data was extracted from its datasheets by AI agents and no person has checked it yet. Each value links to the page it was read from, so you can check it.",
-  reviewed_note: "A person has checked all of this part's, device's and package's data against the datasheets.",
+  candidate_tip: "Extracted from the datasheets by AI; not yet checked by a person",
   doc_part: "Part",
   doc_device: "Device",
   doc_package: "Package",
   edit_on_github: "Edit on GitHub",
-  edit_note: "Found a wrong value? Edit the file on GitHub: it guides you through forking and opening a pull request, which gets a comment listing every changed value with its source page.",
   report_error: "Report an error",
+  report_value: "Report this value as wrong",
   how_to_review: "How to review",
   heading: "Data review",
   page_short: "p.",

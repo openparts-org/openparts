@@ -35,8 +35,6 @@ type Copy
 
 type DataReviewCopy
 
-type Feature
-
 #derive(Eq)
 type Fetch[T]
 

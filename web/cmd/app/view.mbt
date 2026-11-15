@@ -132,25 +132,33 @@ fn footer_view(lang : Lang) -> Html {
 ///|
 fn home_view(lang : Lang) -> Html {
   let c = lang.copy()
-  div([
-    section(class="hero", [
-      h1(c.home_title),
-      p(class="text-muted hero-lead", c.home_lead),
-      div(class="hero-actions", [
-        a(
-          class="button button-primary",
-          href=href(lang, "search"),
-          c.home_cta_search,
+  // A plain GET form: /search?q= is the catalog's own query.
+  section(class="hero", [
+    h1(c.home_title),
+    p(class="text-muted hero-lead", c.home_lead),
+    @html.form(
+      action=href(lang, "search"),
+      method_="get",
+      class="hero-search",
+      [
+        input(
+          input_type=Search,
+          name="q",
+          class="search-input",
+          placeholder=c.search_placeholder,
+          attrs=@html.Attrs::build().aria_label(c.nav_search),
         ),
-        a(class="button", href=href(lang, "kicad-plugin"), c.home_cta_kicad),
-      ]),
-    ]),
-    section(
-      class="section features",
-      c.features.map(f => {
-        div(class="card", [h3(f.title), p(class="text-muted", f.body)])
-      }),
+      ],
     ),
+    div(class="hero-actions", [
+      a(
+        class="button button-primary",
+        href=href(lang, "search"),
+        c.home_cta_search,
+      ),
+      a(class="button", href=href(lang, "bom"), lang.bom().nav),
+      a(class="button", href=href(lang, "kicad-plugin"), c.nav_kicad),
+    ]),
   ])
 }
 
@@ -167,12 +175,7 @@ fn kicad_view(lang : Lang) -> Html {
       pre([code("curl -fsSL \{raw}/install.sh | bash")]),
       h3("Windows (PowerShell)"),
       pre([code("irm \{raw}/install.ps1 | iex")]),
-      p(class="text-muted", c.kicad_auto_detect),
-      p(class="text-muted", c.kicad_restart),
-    ]),
-    section(class="section", [
-      h2(c.kicad_good_to_know),
-      p(class="text-muted", c.kicad_session),
+      ul(class="text-muted", c.kicad_notes.map(n => li(n))),
     ]),
   ])
 }
@@ -208,7 +211,6 @@ fn contributing_view(lang : Lang) -> Html {
   ]
   div([
     h1(c.contrib_title),
-    p(class="text-muted", c.contrib_intro),
     section(class="section", [
       h2(c.contrib_report_heading),
       p(class="text-muted", [
@@ -238,11 +240,7 @@ fn not_found_view(lang : Lang) -> Html {
   let c = lang.copy()
   div([
     h1(c.not_found_title),
-    p(class="text-muted", [
-      text(c.not_found_before),
-      a(href=href(lang, "search"), c.not_found_link),
-      text(c.not_found_after),
-    ]),
+    p([a(href=href(lang, "search"), c.home_cta_search + " →")]),
   ])
 }
 
@@ -387,7 +385,6 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
   // plain SVG.
   let viewer : Array[Html] = [
     div(id=VIEWER_ID, class="model-viewer-canvas", nodes([])),
-    p(class="text-muted viewer-controls", c.viewer_controls),
   ]
   if model.viewer_error is Some(e) {
     viewer.push(
@@ -417,6 +414,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
           "\{c.pin_number} \{n}",
           pin.name,
         ),
+        report_value_link(lang, data, "device", "/pins/\{n}/name", pin.name),
       ]),
       td(pin.type_.wire()),
       td(if alt.is_empty() { "-" } else { alt }),
@@ -439,10 +437,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       ]),
     ]),
     section(class="section", [
-      div(class="pin-table-header", [
-        h3(pins_heading(lang, device.id)),
-        ext_link(report_error_url(data), c.report_issue, class="button"),
-      ]),
+      h3(pins_heading(lang, device.id)),
       details(class="pin-table-details", [
         summary(pins_show(lang, numbers.length())),
         table([
@@ -493,7 +488,10 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
             tr([
               th(r.0),
               td([cited_value(lang, data, "package", [r.2], r.0, r.1)]),
-              td([cited_where(lang, data, "package", [r.2])]),
+              td([
+                cited_where(lang, data, "package", [r.2]),
+                report_value_link(lang, data, "package", r.2, r.1),
+              ]),
             ])
           }),
         ),
@@ -518,7 +516,6 @@ fn sources_view(lang : Lang, sources : Array[@api.PartSource]) -> Html {
     return p(class="text-muted", c.sources_none)
   }
   div([
-    p(class="text-muted", c.sources_note),
     ul(
       class="source-list",
       sources.map(ps => {
@@ -530,7 +527,14 @@ fn sources_view(lang : Lang, sources : Array[@api.PartSource]) -> Html {
         let cited = ps.cited_by.map(b => cited_by_label(lang, b)).join(", ")
         meta = meta + " · \{c.source_cited_by}: \{cited}"
         li([
-          ext_link(s.url, "\{s.publisher.to_upper()} \{s.document_id}"),
+          a(
+            href=s.url,
+            target=Blank,
+            rel="noopener noreferrer",
+            title=c.sources_tip,
+            "\{s.publisher.to_upper()} \{s.document_id}",
+            escape=true,
+          ),
           text(" "),
           span(class="text-muted", meta),
         ])

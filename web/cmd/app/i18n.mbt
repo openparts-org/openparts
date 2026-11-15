@@ -17,12 +17,6 @@ fn Lang::code(self : Lang) -> String {
 }
 
 ///|
-struct Feature {
-  title : String
-  body : String
-}
-
-///|
 struct Copy {
   // nav / footer
   nav_search : String
@@ -33,19 +27,13 @@ struct Copy {
   home_title : String
   home_lead : String
   home_cta_search : String
-  home_cta_kicad : String
-  features : Array[Feature]
   // KiCad plugin
   kicad_title : String
   kicad_intro : String
   kicad_quick_install : String
-  kicad_auto_detect : String
-  kicad_restart : String
-  kicad_good_to_know : String
-  kicad_session : String
+  kicad_notes : Array[String]
   // contributing
   contrib_title : String
-  contrib_intro : String
   contrib_report_heading : String
   contrib_report_before : String
   contrib_report_link : String
@@ -66,9 +54,6 @@ struct Copy {
   no_results : String
   // part
   not_found_title : String
-  not_found_before : String
-  not_found_link : String
-  not_found_after : String
   load_failed : String
   artifacts_failed : String
   download : String
@@ -78,8 +63,6 @@ struct Copy {
   zip_failed : String
   preview3d : String
   model_load_failed : String
-  viewer_controls : String
-  report_issue : String
   pin_number : String
   pin_name : String
   pin_type : String
@@ -94,7 +77,8 @@ struct Copy {
   footprint : String
   footprint_legend : String
   sources_heading : String
-  sources_note : String
+  /// The source link's tooltip.
+  sources_tip : String
   source_cited_by : String
   sources_none : String
 }
@@ -106,69 +90,44 @@ let ja : Copy = {
   nav_contributing: "コントリビュート",
   open_source: "OpenParts is open source.",
   home_title: "オープンで、出典のたどれる電子部品データ",
-  home_lead: "OpenPartsは、電子部品のCADアセット(KiCadシンボル/フットプリント、STEP/STLモデル)を既製ファイルとして配布するのではなく、検証可能な正規データから再現可能に生成するプラットフォームです。",
+  home_lead: "出典つきの部品データから、KiCadシンボル・フットプリント・3Dモデルを生成します。",
   home_cta_search: "部品を探す",
-  home_cta_kicad: "KiCadプラグインを入れる",
-  features: [
-    {
-      title: "オープンな部品データ",
-      body: "電子部品のピン配置・パッケージ寸法・リビジョン情報を、誰でも閲覧・検証・修正できる正規YAMLデータとして公開しています。",
-    },
-    {
-      title: "Provenance(出典)追跡",
-      body: "すべてのフィールドがデータシート等の出典に紐づいています。「なぜそう書かれているか」を常にたどれます。",
-    },
-    {
-      title: "再現可能なCAD生成",
-      body: "既製のシンボル/フットプリント/3Dモデルを配布するのではなく、正規データから都度生成します。データを直せば、生成物も追従します。",
-    },
-  ],
   kicad_title: "KiCadプラグイン",
-  kicad_intro: "KiCadのツールバーから直接OpenPartsレジストリを検索し、部品のSymbol / Footprint / STEPモデルをプロジェクトのローカルライブラリにインストールできる、小さなネイティブGUIアプリです。スキーマティックやボードへの配置は行いません。インストール後はKiCad標準のSymbol/Footprintピッカーからいつも通り使ってください。",
-  kicad_quick_install: "クイックインストール",
-  kicad_auto_detect: "どちらのスクリプトもKiCadのプラグインディレクトリを自動検出しようとします。検出できない場合はKiCadの「Tools > External Plugins > Open Plugin Directory」で場所を確認し、--plugin-dir(Linux)/ -PluginDir(Windows)で明示的に指定して再実行してください。",
-  kicad_restart: "インストール後はKiCadを再起動するか、「Tools > External Plugins > Refresh Plugins」を実行し、PCBエディタのツールバーに現れる「OpenParts」ボタンを探してください。Plugin and Content Managerの「Installed」一覧には表示されません。",
-  kicad_good_to_know: "知っておくとよいこと",
-  kicad_session: "あるKiCadセッションで初めて部品をインストールした直後は、Symbol Editor / Footprint Editor / 3Dビューアのウィンドウを一度閉じて開き直してください。KiCadはこれらのウィンドウを開いた時点でライブラリテーブルを読み込み、開いている間はライブラリテーブルの変更をホットリロードしないためです(KiCad自体の仕様です)。",
+  kicad_intro: "KiCadから部品を検索し、シンボル・フットプリント・STEPをプロジェクトのライブラリに追加します。",
+  kicad_quick_install: "インストール",
+  kicad_notes: [
+    "プラグインディレクトリが検出されないとき: Tools > External Plugins > Open Plugin Directory で確認し --plugin-dir / -PluginDir で指定",
+    "KiCadを再起動し、PCBエディタのツールバーの「OpenParts」から起動",
+    "初めて部品を追加した後は、シンボル/フットプリントエディタと3Dビューアを開き直す",
+  ],
   contrib_title: "コントリビュート",
-  contrib_intro: "OpenPartsの部品データは openparts-data リポジトリの正規YAMLとして管理されています。ピン配置や寸法などの誤りに気づいた場合や、新しい部品を追加したい場合は、誰でもPull Requestを送ることができます。",
-  contrib_report_heading: "個別データの問題を報告する",
-  contrib_report_before: "自分で直す時間が無い場合は、まず",
-  contrib_report_link: "部品を探し",
-  contrib_report_after: "、詳細ページの「誤りを報告」ボタンから openparts-data へIssueを作成してください。部品ID・ページURL・データファイルと記入欄が自動的に入力されます。",
-  contrib_review_heading: "データをレビューする",
-  contrib_review_body: "部品データの多くはAIエージェントがデータシートから抽出した候補で、部品ページに「AI候補 — 要レビュー」と表示されます。値のリンクから出典のページを開いて照合し、部品ページの「GitHubで編集」からYAMLを直すか、正しければ review ブロックを追加してPull Requestを送ってください。PRには変更した値と出典ページの一覧が自動でコメントされます。手順は ",
+  contrib_report_heading: "誤りを報告",
+  contrib_report_before: "",
+  contrib_report_link: "部品ページ",
+  contrib_report_after: "の「誤りを報告」からIssueを作成できます。",
+  contrib_review_heading: "レビュー",
+  contrib_review_body: "AI候補の値を出典ページと照合し、「GitHubで編集」から修正または review ブロックを追加してPRを送ってください。手順: ",
   contrib_review_link: "CONTRIBUTING.md",
-  contrib_review_after: " にあります。",
-  contrib_pr_heading: "新規部品を追加する / 既存データを修正する(Pull Request)",
+  contrib_review_after: "",
+  contrib_pr_heading: "部品の追加・修正(Pull Request)",
   contrib_steps: [
     [
-      "openparts-data を", "フォーク", "します。検証コマンドのビルドに openparts(コアリポジトリ)が必要なので、兄弟ディレクトリとして",
-      "openparts", "もcloneしてください。",
+      "openparts-data を", "フォーク", "し、隣に ", "openparts", " もclone",
     ],
     [
-      "", "Canonical Data Specification", "(特にRepository Layoutの節)に従い、parts/・devices/・packages/・manufacturers/・sources/配下にYAMLを追加/編集します。",
+      "", "Canonical Data Specification", " に沿ってYAMLを追加・編集",
       "", "",
     ],
-    [
-      "openparts-data のリポジトリルートで ./scripts/validate.sh を実行し、Part/Device/Package/Sourcesの参照整合性とバリデーションが通ることを確認します(このスクリプトは兄弟の ../openparts をビルドして使います)。",
-      "", "", "", "",
-    ],
-    [
-      "openparts-data へPull Requestを作成します。作成後はCI上の validate ワークフローが同じ検証を自動実行します。",
-      "", "", "", "",
-    ],
+    ["./scripts/validate.sh で検証", "", "", "", ""],
+    ["Pull Requestを作成(CIが同じ検証を実行)", "", "", "", ""],
   ],
-  contrib_specs_heading: "関連する仕様書",
+  contrib_specs_heading: "仕様書",
   search_title: "部品を探す",
   search_placeholder: "型番・メーカー・パッケージで検索(例: nRF52840, 0603, QFN)",
   loading: "読み込み中...",
   search_failed: "検索に失敗しました。",
   no_results: "該当する部品が見つかりませんでした。",
-  not_found_title: "部品が見つかりません",
-  not_found_before: "指定された部品は見つかりませんでした。",
-  not_found_link: "検索",
-  not_found_after: "からお探しください。",
+  not_found_title: "見つかりません",
   load_failed: "読み込みに失敗しました。",
   artifacts_failed: "CAD成果物の情報を取得できませんでした。",
   download: "ダウンロード",
@@ -178,8 +137,6 @@ let ja : Copy = {
   zip_failed: "ダウンロードに失敗しました。",
   preview3d: "3Dプレビュー",
   model_load_failed: "3Dモデルを表示できませんでした。",
-  viewer_controls: "ドラッグ: 回転(カーソル位置中心)　右/中ドラッグ・Shift+ドラッグ: 移動　ホイール: カーソルへズーム　ダブルクリック: その点へ寄る　F: 全体表示　1/3/7/0: 正面/右/上/等角(Ctrl で反対側)　P: 投影切替　寸法ラベルをクリック: 出典",
-  report_issue: "このデータの問題を報告",
   pin_number: "ピン番号",
   pin_name: "名前",
   pin_type: "種別",
@@ -194,7 +151,7 @@ let ja : Copy = {
   footprint: "フットプリント",
   footprint_legend: "金: 銅パッド　白: シルク　灰: 部品外形　桃: コートヤード",
   sources_heading: "出典",
-  sources_note: "この部品のデータは次の文書から読み取っています。リンク先は各メーカーのサイトで、版が更新されている場合があります。",
+  sources_tip: "メーカーのサイト(新しい版に更新されている場合があります)",
   source_cited_by: "根拠にしている項目",
   sources_none: "出典が登録されていません。",
 }
@@ -206,70 +163,42 @@ let en : Copy = {
   nav_contributing: "Contributing",
   open_source: "OpenParts is open source.",
   home_title: "Open electronic component data, with sources you can trace",
-  home_lead: "OpenParts generates CAD assets (KiCad symbols/footprints, STEP/STL models) reproducibly from verifiable canonical data, instead of distributing pre-made files.",
+  home_lead: "KiCad symbols, footprints and 3D models generated from part data with datasheet sources.",
   home_cta_search: "Search parts",
-  home_cta_kicad: "Install the KiCad plugin",
-  features: [
-    {
-      title: "Open part data",
-      body: "Pin assignments, package dimensions, and revision info are published as canonical YAML data anyone can view, verify, or fix.",
-    },
-    {
-      title: "Provenance tracking",
-      body: "Every field is tied to a datasheet or other source, so you can always trace why it's written the way it is.",
-    },
-    {
-      title: "Reproducible CAD generation",
-      body: "Symbols, footprints, and 3D models aren't distributed pre-made -- they're generated from canonical data each time. Fix the data, and the generated output follows.",
-    },
-  ],
   kicad_title: "KiCad Plugin",
-  kicad_intro: "A small native GUI app that searches the OpenParts registry and installs a part's Symbol / Footprint / STEP model into your project's local libraries, right from KiCad's toolbar. It doesn't place anything on the schematic or board -- use KiCad's own Symbol/Footprint picker as usual after installing.",
-  kicad_quick_install: "Quick install",
-  kicad_auto_detect: "Both scripts try to auto-detect your KiCad plugin directory. If they can't, find it via KiCad's Tools > External Plugins > Open Plugin Directory, then re-run with --plugin-dir (Linux) / -PluginDir (Windows) set explicitly.",
-  kicad_restart: "Afterwards, restart KiCad (or Tools > External Plugins > Refresh Plugins) and look for the new \"OpenParts\" button in the PCB editor toolbar -- not in the Plugin and Content Manager's own \"Installed\" list.",
-  kicad_good_to_know: "Good to know",
-  kicad_session: "Right after installing a part for the first time in a KiCad session, close and reopen the Symbol Editor / Footprint Editor / 3D viewer windows. KiCad reads library tables once when each window opens and doesn't hot-reload them while it's open -- this is KiCad's own behavior.",
-  contrib_title: "Contributing",
-  contrib_intro: "OpenParts' component data is maintained as canonical YAML in the openparts-data repository. If you spot an error in a pin assignment or dimension, or want to add a new part, anyone can send a Pull Request.",
-  contrib_report_heading: "Report a problem with existing data",
-  contrib_report_before: "If you don't have time to fix it yourself, ",
-  contrib_report_link: "search for the part",
-  contrib_report_after: ", then use the \"Report an error\" button on its page to open an Issue against openparts-data -- the part id, the page URL, the data files and the fields to fill in are pre-filled.",
-  contrib_review_heading: "Review data",
-  contrib_review_body: "Most part data are candidates AI agents extracted from datasheets; their part pages say \"AI candidate -- needs review\". Open each value's source page from its link and compare. Then use \"Edit on GitHub\" on the part page to fix the YAML, or, if it is right, add a review block, and open a pull request. The pull request gets a comment listing every changed value with its source page. The steps are in ",
-  contrib_review_link: "CONTRIBUTING.md",
-  contrib_review_after: ".",
-  contrib_pr_heading: "Add a new part / fix existing data (Pull Request)",
-  contrib_steps: [
-    [
-      "", "Fork openparts-data", ". The validation command needs openparts (the core repo), so also clone ",
-      "openparts", " as a sibling directory.",
-    ],
-    [
-      "Add or edit YAML under parts/, devices/, packages/, manufacturers/, sources/, following the ",
-      "Canonical Data Specification", " (especially the Repository Layout section).",
-      "", "",
-    ],
-    [
-      "Run ./scripts/validate.sh from openparts-data's repo root to confirm Part/Device/Package/Sources references resolve and validation passes (it builds the sibling ../openparts to do so).",
-      "", "", "", "",
-    ],
-    [
-      "Open a Pull Request against openparts-data. The validate workflow runs the same checks in CI once it's up.",
-      "", "", "", "",
-    ],
+  kicad_intro: "Search parts from KiCad and add their symbol, footprint and STEP model to your project's libraries.",
+  kicad_quick_install: "Install",
+  kicad_notes: [
+    "Plugin directory not detected: find it via Tools > External Plugins > Open Plugin Directory and pass --plugin-dir / -PluginDir",
+    "Restart KiCad and start it from the \"OpenParts\" button in the PCB editor toolbar",
+    "After adding the first part, reopen the Symbol/Footprint Editor and the 3D viewer",
   ],
-  contrib_specs_heading: "Related specifications",
+  contrib_title: "Contributing",
+  contrib_report_heading: "Report an error",
+  contrib_report_before: "Use \"Report an error\" on the ",
+  contrib_report_link: "part's page",
+  contrib_report_after: ".",
+  contrib_review_heading: "Review",
+  contrib_review_body: "Check AI-candidate values against their cited pages, then fix them with \"Edit on GitHub\" or add a review block, and open a pull request. Steps: ",
+  contrib_review_link: "CONTRIBUTING.md",
+  contrib_review_after: "",
+  contrib_pr_heading: "Add or fix parts (pull request)",
+  contrib_steps: [
+    ["", "Fork openparts-data", " and clone ", "openparts", " next to it"],
+    [
+      "Add or edit YAML following the ", "Canonical Data Specification", "", "",
+      "",
+    ],
+    ["Run ./scripts/validate.sh", "", "", "", ""],
+    ["Open a pull request (CI runs the same checks)", "", "", "", ""],
+  ],
+  contrib_specs_heading: "Specifications",
   search_title: "Search parts",
   search_placeholder: "Search by MPN, manufacturer or package (e.g. nRF52840, 0603, QFN)",
   loading: "Loading...",
   search_failed: "Search failed.",
   no_results: "No matching parts found.",
-  not_found_title: "Part not found",
-  not_found_before: "The requested part could not be found. Try ",
-  not_found_link: "searching",
-  not_found_after: " instead.",
+  not_found_title: "Not found",
   load_failed: "Failed to load.",
   artifacts_failed: "Could not fetch CAD artifact info.",
   download: "Download",
@@ -279,8 +208,6 @@ let en : Copy = {
   zip_failed: "Download failed.",
   preview3d: "3D preview",
   model_load_failed: "Could not display the 3D model.",
-  viewer_controls: "Drag: orbit (about the point under the cursor) · Right/middle or Shift+drag: pan · Wheel: zoom to cursor · Double-click: close in on a point · F: fit · 1/3/7/0: front/right/top/iso (Ctrl: opposite) · P: projection · Click a dimension label: its source",
-  report_issue: "Report a problem with this data",
   pin_number: "Pin",
   pin_name: "Name",
   pin_type: "Type",
@@ -295,7 +222,7 @@ let en : Copy = {
   footprint: "Footprint",
   footprint_legend: "Gold: copper pads · White: silkscreen · Grey: body outline · Pink: courtyard",
   sources_heading: "Sources",
-  sources_note: "This part's data was read from the documents below. Links go to each manufacturer's site, which may now serve a newer revision.",
+  sources_tip: "The manufacturer's site (may now serve a newer revision)",
   source_cited_by: "Used for",
   sources_none: "No sources are recorded.",
 }
@@ -484,7 +411,8 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
 
 ///|
 struct CatalogCopy {
-  lead : String
+  /// A parameter range input's tooltip: unit prefixes.
+  unit_hint : String
   browse_all : String
   by_size : String
   by_family : String
@@ -499,7 +427,6 @@ struct CatalogCopy {
   prev : String
   next : String
   show_less : String
-  electrical_note : String
   // facet group titles
   f_category : String
   f_manufacturer : String
@@ -537,7 +464,7 @@ struct CatalogCopy {
 
 ///|
 let catalog_ja : CatalogCopy = {
-  lead: "カテゴリを選ぶか型番・キーワードで検索し、電気的特性・パッケージ・サイズ・ピン数・ピッチ・寸法で絞り込めます。",
+  unit_hint: "例: 10n, 0.1u, 100nF, 4k7",
   browse_all: "すべての部品",
   by_size: "チップサイズから探す",
   by_family: "パッケージから探す",
@@ -552,7 +479,6 @@ let catalog_ja : CatalogCopy = {
   prev: "前へ",
   next: "次へ",
   show_less: "折りたたむ",
-  electrical_note: "容量・抵抗値・定格電圧などの電気的特性は、出典付きの値がある部品だけが絞り込み対象です(まだ一部の部品のみ)。範囲は 10n、0.1u、100nF、4k7 のように単位接頭辞付きで入力できます。",
   f_category: "カテゴリ",
   f_manufacturer: "メーカー",
   f_family: "パッケージ",
@@ -587,7 +513,7 @@ let catalog_ja : CatalogCopy = {
 
 ///|
 let catalog_en : CatalogCopy = {
-  lead: "Pick a category or search by part number or keyword, then narrow by electrical parameters, package, size, pin count, pitch and dimensions.",
+  unit_hint: "e.g. 10n, 0.1u, 100nF, 4k7",
   browse_all: "All parts",
   by_size: "Browse by chip size",
   by_family: "Browse by package",
@@ -602,7 +528,6 @@ let catalog_en : CatalogCopy = {
   prev: "Previous",
   next: "Next",
   show_less: "Show less",
-  electrical_note: "Electrical parameters such as capacitance, resistance and voltage rating filter only the parts with sourced values (so far a few). Ranges take unit prefixes: 10n, 0.1u, 100nF, 4k7.",
   f_category: "Category",
   f_manufacturer: "Manufacturer",
   f_family: "Package",

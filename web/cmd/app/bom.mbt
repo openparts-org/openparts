@@ -486,11 +486,7 @@ fn bom_view(model : Model, emit : Emit[Msg]) -> Html {
       ]),
     ]),
   ])
-  let body : Array[Html] = [
-    h1(c.title),
-    p(class="text-muted", c.lead),
-    input_section,
-  ]
+  let body : Array[Html] = [h1(c.title), input_section]
   match s.phase {
     Idle => ()
     Checking => body.push(p(class="text-muted", c.checking))

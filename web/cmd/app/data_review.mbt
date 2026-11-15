@@ -100,10 +100,22 @@ fn common_review(docs : @api.PartDocuments) -> @api.DocumentReview? {
 }
 
 ///|
-/// The badge beside existence and lifecycle.
+/// The badge beside existence and lifecycle; a candidate's links to the
+/// review steps.
 fn review_badge(lang : Lang, docs : @api.PartDocuments?) -> Html {
   let r = lang.data_review()
   guard docs is Some(d) else { text("") }
+  let candidate = (label : String) => {
+    a(
+      href=contributing_url(),
+      target=Blank,
+      rel="noopener noreferrer",
+      class="badge badge-warn review-badge",
+      title=r.candidate_tip,
+      label,
+      escape=true,
+    )
+  }
   match d.review {
     Reviewed =>
       match common_review(d) {
@@ -114,42 +126,90 @@ fn review_badge(lang : Lang, docs : @api.PartDocuments?) -> Html {
           )
         None => span(class="badge badge-good review-badge", "✓ " + r.reviewed)
       }
-    Partly => span(class="badge badge-warn review-badge", r.partly)
-    Unreviewed => span(class="badge badge-warn review-badge", r.ai_candidate)
+    Partly => candidate(r.partly)
+    Unreviewed => candidate(r.ai_candidate)
   }
 }
 
 ///|
-/// The "Report an error" issue: the part, the page, the files and the
-/// fields a report needs. In English, like the data repository.
-fn report_error_url(data : PartData) -> String {
+/// GitHub's new-issue URLs stop working at about 8 KB; a prefill that
+/// would pass this is left out.
+let issue_url_limit : Int32 = 7500
+
+///|
+/// The "Report an error" issue: openparts-data's data-error issue form
+/// (.github/ISSUE_TEMPLATE/data-error.yml) with the part, the page and
+/// the files filled in by field id, and for one value also its pointer
+/// and the value shown. In English, like the data repository.
+fn report_error_url(
+  data : PartData,
+  field? : String,
+  current? : String,
+) -> String {
   let part = data.part
-  let path = (d : @api.DocumentInfo?) => {
-    match d {
-      Some(d) => d.path.unwrap_or(d.id)
-      None => "-"
+  let files : Array[String] = []
+  if data.documents is Some(docs) {
+    for
+      item in [
+        ("part", docs.part),
+        ("device", docs.device),
+        ("package", docs.package_),
+      ] {
+      files.push("\{item.0}: \{item.1.path.unwrap_or(item.1.id)}")
     }
   }
-  let docs = data.documents
-  let title = "Data error: \{part.manufacturer}/\{part.mpn}"
-  let body = [
-    "**Part**: `\{part.id}`",
-    "**Page**: \{current_href()}",
-    "**Files**:",
-    "- part: `\{path(docs.map(d => d.part))}`",
-    "- device: `\{path(docs.map(d => d.device))}`",
-    "- package: `\{path(docs.map(d => d.package_))}`",
-    "",
-    "**Field** (e.g. pin 12 name, body width):",
-    "",
-    "**Value shown**:",
-    "",
-    "**Value in the datasheet**:",
-    "",
-    "**Source** (document, revision, page, table or figure):",
-    "",
+  let title = match field {
+    Some(f) => "Data error: \{part.manufacturer}/\{part.mpn} \{f}"
+    None => "Data error: \{part.manufacturer}/\{part.mpn}"
+  }
+  let params = [
+    ("template", "data-error.yml"),
+    ("title", title),
+    ("part", part.id),
+    ("page", current_href()),
+    ("files", files.join("\n")),
   ]
-  "\{data_repo}/issues/new?title=\{encode_uri_component(title)}&body=\{encode_uri_component(body.join("\n"))}"
+  if field is Some(f) {
+    params.push(("field", f))
+  }
+  if current is Some(v) {
+    params.push(("current", v))
+  }
+  let mut url = "\{data_repo}/issues/new"
+  for i, kv in params {
+    let next = url +
+      (if i == 0 { "?" } else { "&" }) +
+      kv.0 +
+      "=" +
+      encode_uri_component(kv.1)
+    if next.length() <= issue_url_limit {
+      url = next
+    }
+  }
+  url
+}
+
+///|
+/// A small flag beside a cited value, shown on hover: reports `kind`'s
+/// `pointer` (shown as `value`) as wrong.
+fn report_value_link(
+  lang : Lang,
+  data : PartData,
+  kind : String,
+  pointer : String,
+  value : String,
+) -> Html {
+  let label = lang.data_review().report_value
+  a(
+    href=report_error_url(data, field="\{kind} \{pointer}", current=value),
+    target=Blank,
+    rel="noopener noreferrer",
+    class="report-value",
+    title=label,
+    attrs=@html.Attrs::build().aria_label(label),
+    "⚑",
+    escape=true,
+  )
 }
 
 ///|
@@ -189,13 +249,8 @@ fn review_section(lang : Lang, data : PartData) -> Html {
       )
     }
   }
-  let note = match data.documents.map(d => d.review) {
-    Some(Reviewed) => r.reviewed_note
-    _ => r.candidate_note
-  }
   section(class="section review-section", [
     h3(r.heading),
-    p(class="text-muted", note),
     if rows.is_empty() {
       text("")
     } else {
@@ -205,7 +260,6 @@ fn review_section(lang : Lang, data : PartData) -> Html {
       ext_link(report_error_url(data), r.report_error, class="button"),
       ext_link(contributing_url(), r.how_to_review, class="button"),
     ]),
-    p(class="text-muted", r.edit_note),
   ])
 }
 

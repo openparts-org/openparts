@@ -206,7 +206,10 @@ pub(crate) async fn mount_model(
     let fit_button = button(&labels.fit, None);
     fit_button.set_title(&format!("{} (F)", labels.fit));
     let projection_button = button(&labels.orthographic, Some(false));
-    projection_button.set_title("P");
+    projection_button.set_title(&format!(
+        "{} / {} (P)",
+        labels.perspective, labels.orthographic
+    ));
     for b in [
         &dims_button,
         &measure_button,
@@ -1069,10 +1072,11 @@ impl ModelView {
         let t = |axis: usize, positive: bool| {
             let v = StandardView::from_axis(axis, positive);
             format!(
-                "{}{} — {}",
+                "{}{} — {} ({})",
                 if positive { "+" } else { "−" },
                 ["X", "Y", "Z"][axis],
-                self.labels.get(v.key())
+                self.labels.get(v.key()),
+                v.shortcut()
             )
         };
         [

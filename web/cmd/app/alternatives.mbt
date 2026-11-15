@@ -123,7 +123,7 @@ fn pins_summary(lang : Lang, a : @api.Alternative) -> Html {
 fn alternatives_section(model : Model, emit : Emit[Msg]) -> Html {
   let lang = model.lang
   let c = lang.bom()
-  let body : Array[Html] = [h3(c.alt_title), p(class="text-muted", c.alt_lead)]
+  let body : Array[Html] = [h3(c.alt_title)]
   match model.alts.data {
     Loading => body.push(p(class="text-muted", c.alt_loading))
     Missing => body.push(p(class="text-muted", c.alt_none))
@@ -147,12 +147,7 @@ fn alternatives_view(
   if r.alternatives.is_empty() {
     let out = [p(class="text-muted", c.alt_none)]
     if r.rejected > 0 {
-      out.push(
-        p(
-          class="text-muted",
-          "\{alt_count_note(lang, r.rejected)} \{c.alt_rejected}",
-        ),
-      )
+      out.push(p(class="text-muted", alt_rejected_note(lang, r.rejected)))
     }
     return div(out)
   }
@@ -173,6 +168,7 @@ fn alternatives_view(
         class="alt-tab" +
           (if cl.wire() == shown { " alt-tab-active" } else { "" }),
         disabled=n == 0,
+        title=alt_class_help(lang, cl),
         attrs=@html.Attrs::build()
           .attribute("role", "tab")
           .aria_selected((cl.wire() == shown).to_string()),
@@ -184,12 +180,10 @@ fn alternatives_view(
       )
     })
   let items : Array[Html] = []
-  let mut help = ""
   for a in r.alternatives {
     if a.class.wire() != shown {
       continue
     }
-    help = alt_class_help(lang, a.class)
     items.push(alternative_card(lang, r.part, a))
   }
   let out : Array[Html] = [
@@ -198,15 +192,11 @@ fn alternatives_view(
       attrs=@html.Attrs::build().attribute("role", "tablist"),
       tabs,
     ),
-    p(class="text-muted alt-help", help),
     div(class="alt-list", items),
   ]
   if r.rejected > 0 {
     out.push(
-      p(
-        class="text-muted alt-rejected",
-        "\{alt_count_note(lang, r.rejected)} \{c.alt_rejected}",
-      ),
+      p(class="text-muted alt-rejected", alt_rejected_note(lang, r.rejected)),
     )
   }
   div(out)

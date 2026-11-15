@@ -179,8 +179,32 @@
 .cited-table td:last-child {
   max-width: 28em;
 }
-.review-badge a {
+.review-badge a,
+a.review-badge {
   color: inherit;
+}
+a.review-badge {
+  text-decoration: none;
+}
+/* The per-value "report" flag: only on the row's hover or focus. */
+.report-value {
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 0.85em;
+  opacity: 0;
+}
+tr:hover .report-value,
+.report-value:focus-visible {
+  opacity: 1;
+}
+.report-value:hover {
+  color: var(--color-accent);
+}
+@media (hover: none) {
+  .report-value {
+    opacity: 0.6;
+  }
 }
 .badge-mini {
   margin-left: var(--space-2);

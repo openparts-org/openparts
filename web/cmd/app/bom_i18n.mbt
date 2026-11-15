@@ -5,7 +5,6 @@
 struct BomCopy {
   nav : String
   title : String
-  lead : String
   drop_here : String
   choose_file : String
   formats : String
@@ -44,10 +43,8 @@ struct BomCopy {
   file_label : String
   // alternatives section (part page)
   alt_title : String
-  alt_lead : String
   alt_loading : String
   alt_none : String
-  alt_rejected : String
   alt_replacement : String
   alt_parameters : String
   alt_pins : String
@@ -70,10 +67,9 @@ struct BomCopy {
 let bom_ja : BomCopy = {
   nav: "BOMチェック",
   title: "BOMチェック",
-  lead: "KiCadのBOM CSV、ネットリスト(.net)、MPN列のあるCSVを読み込み、各行をOpenPartsの部品に照合します。ライフサイクル(EOL・NRND)、データの充足度、フットプリント名とパッケージの不一致を確認し、問題のある行には代替部品を提案します。",
   drop_here: "BOMファイルをここにドロップ",
   choose_file: "ファイルを選択",
-  formats: "対応形式: KiCad BOM CSV / KiCad ネットリスト (.net) / MPN・メーカー列のあるCSV(最大2 MB・5000行)",
+  formats: "KiCad BOM CSV · ネットリスト (.net) · MPN列のあるCSV(2 MB・5000行まで)",
   paste_label: "またはBOMを貼り付け",
   paste_placeholder: "Reference,Value,Footprint,MPN\nC1,100nF,Capacitor_SMD:C_0603_1608Metric,\nU1,RP2040,,RP2040",
   check: "チェック",
@@ -106,10 +102,8 @@ let bom_ja : BomCopy = {
   detected_columns: "検出した列",
   file_label: "ファイル",
   alt_title: "代替部品",
-  alt_lead: "同じカテゴリの部品を、ランドパターン(生成したフットプリントのパッド)、ピン配置(パッドごと)、電気的特性(同等以上か)で比較しています。記載のない値は「未確認」で、合格扱いにはしません。",
   alt_loading: "代替部品を検索中…",
   alt_none: "代替候補はありません",
-  alt_rejected: "件は識別値(容量・出力電圧など)が異なるか確認できないため除外しました",
   alt_replacement: "データに記載の後継品",
   alt_parameters: "電気的特性の比較",
   alt_pins: "ピン配置の比較(パッドごと)",
@@ -132,10 +126,9 @@ let bom_ja : BomCopy = {
 let bom_en : BomCopy = {
   nav: "BOM check",
   title: "BOM check",
-  lead: "Load a KiCad BOM CSV, a netlist (.net) or any CSV with an MPN column, and each line is matched to OpenParts parts: lifecycle (EOL, NRND), data coverage and footprint-name vs package mismatches are checked, and problem lines get alternative parts.",
   drop_here: "Drop a BOM file here",
   choose_file: "Choose a file",
-  formats: "KiCad BOM CSV, KiCad netlist (.net), or a CSV with MPN and manufacturer columns (up to 2 MB, 5000 rows)",
+  formats: "KiCad BOM CSV · netlist (.net) · CSV with an MPN column (up to 2 MB, 5000 rows)",
   paste_label: "Or paste a BOM",
   paste_placeholder: "Reference,Value,Footprint,MPN\nC1,100nF,Capacitor_SMD:C_0603_1608Metric,\nU1,RP2040,,RP2040",
   check: "Check",
@@ -168,10 +161,8 @@ let bom_en : BomCopy = {
   detected_columns: "Columns found",
   file_label: "File",
   alt_title: "Alternatives",
-  alt_lead: "Parts of the same category, compared by land pattern (the generated footprint pads), pinout (pad by pad) and electrical parameters (meeting or exceeding the original). A value the data doesn't state is unverified, never a pass.",
   alt_loading: "Looking for alternatives…",
   alt_none: "No alternatives",
-  alt_rejected: "left out: another (or unverifiable) identity value such as capacitance or output voltage",
   alt_replacement: "Replacement named in the data",
   alt_parameters: "Parameters",
   alt_pins: "Pinout, pad by pad",
@@ -400,6 +391,16 @@ fn alt_count_note(lang : Lang, n : Int32) -> String {
   match lang {
     Ja => "\{n}件"
     En => if n == 1 { "1 part" } else { "\{n} parts" }
+  }
+}
+
+///|
+/// The candidates left out for another (or an unknown) identity value.
+fn alt_rejected_note(lang : Lang, n : Int32) -> String {
+  match lang {
+    Ja => "\{n}件を除外(識別値が異なる・不明)"
+    En =>
+      "\{alt_count_note(lang, n)} left out (identity value differs or unknown)"
   }
 }
 

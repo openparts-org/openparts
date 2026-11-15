@@ -74,6 +74,19 @@ impl StandardView {
             StandardView::Iso => "view_iso",
         }
     }
+
+    /// Its keyboard shortcut, for tooltips.
+    pub fn shortcut(self) -> &'static str {
+        match self {
+            StandardView::Front => "1",
+            StandardView::Back => "Ctrl+1",
+            StandardView::Right => "3",
+            StandardView::Left => "Ctrl+3",
+            StandardView::Top => "7",
+            StandardView::Bottom => "Ctrl+7",
+            StandardView::Iso => "0",
+        }
+    }
 }
 
 /// A right-handed view matrix from an eye and its unit basis.

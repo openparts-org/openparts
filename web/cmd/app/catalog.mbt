@@ -682,7 +682,7 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
   let lang = model.lang
   let c = lang.copy()
   let k = lang.catalog()
-  let head = [h1(c.search_title), p(class="text-muted", k.lead), box]
+  let head = [h1(c.search_title), box]
   guard model.catalog.results is Got(r) else {
     div(
       class="catalog catalog-entry",
@@ -1006,7 +1006,7 @@ fn param_range(
       class="range-input",
       value=s.query.value(key),
       placeholder=hint.unwrap_or(title),
-      title~,
+      title="\{title} (\{k.unit_hint})",
       attrs=@html.Attrs::build()
         .attribute("inputmode", "text")
         .attribute("spellcheck", "false")
@@ -1086,7 +1086,6 @@ fn sidebar(
   out.push(
     group("existence", facet_checks(lang, s, emit, "existence", f.existence, 8)),
   )
-  out.push(p(class="text-muted catalog-note", k.electrical_note))
   out
 }
 
