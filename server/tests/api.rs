@@ -1139,23 +1139,22 @@ async fn reference_circuits_are_served_per_part_and_by_id() {
     if store.dataset.circuits.is_empty() {
         return; // a dataset without circuits/ (before they landed)
     }
-    // No two texts of any schematic overlap, on every host part.
+    // Every schematic is clean on every host part.
     let ds = &store.dataset;
+    let mut bad = Vec::new();
     for part in &ds.parts {
         let Some(device) = ds.devices.get(&part.device.0) else {
             continue;
         };
         for c in ds.circuits_for(device) {
-            let scene = openparts_server::circuits::scene(ds, c, device, &part.mpn);
-            let overlaps = openparts_server::circuit_diagram::overlapping_texts(&scene);
-            assert!(
-                overlaps.is_empty(),
-                "{} on {}: {overlaps:?}",
-                c.id,
-                part.mpn
-            );
+            let sections = openparts_server::circuits::sections(ds, c, device, &part.mpn);
+            let problems = openparts_server::circuit_diagram::problems(&sections);
+            if !problems.is_empty() {
+                bad.push(format!("{} on {}: {problems:?}", c.id, part.mpn));
+            }
         }
     }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
     let app = openparts_server::routes::build_router(Arc::new(store));
     let response = get(app.clone(), "/v1/parts/raspberrypi/RP2040/circuits").await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -1230,4 +1229,107 @@ async fn reference_circuits_are_served_per_part_and_by_id() {
     let response = get(app, "/v1/circuits").await;
     let all: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
     assert!(all.as_array().unwrap().len() >= 8);
+}
+
+/// Every circuit's schematic, on each of its host devices: drawn, clean
+/// (no text over another text or a wire, all inside the view box),
+/// composites with their included circuits, and parts between two host
+/// pins or placed near one attached to the host. With
+/// `OPENPARTS_DIAGRAM_DUMP=<dir>` the SVGs are written there.
+#[tokio::test]
+async fn every_circuit_diagram_is_drawn_cleanly() {
+    use openparts_core::circuit::{target, Target};
+    use openparts_core::CircuitHost;
+    use openparts_server::circuit_diagram::{detached, problems};
+    use openparts_server::circuits::sections;
+
+    let store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+    let ds = &store.dataset;
+    let dump = std::env::var_os("OPENPARTS_DIAGRAM_DUMP").map(PathBuf::from);
+    let mut bad = Vec::new();
+    let mut runs = Vec::new();
+    for c in ds.circuits.values() {
+        let hosts: Vec<&str> = match &c.host {
+            CircuitHost::Device(d) => vec![d.0.as_str()],
+            CircuitHost::Match(m) => m.devices.iter().map(|d| d.0.as_str()).collect(),
+        };
+        for (k, host) in hosts.iter().enumerate() {
+            runs.push((c.id.clone(), (k > 0).then(|| host.to_string())));
+            let Some(device) = ds.devices.get(*host) else {
+                bad.push(format!("{}: no device {host}", c.id));
+                continue;
+            };
+            let label = host.rsplit('/').next().unwrap();
+            let secs = sections(ds, c, device, label);
+            let p = problems(&secs);
+            if !p.is_empty() {
+                bad.push(format!("{} on {label}: {p:#?}", c.id));
+            }
+            let svg = openparts_server::circuit_diagram::render_sections(&secs, false);
+            for inc in &c.includes {
+                let title = &ds.circuits[&inc.circuit].title;
+                if !svg.contains(&format!(">{title}<")) {
+                    bad.push(format!("{}: no section for {}", c.id, inc.circuit));
+                }
+            }
+            // The circuit's own parts: those on two host pins or placed
+            // near one are attached to the host.
+            let loose = detached(&secs[0].scene);
+            for (name, r) in &c.roles {
+                let pins = r
+                    .pins
+                    .values()
+                    .filter(|t| matches!(target(t), Target::HostPin(_) | Target::ThisPin))
+                    .count();
+                let near_pin = r
+                    .place
+                    .as_ref()
+                    .is_some_and(|p| p.near == "$pin" || p.near.starts_with("host."));
+                if (pins == 2 || near_pin) && loose.contains(name) {
+                    bad.push(format!("{} on {label}: {name} drawn apart", c.id));
+                }
+            }
+        }
+        if hosts.is_empty() && c.includes.is_empty() && c.roles.is_empty() && c.connect.is_empty() {
+            continue;
+        }
+        if hosts.is_empty() {
+            runs.push((c.id.clone(), None));
+        }
+    }
+    // Through the API, as the page and the board tool get them.
+    let app = openparts_server::routes::build_router(Arc::new(store));
+    for (id, device) in &runs {
+        let q = device
+            .as_ref()
+            .map(|d| format!("?device={}", d.rsplit('/').next().unwrap()))
+            .unwrap_or_default();
+        let response = get(app.clone(), &format!("/v1/circuits/{id}/diagram.svg{q}")).await;
+        let ok = response.status() == StatusCode::OK;
+        let svg = body_string(response).await;
+        if !ok || !svg.starts_with("<svg") {
+            bad.push(format!("{id}{q}: nothing drawn"));
+            continue;
+        }
+        if let Some(dir) = &dump {
+            let name = format!(
+                "{}{}.svg",
+                id.replace('/', "__"),
+                q.replace("?device=", "@")
+            );
+            std::fs::write(dir.join(name), &svg).unwrap();
+        }
+    }
+    let response = get(
+        app,
+        "/v1/circuits/raspberrypi/rp2350-vreg/diagram.svg?device=nope",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert!(
+        bad.is_empty(),
+        "{} problems:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
 }

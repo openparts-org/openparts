@@ -667,11 +667,21 @@ impl Normalized {
     /// The display form: `100 nF`, `±10%`, `X7R`, `1.2 V typ`... Ranges
     /// show as `min–max`; a lone limit as `≥ x` / `≤ x`.
     pub fn label(&self, spec: &ParameterSpec) -> String {
+        self.label_digits(spec, 4)
+    }
+
+    /// [`Normalized::label`] keeping every significant digit of a value
+    /// as written (`32.768 kHz`, not `32.77 kHz`).
+    pub fn label_exact(&self, spec: &ParameterSpec) -> String {
+        self.label_digits(spec, 9)
+    }
+
+    fn label_digits(&self, spec: &ParameterSpec, digits: i32) -> String {
         let (typ, min, max) = match *self {
             Normalized::Text(t) => return t.to_string(),
             Normalized::Numeric { typ, min, max } => (typ, min, max),
         };
-        let f = |v: f64| format_value(v, spec);
+        let f = |v: f64| format_value_digits(v, spec, digits);
         if spec.deviation {
             return match (typ, min, max) {
                 (_, Some(a), Some(b)) if (a + b).abs() <= 1e-12 * b.abs().max(1e-30) => {
@@ -698,12 +708,16 @@ impl Normalized {
 /// four significant digits at most: `1e-7` F -> `100 nF`, `0.01` ->
 /// `1%`, `4.7e3` Ω -> `4.7 kΩ`, `134217728` bit -> `128 Mbit`.
 pub fn format_value(v: f64, spec: &ParameterSpec) -> String {
+    format_value_digits(v, spec, 4)
+}
+
+fn format_value_digits(v: f64, spec: &ParameterSpec, digits: i32) -> String {
     let Numeric(q) = spec.shape else {
-        return trim_number(v);
+        return trim_number(v, digits);
     };
     if let Some(unit) = spec.display_unit {
         let factor = q.unit_factor(unit).unwrap_or(1.0);
-        let n = trim_number(v / factor);
+        let n = trim_number(v / factor, digits);
         return if unit == "%" {
             format!("{n}%")
         } else {
@@ -724,7 +738,7 @@ pub fn format_value(v: f64, spec: &ParameterSpec) -> String {
             .find(|p| p.0.is_empty())
             .unwrap_or(&prefixes[0]);
     }
-    let n = trim_number(v / chosen.1);
+    let n = trim_number(v / chosen.1, digits);
     if symbol == "%" {
         format!("{n}%")
     } else {
@@ -758,12 +772,13 @@ pub fn plain_number(v: f64) -> String {
     format!("{v}")
 }
 
-/// Four significant digits, trailing zeros dropped (`100`, `4.7`, `0.25`).
-fn trim_number(v: f64) -> String {
+/// `sig` significant digits (four for display), trailing zeros dropped
+/// (`100`, `4.7`, `0.25`).
+fn trim_number(v: f64, sig: i32) -> String {
     if v == 0.0 || !v.is_finite() {
         return "0".into();
     }
-    let digits = 4 - 1 - v.abs().log10().floor() as i32;
+    let digits = sig - 1 - v.abs().log10().floor() as i32;
     let s = if digits > 0 {
         format!("{:.*}", digits as usize, v)
     } else {
@@ -974,6 +989,16 @@ mod tests {
             .unwrap();
         assert_eq!(n.stated(spec("capacity")), Some(134217728.0));
         assert_eq!(n.label(spec("capacity")), "128 Mbit");
+        // Every digit as written, when asked for.
+        let n = val(Some(32.768), None, None, "kHz")
+            .normalize(spec("frequency"))
+            .unwrap();
+        assert_eq!(n.label(spec("frequency")), "32.77 kHz");
+        assert_eq!(n.label_exact(spec("frequency")), "32.768 kHz");
+        let n = val(Some(100.0), None, None, "nF")
+            .normalize(spec("capacitance"))
+            .unwrap();
+        assert_eq!(n.label_exact(spec("capacitance")), "100 nF");
     }
 
     #[test]

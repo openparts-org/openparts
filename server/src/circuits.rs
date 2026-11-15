@@ -11,10 +11,10 @@
 //!   on its own (on its host device, or on the pin names a generic
 //!   host must have).
 
-use crate::circuit_diagram::{self, Connection, Element, End, Scene, Sym};
+use crate::circuit_diagram::{self, Connection, Element, End, Near, Scene, Section, Sym};
 use crate::error::ApiError;
 use crate::store::Store;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -27,7 +27,7 @@ use openparts_core::{
 use openparts_data::format::pin_order;
 use openparts_data::Dataset;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub fn router() -> Router<Arc<Store>> {
@@ -248,7 +248,7 @@ fn esc(key: &str) -> String {
 }
 
 fn value_label(key: &str, v: &ParameterValue) -> String {
-    match parameter_spec(key).and_then(|spec| v.normalize(spec).ok().map(|n| n.label(spec))) {
+    match parameter_spec(key).and_then(|spec| v.normalize(spec).ok().map(|n| n.label_exact(spec))) {
         Some(l) => l,
         None => v.value.clone().unwrap_or_default(),
     }
@@ -316,10 +316,20 @@ fn literal_label(v: &ParameterValue) -> String {
     .to_string()
 }
 
-/// `GET /v1/circuits/{publisher}/{name}/diagram.svg`
+/// `?device=` of the schematic: which of several host devices.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct DiagramQuery {
+    /// A device id (`raspberrypi/RP2350B`) or its name (`RP2350B`).
+    pub device: Option<String>,
+}
+
+/// `GET /v1/circuits/{publisher}/{name}/diagram.svg[?device=]`: on its
+/// host device (the first of several unless `device` picks one), or on
+/// the pin names a generic host must have.
 async fn circuit_diagram(
     State(store): State<Arc<Store>>,
     Path((publisher, name)): Path<(String, String)>,
+    Query(q): Query<DiagramQuery>,
 ) -> Result<Response, ApiError> {
     let id = format!("{publisher}/{name}");
     let ds = &store.dataset;
@@ -327,14 +337,27 @@ async fn circuit_diagram(
         .circuits
         .get(&id)
         .ok_or_else(|| ApiError::NotFound(format!("no circuit {id}")))?;
-    let device = match &c.host {
-        CircuitHost::Device(d) => ds.devices.get(&d.0),
-        CircuitHost::Match(m) => m.devices.first().and_then(|d| ds.devices.get(&d.0)),
+    let hosts: Vec<&str> = match &c.host {
+        CircuitHost::Device(d) => vec![d.0.as_str()],
+        CircuitHost::Match(m) => m.devices.iter().map(|d| d.0.as_str()).collect(),
     };
-    let scene = match device {
+    let wanted = match &q.device {
+        None => hosts.first().copied(),
+        Some(w) => Some(
+            hosts
+                .iter()
+                .copied()
+                .find(|h| h == w || h.rsplit('/').next() == Some(w.as_str()))
+                .ok_or_else(|| {
+                    ApiError::NotFound(format!("{id} has no host {w} (hosts: {hosts:?})"))
+                })?,
+        ),
+    };
+    let device = wanted.and_then(|d| ds.devices.get(d));
+    let sections = match device {
         Some(device) => {
             let label = device.id.0.rsplit('/').next().unwrap_or_default();
-            scene(ds, c, device, label)
+            sections(ds, c, device, label)
         }
         // A generic host: the pin names it must have, without numbers.
         None => {
@@ -362,14 +385,16 @@ async fn circuit_diagram(
             }))
             .map_err(|e| ApiError::GenerationFailed(e.to_string()))?;
             let label = m.category.map_or("host", |c| c.name()).replace('_', " ");
-            let mut s = scene(ds, c, &device, &label);
-            for p in &mut s.pins {
-                p.0.clear();
+            let mut out = sections(ds, c, &device, &label);
+            for s in out.iter_mut().filter(|s| s.scene.host == label) {
+                for p in &mut s.scene.pins {
+                    p.0.clear();
+                }
             }
-            s
+            out
         }
     };
-    let svg = circuit_diagram::render(&scene, true);
+    let svg = circuit_diagram::render_sections(&sections, true);
     if svg.is_empty() {
         return Err(ApiError::NotFound(format!("nothing to draw for {id}")));
     }
@@ -483,7 +508,7 @@ fn add_to_scene(
     c: &Circuit,
     device: &Device,
     rename: &BTreeMap<String, String>,
-    skip: Option<&str>,
+    skip: &BTreeSet<&str>,
 ) {
     let net = |n: &str| rename.get(n).cloned().unwrap_or_else(|| n.to_string());
     for (name, k) in &c.nets {
@@ -524,7 +549,7 @@ fn add_to_scene(
     }
     let pins_named = |name: &str| device.pins.values().filter(|p| p.name == name).count();
     for (name, r) in &c.roles {
-        if Some(name.as_str()) == skip {
+        if skip.contains(name.as_str()) {
             continue;
         }
         let sym = symbol_of(ds, r);
@@ -549,46 +574,98 @@ fn add_to_scene(
             level: r.level.value,
             tip: tip_of(ds, c, name, r, count),
             terms,
+            near: r.place.as_ref().map(|p| match p.near.as_str() {
+                "$pin" => Near::Pin(r.per_pin.clone().unwrap_or_default()),
+                near => match near.strip_prefix("host.") {
+                    Some(pin) => Near::Pin(pin.to_string()),
+                    None => Near::Role(near.to_string()),
+                },
+            }),
         });
     }
 }
 
-/// The drawing of `c` on `device` (titled `label`). A composite with a
-/// part of its own hosting an included circuit (the minimal design's
-/// LDO) is drawn around that part; its other includes have drawings
-/// of their own.
-pub fn scene(ds: &Dataset, c: &Circuit, device: &Device, label: &str) -> Scene {
+/// The drawing of `c` on `device` (titled `label`): one section, or
+/// for a composite its own parts and then each included circuit under
+/// its title (one hosted by a part of the composite, the minimal
+/// design's LDO, drawn around that part).
+pub fn sections(ds: &Dataset, c: &Circuit, device: &Device, label: &str) -> Vec<Section> {
+    let mut out = Vec::new();
+    collect(ds, c, device, label, &BTreeMap::new(), None, 0, &mut out);
+    if let [one] = out.as_mut_slice() {
+        one.title = None;
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect(
+    ds: &Dataset,
+    c: &Circuit,
+    device: &Device,
+    label: &str,
+    rename: &BTreeMap<String, String>,
+    title: Option<String>,
+    depth: usize,
+    out: &mut Vec<Section>,
+) {
+    // Roles that host an included circuit are drawn as its host.
+    let hosts: BTreeSet<&str> = c
+        .includes
+        .iter()
+        .filter_map(|i| i.host.as_ref().map(|h| h.role.as_str()))
+        .collect();
     let mut s = Scene::default();
-    let hosted = c.includes.iter().find_map(|inc| {
-        let role = &inc.host.as_ref()?.role;
-        let part = c.roles.get(role)?.requires.part.as_ref()?;
-        let (m, mpn) = part.0.split_once('/')?;
-        let part = ds.part(m, mpn)?;
-        let dev = ds.devices.get(&part.device.0)?;
-        let child = ds.circuits.get(&inc.circuit)?;
-        Some((role, part.mpn.clone(), dev, child, &inc.nets))
-    });
-    let host = match hosted {
-        Some((role, mpn, dev, child, rename)) => {
-            add_to_scene(&mut s, ds, child, dev, rename, None);
-            add_to_scene(&mut s, ds, c, device, &BTreeMap::new(), Some(role));
-            s.host = mpn;
-            dev
+    add_to_scene(&mut s, ds, c, device, rename, &hosts);
+    s.host = label.to_string();
+    s.pins = pins_of(device);
+    let title = title.or_else(|| (!c.includes.is_empty()).then(|| c.title.clone()));
+    out.push(Section { title, scene: s });
+    if depth >= 4 {
+        return;
+    }
+    for inc in &c.includes {
+        let Some(child) = ds.circuits.get(&inc.circuit) else {
+            continue;
+        };
+        // Their net -> ours -> the outermost name.
+        let names: BTreeMap<String, String> = inc
+            .nets
+            .iter()
+            .map(|(theirs, ours)| {
+                let top = rename.get(ours).cloned().unwrap_or_else(|| ours.clone());
+                (theirs.clone(), top)
+            })
+            .collect();
+        let title = Some(child.title.clone());
+        match &inc.host {
+            None => collect(ds, child, device, label, &names, title, depth + 1, out),
+            Some(h) => {
+                let hosted = c
+                    .roles
+                    .get(&h.role)
+                    .and_then(|r| r.requires.part.as_ref())
+                    .and_then(|p| p.0.split_once('/'))
+                    .and_then(|(m, mpn)| ds.part(m, mpn))
+                    .and_then(|p| ds.devices.get(&p.device.0).map(|d| (p.mpn.clone(), d)));
+                if let Some((mpn, dev)) = hosted {
+                    let label = format!("{} · {mpn}", h.role);
+                    collect(ds, child, dev, &label, &names, title, depth + 1, out);
+                }
+            }
         }
-        None => {
-            add_to_scene(&mut s, ds, c, device, &BTreeMap::new(), None);
-            s.host = label.to_string();
-            device
-        }
-    };
-    let mut pins: Vec<(String, String)> = host
+    }
+}
+
+/// The host's pins: (number, name), in pin-number order.
+fn pins_of(device: &Device) -> Vec<(String, String)> {
+    let mut pins: Vec<(String, String)> = device
         .pins
         .iter()
         .map(|(num, p)| (num.clone(), p.name.clone()))
         .collect();
     pins.sort_by(|a, b| pin_order(&a.0, &b.0));
-    s.pins = pins;
-    s
+    pins
 }
 
 pub fn view(ds: &Dataset, c: &Circuit, device: &Device, host_label: &str) -> CircuitView {
@@ -760,7 +837,7 @@ pub fn view(ds: &Dataset, c: &Circuit, device: &Device, host_label: &str) -> Cir
         includes: c.includes.iter().map(|i| i.circuit.clone()).collect(),
         use_line: format!("{{ circuit: {}, host: <REF> }}", c.id),
         diagram: {
-            let svg = circuit_diagram::render(&scene(ds, c, device, host_label), false);
+            let svg = circuit_diagram::render_sections(&sections(ds, c, device, host_label), false);
             (!svg.is_empty()).then_some(svg)
         },
     }

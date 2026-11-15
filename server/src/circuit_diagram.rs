@@ -7,16 +7,24 @@
 //!
 //! - a part from the pin to ground hangs below the row (decoupling);
 //! - a part to a power net stands above it, to a power symbol (pull-up);
-//! - a part to another net sits in the row (USB 27 Ω) and the row ends
-//!   at that net's label, or continues on a local net with its parts;
+//! - a part to another net sits in the row (USB 27 Ω, a supply's
+//!   inductor) and the row ends at that net's label, or continues on a
+//!   local net with its parts;
+//! - a part between two host pins bridges their rows (`CAP2`--`CAP1`);
 //! - a host pin tied to a net ends in that net's label, ground symbol,
 //!   or a no-connect cross; pins tied only to ground sit at the bottom.
 //!
-//! A crystal between two host pins (directly or through a series
-//! resistor) is drawn as the Pierce network below those two rows; other
-//! multi-pin parts are boxes joined by net labels; parts between nets
-//! alone stand beside the host. Interface nets are labels, so no wire
+//! A part between a net and ground hangs from the host pin it is placed
+//! near (`place: near`), or from a pin tied to that net. A crystal
+//! between two host pins (directly or through a series resistor) is
+//! drawn as the Pierce network below those two rows, a bias resistor
+//! beside it; other multi-pin parts are boxes joined by net labels;
+//! parts between nets alone stand beside the host. Interface nets are
+//! flags, local nets (one per instance) plain italic names, so no wire
 //! crosses another.
+//!
+//! A composite (`includes`) is drawn as [`Section`]s: its own parts,
+//! then each included circuit under its title.
 //!
 //! How strongly the source asks for a part is its colour and line style
 //! (`lvl-required`, `lvl-recommended`, `lvl-example` dashed,
@@ -52,6 +60,15 @@ pub enum End {
     Net(String),
 }
 
+/// What a part is placed near (`place: { near }`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Near {
+    /// A host pin, by name.
+    Pin(String),
+    /// Another part, by role.
+    Role(String),
+}
+
 /// One part (a role; `count` instances when it is per pin).
 #[derive(Debug, Clone)]
 pub struct Element {
@@ -64,6 +81,7 @@ pub struct Element {
     pub tip: String,
     /// The part's pins and what they connect to.
     pub terms: Vec<(String, End)>,
+    pub near: Option<Near>,
 }
 
 /// A host pin tied to a net (`None`: left unconnected).
@@ -85,10 +103,18 @@ pub struct Scene {
     pub ground: BTreeSet<String>,
     pub power: BTreeSet<String>,
     /// Nets internal to the circuit (a crystal's output node): drawn
-    /// as wires, never as labels.
+    /// as wires or plain names, never as interface flags.
     pub local: BTreeSet<String>,
     pub connects: Vec<Connection>,
     pub elements: Vec<Element>,
+}
+
+/// One drawing of a composite: an included circuit (or the composite's
+/// own parts) under its title.
+#[derive(Debug, Clone)]
+pub struct Section {
+    pub title: Option<String>,
+    pub scene: Scene,
 }
 
 // ---------------------------------------------------------------- drawing
@@ -140,8 +166,52 @@ impl BBox {
             self.add(o.x1 + dx, o.y1 + dy);
         }
     }
+    fn moved(&self, dx: f64, dy: f64) -> BBox {
+        BBox {
+            x0: self.x0 + dx,
+            y0: self.y0 + dy,
+            x1: self.x1 + dx,
+            y1: self.y1 + dy,
+        }
+    }
+    fn shrunk(&self, d: f64) -> BBox {
+        BBox {
+            x0: self.x0 + d,
+            y0: self.y0 + d,
+            x1: self.x1 - d,
+            y1: self.y1 - d,
+        }
+    }
     fn overlaps(&self, o: &BBox) -> bool {
         self.x0 < o.x1 && o.x0 < self.x1 && self.y0 < o.y1 && o.y0 < self.y1
+    }
+    fn contains(&self, o: &BBox) -> bool {
+        o.x0 >= self.x0 && o.x1 <= self.x1 && o.y0 >= self.y0 && o.y1 <= self.y1
+    }
+    /// Whether the segment (a, b) passes through the box (Liang-Barsky).
+    fn crossed_by(&self, a: (f64, f64), b: (f64, f64)) -> bool {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let (mut t0, mut t1) = (0.0f64, 1.0f64);
+        for (p, q) in [
+            (-dx, a.0 - self.x0),
+            (dx, self.x1 - a.0),
+            (-dy, a.1 - self.y0),
+            (dy, self.y1 - a.1),
+        ] {
+            if p == 0.0 {
+                if q < 0.0 {
+                    return false;
+                }
+            } else {
+                let r = q / p;
+                if p < 0.0 {
+                    t0 = t0.max(r);
+                } else {
+                    t1 = t1.min(r);
+                }
+            }
+        }
+        t0 < t1
     }
 }
 
@@ -168,13 +238,17 @@ fn n(v: f64) -> String {
     }
 }
 
-/// SVG text with its bounding box (shapes and text tracked separately,
-/// so tests can check that no two texts overlap).
+type Seg = ((f64, f64), (f64, f64));
+
+/// SVG text with its bounding box (shapes, wires and texts tracked
+/// separately, so tests can check that no text overlaps another or a
+/// wire).
 #[derive(Default)]
 struct Pen {
     s: String,
     bb: Option<BBox>,
     texts: Vec<(BBox, String)>,
+    segs: Vec<Seg>,
 }
 
 impl Pen {
@@ -184,6 +258,7 @@ impl Pen {
     fn line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64) {
         self.bb().add(x1, y1);
         self.bb().add(x2, y2);
+        self.segs.push(((x1, y1), (x2, y2)));
         let _ = write!(
             self.s,
             "<path d=\"M{} {}L{} {}\"/>",
@@ -193,12 +268,24 @@ impl Pen {
             n(y2)
         );
     }
-    /// A path in absolute coordinates with its own class (`b`: a part's body).
+    /// A path in absolute coordinates with its own class (`b`: a part's
+    /// body); `pts` is its outline as a polyline.
     fn path(&mut self, d: &str, class: &str, pts: &[(f64, f64)]) {
         for &(x, y) in pts {
             self.bb().add(x, y);
         }
+        for w in pts.windows(2) {
+            self.segs.push((w[0], w[1]));
+        }
         let _ = write!(self.s, "<path class=\"{class}\" d=\"{d}\"/>");
+    }
+    /// A rectangle (a box's outline).
+    fn rect(&mut self, x: f64, y: f64, w: f64, h: f64, class: &str) {
+        self.path(
+            &format!("M{} {}H{}V{}H{}Z", n(x), n(y), n(x + w), n(y + h), n(x)),
+            class,
+            &[(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)],
+        );
     }
     fn dot(&mut self, x: f64, y: f64) {
         self.bb().add(x - 2.5, y - 2.5);
@@ -269,15 +356,10 @@ impl Pen {
             self.bb().merge(b, dx, dy);
         }
         for (b, t) in o.texts {
-            self.texts.push((
-                BBox {
-                    x0: b.x0 + dx,
-                    y0: b.y0 + dy,
-                    x1: b.x1 + dx,
-                    y1: b.y1 + dy,
-                },
-                t,
-            ));
+            self.texts.push((b.moved(dx, dy), t));
+        }
+        for (a, b) in o.segs {
+            self.segs.push(((a.0 + dx, a.1 + dy), (b.0 + dx, b.1 + dy)));
         }
         let _ = write!(
             self.s,
@@ -335,13 +417,14 @@ fn symbol(pen: &mut Pen, sym: Sym, a: (f64, f64), b: (f64, f64)) {
         );
     };
     let poly = |pen: &mut Pen, pts: &[(f64, f64)], close: bool| {
-        let pts: Vec<(f64, f64)> = pts.iter().map(|&(u, v)| p(u, v)).collect();
+        let mut pts: Vec<(f64, f64)> = pts.iter().map(|&(u, v)| p(u, v)).collect();
         let mut d = String::new();
         for (i, (x, y)) in pts.iter().enumerate() {
             let _ = write!(d, "{}{} {}", if i == 0 { "M" } else { "L" }, n(*x), n(*y));
         }
         if close {
             d.push('Z');
+            pts.push(pts[0]);
         }
         pen.path(&d, "b", &pts);
     };
@@ -377,7 +460,7 @@ fn symbol(pen: &mut Pen, sym: Sym, a: (f64, f64), b: (f64, f64)) {
                     n(y2)
                 ),
                 "b",
-                &[(x1, y1), (x2, y2)],
+                &[(x1, y1), (xc, yc), (x2, y2)],
             );
             seg(pen, -8.0, -9.0, -8.0, -5.0);
             seg(pen, -10.0, -7.0, -6.0, -7.0);
@@ -414,7 +497,7 @@ fn symbol(pen: &mut Pen, sym: Sym, a: (f64, f64), b: (f64, f64)) {
             );
         }
         Sym::Switch | Sym::Block => {
-            // A push button: two contacts and the plunger above them.
+            // A push button: two contacts and the plunger beside them.
             lead(pen, 12.0);
             for u in [-12.0, 12.0] {
                 let (x, y) = p(u, 0.0);
@@ -431,6 +514,15 @@ fn symbol(pen: &mut Pen, sym: Sym, a: (f64, f64), b: (f64, f64)) {
     }
 }
 
+/// How far a symbol reaches beside its axis on the side its value is
+/// written (a switch's plunger).
+fn side_reach(sym: Sym) -> f64 {
+    match sym {
+        Sym::Switch | Sym::Block => 11.0,
+        _ => 0.0,
+    }
+}
+
 /// A ground symbol hanging from (x, y).
 fn ground(pen: &mut Pen, x: f64, y: f64) {
     pen.line(x - 7.0, y, x + 7.0, y);
@@ -442,6 +534,11 @@ fn ground(pen: &mut Pen, x: f64, y: f64) {
 fn power(pen: &mut Pen, x: f64, y: f64, net: &str) {
     pen.line(x - 7.0, y, x + 7.0, y);
     pen.text(x, y - 4.0, Anchor::Middle, "lbl", T_VAL, net);
+}
+
+/// The space a power symbol's name takes beside its wire.
+fn power_half(net: &str) -> f64 {
+    text_width(net, T_VAL) / 2.0
 }
 
 /// A net label (a flag) whose wire end is (x, y), pointing `dir`;
@@ -456,9 +553,10 @@ fn flag(pen: &mut Pen, x: f64, y: f64, dir: f64, net: &str, class: &str, tip: &s
         (x + dir * (w + h), y - h),
         (x + dir * (w + h), y + h),
         (x + dir * h, y + h),
+        (x, y),
     ];
     let mut d = String::new();
-    for (i, (px, py)) in pts.iter().enumerate() {
+    for (i, (px, py)) in pts[..5].iter().enumerate() {
         let _ = write!(d, "{}{} {}", if i == 0 { "M" } else { "L" }, n(*px), n(*py));
     }
     d.push('Z');
@@ -467,6 +565,28 @@ fn flag(pen: &mut Pen, x: f64, y: f64, dir: f64, net: &str, class: &str, tip: &s
     pen.text(tx, y + 3.6, Anchor::Middle, "", T_VAL, net);
     pen.close();
     w + h
+}
+
+/// A local net's name at a wire's end (x, y), going `dir`: plain
+/// italic text, unlike an interface flag; returns its length.
+fn local_name(pen: &mut Pen, x: f64, y: f64, dir: f64, net: &str, tip: &str) -> f64 {
+    let w = text_width(net, T_VAL);
+    pen.open("lbl loc", tip);
+    pen.line(x, y - 4.0, x, y + 4.0);
+    pen.text(
+        x + dir * 4.0,
+        y + 3.6,
+        if dir > 0.0 {
+            Anchor::Start
+        } else {
+            Anchor::End
+        },
+        "",
+        T_VAL,
+        net,
+    );
+    pen.close();
+    w + 4.0
 }
 
 /// A no-connect cross at (x, y).
@@ -488,23 +608,39 @@ enum At {
 struct Row {
     pin: String,
     numbers: Vec<String>,
-    /// A name on the wire next to the pin (a block's pin joins here).
+    /// A name on the wire next to the pin (a block's pin joins here,
+    /// or the pin's own local net).
     link: Option<String>,
     up: Vec<(usize, String)>,
     down: Vec<usize>,
     /// A part in the row to a net, and whether it is drawn reversed.
     series: Option<(usize, String, bool)>,
-    /// Parts from the series part's far (local) net to ground.
+    /// Parts from the series part's far net to ground.
     far_down: Vec<usize>,
     end: RowEnd,
 }
+
+impl Row {
+    /// Whether the row has anything but its wire.
+    fn bare(&self) -> bool {
+        self.up.is_empty()
+            && self.down.is_empty()
+            && self.series.is_none()
+            && self.link.is_none()
+            && matches!(self.end, RowEnd::Open)
+    }
+}
+
+type Tip = Option<(LevelValue, String)>;
 
 #[derive(Debug, Clone, Default)]
 enum RowEnd {
     #[default]
     Open,
-    Label(String, Option<(LevelValue, String)>),
-    Gnd(Option<(LevelValue, String)>),
+    Label(String, Tip),
+    /// A local net's name.
+    Local(String, Tip),
+    Gnd(Tip),
     Nc(LevelValue, String),
     /// A name on the wire's end (a net label joining a block's pin).
     Name(String),
@@ -522,30 +658,59 @@ struct Pierce {
     lower: (String, Vec<String>, Option<usize>, Vec<usize>),
     /// Whether the crystal's first terminal is on the lower side.
     first_lower: bool,
+    /// Parts across the crystal (a bias resistor).
+    bias: Vec<usize>,
+}
+
+/// Two host pins with parts between them.
+#[derive(Debug, Clone)]
+struct Bridge {
+    upper: Row,
+    lower: Row,
+    parts: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 enum Unit {
     Row(Row),
     Pierce(Pierce),
+    Bridge(Bridge),
+}
+
+impl Unit {
+    fn pins(&self) -> Vec<&str> {
+        match self {
+            Unit::Row(r) => vec![&r.pin],
+            Unit::Pierce(p) => vec![&p.upper.0, &p.lower.0],
+            Unit::Bridge(b) => vec![&b.upper.pin, &b.lower.pin],
+        }
+    }
 }
 
 /// Something drawn beside the host.
 #[derive(Debug, Clone)]
 enum Free {
-    /// A two-pin part between two nets (or a net and ground).
-    Part(usize, At, At),
-    /// A block with its pins.
-    Block(usize, Vec<Row>, Vec<(String, String)>),
+    /// A two-pin part between two nets (or a net and ground), with
+    /// the names its ends are labelled with.
+    Part(usize, At, At, String, String),
+    /// A block with its pins (left, right) and power pins on top.
+    Block(usize, [Vec<Row>; 2], Vec<(String, String)>),
 }
 
 /// A pin tied only to ground: name, numbers, (level, tooltip).
-type GroundPin = (String, Vec<String>, Option<(LevelValue, String)>);
+type GroundPin = (String, Vec<String>, Tip);
 
 struct Plan {
     sides: [Vec<Unit>; 2], // left, right
     bottom: Vec<GroundPin>,
     free: Vec<Free>,
+}
+
+/// Where a part between a net and ground hangs.
+enum Hang {
+    Down(String),
+    Far(String),
 }
 
 impl Scene {
@@ -564,27 +729,131 @@ impl Scene {
             .unwrap_or(usize::MAX)
     }
 
+    /// The host pins tied to `net`, in pin order.
+    fn tied(&self, net: &str) -> Vec<&str> {
+        let mut pins: Vec<&str> = self
+            .connects
+            .iter()
+            .filter(|c| c.net.as_deref() == Some(net))
+            .map(|c| c.pin.as_str())
+            .collect();
+        pins.sort_by_key(|p| self.pin_index(p));
+        pins.dedup();
+        pins
+    }
+
     fn at(&self, e: &End) -> At {
         match e {
             End::Pin(p) => At::Row(p.clone()),
             End::Net(net) if self.ground.contains(net) => At::Gnd,
+            // A power net is a symbol (or a label), never a row.
+            End::Net(net) if self.power.contains(net) => At::Net(net.clone()),
             End::Net(net) => {
                 // A net that exactly one host pin is tied to is that pin's row.
-                let pins: Vec<&Connection> = self
-                    .connects
-                    .iter()
-                    .filter(|c| c.net.as_deref() == Some(net))
-                    .collect();
-                match pins.as_slice() {
-                    [one] => At::Row(one.pin.clone()),
+                match self.tied(net).as_slice() {
+                    [one] => At::Row(one.to_string()),
                     _ => At::Net(net.clone()),
                 }
             }
         }
     }
 
+    fn end_label(e: &End) -> String {
+        match e {
+            End::Pin(p) | End::Net(p) => p.clone(),
+        }
+    }
+
     fn is_local(&self, net: &str) -> bool {
         self.local.contains(net)
+    }
+
+    /// The text beside a part: its value (and count), else its role.
+    fn lines(&self, i: usize) -> Vec<String> {
+        let e = &self.elements[i];
+        let mut v = e.value.clone();
+        if v.is_empty() {
+            v.push(e.role.clone());
+        }
+        if e.count > 1 {
+            v[0].push_str(&format!(" ×{}", e.count));
+        }
+        v
+    }
+
+    fn lines_width(&self, i: usize) -> f64 {
+        self.lines(i)
+            .iter()
+            .map(|l| text_width(l, T_VAL))
+            .fold(0.0, f64::max)
+    }
+
+    /// Room a vertical part takes beside its wire on its text side.
+    fn beside(&self, i: usize) -> f64 {
+        13.0 + side_reach(self.elements[i].sym) + self.lines_width(i)
+    }
+
+    /// The Pierce network's depths below the lower row: (bias line,
+    /// crystal line).
+    fn pierce_depths(&self, p: &Pierce) -> (f64, f64) {
+        let cl = self.lines(p.crystal).len() as f64;
+        if p.bias.is_empty() {
+            return (0.0, snap((12.0 * cl + 20.0).max(40.0)));
+        }
+        let bl = p
+            .bias
+            .iter()
+            .map(|i| self.lines(*i).len())
+            .max()
+            .unwrap_or(1) as f64;
+        let bias = snap(14.0 + 12.0 * bl);
+        let between = 30.0 * (p.bias.len() as f64 - 1.0);
+        (bias, snap(bias + between + (18.0 + 12.0 * cl).max(30.0)))
+    }
+
+    /// Space a row needs above and below its wire.
+    fn row_extent(&self, r: &Row) -> (f64, f64) {
+        let mut above: f64 = 20.0;
+        if !r.up.is_empty() {
+            above = above.max(70.0);
+        }
+        if let Some((i, _, _)) = &r.series {
+            above = above.max(24.0 + 12.0 * (self.lines(*i).len() as f64 - 1.0));
+        }
+        let parts = r.down.iter().chain(&r.far_down);
+        let below = match parts.map(|i| self.lines(*i).len()).max() {
+            // The part's text, centred on it, may reach past it.
+            Some(l) => 70.0f64.max(30.0 + 6.5 * l as f64 + 14.0),
+            None if matches!(r.end, RowEnd::Gnd(_)) => 20.0,
+            None => 10.0,
+        };
+        (above, below)
+    }
+
+    /// Rows of a bridge apart.
+    fn bridge_gap(&self, b: &Bridge) -> f64 {
+        let lines = b
+            .parts
+            .iter()
+            .map(|i| self.lines(*i).len())
+            .max()
+            .unwrap_or(1) as f64;
+        snap(
+            (self.row_extent(&b.upper).1 + self.row_extent(&b.lower).0)
+                .max(70.0)
+                .max(13.0 * lines + 30.0),
+        )
+    }
+
+    fn extent(&self, u: &Unit) -> (f64, f64) {
+        match u {
+            Unit::Row(r) => self.row_extent(r),
+            Unit::Pierce(p) => (20.0, PIERCE_LOW + self.pierce_depths(p).1 + 70.0),
+            Unit::Bridge(b) => (
+                self.row_extent(&b.upper).0,
+                self.bridge_gap(b) + self.row_extent(&b.lower).1,
+            ),
+        }
     }
 
     fn plan(&self) -> Plan {
@@ -647,7 +916,11 @@ impl Scene {
             let (Some(s0), Some(s1)) = (sides[0].clone(), sides[1].clone()) else {
                 continue;
             };
-            if s0.0 == s1.0 {
+            if s0.0 == s1.0
+                || pierces
+                    .iter()
+                    .any(|p: &Pierce| [&p.upper.0, &p.lower.0].contains(&&s0.0))
+            {
                 continue;
             }
             let caps = |node: &At| -> Vec<usize> {
@@ -681,62 +954,138 @@ impl Scene {
                 upper,
                 lower,
                 first_lower,
+                bias: Vec::new(),
             });
+        }
+        // Parts across a crystal's two pins.
+        for p in &mut pierces {
+            for (j, e) in self.elements.iter().enumerate() {
+                if used[j] {
+                    continue;
+                }
+                if let Some((At::Row(a), At::Row(b))) = two(e) {
+                    let ends = [a.as_str(), b.as_str()];
+                    if ends.contains(&p.upper.0.as_str()) && ends.contains(&p.lower.0.as_str()) {
+                        p.bias.push(j);
+                        used[j] = true;
+                    }
+                }
+            }
         }
         let pierce_pins: BTreeSet<String> = pierces
             .iter()
             .flat_map(|p| [p.upper.0.clone(), p.lower.0.clone()])
             .collect();
 
+        // Parts between two host pins: one bridge per pair, a pin in
+        // one bridge.
+        let mut bridges: Vec<(String, String, Vec<usize>)> = Vec::new();
+        for (i, e) in self.elements.iter().enumerate() {
+            if used[i] {
+                continue;
+            }
+            let Some((At::Row(a), At::Row(b))) = two(e) else {
+                continue;
+            };
+            if a == b || pierce_pins.contains(&a) || pierce_pins.contains(&b) {
+                continue;
+            }
+            if let Some(br) = bridges
+                .iter_mut()
+                .find(|(x, y, _)| (*x == a && *y == b) || (*x == b && *y == a))
+            {
+                br.2.push(i);
+                used[i] = true;
+            } else if !bridges
+                .iter()
+                .any(|(x, y, _)| [x, y].contains(&&a) || [x, y].contains(&&b))
+            {
+                bridges.push((a, b, vec![i]));
+                used[i] = true;
+            }
+        }
+
         // Two-pin parts on rows.
         let mut free = Vec::new();
-        let mut far: Vec<(usize, At, At)> = Vec::new();
+        let mut far: Vec<(usize, At, At, String, String)> = Vec::new();
         for (i, e) in self.elements.iter().enumerate() {
             if used[i] {
                 continue;
             }
             let Some((a, b)) = two(e) else { continue };
+            let (la, lb) = (
+                Self::end_label(&e.terms[0].1),
+                Self::end_label(&e.terms[1].1),
+            );
             // Host pin first.
-            let (a, b, flip) = match (&a, &b) {
-                (At::Row(_), _) => (a, b, false),
-                (_, At::Row(_)) => (b, a, true),
-                _ => (a, b, false),
+            let (a, b, la, lb, flip) = match (&a, &b) {
+                (At::Row(_), _) => (a, b, la, lb, false),
+                (_, At::Row(_)) => (b, a, lb, la, true),
+                _ => (a, b, la, lb, false),
             };
             match (&a, &b) {
                 (At::Row(p), At::Gnd) if !pierce_pins.contains(p) => {
                     get(self, &mut rows, p).down.push(i);
                     used[i] = true;
                 }
-                (At::Row(p), At::Net(net))
-                    if !pierce_pins.contains(p) && self.power.contains(net) =>
-                {
-                    get(self, &mut rows, p).up.push((i, net.clone()));
-                    used[i] = true;
-                }
                 (At::Row(p), At::Net(net)) if !pierce_pins.contains(p) => {
+                    let pull = self.power.contains(net) && e.sym != Sym::Inductor;
                     let r = get(self, &mut rows, p);
-                    if r.series.is_none() {
+                    if !pull && r.series.is_none() {
                         r.series = Some((i, net.clone(), flip));
+                        used[i] = true;
+                    } else if self.power.contains(net) {
+                        r.up.push((i, net.clone()));
                         used[i] = true;
                     }
                 }
                 _ => {}
             }
             if !used[i] {
-                far.push((i, a, b));
+                far.push((i, a, b, la, lb));
             }
         }
-        // Parts on a series part's far local net hang from it.
-        for (i, a, b) in far {
-            let on = match (&a, &b) {
-                (At::Net(net), At::Gnd) | (At::Gnd, At::Net(net)) if self.is_local(net) => rows
-                    .values_mut()
-                    .find(|r| matches!(&r.series, Some((_, m, _)) if m == net)),
+        // Parts from a net to ground hang from the pin they are placed
+        // near, a pin tied to the net, or a series part's far end.
+        for (i, a, b, la, lb) in far {
+            let net = match (&a, &b) {
+                (At::Net(m), At::Gnd) | (At::Gnd, At::Net(m)) => Some(m.clone()),
+                (At::Row(p), At::Gnd) | (At::Gnd, At::Row(p)) if pierce_pins.contains(p) => None,
                 _ => None,
             };
-            match on {
-                Some(r) => r.far_down.push(i),
-                None => free.push(Free::Part(i, a, b)),
+            let hang = net.and_then(|m| {
+                let ok_pin = |p: &str| !pierce_pins.contains(p);
+                let far_of = |rows: &BTreeMap<String, Row>, role: Option<&str>| {
+                    rows.values()
+                        .find(|r| {
+                            matches!(&r.series, Some((j, n, _)) if *n == m
+                                && role.is_none_or(|role| self.elements[*j].role == role))
+                        })
+                        .map(|r| r.pin.clone())
+                };
+                let tied: Vec<&str> = self.tied(&m).into_iter().filter(|p| ok_pin(p)).collect();
+                let hinted = match &self.elements[i].near {
+                    Some(Near::Role(role)) => far_of(&rows, Some(role)).map(Hang::Far),
+                    Some(Near::Pin(p)) if tied.contains(&p.as_str()) => Some(Hang::Down(p.clone())),
+                    Some(Near::Pin(p)) => rows
+                        .get(p)
+                        .filter(|r| matches!(&r.series, Some((_, n, _)) if *n == m))
+                        .map(|r| Hang::Far(r.pin.clone())),
+                    None => None,
+                };
+                hinted
+                    .or_else(|| {
+                        // The tied pin with the fewest parts so far.
+                        tied.iter()
+                            .min_by_key(|p| rows.get(**p).map_or(0, |r| r.down.len() + r.up.len()))
+                            .map(|p| Hang::Down(p.to_string()))
+                    })
+                    .or_else(|| far_of(&rows, None).map(Hang::Far))
+            });
+            match hang {
+                Some(Hang::Down(p)) => get(self, &mut rows, &p).down.push(i),
+                Some(Hang::Far(p)) => get(self, &mut rows, &p).far_down.push(i),
+                None => free.push(Free::Part(i, a, b, la, lb)),
             }
             used[i] = true;
         }
@@ -746,6 +1095,7 @@ impl Scene {
             if pierce_pins.contains(&c.pin) {
                 continue;
             }
+            let local = c.net.as_deref().is_some_and(|n| self.is_local(n));
             let r = get(self, &mut rows, &c.pin);
             let tip = Some((c.level, c.tip.clone()));
             match &c.net {
@@ -755,7 +1105,14 @@ impl Scene {
                     let ends_elsewhere =
                         r.series.as_ref().is_some_and(|(_, m, _)| !self.is_local(m));
                     if ends_elsewhere {
-                        r.link = Some(net.clone());
+                        if !(local && *net == r.pin) {
+                            r.link = Some(net.clone());
+                        }
+                    } else if local {
+                        // The pin's own node: named unless the name is the pin's.
+                        if *net != r.pin || r.bare() {
+                            r.end = RowEnd::Local(net.clone(), tip);
+                        }
                     } else {
                         r.end = RowEnd::Label(net.clone(), tip);
                     }
@@ -789,11 +1146,7 @@ impl Scene {
                     At::Row(p) => {
                         r.end = RowEnd::Name(p.clone());
                         let hr = get(self, &mut rows, &p);
-                        let lone = hr.up.is_empty()
-                            && hr.down.is_empty()
-                            && hr.series.is_none()
-                            && matches!(hr.end, RowEnd::Open);
-                        if lone {
+                        if hr.bare() {
                             hr.end = RowEnd::Name(p.clone());
                         } else if hr.link.is_none() {
                             hr.link = Some(p.clone());
@@ -803,6 +1156,7 @@ impl Scene {
                         top.push((pin.clone(), net));
                         continue;
                     }
+                    At::Net(net) if self.is_local(&net) => r.end = RowEnd::Local(net, None),
                     At::Net(net) => r.end = RowEnd::Label(net, None),
                 }
                 brows.push(r);
@@ -813,12 +1167,54 @@ impl Scene {
                 RowEnd::Gnd(_) => (2, 0),
                 _ => (1, 0),
             });
-            free.push(Free::Block(i, brows, top));
+            // Ground pins go below the box; the rest on both sides.
+            let (gnd, mut sig): (Vec<Row>, Vec<Row>) = brows
+                .into_iter()
+                .partition(|r| matches!(r.end, RowEnd::Gnd(_)));
+            let right = if sig.len() > 3 {
+                sig.split_off(sig.len().div_ceil(2))
+            } else {
+                Vec::new()
+            };
+            sig.extend(gnd);
+            free.push(Free::Block(i, [sig, right], top));
+        }
+
+        // Bridged pins: both rows (a ground pin too) side by side.
+        let mut units: Vec<(usize, Unit)> = Vec::new();
+        for (a, b, parts) in bridges {
+            let ra = rows.remove(&a).unwrap_or_else(|| Row {
+                pin: a.clone(),
+                numbers: self.numbers(&a),
+                ..Row::default()
+            });
+            let rb = rows.remove(&b).unwrap_or_else(|| Row {
+                pin: b.clone(),
+                numbers: self.numbers(&b),
+                ..Row::default()
+            });
+            // The order that keeps them closest; pin order on a tie.
+            let ab = self.row_extent(&ra).1 + self.row_extent(&rb).0;
+            let ba = self.row_extent(&rb).1 + self.row_extent(&ra).0;
+            let in_order = self.pin_index(&a) <= self.pin_index(&b);
+            let (upper, lower) = if ab < ba || (ab == ba && in_order) {
+                (ra, rb)
+            } else {
+                (rb, ra)
+            };
+            let at = self.pin_index(&a).min(self.pin_index(&b));
+            units.push((
+                at,
+                Unit::Bridge(Bridge {
+                    upper,
+                    lower,
+                    parts,
+                }),
+            ));
         }
 
         // Ground-only pins go to the bottom of the box.
         let mut bottom = Vec::new();
-        let mut units: Vec<(usize, Unit)> = Vec::new();
         for (pin, r) in rows {
             if pierce_pins.contains(&pin) {
                 continue;
@@ -846,8 +1242,9 @@ impl Scene {
         }
     }
 
-    /// Left and right: inputs left, outputs right, the rest balanced
-    /// (few rows all on the right).
+    /// Left and right: inputs left, outputs right, the rest so that the
+    /// box is short and the sides about as many pins (few rows all on
+    /// the right).
     fn split(&self, units: Vec<Unit>) -> [Vec<Unit>; 2] {
         fn hint(pin: &str) -> Option<usize> {
             let up = pin.to_uppercase();
@@ -871,6 +1268,7 @@ impl Scene {
             .map(|u| match u {
                 Unit::Row(r) => hint(&r.pin),
                 Unit::Pierce(_) => Some(1),
+                Unit::Bridge(_) => None,
             })
             .collect();
         let any_hint = units
@@ -880,21 +1278,34 @@ impl Scene {
         if units.len() <= 3 && !any_hint {
             return [Vec::new(), units];
         }
-        let heights: Vec<f64> = units.iter().map(unit_height).collect();
-        let mut fixed = [0.0, 0.0];
-        for (h, s) in heights.iter().zip(&hints) {
+        let heights: Vec<f64> = units
+            .iter()
+            .map(|u| {
+                let (a, b) = self.extent(u);
+                a + b
+            })
+            .collect();
+        let pins: Vec<f64> = units.iter().map(|u| u.pins().len() as f64).collect();
+        let mut fixed = [(0.0, 0.0), (0.0, 0.0)];
+        for ((h, p), s) in heights.iter().zip(&pins).zip(&hints) {
             if let Some(s) = s {
-                fixed[*s] += h;
+                fixed[*s].0 += h;
+                fixed[*s].1 += p;
             }
         }
         let open: Vec<usize> = (0..units.len()).filter(|i| hints[*i].is_none()).collect();
         let mut best = (f64::MAX, 0);
         for k in 0..=open.len() {
-            let left: f64 = fixed[0] + open[..k].iter().map(|i| heights[*i]).sum::<f64>();
-            let right: f64 = fixed[1] + open[k..].iter().map(|i| heights[*i]).sum::<f64>();
-            let d = (left - right).abs();
-            if d < best.0 - 1e-9 {
-                best = (d, k);
+            let sum = |s: &[usize], f: &Vec<f64>| s.iter().map(|i| f[*i]).sum::<f64>();
+            let left = fixed[0].0 + sum(&open[..k], &heights);
+            let right = fixed[1].0 + sum(&open[k..], &heights);
+            let (lp, rp) = (
+                fixed[0].1 + sum(&open[..k], &pins),
+                fixed[1].1 + sum(&open[k..], &pins),
+            );
+            let cost = left.max(right) + 0.25 * (left - right).abs() + 15.0 * (lp - rp).abs();
+            if cost < best.0 - 1e-9 {
+                best = (cost, k);
             }
         }
         let mut out: [Vec<Unit>; 2] = [Vec::new(), Vec::new()];
@@ -909,37 +1320,17 @@ impl Scene {
 
 // ---------------------------------------------------------------- layout
 
-/// Space a row needs above and below its wire.
-fn row_extent(r: &Row) -> (f64, f64) {
-    let above = if r.up.is_empty() { 20.0 } else { 70.0 };
-    let below = if !r.down.is_empty() || !r.far_down.is_empty() {
-        70.0
-    } else if matches!(r.end, RowEnd::Gnd(_)) {
-        20.0
-    } else {
-        10.0
-    };
-    (above, below)
-}
-
-fn unit_extent(u: &Unit) -> (f64, f64) {
-    match u {
-        Unit::Row(r) => row_extent(r),
-        Unit::Pierce(_) => (20.0, PIERCE_LOW + PIERCE_DROP + 70.0),
-    }
-}
-
-fn unit_height(u: &Unit) -> f64 {
-    let (a, b) = unit_extent(u);
-    a + b
-}
-
 const STUB: f64 = 20.0;
 const PIERCE_LOW: f64 = 30.0; // lower row below the upper one
-const PIERCE_DROP: f64 = 40.0; // crystal line below the lower row
 
 fn snap(v: f64) -> f64 {
     (v / 10.0).ceil() * 10.0
+}
+
+/// Horizontal room a tap (a part hanging from or standing on a row)
+/// takes: its wire, its text and a gap to the next one.
+fn tap_w(beside: f64) -> f64 {
+    (beside + 20.0).max(36.0)
 }
 
 struct Ctx<'a> {
@@ -951,23 +1342,8 @@ impl Ctx<'_> {
         &self.scene.elements[i]
     }
 
-    fn value_lines(&self, i: usize) -> Vec<String> {
-        let e = self.el(i);
-        let mut v = e.value.clone();
-        if e.count > 1 {
-            match v.first_mut() {
-                Some(first) => first.push_str(&format!(" ×{}", e.count)),
-                None => v.push(format!("×{}", e.count)),
-            }
-        }
-        v
-    }
-
     fn value_width(&self, i: usize) -> f64 {
-        self.value_lines(i)
-            .iter()
-            .map(|l| text_width(l, T_VAL))
-            .fold(0.0, f64::max)
+        self.scene.lines_width(i)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -978,18 +1354,21 @@ impl Ctx<'_> {
         pen.open(&format!("p {}", level_class(e.level)), &e.tip);
         let (y1, y2) = (y + vdir * 10.0, y + vdir * (10.0 + 2.0 * HALF));
         pen.line(x, y, x, y1);
+        // A switch's plunger on the text side.
+        let flip = flip ^ (side_reach(e.sym) > 0.0 && (tdir * vdir) < 0.0);
         let (a, b) = if flip {
             ((x, y2), (x, y1))
         } else {
             ((x, y1), (x, y2))
         };
         symbol(pen, e.sym, a, b);
-        let lines = self.value_lines(i);
+        let lines = self.scene.lines(i);
         let mid = (y1 + y2) / 2.0;
         let top = mid + 4.0 - (lines.len() as f64 - 1.0) * 6.5;
+        let off = 13.0 + side_reach(e.sym);
         for (k, l) in lines.iter().enumerate() {
             pen.text(
-                x + tdir * 13.0,
+                x + tdir * off,
                 top + k as f64 * 13.0,
                 if tdir > 0.0 {
                     Anchor::Start
@@ -1020,29 +1399,70 @@ impl Ctx<'_> {
         power(pen, x, top - 6.0, net);
     }
 
-    /// One row from the box edge at `ox` going `dir`; returns its end.
-    fn row(&self, pen: &mut Pen, r: &Row, ox: f64, y: f64, dir: f64) -> f64 {
+    /// A part in a row from `x(c - half)` to `x(c + half)`, its value
+    /// above.
+    fn inline(&self, pen: &mut Pen, i: usize, a: (f64, f64), b: (f64, f64), flip: bool) {
+        let e = self.el(i);
+        pen.open(&format!("p {}", level_class(e.level)), &e.tip);
+        let (s, t) = if flip { (b, a) } else { (a, b) };
+        symbol(pen, e.sym, s, t);
+        let (cx, y) = ((a.0 + b.0) / 2.0, a.1);
+        for (k, l) in self.scene.lines(i).iter().rev().enumerate() {
+            pen.text(
+                cx,
+                y - 11.0 - k as f64 * 12.0,
+                Anchor::Middle,
+                "val",
+                T_VAL,
+                l,
+            );
+        }
+        pen.close();
+    }
+
+    /// One row from the box edge at `ox` going `dir`; its parts start
+    /// at `start` (past a bridge's parts) and its wire reaches at least
+    /// `reach`. Returns its end.
+    #[allow(clippy::too_many_arguments)]
+    fn row(
+        &self,
+        pen: &mut Pen,
+        r: &Row,
+        ox: f64,
+        y: f64,
+        dir: f64,
+        start: f64,
+        reach: f64,
+    ) -> f64 {
         let x = |u: f64| ox + dir * u;
-        let start = if dir > 0.0 {
+        let anchor = if dir > 0.0 {
             Anchor::Start
         } else {
             Anchor::End
         };
         if !r.numbers.is_empty() {
-            pen.text(x(3.0), y - 3.5, start, "num", T_NUM, &r.numbers.join(", "));
+            pen.text(x(3.0), y - 3.5, anchor, "num", T_NUM, &r.numbers.join(", "));
         }
         let numbers_w = text_width(&r.numbers.join(", "), T_NUM) + 6.0;
-        let mut cur = STUB;
+        let mut cur = STUB.max(start);
         if let RowEnd::Nc(level, tip) = &r.end {
-            pen.line(x(0.0), y, x(STUB), y);
+            let end = STUB.max(reach);
+            pen.line(x(0.0), y, x(end), y);
             pen.open(&format!("nc {}", level_class(*level)), tip);
-            no_connect(pen, x(STUB), y);
+            no_connect(pen, x(end), y);
             pen.close();
-            return x(STUB + 5.0);
+            return x(end + 5.0);
         }
         if let Some(name) = &r.link {
             cur = cur.max(numbers_w);
-            pen.text(x(cur + 4.0), y - 4.0, start, "lbl", T_VAL, name);
+            let class = if self.scene.is_local(name) {
+                "lbl loc"
+            } else {
+                "lbl"
+            };
+            pen.open(class, name);
+            pen.text(x(cur + 4.0), y - 4.0, anchor, "", T_VAL, name);
+            pen.close();
             cur += text_width(name, T_VAL) + 12.0;
         }
         // Taps: (position, what).
@@ -1051,19 +1471,21 @@ impl Ctx<'_> {
             Down(usize),
         }
         let mut taps: Vec<(f64, Tap)> = Vec::new();
-        let tap_w = |w: f64| (14.0 + w + 12.0).max(36.0);
         if !r.up.is_empty() || !r.down.is_empty() {
             cur = cur.max(numbers_w - 6.0);
         }
+        // A power symbol's name reaches back past its wire.
+        let mut prev_reach = 0.0f64;
         for (i, net) in &r.up {
-            let at = cur + 12.0;
+            let at = (cur + 12.0).max(prev_reach + power_half(net) + 8.0);
             taps.push((at, Tap::Up(*i, net)));
-            cur = at + tap_w(self.value_width(*i)).max(text_width(net, T_VAL) / 2.0 + 14.0) - 12.0;
+            prev_reach = at + power_half(net).max(self.scene.beside(*i));
+            cur = at + tap_w(self.scene.beside(*i)).max(power_half(net) + 14.0) - 12.0;
         }
         for i in &r.down {
             let at = cur + 12.0;
             taps.push((at, Tap::Down(*i)));
-            cur = at + tap_w(self.value_width(*i)) - 12.0;
+            cur = at + tap_w(self.scene.beside(*i)) - 12.0;
         }
         let mut series_at = None;
         if let Some((i, _, flip)) = &r.series {
@@ -1075,11 +1497,11 @@ impl Ctx<'_> {
             for j in &r.far_down {
                 let at = cur + 14.0;
                 taps.push((at, Tap::Down(*j)));
-                cur = at + tap_w(self.value_width(*j)) - 14.0;
+                cur = at + tap_w(self.scene.beside(*j)) - 14.0;
             }
         }
         // The end, clear of the pin numbers.
-        cur = cur.max(numbers_w);
+        cur = cur.max(numbers_w).max(reach);
         let tail = |pen: &mut Pen, end_u: f64| {
             // The wire, broken where the series part sits.
             match series_at {
@@ -1104,6 +1526,13 @@ impl Ctx<'_> {
                 let w = flag(pen, x(end_u), y, dir, net, class, &tip);
                 cur = end_u + w;
             }
+            RowEnd::Local(net, lvl) => {
+                let end_u = cur + 12.0;
+                let tip = lvl.as_ref().map_or(net.as_str(), |(_, t)| t.as_str());
+                tail(pen, end_u);
+                let w = local_name(pen, x(end_u), y, dir, net, tip);
+                cur = end_u + w;
+            }
             RowEnd::Gnd(lvl) => {
                 let end_u = cur + 12.0;
                 tail(pen, end_u);
@@ -1120,7 +1549,7 @@ impl Ctx<'_> {
             RowEnd::Name(name) => {
                 let s = cur.max(numbers_w);
                 let w = text_width(name, T_VAL);
-                pen.text(x(s + 4.0), y - 4.0, start, "lbl", T_VAL, name);
+                pen.text(x(s + 4.0), y - 4.0, anchor, "lbl", T_VAL, name);
                 let end_u = s + w + 10.0;
                 tail(pen, end_u);
                 cur = end_u;
@@ -1133,12 +1562,13 @@ impl Ctx<'_> {
                         end_u = c + HALF;
                     }
                 }
+                let end_u = end_u.max(reach);
                 tail(pen, end_u);
             }
         }
         let last = taps.last().map(|(at, _)| *at);
         for (at, tap) in &taps {
-            if Some(*at) != last || !open_end {
+            if Some(*at) != last || !open_end || reach > *at {
                 pen.dot(x(*at), y);
             }
             match tap {
@@ -1147,16 +1577,56 @@ impl Ctx<'_> {
             }
         }
         if let Some((c, i, flip)) = series_at {
-            let e = self.el(i);
+            self.inline(pen, i, (x(c - HALF), y), (x(c + HALF), y), flip);
+        }
+        x(cur)
+    }
+
+    /// Two rows with parts between them, from `ox` going `dir`.
+    fn bridge(&self, pen: &mut Pen, b: &Bridge, ox: f64, y: f64, dir: f64) {
+        let x = |u: f64| ox + dir * u;
+        let gap = self.scene.bridge_gap(b);
+        let (yu, yl) = (y, y + gap);
+        let numbers_w = [&b.upper, &b.lower]
+            .iter()
+            .map(|r| text_width(&r.numbers.join(", "), T_NUM) + 6.0)
+            .fold(0.0, f64::max);
+        let mut u = STUB.max(numbers_w) + 12.0;
+        let mut cols = Vec::new();
+        for i in &b.parts {
+            cols.push((u, *i));
+            u += tap_w(self.scene.beside(*i));
+        }
+        let last = cols.last().map_or(STUB, |c| c.0);
+        let more = |r: &Row| !r.bare();
+        for (k, (u, i)) in cols.iter().enumerate() {
+            let is_last = k + 1 == cols.len();
+            for (r, yy) in [(&b.upper, yu), (&b.lower, yl)] {
+                if !is_last || more(r) {
+                    pen.dot(x(*u), yy);
+                }
+            }
+            // The part centred between the rows, its leads to them.
+            let mid = (yu + yl) / 2.0;
+            let e = self.el(*i);
             pen.open(&format!("p {}", level_class(e.level)), &e.tip);
-            let (s, t) = ((x(c - HALF), y), (x(c + HALF), y));
+            pen.line(x(*u), yu, x(*u), mid - HALF);
+            pen.line(x(*u), mid + HALF, x(*u), yl);
+            let flip = side_reach(e.sym) > 0.0 && dir < 0.0;
+            let (s, t) = ((x(*u), mid - HALF), (x(*u), mid + HALF));
             let (s, t) = if flip { (t, s) } else { (s, t) };
             symbol(pen, e.sym, s, t);
-            for (k, l) in self.value_lines(i).iter().rev().enumerate() {
+            let lines = self.scene.lines(*i);
+            let top = mid + 4.0 - (lines.len() as f64 - 1.0) * 6.5;
+            for (k, l) in lines.iter().enumerate() {
                 pen.text(
-                    x(c),
-                    y - 11.0 - k as f64 * 12.0,
-                    Anchor::Middle,
+                    x(*u + 13.0 + side_reach(e.sym)),
+                    top + k as f64 * 13.0,
+                    if dir > 0.0 {
+                        Anchor::Start
+                    } else {
+                        Anchor::End
+                    },
                     "val",
                     T_VAL,
                     l,
@@ -1164,7 +1634,12 @@ impl Ctx<'_> {
             }
             pen.close();
         }
-        x(cur)
+        // The rows' own parts beyond the bridge's text.
+        let start = cols
+            .last()
+            .map_or(STUB, |(u, i)| u + self.scene.beside(*i) + 8.0);
+        self.row(pen, &b.upper, ox, yu, dir, start, last);
+        self.row(pen, &b.lower, ox, yl, dir, start, last);
     }
 
     /// A crystal between two rows, from `ox` going `dir`.
@@ -1175,8 +1650,9 @@ impl Ctx<'_> {
         } else {
             Anchor::End
         };
+        let (bias_dy, drop) = self.scene.pierce_depths(p);
         let (yu, yl) = (y, y + PIERCE_LOW);
-        let yb = yl + PIERCE_DROP;
+        let yb = yl + drop;
         for (nums, yy) in [(&p.upper.1, yu), (&p.lower.1, yl)] {
             if !nums.is_empty() {
                 pen.text(x(3.0), yy - 3.5, start, "num", T_NUM, &nums.join(", "));
@@ -1188,21 +1664,7 @@ impl Ctx<'_> {
             let w = self.value_width(i);
             let half = HALF.max(w / 2.0 + 4.0);
             let c = cur + 10.0 + half;
-            let e = self.el(i);
-            pen.open(&format!("p {}", level_class(e.level)), &e.tip);
-            let (s, t) = ((x(c - HALF), yl), (x(c + HALF), yl));
-            symbol(pen, e.sym, s, t);
-            for (k, l) in self.value_lines(i).iter().rev().enumerate() {
-                pen.text(
-                    x(c),
-                    yl - 10.0 - k as f64 * 12.0,
-                    Anchor::Middle,
-                    "val",
-                    T_VAL,
-                    l,
-                );
-            }
-            pen.close();
+            self.inline(pen, i, (x(c - HALF), yl), (x(c + HALF), yl), false);
             pen.line(x(0.0), yl, x(c - HALF), yl);
             cur = c + HALF;
         }
@@ -1213,15 +1675,33 @@ impl Ctx<'_> {
             .map(|i| self.value_width(*i))
             .fold(0.0, f64::max);
         let xb = (cur + 20.0).max(STUB + lower_caps_w + 26.0);
-        pen.line(x(cur), yl, x(xb), yl);
+        pen.line(
+            x(if p.lower.2.is_some() { cur } else { 0.0 }),
+            yl,
+            x(xb),
+            yl,
+        );
         pen.line(x(xb), yl, x(xb), yb);
-        // The crystal.
+        // The crystal (and what is across it).
         let cw = self.value_width(p.crystal);
-        let span = (2.0 * HALF + 40.0).max(cw + 30.0);
+        let bw = p
+            .bias
+            .iter()
+            .map(|i| self.value_width(*i))
+            .fold(0.0, f64::max);
+        let span = (2.0 * HALF + 40.0).max(cw + 30.0).max(bw + 30.0);
         let xa = xb + span;
         let c = (xa + xb) / 2.0;
         pen.line(x(0.0), yu, x(xa), yu);
         pen.line(x(xa), yu, x(xa), yb);
+        for (k, i) in p.bias.iter().enumerate() {
+            let yr = yl + bias_dy + 30.0 * k as f64;
+            pen.dot(x(xb), yr);
+            pen.dot(x(xa), yr);
+            pen.line(x(xb), yr, x(c - HALF), yr);
+            pen.line(x(c + HALF), yr, x(xa), yr);
+            self.inline(pen, *i, (x(c - HALF), yr), (x(c + HALF), yr), false);
+        }
         pen.line(x(xb), yb, x(c - HALF), yb);
         pen.line(x(c + HALF), yb, x(xa), yb);
         let e = self.el(p.crystal);
@@ -1230,7 +1710,7 @@ impl Ctx<'_> {
         // The crystal's first terminal on its own side.
         let (s, t) = if p.first_lower { (l, r) } else { (r, l) };
         symbol(pen, Sym::Crystal, s, t);
-        for (k, line) in self.value_lines(p.crystal).iter().rev().enumerate() {
+        for (k, line) in self.scene.lines(p.crystal).iter().rev().enumerate() {
             pen.text(
                 x(c),
                 yb - 12.0 - k as f64 * 12.0,
@@ -1258,13 +1738,13 @@ impl Ctx<'_> {
                 pen.dot(x(xa), yb);
             }
             self.down(pen, *i, x(xa + k as f64 * 30.0), yb, dir);
-            end = xa + k as f64 * 30.0 + 14.0 + self.value_width(*i);
+            end = xa + k as f64 * 30.0 + self.scene.beside(*i);
         }
         x(end)
     }
 
-    /// A box with rows on its sides and ground pins below; returns its
-    /// pen and the box's top-left corner.
+    /// A box with rows on its sides, ground pins below and power pins
+    /// above; its top-left corner at the origin.
     fn host(
         &self,
         title: &[String],
@@ -1274,16 +1754,10 @@ impl Ctx<'_> {
         top: &[(String, String)],
     ) -> Pen {
         let mut pen = Pen::default();
-        let pin_names = |u: &Unit| -> Vec<String> {
-            match u {
-                Unit::Row(r) => vec![r.pin.clone()],
-                Unit::Pierce(p) => vec![p.upper.0.clone(), p.lower.0.clone()],
-            }
-        };
         let side_w = |s: &Vec<Unit>| {
             s.iter()
-                .flat_map(pin_names)
-                .map(|p| text_width(&p, T_NAME))
+                .flat_map(|u| u.pins())
+                .map(|p| text_width(p, T_NAME))
                 .fold(0.0, f64::max)
         };
         let (lw, rw) = (side_w(&sides[0]), side_w(&sides[1]));
@@ -1291,8 +1765,24 @@ impl Ctx<'_> {
             .iter()
             .map(|t| text_width(t, T_HEAD))
             .fold(0.0, f64::max);
-        let bottom_w = bottom.len().max(top.len()) as f64 * 30.0 + 10.0;
-        let width = snap((lw + rw + 30.0).max(title_w + 24.0).max(bottom_w).max(70.0));
+        // Ground pins below: each wide enough for its numbers.
+        let slots: Vec<f64> = bottom
+            .iter()
+            .map(|(_, nums, _)| (text_width(&nums.join(","), T_NUM) + 14.0).max(30.0))
+            .collect();
+        let bottom_w = slots.iter().sum::<f64>() + 10.0;
+        let top_w = top
+            .iter()
+            .map(|(p, _)| (text_width(p, T_NAME) + 10.0).max(30.0))
+            .sum::<f64>()
+            + 10.0;
+        let width = snap(
+            (lw + rw + 30.0)
+                .max(title_w + 24.0)
+                .max(bottom_w)
+                .max(top_w)
+                .max(70.0),
+        );
         // Pin rows.
         let head = 18.0 + title.len() as f64 * 15.0 + if top.is_empty() { 0.0 } else { 14.0 };
         let mut ys: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
@@ -1301,7 +1791,7 @@ impl Ctx<'_> {
             let mut y = head;
             let mut prev_below: Option<f64> = None;
             for u in units {
-                let (above, below) = unit_extent(u);
+                let (above, below) = self.scene.extent(u);
                 if let Some(pb) = prev_below {
                     y += snap((pb + above).max(20.0));
                 } else {
@@ -1310,16 +1800,11 @@ impl Ctx<'_> {
                 ys[s].push(y);
                 let lowest = match u {
                     Unit::Pierce(_) => y + PIERCE_LOW,
+                    Unit::Bridge(b) => y + self.scene.bridge_gap(b),
                     Unit::Row(_) => y,
                 };
                 last = last.max(lowest);
-                prev_below = Some(
-                    below
-                        - match u {
-                            Unit::Pierce(_) => 0.0,
-                            Unit::Row(_) => 0.0,
-                        },
-                );
+                prev_below = Some(below - (lowest - y));
             }
         }
         let bottom_names = bottom
@@ -1339,11 +1824,7 @@ impl Ctx<'_> {
         if let Some((class, tip)) = title_tip {
             pen.open(class, tip);
         }
-        pen.path(
-            &format!("M0 0H{w}V{h}H0Z", w = n(width), h = n(height)),
-            "host b",
-            &[(0.0, 0.0), (width, height)],
-        );
+        pen.rect(0.0, 0.0, width, height, "host b");
         for (k, t) in title.iter().enumerate() {
             let y = 18.0 + if top.is_empty() { 0.0 } else { 14.0 } + k as f64 * 15.0;
             pen.text(
@@ -1369,21 +1850,28 @@ impl Ctx<'_> {
                 match u {
                     Unit::Row(r) => {
                         pen.text(name_x, y + 3.5, a, "pn", T_NAME, &r.pin);
-                        self.row(&mut pen, r, ox, *y, dir);
+                        self.row(&mut pen, r, ox, *y, dir, STUB, 0.0);
                     }
                     Unit::Pierce(p) => {
                         pen.text(name_x, y + 3.5, a, "pn", T_NAME, &p.upper.0);
                         pen.text(name_x, y + PIERCE_LOW + 3.5, a, "pn", T_NAME, &p.lower.0);
                         self.pierce(&mut pen, p, ox, *y, dir);
                     }
+                    Unit::Bridge(b) => {
+                        let gap = self.scene.bridge_gap(b);
+                        pen.text(name_x, y + 3.5, a, "pn", T_NAME, &b.upper.pin);
+                        pen.text(name_x, y + gap + 3.5, a, "pn", T_NAME, &b.lower.pin);
+                        self.bridge(&mut pen, b, ox, *y, dir);
+                    }
                 }
             }
         }
-        // Ground pins below, power pins above.
-        let span =
-            |k: usize, count: usize| width / 2.0 + (k as f64 - (count as f64 - 1.0) / 2.0) * 30.0;
+        // Ground pins below (numbers right of each stub), power pins above.
+        let x_start = width / 2.0 - slots.iter().sum::<f64>() / 2.0;
+        let mut prefix = 0.0;
         for (k, (pin, nums, lvl)) in bottom.iter().enumerate() {
-            let x = span(k, bottom.len());
+            let x = x_start + prefix + (slots[k] / 2.0).min(15.0);
+            prefix += slots[k];
             pen.text_up(x + 3.5, height - 5.0, "pn", T_NAME, pin);
             if !nums.is_empty() {
                 pen.text(
@@ -1404,8 +1892,20 @@ impl Ctx<'_> {
             ground(&mut pen, x, height + STUB);
             pen.close();
         }
+        let tslots: Vec<f64> = top
+            .iter()
+            .map(|(p, net)| {
+                (text_width(p, T_NAME) + 10.0)
+                    .max(text_width(net, T_VAL) + 10.0)
+                    .max(30.0)
+            })
+            .collect();
+        let mut x =
+            width / 2.0 - (tslots.iter().sum::<f64>() - tslots.first().unwrap_or(&0.0)) / 2.0;
         for (k, (pin, net)) in top.iter().enumerate() {
-            let x = span(k, top.len());
+            if k > 0 {
+                x += (tslots[k - 1] + tslots[k]) / 2.0;
+            }
             pen.text(x, 13.0, Anchor::Middle, "pn", T_NAME, pin);
             pen.line(x, 0.0, x, -STUB);
             power(&mut pen, x, -STUB, net);
@@ -1416,13 +1916,8 @@ impl Ctx<'_> {
     fn free(&self, f: &Free) -> Pen {
         let mut pen = Pen::default();
         match f {
-            Free::Part(i, a, b) => {
+            Free::Part(i, a, b, la, lb) => {
                 let e = self.el(*i);
-                let label = |at: &At| match at {
-                    At::Net(net) => net.clone(),
-                    At::Row(p) => p.clone(),
-                    At::Gnd => "GND".into(),
-                };
                 if e.sym == Sym::Block || e.terms.is_empty() {
                     let mut lines = e.value.clone();
                     if lines.is_empty() {
@@ -1436,11 +1931,7 @@ impl Ctx<'_> {
                         + 24.0;
                     let h = 14.0 + lines.len() as f64 * 15.0;
                     pen.open(&format!("p {}", level_class(e.level)), &e.tip);
-                    pen.path(
-                        &format!("M0 0H{}V{}H0Z", n(w), n(h)),
-                        "host b",
-                        &[(0.0, 0.0), (w, h)],
-                    );
+                    pen.rect(0.0, 0.0, w, h, "host b");
                     for (k, l) in lines.iter().enumerate() {
                         pen.text(
                             w / 2.0,
@@ -1455,11 +1946,12 @@ impl Ctx<'_> {
                     return pen;
                 }
                 match (a, b) {
-                    (x, At::Gnd) | (At::Gnd, x) => {
+                    (_, At::Gnd) | (At::Gnd, _) => {
                         // A shunt: power above, ground below.
                         let flip = matches!(a, At::Gnd);
+                        let net = if flip { lb } else { la };
                         pen.line(0.0, 0.0, 0.0, 6.0);
-                        power(&mut pen, 0.0, 0.0, &label(x));
+                        power(&mut pen, 0.0, 0.0, net);
                         self.vertical(&mut pen, *i, 0.0, 6.0, 1.0, 1.0, flip);
                         let bottom = 6.0 + 10.0 + 2.0 * HALF;
                         pen.line(0.0, bottom, 0.0, bottom + 6.0);
@@ -1468,55 +1960,52 @@ impl Ctx<'_> {
                     _ => {
                         let w = self.value_width(*i);
                         let half = HALF.max(w / 2.0 + 4.0);
-                        let l = flag(&mut pen, 0.0, 0.0, -1.0, &label(a), "", &label(a));
-                        let _ = l;
+                        let label = |at: &At, l: &str, x: f64, dir: f64, pen: &mut Pen| match at {
+                            At::Net(net) if self.scene.is_local(net) => {
+                                local_name(pen, x, 0.0, dir, l, l);
+                            }
+                            _ => {
+                                flag(pen, x, 0.0, dir, l, "", l);
+                            }
+                        };
+                        label(a, la, 0.0, -1.0, &mut pen);
                         pen.line(0.0, 0.0, 10.0 + half - HALF, 0.0);
-                        pen.open(&format!("p {}", level_class(e.level)), &e.tip);
-                        symbol(
+                        self.inline(
                             &mut pen,
-                            e.sym,
+                            *i,
                             (10.0 + half - HALF, 0.0),
                             (10.0 + half + HALF, 0.0),
+                            false,
                         );
-                        for (k, line) in self.value_lines(*i).iter().rev().enumerate() {
-                            pen.text(
-                                10.0 + half,
-                                -11.0 - k as f64 * 12.0,
-                                Anchor::Middle,
-                                "val",
-                                T_VAL,
-                                line,
-                            );
-                        }
-                        pen.close();
                         let end = 20.0 + 2.0 * half;
                         pen.line(10.0 + half + HALF, 0.0, end, 0.0);
-                        flag(&mut pen, end, 0.0, 1.0, &label(b), "", &label(b));
+                        label(b, lb, end, 1.0, &mut pen);
                     }
                 }
             }
-            Free::Block(i, rows, top) => {
+            Free::Block(i, [left, right], top) => {
                 let e = self.el(*i);
                 let mut title = e.value.clone();
                 if title.is_empty() {
                     title.push(e.role.clone());
                 }
-                let gnd: Vec<GroundPin> = rows
+                let gnd: Vec<GroundPin> = left
                     .iter()
                     .filter(|r| matches!(r.end, RowEnd::Gnd(_)))
                     .map(|r| (r.pin.clone(), Vec::new(), None))
                     .collect();
-                let side: Vec<Unit> = rows
-                    .iter()
-                    .filter(|r| !matches!(r.end, RowEnd::Gnd(_)))
-                    .cloned()
-                    .map(Unit::Row)
-                    .collect();
+                let side = |rows: &Vec<Row>| -> Vec<Unit> {
+                    rows.iter()
+                        .filter(|r| !matches!(r.end, RowEnd::Gnd(_)))
+                        .cloned()
+                        .map(Unit::Row)
+                        .collect()
+                };
                 let class = format!("p {}", level_class(e.level));
                 return self.host(
                     &title,
                     Some((&class, &e.tip)),
-                    &[side, Vec::new()],
+                    &[side(left), side(right)],
                     &gnd,
                     top,
                 );
@@ -1529,24 +2018,105 @@ impl Ctx<'_> {
 /// The scene as an SVG document. `standalone`: also styled for a dark
 /// colour scheme on its own (inlined, it follows the page).
 pub fn render(scene: &Scene, standalone: bool) -> String {
-    render_pen(scene).map_or_else(String::new, |pen| finish(pen, standalone))
+    render_sections(
+        &[Section {
+            title: None,
+            scene: scene.clone(),
+        }],
+        standalone,
+    )
 }
 
-/// Pairs of texts in the drawing that overlap (estimated widths); the
-/// tests keep this empty for every circuit in the data.
-pub fn overlapping_texts(scene: &Scene) -> Vec<(String, String)> {
-    let Some(pen) = render_pen(scene) else {
+/// Sections stacked, each under its title; empty when nothing is drawn.
+pub fn render_sections(sections: &[Section], standalone: bool) -> String {
+    render_all(sections).map_or_else(String::new, |pen| finish(pen, standalone))
+}
+
+/// What is wrong with the drawing (estimated text widths): texts that
+/// overlap each other or cross a wire or outline, and anything outside
+/// the view box. The tests keep this empty for every circuit in the
+/// data.
+pub fn problems(sections: &[Section]) -> Vec<String> {
+    let Some(pen) = render_all(sections) else {
         return Vec::new();
     };
     let mut out = Vec::new();
     for (i, (a, ta)) in pen.texts.iter().enumerate() {
         for (b, tb) in &pen.texts[i + 1..] {
             if a.overlaps(b) {
-                out.push((ta.clone(), tb.clone()));
+                out.push(format!("text {ta:?} overlaps text {tb:?}"));
+            }
+        }
+        let inner = a.shrunk(0.6);
+        for (p, q) in &pen.segs {
+            if inner.crossed_by(*p, *q) {
+                out.push(format!(
+                    "text {ta:?} crosses a line ({}, {})-({}, {})",
+                    n(p.0),
+                    n(p.1),
+                    n(q.0),
+                    n(q.1)
+                ));
+                break;
             }
         }
     }
+    let view = view_box(&pen);
+    for (b, t) in &pen.texts {
+        if !view.contains(b) {
+            out.push(format!("text {t:?} outside the view box"));
+        }
+    }
+    for (p, q) in &pen.segs {
+        let s = BBox {
+            x0: p.0.min(q.0),
+            y0: p.1.min(q.1),
+            x1: p.0.max(q.0),
+            y1: p.1.max(q.1),
+        };
+        if !view.contains(&s) {
+            out.push("a line outside the view box".into());
+        }
+    }
     out
+}
+
+/// The two-pin parts drawn apart from the host (between net labels):
+/// none of them touches a host pin or is placed near one.
+pub fn detached(scene: &Scene) -> Vec<String> {
+    scene
+        .plan()
+        .free
+        .iter()
+        .filter_map(|f| match f {
+            Free::Part(i, ..) => Some(scene.elements[*i].role.clone()),
+            Free::Block(..) => None,
+        })
+        .collect()
+}
+
+fn render_all(sections: &[Section]) -> Option<Pen> {
+    let mut pen = Pen::default();
+    let mut y = 0.0;
+    let mut any = false;
+    for s in sections {
+        let Some(part) = render_pen(&s.scene) else {
+            continue;
+        };
+        if any {
+            // A rule between sections.
+            y += 14.0;
+        }
+        let bb = part.bbox();
+        if let Some(t) = &s.title {
+            pen.text(0.0, y + 12.0, Anchor::Start, "sec", T_HEAD, t);
+            y += 26.0;
+        }
+        pen.place(part, -bb.x0, y - bb.y0);
+        y += bb.y1 - bb.y0 + 20.0;
+        any = true;
+    }
+    any.then_some(pen)
 }
 
 fn render_pen(scene: &Scene) -> Option<Pen> {
@@ -1558,7 +2128,6 @@ fn render_pen(scene: &Scene) -> Option<Pen> {
         return None;
     }
     let mut y_free = 0.0;
-    let mut x_min = 0.0;
     if has_host {
         let host = ctx.host(
             std::slice::from_ref(&scene.host),
@@ -1570,17 +2139,16 @@ fn render_pen(scene: &Scene) -> Option<Pen> {
         let bb = host.bbox();
         pen.place(host, -bb.x0, -bb.y0);
         y_free = bb.y1 - bb.y0 + 34.0;
-        x_min = 0.0;
     }
     // Parts beside the host, in a line under it (wrapping).
     let max_w = pen.bbox().x1.max(560.0);
-    let (mut x, mut row_h) = (x_min, 0.0f64);
+    let (mut x, mut row_h) = (0.0, 0.0f64);
     for f in &plan.free {
         let item = ctx.free(f);
         let bb = item.bbox();
         let (w, h) = (bb.x1 - bb.x0, bb.y1 - bb.y0);
-        if x > x_min && x + w > max_w {
-            x = x_min;
+        if x > 0.0 && x + w > max_w {
+            x = 0.0;
             y_free += row_h + 30.0;
             row_h = 0.0;
         }
@@ -1599,9 +2167,11 @@ const STYLE: &str = "\
 .cd .dot{fill:currentColor;stroke:none}\
 .cd text{fill:currentColor;stroke:none;font-size:10.5px}\
 .cd .head{font-size:12px;font-weight:600}\
+.cd .sec{font-size:12px;font-weight:600;fill:var(--color-text-muted,#5c5c66)}\
 .cd .pn{font-size:10px}\
 .cd .num{font-size:9px;fill:var(--color-text-muted,#5c5c66)}\
 .cd .val{fill:var(--color-text-muted,#5c5c66)}\
+.cd .loc text{font-style:italic}\
 .cd .lvl-recommended{color:var(--color-accent,#2456e0)}\
 .cd .lvl-example,.cd .lvl-optional{color:var(--color-text-muted,#5c5c66)}\
 .cd .lvl-example .b{stroke-dasharray:3 2.2}\
@@ -1611,22 +2181,28 @@ const STYLE: &str = "\
 
 const DARK: &str = "\
 @media (prefers-color-scheme:dark){svg.cd{color:#e4e4e8;background:#16161a}\
-.cd .host{fill:#1f1f24}.cd .num,.cd .val{fill:#a0a0aa}\
+.cd .host{fill:#1f1f24}.cd .num,.cd .val,.cd .sec{fill:#a0a0aa}\
 .cd .lvl-recommended{color:#7ea2ff}.cd .lvl-example,.cd .lvl-optional{color:#a0a0aa}}";
 
 /// Display size per drawing unit (the drawing is laid out in CSS pixels
 /// at a 10.5 px text size; shown a little larger).
 const SCALE: f64 = 1.2;
 
-fn finish(pen: Pen, standalone: bool) -> String {
+/// The drawing's bounds with a margin (wider on the right, where the
+/// estimated text widths may fall short).
+fn view_box(pen: &Pen) -> BBox {
     let bb = pen.bbox();
-    let m = 8.0;
-    let (x, y, w, h) = (
-        bb.x0 - m,
-        bb.y0 - m,
-        bb.x1 - bb.x0 + 2.0 * m,
-        bb.y1 - bb.y0 + 2.0 * m,
-    );
+    BBox {
+        x0: bb.x0 - 8.0,
+        y0: bb.y0 - 8.0,
+        x1: bb.x1 + 14.0,
+        y1: bb.y1 + 8.0,
+    }
+}
+
+fn finish(pen: Pen, standalone: bool) -> String {
+    let v = view_box(&pen);
+    let (x, y, w, h) = (v.x0, v.y0, v.x1 - v.x0, v.y1 - v.y0);
     let mut s = String::new();
     let _ = write!(
         s,
@@ -1659,6 +2235,7 @@ mod tests {
                 .iter()
                 .map(|(p, e)| (p.to_string(), e.clone()))
                 .collect(),
+            near: None,
         }
     }
     fn pin(p: &str) -> End {
@@ -1666,6 +2243,22 @@ mod tests {
     }
     fn net(p: &str) -> End {
         End::Net(p.into())
+    }
+    fn tie(s: &mut Scene, pin: &str, net: Option<&str>) {
+        s.connects.push(Connection {
+            pin: pin.into(),
+            net: net.map(Into::into),
+            level: LevelValue::Required,
+            tip: pin.into(),
+        });
+    }
+
+    fn clean(s: &Scene) {
+        let p = problems(&[Section {
+            title: None,
+            scene: s.clone(),
+        }]);
+        assert!(p.is_empty(), "{p:#?}");
     }
 
     fn crystal() -> Scene {
@@ -1787,12 +2380,10 @@ mod tests {
         s
     }
 
-    fn no_text_overlaps(pen: &Pen) {
-        for (i, (a, ta)) in pen.texts.iter().enumerate() {
-            for (b, tb) in &pen.texts[i + 1..] {
-                assert!(!a.overlaps(b), "texts overlap: {ta:?} {tb:?}");
-            }
-        }
+    fn side_of(plan: &Plan, pin: &str) -> Option<usize> {
+        plan.sides
+            .iter()
+            .position(|s| s.iter().any(|u| u.pins().contains(&pin)))
     }
 
     #[test]
@@ -1803,12 +2394,27 @@ mod tests {
         assert!(
             matches!(plan.sides[1].as_slice(), [Unit::Pierce(p)] if p.upper.0 == "XIN" && p.lower.0 == "XOUT" && p.lower.2 == Some(2) && p.upper.3 == vec![0] && p.lower.3 == vec![1] && p.grounded)
         );
-        let pen = render_pen(&s).unwrap();
-        no_text_overlaps(&pen);
+        clean(&s);
         let svg = render(&s, false);
         assert!(svg.starts_with("<svg") && svg.ends_with("</svg>"));
         assert!(svg.contains(">12 MHz<") && svg.contains(">1 kΩ<"));
         assert_eq!(svg, render(&s, false), "deterministic");
+    }
+
+    #[test]
+    fn a_bias_resistor_sits_across_the_crystal() {
+        let mut s = crystal();
+        s.elements.push(el(
+            "R_BIAS",
+            Sym::Resistor,
+            "1 MΩ",
+            LevelValue::Optional,
+            &[("1", pin("XIN")), ("2", pin("XOUT"))],
+        ));
+        let plan = s.plan();
+        assert!(plan.free.is_empty());
+        assert!(matches!(plan.sides[1].as_slice(), [Unit::Pierce(p)] if p.bias == vec![4]));
+        clean(&s);
     }
 
     #[test]
@@ -1818,24 +2424,154 @@ mod tests {
         // Ground-only pins at the bottom; VIN left, VOUT right.
         let bottom: Vec<&str> = plan.bottom.iter().map(|b| b.0.as_str()).collect();
         assert_eq!(bottom, ["TESTEN", "GND"]);
-        let side_of = |pin: &str| {
-            plan.sides
-                .iter()
-                .position(|s| s.iter().any(|u| matches!(u, Unit::Row(r) if r.pin == pin)))
-        };
-        assert_eq!(side_of("VREG_VIN"), Some(0));
-        assert_eq!(side_of("VREG_VOUT"), Some(1));
-        // The bulk cap is on a net several pins share: drawn apart.
-        assert!(
-            matches!(plan.free.as_slice(), [Free::Part(4, At::Net(n), At::Gnd)] if n == "VDD_3V3")
-        );
-        let pen = render_pen(&s).unwrap();
-        no_text_overlaps(&pen);
+        assert_eq!(side_of(&plan, "VREG_VIN"), Some(0));
+        assert_eq!(side_of(&plan, "VREG_VOUT"), Some(1));
+        // The bulk cap on a net several pins share hangs from one of them.
+        assert!(plan.free.is_empty());
+        clean(&s);
         let svg = render(&s, true);
         assert!(svg.contains("100 nF ×2"));
         assert!(svg.contains("1, 10"), "both IOVDD pin numbers");
         assert!(svg.contains("prefers-color-scheme"));
         assert!(svg.contains("lvl-example"));
+    }
+
+    #[test]
+    fn net_parts_hang_from_the_pin_they_are_near() {
+        let mut s = decoupling();
+        s.elements[4].near = Some(Near::Pin("VREG_VIN".into()));
+        let plan = s.plan();
+        let row = plan
+            .sides
+            .iter()
+            .flatten()
+            .find_map(|u| match u {
+                Unit::Row(r) if r.pin == "VREG_VIN" => Some(r),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(row.down, vec![1, 4]);
+    }
+
+    #[test]
+    fn parts_between_two_pins_bridge_their_rows() {
+        let mut s = Scene {
+            host: "ESP32".into(),
+            pins: vec![
+                ("47".into(), "CAP2".into()),
+                ("48".into(), "CAP1".into()),
+                ("49".into(), "VDDA".into()),
+            ],
+            ground: ["GND".to_string()].into(),
+            power: ["VDD".to_string()].into(),
+            ..Scene::default()
+        };
+        tie(&mut s, "VDDA", Some("VDD"));
+        s.elements = vec![
+            el(
+                "C_CAP1",
+                Sym::Capacitor,
+                "10 nF",
+                LevelValue::Required,
+                &[("1", pin("CAP1")), ("2", net("GND"))],
+            ),
+            el(
+                "C_CAP2",
+                Sym::Capacitor,
+                "3.3 nF",
+                LevelValue::Optional,
+                &[("1", pin("CAP2")), ("2", pin("CAP1"))],
+            ),
+            el(
+                "R_CAP2",
+                Sym::Resistor,
+                "20 kΩ",
+                LevelValue::Optional,
+                &[("1", pin("CAP2")), ("2", pin("CAP1"))],
+            ),
+        ];
+        let plan = s.plan();
+        assert!(plan.free.is_empty());
+        let b = plan
+            .sides
+            .iter()
+            .flatten()
+            .find_map(|u| match u {
+                Unit::Bridge(b) => Some(b),
+                _ => None,
+            })
+            .expect("a bridge");
+        assert_eq!(
+            (b.upper.pin.as_str(), b.lower.pin.as_str()),
+            ("CAP2", "CAP1")
+        );
+        assert_eq!(b.parts, vec![1, 2]);
+        assert_eq!(b.lower.down, vec![0]);
+        clean(&s);
+        let svg = render(&s, false);
+        assert!(svg.contains(">CAP2<") && svg.contains(">CAP1<"));
+    }
+
+    #[test]
+    fn a_bridge_to_a_ground_pin_keeps_its_row() {
+        let mut s = Scene {
+            host: "LPC845".into(),
+            pins: vec![
+                ("8".into(), "VSS".into()),
+                ("42".into(), "VREFP".into()),
+                ("43".into(), "VREFN".into()),
+            ],
+            ground: ["GND".to_string()].into(),
+            power: ["VDD".to_string()].into(),
+            ..Scene::default()
+        };
+        tie(&mut s, "VSS", Some("GND"));
+        tie(&mut s, "VREFN", Some("GND"));
+        tie(&mut s, "VREFP", Some("VDD"));
+        s.elements = vec![el(
+            "C_VREF",
+            Sym::Capacitor,
+            "100 nF",
+            LevelValue::Example,
+            &[("1", pin("VREFP")), ("2", pin("VREFN"))],
+        )];
+        let plan = s.plan();
+        let bottom: Vec<&str> = plan.bottom.iter().map(|b| b.0.as_str()).collect();
+        assert_eq!(bottom, ["VSS"]);
+        assert!(plan
+            .sides
+            .iter()
+            .flatten()
+            .any(|u| matches!(u, Unit::Bridge(b) if b.parts == vec![0])));
+        clean(&s);
+    }
+
+    #[test]
+    fn local_nets_are_not_flags() {
+        let mut s = Scene {
+            host: "ESP32".into(),
+            pins: vec![("3".into(), "VDD3P3".into())],
+            ground: ["GND".to_string()].into(),
+            power: ["VDD_3V3".to_string()].into(),
+            local: ["VDD_RF".to_string()].into(),
+            ..Scene::default()
+        };
+        tie(&mut s, "VDD3P3", Some("VDD_RF"));
+        s.elements = vec![el(
+            "L",
+            Sym::Inductor,
+            "2 nH",
+            LevelValue::Recommended,
+            &[("1", net("VDD_3V3")), ("2", net("VDD_RF"))],
+        )];
+        let plan = s.plan();
+        let Unit::Row(r) = &plan.sides[1][0] else {
+            panic!()
+        };
+        // The inductor in the row, to the supply's label.
+        assert!(matches!(&r.series, Some((0, n, _)) if n == "VDD_3V3"));
+        assert_eq!(r.link.as_deref(), Some("VDD_RF"));
+        clean(&s);
     }
 
     #[test]
@@ -1874,10 +2610,45 @@ mod tests {
         };
         let plan = s.plan();
         assert!(
-            matches!(&plan.free[..], [Free::Block(1, rows, top)] if rows.len() == 3 && top.len() == 1)
+            matches!(&plan.free[..], [Free::Block(1, [rows, right], top)] if rows.len() == 3 && right.is_empty() && top.len() == 1)
         );
-        let pen = render_pen(&s).unwrap();
-        no_text_overlaps(&pen);
+        clean(&s);
+    }
+
+    #[test]
+    fn sections_stack_under_titles() {
+        let sections = [
+            Section {
+                title: Some("Crystal".into()),
+                scene: crystal(),
+            },
+            Section {
+                title: Some("Nothing".into()),
+                scene: Scene::default(),
+            },
+            Section {
+                title: Some("Supply".into()),
+                scene: decoupling(),
+            },
+        ];
+        let svg = render_sections(&sections, false);
+        assert!(svg.contains(">Crystal<") && svg.contains(">Supply<"));
+        assert!(!svg.contains(">Nothing<"), "an empty section is left out");
+        assert!(problems(&sections).is_empty(), "{:?}", problems(&sections));
+    }
+
+    #[test]
+    fn segments_cross_boxes() {
+        let b = BBox {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 10.0,
+            y1: 10.0,
+        };
+        assert!(b.crossed_by((-5.0, 5.0), (15.0, 5.0)));
+        assert!(b.crossed_by((5.0, 5.0), (6.0, 6.0)));
+        assert!(!b.crossed_by((-5.0, 12.0), (15.0, 12.0)));
+        assert!(!b.crossed_by((-5.0, -5.0), (-1.0, 20.0)));
     }
 
     #[test]
