@@ -1,5 +1,5 @@
 // How often the datasheet viewer finds a provenance locator on its
-// cited page: samples facts from a running openparts-server (with
+// cited page: samples provenance entries from a running openparts-server (with
 // OPENPARTS_SOURCE_CACHE set), opens each cited page with PDF.js and
 // runs src/locator-match.js on it, as the viewer does.
 //
@@ -15,21 +15,28 @@ const maxSources = Number(process.argv[3] ?? 60);
 const perSource = Number(process.argv[4] ?? 4);
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-// Every fact, in queue order; then a deterministic spread over sources.
-const facts = [];
-for (let offset = 0; ; offset += 100) {
-  const r = await fetch(`${api}/v1/reviews/queue?status=all&limit=100&offset=${offset}`);
-  const q = await r.json();
-  facts.push(...q.items.map((i) => i.fact));
-  if (offset + 100 >= q.total) break;
-}
+// Every provenance entry of every part, its device and its package;
+// then a deterministic spread over sources.
+const parts = await (await fetch(`${api}/v1/search?q=`)).json();
 const bySource = new Map();
-for (const f of facts) {
-  for (const e of f.evidence) {
-    if (!e.page || !e.locator) continue;
-    const list = bySource.get(e.source) ?? [];
-    if (list.length < perSource && !list.some((x) => x.e.locator === e.locator)) list.push({ f, e });
-    bySource.set(e.source, list);
+const seen = new Set();
+for (const part of parts) {
+  const path = `/v1/parts/${encodeURIComponent(part.manufacturer)}/${encodeURIComponent(part.mpn)}/provenance`;
+  const r = await fetch(`${api}${path}`);
+  if (!r.ok) continue;
+  const prov = await r.json();
+  for (const map of [prov.part, prov.device, prov.package]) {
+    for (const entries of Object.values(map)) {
+      for (const e of entries) {
+        if (!e.page || !e.locator) continue;
+        const key = `${e.source}\u0000${e.locator}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const list = bySource.get(e.source) ?? [];
+        if (list.length < perSource) list.push({ e });
+        bySource.set(e.source, list);
+      }
+    }
   }
 }
 const sources = [...bySource.keys()].sort().filter((_, i, all) => i % Math.max(1, Math.floor(all.length / maxSources)) === 0).slice(0, maxSources);
@@ -47,7 +54,7 @@ for (const source of sources) {
     console.log(`UNAVAILABLE ${source}: ${String(e.message).slice(0, 100)}`);
     continue;
   }
-  for (const { f, e } of bySource.get(source)) {
+  for (const { e } of bySource.get(source)) {
     if (e.page > doc.numPages) {
       tally.bad_page++;
       console.log(`BAD PAGE  ${source} p${e.page}/${doc.numPages}`);
@@ -55,7 +62,7 @@ for (const source of sources) {
     }
     const page = await doc.getPage(e.page);
     const content = await page.getTextContent();
-    const m = findLocator(content.items.filter((i) => typeof i.str === "string"), e.locator, [f.value]);
+    const m = findLocator(content.items.filter((i) => typeof i.str === "string"), e.locator, []);
     if (m) {
       tally[m.specific ? "specific" : "general"]++;
       console.log(`${m.specific ? "HIT " : "SECT"} ${source} p${e.page} «${m.fragment}» (${m.kind}) ← ${e.locator.slice(0, 90)}`);

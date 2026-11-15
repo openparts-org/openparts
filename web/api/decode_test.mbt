@@ -1004,6 +1004,7 @@ test "decode CatalogResponse" {
     #|   "mounting": "smd",
     #|   "lifecycle": "unknown",
     #|   "existence": "verified",
+    #|   "review": { "state": "unreviewed", "part": false, "device": false, "package": false },
     #|   "parameters": {
     #|    "capacitance": { "value": 1e-05, "label": "10 µF" },
     #|    "dielectric": { "value": null, "label": "X5R" }
@@ -1148,6 +1149,14 @@ test "decode CatalogResponse" {
     #|    "selected": false
     #|   }
     #|  ],
+    #|  "review": [
+    #|   {
+    #|    "value": "unreviewed",
+    #|    "label": "Unreviewed",
+    #|    "count": 7,
+    #|    "selected": false
+    #|   }
+    #|  ],
     #|  "body_width": {
     #|   "min": 0.8,
     #|   "max": 0.8
@@ -1200,4 +1209,25 @@ test "decode CatalogResponse" {
   assert_eq(r.items.length(), 1)
   assert_eq(r.items[0].size_code, Some("0603"))
   assert_eq(r.items[0].mounting, Some(@api.Mounting::Smd))
+  assert_eq(r.items[0].review.state, @api.ReviewState::Unreviewed)
+}
+
+///|
+test "decode PartDocuments" {
+  let text =
+    #|{
+    #| "part": {
+    #|  "id": "ex/EX-DONE",
+    #|  "path": "parts/ex/ex-done/EX-DONE.yaml",
+    #|  "review": { "status": "reviewed", "by": ["alice", "bob"], "pr": 12, "date": "2026-11-20" }
+    #| },
+    #| "device": { "id": "ex/D", "path": "devices/ex/D.yaml", "review": null },
+    #| "package": { "id": "standards/T", "path": null, "review": null },
+    #| "review": "partly"
+    #|}
+  let d : @api.PartDocuments = @json.from_json(@json.parse(text))
+  assert_eq(d.review, @api.ReviewState::Partly)
+  assert_eq(d.part.review.map(r => r.by), Some(["alice", "bob"]))
+  assert_eq(d.part.review.bind(r => r.pr), Some(12))
+  assert_eq(d.package_.path, None)
 }

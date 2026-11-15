@@ -33,6 +33,8 @@ type CatalogState
 
 type Copy
 
+type DataReviewCopy
+
 type Feature
 
 #derive(Eq)

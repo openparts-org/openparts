@@ -2,18 +2,20 @@
 // page with PDF.js (lazy-loaded) and highlights the locator text on it
 // (locator-match.js). The PDF comes from openparts-server's
 // `/v1/sources/{id}/document` (publishers don't allow cross-origin
-// reads); where that is off or refused, the original link opens
-// instead, at `#page=N`.
+// reads). That endpoint is opt-in (`OPENPARTS_SOURCE_CACHE`) and off on
+// public deployments, which must not redistribute the documents: there
+// (`GET /v1/config` says `source_documents: false`, or doesn't answer)
+// a click is an ordinary link to the original PDF at `#page=N`, and
+// the page shows the locator next to the value.
 //
 // Any element with `data-op-source` opens it in a side panel when
-// clicked: the part page's value cells (cmd/app/view.mbt) and the part
-// viewer's dimension popups (crates/viewer/openparts-viewer). Its other
-// attributes: data-op-page, data-op-locator, data-op-url, data-op-title,
-// data-op-revision, data-op-label (what the value is). The review page
-// shows it inline: `openpartsDatasheet.inline(elementId, options)`.
-// cmd/app/ffi.mbt's datasheet_* calls this; it sets the UI strings
-// (`setLabels`) in the page's language.
-import "./review.css";
+// clicked: the part page's values (cmd/app/data_review.mbt) and the
+// part viewer's dimension popups (crates/viewer/openparts-viewer). Its
+// other attributes: data-op-page, data-op-locator, data-op-url,
+// data-op-title, data-op-revision, data-op-label (what the value is).
+// cmd/app/ffi.mbt's datasheet_set_labels sets the UI strings in the
+// page's language.
+import "./datasheet.css";
 import { findLocator } from "./locator-match.js";
 
 let labels = {
@@ -55,13 +57,14 @@ function loadPdfjs() {
   return pdfjs;
 }
 
-// Whether the server fetches documents: until it answers, assume so
-// (a failure still falls back to the original link).
-let documentsEnabled = true;
-fetch(`${api()}/v1/reviews/config`)
+// Whether the server serves documents: only once it says so. Until then
+// (and on any server that doesn't) values are plain links to the
+// original PDF.
+let documentsEnabled = false;
+fetch(`${api()}/v1/config`)
   .then((r) => (r.ok ? r.json() : null))
   .then((c) => {
-    if (c && c.documents_enabled === false) documentsEnabled = false;
+    if (c && c.source_documents === true) documentsEnabled = true;
   })
   .catch(() => {});
 
@@ -386,13 +389,18 @@ window.addEventListener(
     if (!target) return;
     const o = optionsOf(target);
     if (o.url) o.url = o.url.replace(/#page=\d+$/, "");
-    e.preventDefault();
-    e.stopPropagation();
     if (!documentsEnabled) {
+      // A link already goes to the original at #page=N; anything else
+      // (the viewer's popups) is opened like one.
+      if (target.tagName === "A" && target.getAttribute("href")) return;
+      e.preventDefault();
+      e.stopPropagation();
       const href = originalHref(o);
       if (href) window.open(href, "_blank", "noopener,noreferrer");
       return;
     }
+    e.preventDefault();
+    e.stopPropagation();
     openDrawer(o);
   },
   true,
@@ -404,21 +412,6 @@ globalThis.openpartsDatasheet = {
       labels = { ...labels, ...JSON.parse(json) };
     } catch {}
     drawer?.view.applyLabels();
-  },
-  /// Shows `options` (JSON) in the element `id`, once it is rendered.
-  inline(id, json) {
-    const o = JSON.parse(json);
-    let n = 0;
-    const tick = () => {
-      const root = document.getElementById(id);
-      if (!root) {
-        if (++n < 300) requestAnimationFrame(tick);
-        return;
-      }
-      root._datasheet ??= new DatasheetView(root);
-      root._datasheet.show(o);
-    };
-    tick();
   },
   open(json) {
     openDrawer(JSON.parse(json));

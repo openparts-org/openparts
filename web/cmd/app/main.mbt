@@ -68,6 +68,7 @@ fn enter(
   let (lang, route) = route_of(url)
   set_document_lang(lang.code())
   set_document_title(title_of(lang, route))
+  datasheet_set_labels(datasheet_labels(lang))
   let model = { ..model, lang, route, }
   if !(route is Part(_, _)) {
     // Off the part page: the viewer's views (and listeners) go too.

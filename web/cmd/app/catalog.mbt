@@ -8,7 +8,7 @@
 /// The multi-select facets (URL and API parameter names), in sidebar order.
 let facet_keys : Array[String] = [
   "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
-  "existence",
+  "existence", "review",
 ]
 
 ///|
@@ -20,8 +20,8 @@ let pick_keys : Array[String] = build_pick_keys()
 fn build_pick_keys() -> Array[String] {
   let out = [
     "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
-    "existence", "width_min", "width_max", "length_min", "length_max", "height_min",
-    "height_max",
+    "existence", "review", "width_min", "width_max", "length_min", "length_max",
+    "height_min", "height_max",
   ]
   for p in param_names {
     out.push(p.0)
@@ -478,6 +478,7 @@ fn option_label(
     "mounting" => mounting_label(lang, value)
     "lifecycle" => lifecycle_label(lang, value)
     "existence" => existence_label(lang, value)
+    "review" => review_option_label(lang, value)
     k if enum_param_keys.contains(k) => param_value_label(lang, k, value)
     _ => fallback
   }
@@ -495,6 +496,7 @@ fn group_title(k : CatalogCopy, key : String) -> String {
     "mounting" => k.f_mounting
     "lifecycle" => k.f_lifecycle
     "existence" => k.f_existence
+    "review" => k.f_review
     "width" => k.f_width
     "length" => k.f_length
     _ => k.f_height
@@ -512,6 +514,7 @@ fn facet_values(f : @api.CatalogFacets, key : String) -> Array[@api.FacetValue] 
     "pitch" => f.pitch
     "mounting" => f.mounting
     "lifecycle" => f.lifecycle
+    "review" => f.review
     _ => f.existence
   }
 }
@@ -1048,6 +1051,8 @@ fn sidebar(
   }
   let out = []
   out.push(group("category", category_tree_checks(lang, s, emit, f)))
+  // Cheap to check and what a reviewer looks for first.
+  out.push(group("review", facet_checks(lang, s, emit, "review", f.review, 8)))
   for pf in f.parameters {
     out.push(param_facet(lang, s, emit, pf))
   }
@@ -1121,6 +1126,14 @@ fn result_row(
   let cells = [
     cell(k.c_mpn, "col-mpn", [
       a(href=href(lang, part_path(it.manufacturer, it.mpn)), [strong(it.mpn)]),
+      if it.review.state is Reviewed {
+        span(
+          class="badge badge-good badge-mini",
+          "✓ " + lang.data_review().reviewed_mark,
+        )
+      } else {
+        text("")
+      },
     ]),
     td(
       class="col-maker",

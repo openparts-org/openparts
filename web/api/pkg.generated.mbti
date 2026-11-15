@@ -145,6 +145,7 @@ pub(all) struct CatalogFacets {
   parameters : Array[ParameterFacet]
   pins : Array[FacetValue]
   pitch : Array[FacetValue]
+  review : Array[FacetValue]
   size : Array[FacetValue]
 }
 pub impl @json.FromJson for CatalogFacets
@@ -167,6 +168,7 @@ pub(all) struct CatalogItem {
   package_family : PackageFamily?
   parameters : Map[String, CatalogParameter]
   pitch : Double?
+  review : ReviewSummary
   size_code : String?
   size_code_metric : String?
 }
@@ -311,6 +313,7 @@ pub(all) struct Device {
   parameters : Map[String, ParameterValue]?
   pins : Map[String, Pin]
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   revisions : Map[String, DeviceRevision]
   schema_version : String
 }
@@ -348,6 +351,23 @@ pub(all) struct Dimension {
   unit : String
 }
 pub impl @json.FromJson for Dimension
+
+#derive(Eq)
+pub(all) struct DocumentInfo {
+  id : String
+  path : String?
+  review : DocumentReview?
+}
+pub impl @json.FromJson for DocumentInfo
+
+#derive(Eq)
+pub(all) struct DocumentReview {
+  by : Array[String]
+  date : String?
+  pr : Int32?
+  status : ReviewStatus
+}
+pub impl @json.FromJson for DocumentReview
 
 #derive(Eq, @debug.Debug)
 pub(all) enum DocumentType {
@@ -576,6 +596,7 @@ pub(all) struct Package {
   pads : Array[PackagePad]?
   pitch : Dimension
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   schema_version : String
   tab : PackageTab?
 }
@@ -784,6 +805,7 @@ pub(all) struct Part {
   package_ : String
   parameters : Map[String, ParameterValue]?
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   schema_version : String
   sources : Array[String]
 }
@@ -805,6 +827,15 @@ pub(all) struct PartBrief {
   size_code : String?
 }
 pub impl @json.FromJson for PartBrief
+
+#derive(Eq)
+pub(all) struct PartDocuments {
+  device : DocumentInfo
+  package_ : DocumentInfo
+  part : DocumentInfo
+  review : ReviewState
+}
+pub impl @json.FromJson for PartDocuments
 
 #derive(Eq)
 pub(all) struct PartSource {
@@ -901,6 +932,33 @@ pub(all) struct RangeFacet {
 }
 pub impl @json.FromJson for RangeFacet
 
+#derive(Eq, @debug.Debug)
+pub(all) enum ReviewState {
+  Reviewed
+  Partly
+  Unreviewed
+}
+pub fn ReviewState::all() -> Array[Self]
+pub fn ReviewState::wire(Self) -> String
+pub impl @json.FromJson for ReviewState
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ReviewStatus {
+  Reviewed
+}
+pub fn ReviewStatus::all() -> Array[Self]
+pub fn ReviewStatus::wire(Self) -> String
+pub impl @json.FromJson for ReviewStatus
+
+#derive(Eq)
+pub(all) struct ReviewSummary {
+  device : Bool
+  package_ : Bool
+  part : Bool
+  state : ReviewState
+}
+pub impl @json.FromJson for ReviewSummary
+
 #derive(Eq)
 pub(all) struct RevisionDetection {
   mask : String?
@@ -929,6 +987,12 @@ pub fn RuleKind::all() -> Array[Self]
 pub fn RuleKind::wire(Self) -> String
 pub impl @json.FromJson for RuleKind
 
+#derive(Eq)
+pub(all) struct ServerConfig {
+  source_documents : Bool
+}
+pub impl @json.FromJson for ServerConfig
+
 #derive(Eq, @debug.Debug)
 pub(all) enum Severity {
   Info
@@ -947,8 +1011,10 @@ pub(all) struct Source {
   kind : Kind
   publisher : String
   retrieved : String?
+  review : DocumentReview?
   revision : String
   schema_version : String
+  sha256 : String?
   url : String
 }
 pub impl @json.FromJson for Source

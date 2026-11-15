@@ -324,6 +324,7 @@ pub(all) struct CatalogFacets {
   parameters : Array[ParameterFacet]
   pins : Array[FacetValue]
   pitch : Array[FacetValue]
+  review : Array[FacetValue]
   size : Array[FacetValue]
 }
 
@@ -346,6 +347,7 @@ pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
     parameters: field(obj, "parameters", path),
     pins: field(obj, "pins", path),
     pitch: field(obj, "pitch", path),
+    review: field(obj, "review", path),
     size: field(obj, "size", path),
   }
 }
@@ -372,6 +374,7 @@ pub(all) struct CatalogItem {
   package_family : PackageFamily?
   parameters : Map[String, CatalogParameter]
   pitch : Double?
+  review : ReviewSummary
   size_code : String?
   size_code_metric : String?
 }
@@ -398,6 +401,7 @@ pub impl @json.FromJson for CatalogItem with fn from_json(json, path) {
     package_family: opt_field(obj, "package_family", path),
     parameters: field(obj, "parameters", path),
     pitch: opt_field(obj, "pitch", path),
+    review: field(obj, "review", path),
     size_code: opt_field(obj, "size_code", path),
     size_code_metric: opt_field(obj, "size_code_metric", path),
   }
@@ -851,6 +855,7 @@ pub(all) struct Device {
   parameters : Map[String, ParameterValue]?
   pins : Map[String, Pin]
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   revisions : Map[String, DeviceRevision]
   schema_version : String
 }
@@ -869,6 +874,7 @@ pub impl @json.FromJson for Device with fn from_json(json, path) {
     parameters: opt_field(obj, "parameters", path),
     pins: field(obj, "pins", path),
     provenance: field_or(obj, "provenance", path, {}),
+    review: opt_field(obj, "review", path),
     revisions: field_or(obj, "revisions", path, {}),
     schema_version: field(obj, "schema_version", path),
   }
@@ -957,6 +963,50 @@ pub impl @json.FromJson for Dimension with fn from_json(json, path) {
     min: opt_field(obj, "min", path),
     nominal: opt_field(obj, "nominal", path),
     unit: field(obj, "unit", path),
+  }
+}
+
+///|
+/// One data document.
+#derive(Eq)
+pub(all) struct DocumentInfo {
+  id : String
+  path : String?
+  review : DocumentReview?
+}
+
+///|
+pub impl @json.FromJson for DocumentInfo with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a DocumentInfo object"))
+  }
+  {
+    id: field(obj, "id", path),
+    path: opt_field(obj, "path", path),
+    review: opt_field(obj, "review", path),
+  }
+}
+
+///|
+/// A document's `review` block.
+#derive(Eq)
+pub(all) struct DocumentReview {
+  by : Array[String]
+  date : String?
+  pr : Int32?
+  status : ReviewStatus
+}
+
+///|
+pub impl @json.FromJson for DocumentReview with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a DocumentReview object"))
+  }
+  {
+    by: field_or(obj, "by", path, []),
+    date: opt_field(obj, "date", path),
+    pr: opt_field(obj, "pr", path),
+    status: field(obj, "status", path),
   }
 }
 
@@ -1676,6 +1726,7 @@ pub(all) struct Package {
   pads : Array[PackagePad]?
   pitch : Dimension
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   schema_version : String
   tab : PackageTab?
 }
@@ -1699,6 +1750,7 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     pads: opt_field(obj, "pads", path),
     pitch: field(obj, "pitch", path),
     provenance: field_or(obj, "provenance", path, {}),
+    review: opt_field(obj, "review", path),
     schema_version: field(obj, "schema_version", path),
     tab: opt_field(obj, "tab", path),
   }
@@ -2311,6 +2363,7 @@ pub(all) struct Part {
   package_ : String
   parameters : Map[String, ParameterValue]?
   provenance : Map[String, Array[ProvenanceEntry]]
+  review : DocumentReview?
   schema_version : String
   sources : Array[String]
 }
@@ -2331,6 +2384,7 @@ pub impl @json.FromJson for Part with fn from_json(json, path) {
     package_: field(obj, "package", path),
     parameters: opt_field(obj, "parameters", path),
     provenance: field_or(obj, "provenance", path, {}),
+    review: opt_field(obj, "review", path),
     schema_version: field(obj, "schema_version", path),
     sources: field_or(obj, "sources", path, []),
   }
@@ -2372,6 +2426,29 @@ pub impl @json.FromJson for PartBrief with fn from_json(json, path) {
     package_family: opt_field(obj, "package_family", path),
     parameters: field(obj, "parameters", path),
     size_code: opt_field(obj, "size_code", path),
+  }
+}
+
+///|
+/// `GET /v1/parts/{manufacturer}/{mpn}/documents`.
+#derive(Eq)
+pub(all) struct PartDocuments {
+  device : DocumentInfo
+  package_ : DocumentInfo
+  part : DocumentInfo
+  review : ReviewState
+}
+
+///|
+pub impl @json.FromJson for PartDocuments with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PartDocuments object"))
+  }
+  {
+    device: field(obj, "device", path),
+    package_: field(obj, "package", path),
+    part: field(obj, "part", path),
+    review: field(obj, "review", path),
   }
 }
 
@@ -2645,6 +2722,91 @@ pub impl @json.FromJson for RangeFacet with fn from_json(json, path) {
 }
 
 ///|
+#derive(Eq, Debug)
+pub(all) enum ReviewState {
+  Reviewed
+  Partly
+  Unreviewed
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ReviewState::wire(self : ReviewState) -> String {
+  match self {
+    Reviewed => "reviewed"
+    Partly => "partly"
+    Unreviewed => "unreviewed"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ReviewState::all() -> Array[ReviewState] {
+  [Reviewed, Partly, Unreviewed]
+}
+
+///|
+pub impl @json.FromJson for ReviewState with fn from_json(json, path) {
+  match json {
+    String("reviewed") => Reviewed
+    String("partly") => Partly
+    String("unreviewed") => Unreviewed
+    _ => raise @json.JsonDecodeError((path, "expected a ReviewState"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ReviewStatus {
+  Reviewed
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ReviewStatus::wire(self : ReviewStatus) -> String {
+  match self {
+    Reviewed => "reviewed"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ReviewStatus::all() -> Array[ReviewStatus] {
+  [Reviewed]
+}
+
+///|
+pub impl @json.FromJson for ReviewStatus with fn from_json(json, path) {
+  match json {
+    String("reviewed") => Reviewed
+    _ => raise @json.JsonDecodeError((path, "expected a ReviewStatus"))
+  }
+}
+
+///|
+/// A catalog row's review status.
+#derive(Eq)
+pub(all) struct ReviewSummary {
+  device : Bool
+  package_ : Bool
+  part : Bool
+  state : ReviewState
+}
+
+///|
+pub impl @json.FromJson for ReviewSummary with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ReviewSummary object"))
+  }
+  {
+    device: field(obj, "device", path),
+    package_: field(obj, "package", path),
+    part: field(obj, "part", path),
+    state: field(obj, "state", path),
+  }
+}
+
+///|
 /// Canonical Data Specification section 18.
 #derive(Eq)
 pub(all) struct RevisionDetection {
@@ -2726,6 +2888,21 @@ pub impl @json.FromJson for RuleKind with fn from_json(json, path) {
 }
 
 ///|
+/// What the site may use on this server.
+#derive(Eq)
+pub(all) struct ServerConfig {
+  source_documents : Bool
+}
+
+///|
+pub impl @json.FromJson for ServerConfig with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ServerConfig object"))
+  }
+  { source_documents: field(obj, "source_documents", path), }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum Severity {
   Info
@@ -2766,8 +2943,10 @@ pub(all) struct Source {
   kind : Kind
   publisher : String
   retrieved : String?
+  review : DocumentReview?
   revision : String
   schema_version : String
+  sha256 : String?
   url : String
 }
 
@@ -2784,8 +2963,10 @@ pub impl @json.FromJson for Source with fn from_json(json, path) {
     kind: field(obj, "kind", path),
     publisher: field(obj, "publisher", path),
     retrieved: opt_field(obj, "retrieved", path),
+    review: opt_field(obj, "review", path),
     revision: field(obj, "revision", path),
     schema_version: field(obj, "schema_version", path),
+    sha256: opt_field(obj, "sha256", path),
     url: field(obj, "url", path),
   }
 }

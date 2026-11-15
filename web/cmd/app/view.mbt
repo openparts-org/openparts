@@ -217,6 +217,14 @@ fn contributing_view(lang : Lang) -> Html {
         text(c.contrib_report_after),
       ]),
     ]),
+    section(class="section", [
+      h2(c.contrib_review_heading),
+      p(class="text-muted", [
+        text(c.contrib_review_body),
+        ext_link(contributing_url(), c.contrib_review_link),
+        text(c.contrib_review_after),
+      ]),
+    ]),
     section(class="section", [h2(c.contrib_pr_heading), ol(steps)]),
     section(class="section", [
       h2(c.contrib_specs_heading),
@@ -293,20 +301,6 @@ fn format_dimension(d : @api.Dimension?) -> String {
     (None, None, Some(hi)) => "≤\{format_number(hi)} \{u}"
     _ => "-"
   }
-}
-
-///|
-fn report_issue_url(part : @api.Part, device_id : String) -> String {
-  let title = "Data issue: \{part.manufacturer}/\{part.mpn}"
-  let body = [
-    "**Part**: \{part.manufacturer}/\{part.mpn}",
-    "**Device**: \{device_id}",
-    "**Page**: \{current_href()}",
-    "",
-    "Describe the problem (e.g. incorrect pin number, name, or type):",
-    "",
-  ]
-  "https://github.com/openparts-org/openparts-data/issues/new?title=\{encode_uri_component(title)}&body=\{encode_uri_component(body.join("\n"))}"
 }
 
 ///|
@@ -414,7 +408,16 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     let alt = pin.alternate_functions.join(", ")
     tr([
       td(n),
-      td(pin.name),
+      td([
+        cited_value(
+          lang,
+          data,
+          "device",
+          ["/pins/\{n}/name", "/pins/\{n}", "/pins"],
+          "\{c.pin_number} \{n}",
+          pin.name,
+        ),
+      ]),
       td(pin.type_.wire()),
       td(if alt.is_empty() { "-" } else { alt }),
     ])
@@ -424,6 +427,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     div(class="result-badges", [
       existence_badge(part.existence.status),
       lifecycle_badge(part.lifecycle.status),
+      review_badge(lang, data.documents),
     ]),
     section(class="section", downloads),
     section(class="section", [h3(c.preview3d), ..viewer]),
@@ -437,11 +441,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     section(class="section", [
       div(class="pin-table-header", [
         h3(pins_heading(lang, device.id)),
-        ext_link(
-          report_issue_url(part, device.id),
-          c.report_issue,
-          class="button",
-        ),
+        ext_link(report_error_url(data), c.report_issue, class="button"),
       ]),
       details(class="pin-table-details", [
         summary(pins_show(lang, numbers.length())),
@@ -465,19 +465,42 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
   let pkg = data.package_
   let dims = pkg.dimensions
   let rows = [
-    (c.family, pkg.family.wire()),
-    (c.lead_count, pkg.lead_count.to_string()),
-    (c.pitch, format_dimension(Some(pkg.pitch))),
-    (c.body_width, format_dimension(Some(dims.body_width))),
-    (c.body_length, format_dimension(Some(dims.body_length))),
-    (c.body_height, format_dimension(dims.body_height)),
+    (c.family, pkg.family.wire(), "/family"),
+    (c.lead_count, pkg.lead_count.to_string(), "/lead_count"),
+    (c.pitch, format_dimension(Some(pkg.pitch)), "/pitch"),
+    (
+      c.body_width,
+      format_dimension(Some(dims.body_width)),
+      "/dimensions/body_width",
+    ),
+    (
+      c.body_length,
+      format_dimension(Some(dims.body_length)),
+      "/dimensions/body_length",
+    ),
+    (
+      c.body_height,
+      format_dimension(dims.body_height),
+      "/dimensions/body_height",
+    ),
   ]
   sections.push(
     section(class="section", [
       h3(package_heading(lang, pkg.id)),
-      table([tbody(rows.map(r => tr([th(r.0), td(r.1)])))]),
+      table(class="cited-table", [
+        tbody(
+          rows.map(r => {
+            tr([
+              th(r.0),
+              td([cited_value(lang, data, "package", [r.2], r.0, r.1)]),
+              td([cited_where(lang, data, "package", [r.2])]),
+            ])
+          }),
+        ),
+      ]),
     ]),
   )
+  sections.push(review_section(lang, data))
   sections.push(alternatives_section(model, emit))
   sections.push(
     section(class="section", [

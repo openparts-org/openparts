@@ -51,6 +51,10 @@ struct Copy {
   contrib_report_link : String
   contrib_report_after : String
   contrib_pr_heading : String
+  contrib_review_heading : String
+  contrib_review_body : String
+  contrib_review_link : String
+  contrib_review_after : String
   // [before, link 1, after, link 2, after 2] per step; "" = absent
   contrib_steps : Array[Array[String]]
   contrib_specs_heading : String
@@ -131,7 +135,11 @@ let ja : Copy = {
   contrib_report_heading: "個別データの問題を報告する",
   contrib_report_before: "自分で直す時間が無い場合は、まず",
   contrib_report_link: "部品を探し",
-  contrib_report_after: "、詳細ページのピン表にある「このデータの問題を報告」リンクから openparts-data へIssueを作成してください。対象の部品・デバイスIDが自動的に入力されます。",
+  contrib_report_after: "、詳細ページの「誤りを報告」ボタンから openparts-data へIssueを作成してください。部品ID・ページURL・データファイルと記入欄が自動的に入力されます。",
+  contrib_review_heading: "データをレビューする",
+  contrib_review_body: "部品データの多くはAIエージェントがデータシートから抽出した候補で、部品ページに「AI候補 — 要レビュー」と表示されます。値のリンクから出典のページを開いて照合し、部品ページの「GitHubで編集」からYAMLを直すか、正しければ review ブロックを追加してPull Requestを送ってください。PRには変更した値と出典ページの一覧が自動でコメントされます。手順は ",
+  contrib_review_link: "CONTRIBUTING.md",
+  contrib_review_after: " にあります。",
   contrib_pr_heading: "新規部品を追加する / 既存データを修正する(Pull Request)",
   contrib_steps: [
     [
@@ -227,7 +235,11 @@ let en : Copy = {
   contrib_report_heading: "Report a problem with existing data",
   contrib_report_before: "If you don't have time to fix it yourself, ",
   contrib_report_link: "search for the part",
-  contrib_report_after: ", then use the \"Report a problem with this data\" link on its pin table to open an Issue against openparts-data -- the part and device IDs are pre-filled.",
+  contrib_report_after: ", then use the \"Report an error\" button on its page to open an Issue against openparts-data -- the part id, the page URL, the data files and the fields to fill in are pre-filled.",
+  contrib_review_heading: "Review data",
+  contrib_review_body: "Most part data are candidates AI agents extracted from datasheets; their part pages say \"AI candidate -- needs review\". Open each value's source page from its link and compare. Then use \"Edit on GitHub\" on the part page to fix the YAML, or, if it is right, add a review block, and open a pull request. The pull request gets a comment listing every changed value with its source page. The steps are in ",
+  contrib_review_link: "CONTRIBUTING.md",
+  contrib_review_after: ".",
   contrib_pr_heading: "Add a new part / fix existing data (Pull Request)",
   contrib_steps: [
     [
@@ -498,6 +510,7 @@ struct CatalogCopy {
   f_mounting : String
   f_lifecycle : String
   f_existence : String
+  f_review : String
   f_width : String
   f_length : String
   f_height : String
@@ -549,6 +562,7 @@ let catalog_ja : CatalogCopy = {
   f_mounting: "実装方式",
   f_lifecycle: "ライフサイクル",
   f_existence: "実在確認",
+  f_review: "レビュー",
   f_width: "本体幅 W (mm)",
   f_length: "本体長 L (mm)",
   f_height: "本体高さ H (mm)",
@@ -598,6 +612,7 @@ let catalog_en : CatalogCopy = {
   f_mounting: "Mounting",
   f_lifecycle: "Lifecycle",
   f_existence: "Existence",
+  f_review: "Review",
   f_width: "Body width W (mm)",
   f_length: "Body length L (mm)",
   f_height: "Body height H (mm)",

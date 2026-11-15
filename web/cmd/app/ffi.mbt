@@ -21,6 +21,11 @@ extern "js" fn current_href() -> String =
   #|() => window.location.href
 
 ///|
+/// The datasheet panel's strings (JSON; src/datasheet.js).
+extern "js" fn datasheet_set_labels(json : String) -> Unit =
+  #|(j) => globalThis.openpartsDatasheet?.setLabels(j)
+
+///|
 extern "js" fn encode_uri_component(s : String) -> String =
   #|(s) => encodeURIComponent(s)
 
