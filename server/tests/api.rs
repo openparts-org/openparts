@@ -521,3 +521,46 @@ async fn footprint_svg_preview_shows_every_pad() {
     assert_eq!(svg.matches("<text").count(), 57 + 1);
     assert!(svg.contains(">1</text>") && svg.contains(">56</text>") && svg.contains(">EP</text>"));
 }
+
+async fn search_mpns(q: &str) -> Vec<(String, String)> {
+    let uri = format!(
+        "/v1/search?q={}",
+        q.bytes().map(|b| format!("%{b:02X}")).collect::<String>()
+    );
+    let response = app()
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    body.as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            (
+                p["mpn"].as_str().unwrap().to_string(),
+                p["category"].as_str().unwrap_or("").to_string(),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn search_normalises_and_ranks_the_exact_mpn_first() {
+    for q in ["RP2040", "ＲＰ２０４０", "rp-2040", "rp 2040"] {
+        let hits = search_mpns(q).await;
+        assert_eq!(hits[0].0, "RP2040", "query {q:?}");
+    }
+}
+
+#[tokio::test]
+async fn search_matches_package_and_japanese_category() {
+    let hits = search_mpns("0603 コンデンサ").await;
+    assert!(!hits.is_empty());
+    assert!(hits.iter().all(|(_, c)| c == "capacitor"));
+    let hits = search_mpns("qfn56").await;
+    assert!(hits.iter().any(|(m, _)| m == "RP2040"));
+    // `ldo` must not match inside a package id such as `AXIAL-DO41`.
+    let hits = search_mpns("ldo").await;
+    assert!(hits.iter().all(|(_, c)| c != "diode"));
+}

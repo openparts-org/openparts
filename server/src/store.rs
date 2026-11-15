@@ -11,6 +11,8 @@ pub struct Store {
     /// Prebuilt artifacts (`OPENPARTS_ARTIFACT_DIR`), served in place of
     /// generating them per request.
     pub bundle: Option<crate::bundle::Bundle>,
+    /// `GET /v1/search`'s index over `dataset.parts`.
+    pub search: crate::search::SearchIndex,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -43,6 +45,7 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
         "loaded openparts-data"
     );
     Ok(Store {
+        search: crate::search::SearchIndex::build(&dataset),
         dataset,
         bundle: None,
     })

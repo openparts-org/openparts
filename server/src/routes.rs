@@ -91,16 +91,25 @@ async fn search(
     State(store): State<Arc<Store>>,
     Query(params): Query<SearchQuery>,
 ) -> Json<Vec<PartSummary>> {
-    let needle = params.q.unwrap_or_default().to_lowercase();
     let ds = &store.dataset;
-    let mut results: Vec<PartSummary> = ds
-        .parts
-        .iter()
-        .filter(|p| {
-            needle.is_empty()
-                || p.mpn.to_lowercase().contains(&needle)
-                || p.manufacturer.0.to_lowercase().contains(&needle)
-        })
+    let query = params.q.unwrap_or_default();
+    let mut hits = store.search.search(&query);
+    if query.trim().is_empty() {
+        hits.sort_by(|a, b| {
+            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
+            (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn))
+        });
+    } else {
+        // Best score first; ties by name, so results are stable.
+        hits.sort_by(|a, b| {
+            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
+            b.1.cmp(&a.1)
+                .then_with(|| (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn)))
+        });
+    }
+    let results: Vec<PartSummary> = hits
+        .into_iter()
+        .map(|(i, _)| &ds.parts[i])
         .map(|p| PartSummary {
             manufacturer: p.manufacturer.0.clone(),
             mpn: p.mpn.clone(),
@@ -113,7 +122,6 @@ async fn search(
             Some(wanted) => p.category == Some(wanted),
         })
         .collect();
-    results.sort_by(|a, b| (&a.manufacturer, &a.mpn).cmp(&(&b.manufacturer, &b.mpn)));
     Json(results)
 }
 
