@@ -24,13 +24,13 @@ impl P {
     fn add(self, o: P, k: f64) -> P {
         P::new(self.x + o.x * k, self.y + o.y * k)
     }
-    fn sub(self, o: P) -> P {
+    pub fn minus(self, o: P) -> P {
         P::new(self.x - o.x, self.y - o.y)
     }
     fn dot(self, o: P) -> f64 {
         self.x * o.x + self.y * o.y
     }
-    fn len(self) -> f64 {
+    pub fn len(self) -> f64 {
         self.dot(self).sqrt()
     }
 }
@@ -157,7 +157,7 @@ impl Ink {
         let sw = self.font * 0.08;
         let arrow = self.font * 0.7;
         for (f, p) in [(f[0], l[0]), (f[1], l[1])] {
-            let e = p.sub(f);
+            let e = p.minus(f);
             let len = e.len();
             if len > 1e-6 {
                 let u = P::new(e.x / len, e.y / len);
@@ -168,7 +168,7 @@ impl Ink {
                 );
             }
         }
-        let d = l[1].sub(l[0]);
+        let d = l[1].minus(l[0]);
         let len = d.len();
         if len < 1e-9 {
             return;
@@ -340,15 +340,15 @@ pub fn drawing(fp: &PcbFootprint, labels: &Labels) -> Drawing {
         let same = |a: &Pad, b: &Pad| (a.w - b.w).abs() < 1e-6 && (a.h - b.h).abs() < 1e-6;
         let neighbour = pads
             .iter()
-            .filter(|p| same(p, p1) && p.c.sub(p1.c).len() > 1e-6)
-            .min_by(|a, b| a.c.sub(p1.c).len().total_cmp(&b.c.sub(p1.c).len()));
+            .filter(|p| same(p, p1) && p.c.minus(p1.c).len() > 1e-6)
+            .min_by(|a, b| a.c.minus(p1.c).len().total_cmp(&b.c.minus(p1.c).len()));
         if let Some(p2) = neighbour {
-            let v = p2.c.sub(p1.c);
+            let v = p2.c.minus(p1.c);
             let pitch = v.len();
             let d = P::new(v.x / pitch, v.y / pitch);
             let mut n = P::new(-d.y, d.x);
             let centre = P::new((base.x0 + base.x1) * 0.5, (base.y0 + base.y1) * 0.5);
-            let r = n.dot(p1.c.sub(centre));
+            let r = n.dot(p1.c.minus(centre));
             if r < -1e-6 || (r.abs() <= 1e-6 && n.y > 0.0) {
                 n = P::new(-n.x, -n.y);
             }
@@ -462,7 +462,7 @@ pub fn pick(snaps: &[FpSnap], at: P, radius: f64) -> Option<FpSnap> {
     snaps
         .iter()
         .filter_map(|s| {
-            let d = s.at.sub(at).len();
+            let d = s.at.minus(at).len();
             let bonus = if s.kind == SnapKind::PadCenter {
                 radius * 0.3
             } else {
@@ -474,50 +474,97 @@ pub fn pick(snaps: &[FpSnap], at: P, radius: f64) -> Option<FpSnap> {
         .map(|(_, s)| s)
 }
 
-/// The measure overlay between `a` and `b` (either may be pending):
-/// the line, the end points and the distance label.
-pub fn measure_svg(a: Option<P>, b: Option<P>, hover: Option<P>, font: f64, text: &str) -> String {
-    const C: &str = "#ffb02e";
+/// What the footprint's measure overlay shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeasureDraw {
+    /// The first point.
+    pub a: Option<P>,
+    /// The second, held to `axis` when it has one...
+    pub end: Option<P>,
+    /// ...projected from this (the snapped point).
+    pub from: Option<P>,
+    /// 0 X, 1 Y.
+    pub axis: Option<usize>,
+    pub hover: Option<P>,
+    pub view: [f64; 4],
+    pub font: f64,
+    pub text: String,
+}
+
+/// The measure overlay: the snap ring, the end points, the distance in
+/// the axis colour with a dashed guide along the axis, a dashed tie to
+/// the snapped point, and the distance label.
+pub fn measure_svg(m: &MeasureDraw) -> String {
+    const FREE: &str = "#ff8a3d";
+    let font = m.font;
+    let color = m.axis.map(|i| crate::measure::AXIS_CSS[i]).unwrap_or(FREE);
     let mut s = String::new();
-    let dot = |p: P, s: &mut String| {
+    if let Some(h) = m.hover {
         s.push_str(&format!(
-            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"{C}\"/>\n",
-            p.x,
-            p.y,
-            font * 0.25
-        ))
-    };
-    if let Some(h) = hover {
-        s.push_str(&format!(
-            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"none\" stroke=\"{C}\" stroke-width=\"{:.3}\"/>\n",
+            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"none\" stroke=\"{FREE}\" stroke-width=\"{:.3}\"/>\n",
             h.x,
             h.y,
             font * 0.45,
             font * 0.08
         ));
     }
-    if let Some(a) = a {
-        dot(a, &mut s);
-        if let Some(b) = b {
-            dot(b, &mut s);
+    let Some(a) = m.a else { return s };
+    let [vx, vy, vw, vh] = m.view;
+    if let (Some(i), Some(_)) = (m.axis, m.end) {
+        let (x1, y1, x2, y2) = if i == 0 {
+            (vx, a.y, vx + vw, a.y)
+        } else {
+            (a.x, vy, a.x, vy + vh)
+        };
+        s.push_str(&format!(
+            "<line x1=\"{x1:.3}\" y1=\"{y1:.3}\" x2=\"{x2:.3}\" y2=\"{y2:.3}\" stroke=\"{color}\" \
+             stroke-width=\"{:.3}\" stroke-dasharray=\"{:.3} {:.3}\" opacity=\"0.7\"/>\n",
+            font * 0.05,
+            font * 0.4,
+            font * 0.3
+        ));
+    }
+    let dot = |p: P, s: &mut String| {
+        s.push_str(&format!(
+            "<circle cx=\"{:.3}\" cy=\"{:.3}\" r=\"{:.3}\" fill=\"{color}\"/>\n",
+            p.x,
+            p.y,
+            font * 0.25
+        ))
+    };
+    dot(a, &mut s);
+    if let Some(b) = m.end {
+        if let Some(f) = m.from.filter(|f| f.minus(b).len() > font * 0.05) {
             s.push_str(&format!(
-                "<line x1=\"{:.3}\" y1=\"{:.3}\" x2=\"{:.3}\" y2=\"{:.3}\" stroke=\"{C}\" stroke-width=\"{:.3}\"/>\n",
-                a.x,
-                a.y,
+                "<line x1=\"{:.3}\" y1=\"{:.3}\" x2=\"{:.3}\" y2=\"{:.3}\" stroke=\"#cfd4da\" \
+                 stroke-width=\"{:.3}\" stroke-dasharray=\"{:.3} {:.3}\"/>\n",
                 b.x,
                 b.y,
-                font * 0.1
-            ));
-            s.push_str(&format!(
-                "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" text-anchor=\"middle\" fill=\"{C}\" \
-                 stroke=\"#0b1a12\" stroke-width=\"{:.3}\" style=\"paint-order: stroke\">{}</text>\n",
-                (a.x + b.x) * 0.5,
-                (a.y + b.y) * 0.5 - font * 0.6,
-                font,
+                f.x,
+                f.y,
+                font * 0.05,
                 font * 0.25,
-                esc(text)
+                font * 0.2
             ));
         }
+        dot(b, &mut s);
+        s.push_str(&format!(
+            "<line x1=\"{:.3}\" y1=\"{:.3}\" x2=\"{:.3}\" y2=\"{:.3}\" stroke=\"{color}\" stroke-width=\"{:.3}\"/>\n",
+            a.x,
+            a.y,
+            b.x,
+            b.y,
+            font * 0.12
+        ));
+        s.push_str(&format!(
+            "<text x=\"{:.3}\" y=\"{:.3}\" font-size=\"{:.3}\" text-anchor=\"middle\" fill=\"{color}\" \
+             stroke=\"#0b1a12\" stroke-width=\"{:.3}\" style=\"paint-order: stroke\" font-weight=\"700\">{}</text>\n",
+            (a.x + b.x) * 0.5,
+            (a.y + b.y) * 0.5 - font * 0.6,
+            font,
+            font * 0.25,
+            esc(&m.text)
+        ));
     }
     s
 }

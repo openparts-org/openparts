@@ -1,5 +1,6 @@
-//! The wgpu renderer: the shaded model, the board-plane grid (depth
-//! tested) and the overlay lines (dimensions, measurement: always on
+//! The wgpu renderer: the shaded model, then line layers (`Layer`): the
+//! board-plane grid and the dimensions depth tested, a faint always-on-top
+//! ghost of the dimensions, and the measurement always on
 //! top). Lines are screen-space quads so they keep a pixel width.
 
 use crate::mesh::Mesh;
@@ -81,7 +82,8 @@ fn vs_line(@location(0) a: vec3<f32>, @location(1) b: vec3<f32>,
     let w = params.z * 0.5;
     let off = nrm * params.x * w + dir * (params.y * 2.0 - 1.0) * w;
     var o: LineOut;
-    o.clip = vec4<f32>(p.xy + off / half_vp * p.w, p.z, p.w);
+    // A nudge toward the viewer, so lines on a face aren't lost in it.
+    o.clip = vec4<f32>(p.xy + off / half_vp * p.w, p.z - 0.0004 * p.w, p.w);
     o.color = color;
     return o;
 }
@@ -115,6 +117,19 @@ struct LineVertex {
     b: [f32; 3],
     params: [f32; 3],
     color: [f32; 4],
+}
+
+/// The line layers, drawn in this order after the model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layer {
+    /// Depth tested: the board-plane grid.
+    Grid = 0,
+    /// Always on top, faint: dimensions where the model hides them.
+    Ghost = 1,
+    /// Depth tested: the dimensions.
+    Dims = 2,
+    /// Always on top: the measurement and its guides.
+    Overlay = 3,
 }
 
 /// A line segment to draw: ends, linear RGBA colour, width in CSS px.
@@ -161,8 +176,7 @@ pub struct Gpu {
     uniforms: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     mesh: Option<(wgpu::Buffer, u32)>,
-    grid: Option<(wgpu::Buffer, u32)>,
-    overlay: Option<(wgpu::Buffer, u32)>,
+    layers: [Option<(wgpu::Buffer, u32)>; 4],
     targets: Option<(wgpu::TextureView, wgpu::TextureView)>,
 }
 
@@ -374,8 +388,7 @@ impl Gpu {
             uniforms,
             bind_group,
             mesh: None,
-            grid: None,
-            overlay: None,
+            layers: Default::default(),
             targets: None,
         }
     }
@@ -391,14 +404,9 @@ impl Gpu {
         self.mesh = self.buffer(bytemuck::cast_slice(&v), v.len());
     }
 
-    pub fn set_grid(&mut self, lines: &[Line], dpr: f32) {
+    pub fn set_lines(&mut self, layer: Layer, lines: &[Line], dpr: f32) {
         let v = line_vertices(lines, dpr);
-        self.grid = self.buffer(bytemuck::cast_slice(&v), v.len());
-    }
-
-    pub fn set_overlay(&mut self, lines: &[Line], dpr: f32) {
-        let v = line_vertices(lines, dpr);
-        self.overlay = self.buffer(bytemuck::cast_slice(&v), v.len());
+        self.layers[layer as usize] = self.buffer(bytemuck::cast_slice(&v), v.len());
     }
 
     fn buffer(&self, bytes: &[u8], count: usize) -> Option<(wgpu::Buffer, u32)> {
@@ -516,8 +524,13 @@ impl Gpu {
             pass.set_bind_group(0, &self.bind_group, &[]);
             for (pipeline, buffer) in [
                 (&self.mesh_pipeline, &self.mesh),
-                (&self.grid_pipeline, &self.grid),
-                (&self.overlay_pipeline, &self.overlay),
+                (&self.grid_pipeline, &self.layers[Layer::Grid as usize]),
+                (&self.overlay_pipeline, &self.layers[Layer::Ghost as usize]),
+                (&self.grid_pipeline, &self.layers[Layer::Dims as usize]),
+                (
+                    &self.overlay_pipeline,
+                    &self.layers[Layer::Overlay as usize],
+                ),
             ] {
                 if let Some((b, n)) = buffer {
                     pass.set_pipeline(pipeline);

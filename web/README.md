@@ -32,7 +32,9 @@ The OpenParts web site: a single-page app written in
 Needs `moon`, `bun` (or npm), and for the viewer Rust with the
 `wasm32-unknown-unknown` target and `wasm-bindgen-cli` at exactly the
 `wasm-bindgen` version in `Cargo.lock`
-(`scripts/build-wasm.sh --bindgen-version` prints it).
+(`scripts/build-wasm.sh --bindgen-version` prints it). When the default
+rustup toolchain lacks wasm32 (e.g. a nightly default), the script uses
+`stable`'s if that has it; `RUSTUP_TOOLCHAIN` overrides.
 
 ```sh
 rustup target add wasm32-unknown-unknown

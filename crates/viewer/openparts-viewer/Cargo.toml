@@ -34,7 +34,7 @@ web-sys = { version = "0.3", features = [
   "RequestInit", "Headers", "AddEventListenerOptions", "ResizeObserver",
   "ResizeObserverEntry", "SvgElement", "SvgGraphicsElement", "SvgMatrix",
   "SvgPoint", "SvgsvgElement", "DomPoint", "DomPointReadOnly", "DomMatrix", "DomMatrixReadOnly",
-  "console", "DomTokenList",
+  "console", "DomTokenList", "Performance",
 ] }
 
 [dev-dependencies]

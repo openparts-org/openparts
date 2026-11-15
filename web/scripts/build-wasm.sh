@@ -22,6 +22,13 @@ if [ "$HAVE" != "$VERSION" ]; then
   exit 1
 fi
 TARGET_DIR="${CARGO_TARGET_DIR:-$REPO/target}"
+# The default toolchain may lack wasm32 (a pinned or nightly default);
+# use stable's when it has it and the caller didn't pick one.
+if [ -z "${RUSTUP_TOOLCHAIN:-}" ] && command -v rustup >/dev/null \
+  && ! rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown \
+  && rustup +stable target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown; then
+  export RUSTUP_TOOLCHAIN=stable
+fi
 cargo build --release --target wasm32-unknown-unknown \
   --manifest-path "$REPO/Cargo.toml" -p openparts-viewer
 rm -rf "$WEB/src/viewer-pkg"

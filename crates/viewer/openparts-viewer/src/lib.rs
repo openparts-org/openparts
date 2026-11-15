@@ -6,8 +6,12 @@
 //! - datasheet dimensions (`dims`): dimension lines on the model, anchored
 //!   on the same Mechanical Geometry the model was generated from, their
 //!   labels HTML over the canvas, each showing its provenance on click;
-//! - a measure tool (`snap`): two clicked points' distance and ΔX/ΔY/ΔZ,
-//!   snapping to vertices, edge midpoints and pad centres;
+//! - a measure tool (`snap`, `measure`): two clicked points' distance and
+//!   ΔX/ΔY/ΔZ, snapping to vertices, edge midpoints and pad centres, the
+//!   second point held to the X/Y/Z axis when near one;
+//! - CAD navigation (`camera`, `gizmo`): orbit about the point under the
+//!   cursor, zoom toward it, standard views, fit, perspective or
+//!   orthographic, and a navigation gizmo;
 //! - the footprint (`footprint`): openparts-pcbcad's SVG with pad size,
 //!   pitch, pad span and courtyard dimensions, and the measure tool.
 //!
@@ -18,7 +22,9 @@ pub mod camera;
 pub mod dims;
 pub mod footprint;
 pub mod format;
+pub mod gizmo;
 pub mod labels;
+pub mod measure;
 pub mod mesh;
 pub mod snap;
 

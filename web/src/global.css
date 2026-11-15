@@ -153,7 +153,7 @@ td {
 .model-viewer-canvas {
   position: relative;
   width: 100%;
-  height: 420px;
+  height: 460px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-bg);
@@ -232,6 +232,31 @@ td {
 }
 .opv-snap {
   border: 2px solid #e8590c;
+  background: rgba(232, 89, 12, 0.15);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+/* The snap target's kind by shape: vertex square, edge midpoint
+   diamond, pad centre ring with a dot, surface small. */
+.opv-snap-vertex {
+  border-radius: 1px;
+}
+.opv-snap-edge {
+  border-radius: 1px;
+  rotate: 45deg;
+}
+.opv-snap-edge::after {
+  rotate: -45deg;
+}
+.opv-snap-pad {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  background: radial-gradient(circle, #e8590c 0 2px, rgba(232, 89, 12, 0.12) 3px);
+}
+.opv-snap-surface {
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
 }
 .opv-snap::after {
   content: attr(data-kind);
@@ -241,6 +266,82 @@ td {
   font-size: 11px;
   color: #e8590c;
   white-space: nowrap;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
+}
+.opv-pivot {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: #2456e0;
+  box-shadow: 0 0 0 3px rgba(36, 86, 224, 0.25);
+}
+.opv-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  stroke: #6f8fd0;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.opv-dim-crowded {
+  opacity: 0.55;
+}
+.opv-nav {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.opv-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+.opv-gizmo {
+  display: block;
+  width: 96px;
+  height: 96px;
+  overflow: visible;
+  cursor: grab;
+  touch-action: none;
+  font-family: inherit;
+}
+.opv-gizmo-bg {
+  fill: rgba(240, 242, 246, 0.6);
+  stroke: rgba(120, 128, 140, 0.35);
+  stroke-width: 1;
+}
+.opv-gizmo:hover .opv-gizmo-bg {
+  fill: rgba(228, 232, 240, 0.85);
+}
+.opv-gizmo-ball {
+  cursor: pointer;
+}
+.opv-gizmo-ball:hover circle {
+  stroke: #1a1a1e;
+  stroke-width: 2;
+}
+.opv-coords {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--color-border);
+  pointer-events: none;
+}
+.opv-hint {
+  opacity: 0.75;
+  font-size: 12px;
 }
 .opv-point {
   background: #e8590c;
@@ -286,7 +387,7 @@ td {
   position: absolute;
   left: var(--space-2);
   bottom: var(--space-2);
-  max-width: calc(100% - 2 * var(--space-2));
+  max-width: calc(100% - 200px);
   font-size: 13px;
   padding: 3px 8px;
   border-radius: 6px;
@@ -295,15 +396,16 @@ td {
 }
 .opv-fp-readout {
   position: static;
+  max-width: none;
   display: inline-block;
   margin-top: var(--space-2);
 }
 .opv-popup {
   position: absolute;
-  top: var(--space-2);
+  top: 116px;
   right: var(--space-2);
   width: min(340px, calc(100% - 2 * var(--space-2)));
-  max-height: calc(100% - 2 * var(--space-2));
+  max-height: calc(100% - 124px);
   overflow: auto;
   box-sizing: border-box;
   padding: var(--space-2) var(--space-3);
