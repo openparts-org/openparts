@@ -1002,6 +1002,11 @@ test "decode CatalogResponse" {
     #|   "size_code": "0603",
     #|   "size_code_metric": "1608",
     #|   "mounting": "smd",
+    #|   "rows": null,
+    #|   "gender": null,
+    #|   "orientation": null,
+    #|   "shrouded": null,
+    #|   "exposed_pad": null,
     #|   "lifecycle": "unknown",
     #|   "existence": "verified",
     #|   "review": { "state": "unreviewed", "part": false, "device": false, "package": false },
@@ -1157,6 +1162,11 @@ test "decode CatalogResponse" {
     #|    "selected": false
     #|   }
     #|  ],
+    #|  "rows": [],
+    #|  "gender": [],
+    #|  "orientation": [],
+    #|  "shrouded": [],
+    #|  "exposed_pad": [],
     #|  "body_width": {
     #|   "min": 0.8,
     #|   "max": 0.8

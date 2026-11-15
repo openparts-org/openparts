@@ -2,7 +2,9 @@
 //! component catalog narrows parts: free text (through the
 //! [`SearchIndex`]) plus multi-select filters on category, manufacturer,
 //! package family, chip size code, pin count, pitch, mounting,
-//! lifecycle and existence, and min-max ranges on the body's width,
+//! lifecycle and existence, the package's structure (pin rows x pins
+//! per row, connector gender and orientation, shroud, exposed pad:
+//! `Package::structure`), and min-max ranges on the body's width,
 //! length and height.
 //!
 //! Electrical parameters (Canonical Data Specification section 11.1)
@@ -24,8 +26,8 @@
 use crate::search::{chip_codes, CHIP_SIZES};
 use openparts_core::{
     effective_parameters, parameter_spec, parse_value, ComponentCategory, Dimension,
-    ExistenceStatus, LifecycleStatus, Normalized, Package, PackageFamily, ParameterShape,
-    PARAMETERS,
+    ExistenceStatus, Gender, LifecycleStatus, Normalized, Orientation, Package, PackageFamily,
+    ParameterShape, PARAMETERS,
 };
 use openparts_data::Dataset;
 use serde::Serialize;
@@ -88,6 +90,16 @@ pub struct CatalogItem {
     /// The matching metric code, e.g. `1608`.
     pub size_code_metric: Option<String>,
     pub mounting: Option<Mounting>,
+    /// Pin rows x pins per row (`1x20`): headers, sockets, DIP, SIP.
+    pub rows: Option<String>,
+    /// Connectors: male (header, plug) or female (socket, receptacle).
+    pub gender: Option<Gender>,
+    /// Connectors: vertical or right angle.
+    pub orientation: Option<Orientation>,
+    /// Pin headers and sockets: a shroud (box header) or not.
+    pub shrouded: Option<bool>,
+    /// IC packages: an exposed (thermal) pad or not.
+    pub exposed_pad: Option<bool>,
     pub lifecycle: LifecycleStatus,
     pub existence: ExistenceStatus,
     /// Which of the part, its device and its package are reviewed.
@@ -198,6 +210,16 @@ pub struct CatalogFacets {
     pub existence: Vec<FacetValue>,
     /// `reviewed` (part, device and package), `partly`, `unreviewed`.
     pub review: Vec<FacetValue>,
+    /// Pin rows x pins per row (`1x20`), fewest rows then pins first.
+    pub rows: Vec<FacetValue>,
+    /// `male`, `female`.
+    pub gender: Vec<FacetValue>,
+    /// `vertical`, `right_angle`.
+    pub orientation: Vec<FacetValue>,
+    /// `yes`, `no`.
+    pub shrouded: Vec<FacetValue>,
+    /// `yes`, `no`.
+    pub exposed_pad: Vec<FacetValue>,
     pub body_width: RangeFacet,
     pub body_length: RangeFacet,
     pub body_height: RangeFacet,
@@ -232,9 +254,15 @@ enum Group {
     /// Whether the part, its device and its package are reviewed
     /// (`crate::documents::ReviewState`).
     Review,
+    /// The package's structure (`Package::structure`).
+    Rows,
+    Gender,
+    Orientation,
+    Shrouded,
+    ExposedPad,
 }
 
-const GROUP_COUNT: usize = 10;
+const GROUP_COUNT: usize = 15;
 
 const GROUPS: [Group; GROUP_COUNT] = [
     Group::Category,
@@ -247,6 +275,11 @@ const GROUPS: [Group; GROUP_COUNT] = [
     Group::Lifecycle,
     Group::Existence,
     Group::Review,
+    Group::Rows,
+    Group::Gender,
+    Group::Orientation,
+    Group::Shrouded,
+    Group::ExposedPad,
 ];
 
 impl Group {
@@ -263,6 +296,11 @@ impl Group {
             Group::Lifecycle => &["lifecycle"],
             Group::Existence => &["existence"],
             Group::Review => &["review"],
+            Group::Rows => &["rows", "layout"],
+            Group::Gender => &["gender"],
+            Group::Orientation => &["orientation"],
+            Group::Shrouded => &["shrouded"],
+            Group::ExposedPad => &["exposed_pad"],
         }
     }
 
@@ -285,6 +323,22 @@ impl Group {
             Group::Pins => v.parse::<u32>().ok()?.to_string(),
             Group::Pitch => fmt_mm(lower.trim_end_matches("mm").trim().parse::<f64>().ok()?),
             Group::Mounting if lower == "through_hole" => "tht".into(),
+            Group::Rows => rows_key(&lower)?,
+            Group::Gender => match lower.as_str() {
+                "male" | "plug" | "header" | "pin" | "オス" => "male".into(),
+                "female" | "socket" | "receptacle" | "メス" => "female".into(),
+                _ => lower,
+            },
+            Group::Orientation => match lower.replace(['-', ' '], "_").as_str() {
+                "vertical" | "straight" => "vertical".into(),
+                "right_angle" | "rightangle" | "horizontal" | "angled" => "right_angle".into(),
+                _ => lower,
+            },
+            Group::Shrouded | Group::ExposedPad => match lower.as_str() {
+                "yes" | "true" | "1" => "yes".into(),
+                "no" | "false" | "0" => "no".into(),
+                _ => lower,
+            },
             _ => lower,
         })
     }
@@ -592,6 +646,7 @@ impl CatalogIndex {
                     .entry(k.id.0.clone())
                     .or_insert_with(|| mounting(k))
             });
+            let structure = pkg.map(|k| k.structure()).unwrap_or_default();
             let no_params = Default::default();
             let device_params = device.map_or(&no_params, |d| &d.parameters);
             let mut params = BTreeMap::new();
@@ -652,6 +707,11 @@ impl CatalogIndex {
                 size_code: codes.first().map(|s| s.to_string()),
                 size_code_metric: codes.get(1).map(|s| s.trim_end_matches('m').to_string()),
                 mounting,
+                rows: structure.rows.map(|(r, n)| format!("{r}x{n}")),
+                gender: structure.gender,
+                orientation: structure.orientation,
+                shrouded: structure.shrouded,
+                exposed_pad: structure.exposed_pad,
                 lifecycle: p.lifecycle.status,
                 existence: p.existence.status,
                 review: crate::documents::ReviewSummary::of(p, device, pkg),
@@ -700,6 +760,33 @@ impl CatalogIndex {
                         };
                         Some((s.wire().to_string(), label.to_string(), s as u8 as f64))
                     }
+                    Group::Rows => structure.rows.map(|(r, n)| {
+                        (
+                            format!("{r}x{n}"),
+                            format!("{r}\u{d7}{n}"),
+                            f64::from(r) * 1000.0 + f64::from(n),
+                        )
+                    }),
+                    Group::Gender => structure.gender.map(|g| {
+                        let label = match g {
+                            Gender::Male => "Male (header, plug)",
+                            Gender::Female => "Female (socket, receptacle)",
+                        };
+                        (wire(&g), label.to_string(), g as u8 as f64)
+                    }),
+                    Group::Orientation => structure.orientation.map(|o| {
+                        let label = match o {
+                            Orientation::Vertical => "Vertical",
+                            Orientation::RightAngle => "Right angle",
+                        };
+                        (wire(&o), label.to_string(), o as u8 as f64)
+                    }),
+                    Group::Shrouded => structure
+                        .shrouded
+                        .map(|b| yes_no(b, "Shrouded", "Unshrouded")),
+                    Group::ExposedPad => structure
+                        .exposed_pad
+                        .map(|b| yes_no(b, "Exposed pad", "No exposed pad")),
                 };
                 if let Some((key, label, order)) = opt {
                     index.options[i]
@@ -1007,6 +1094,11 @@ impl CatalogIndex {
                 lifecycle: next(),
                 existence: next(),
                 review: next(),
+                rows: next(),
+                gender: next(),
+                orientation: next(),
+                shrouded: next(),
+                exposed_pad: next(),
                 body_width: range(),
                 body_length: range(),
                 body_height: range(),
@@ -1128,6 +1220,23 @@ fn stated(d: &Dimension) -> Option<f64> {
         (Some(min), Some(max)) => Some((min + max) / 2.0),
         (min, max) => min.or(max),
     })
+}
+
+/// `1x20` from `1x20`, `1×20`, `1*20` (rows x pins per row).
+pub(crate) fn rows_key(v: &str) -> Option<String> {
+    let v = v.replace(['\u{d7}', '*', 'X'], "x");
+    let (r, n) = v.split_once('x')?;
+    let (r, n) = (r.trim().parse::<u32>().ok()?, n.trim().parse::<u32>().ok()?);
+    (r > 0 && n > 0).then(|| format!("{r}x{n}"))
+}
+
+/// A yes/no facet option: (value, label, order).
+fn yes_no(b: bool, yes: &str, no: &str) -> (String, String, f64) {
+    if b {
+        ("yes".into(), yes.into(), 0.0)
+    } else {
+        ("no".into(), no.into(), 1.0)
+    }
 }
 
 /// mm with at most three decimals and no trailing zeros (`2.54`, `0.5`, `1`).

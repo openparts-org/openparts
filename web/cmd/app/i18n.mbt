@@ -438,6 +438,11 @@ struct CatalogCopy {
   f_lifecycle : String
   f_existence : String
   f_review : String
+  f_rows : String
+  f_gender : String
+  f_orientation : String
+  f_shrouded : String
+  f_exposed_pad : String
   f_width : String
   f_length : String
   f_height : String
@@ -489,6 +494,11 @@ let catalog_ja : CatalogCopy = {
   f_lifecycle: "ライフサイクル",
   f_existence: "実在確認",
   f_review: "レビュー",
+  f_rows: "列 × ピン数",
+  f_gender: "オス / メス",
+  f_orientation: "向き",
+  f_shrouded: "シュラウド",
+  f_exposed_pad: "露出パッド",
   f_width: "本体幅 W (mm)",
   f_length: "本体長 L (mm)",
   f_height: "本体高さ H (mm)",
@@ -538,6 +548,11 @@ let catalog_en : CatalogCopy = {
   f_lifecycle: "Lifecycle",
   f_existence: "Existence",
   f_review: "Review",
+  f_rows: "Rows × pins",
+  f_gender: "Gender",
+  f_orientation: "Orientation",
+  f_shrouded: "Shroud",
+  f_exposed_pad: "Exposed pad",
   f_width: "Body width W (mm)",
   f_length: "Body length L (mm)",
   f_height: "Body height H (mm)",
@@ -660,6 +675,31 @@ fn mounting_label(lang : Lang, value : String) -> String {
     (En, "mixed") => "SMD + THT"
     _ => value
   }
+}
+
+///|
+/// The package-structure facets' options (`rows` keeps the API label).
+fn structure_label(lang : Lang, key : String, value : String) -> String? {
+  let label = match (lang, key, value) {
+    (Ja, "gender", "male") => "オス"
+    (Ja, "gender", "female") => "メス"
+    (En, "gender", "male") => "Male"
+    (En, "gender", "female") => "Female"
+    (Ja, "orientation", "vertical") => "ストレート"
+    (Ja, "orientation", "right_angle") => "ライトアングル"
+    (En, "orientation", "vertical") => "Vertical"
+    (En, "orientation", "right_angle") => "Right angle"
+    (Ja, "shrouded", "yes") => "あり"
+    (Ja, "shrouded", "no") => "なし"
+    (En, "shrouded", "yes") => "Shrouded"
+    (En, "shrouded", "no") => "Unshrouded"
+    (Ja, "exposed_pad", "yes") => "あり"
+    (Ja, "exposed_pad", "no") => "なし"
+    (En, "exposed_pad", "yes") => "Yes"
+    (En, "exposed_pad", "no") => "No"
+    _ => return None
+  }
+  Some(label)
 }
 
 ///|

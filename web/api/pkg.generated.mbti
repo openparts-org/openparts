@@ -138,14 +138,19 @@ pub(all) struct CatalogFacets {
   category : Array[FacetValue]
   category_tree : Array[CategoryNode]
   existence : Array[FacetValue]
+  exposed_pad : Array[FacetValue]
+  gender : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
   mounting : Array[FacetValue]
+  orientation : Array[FacetValue]
   package_family : Array[FacetValue]
   parameters : Array[ParameterFacet]
   pins : Array[FacetValue]
   pitch : Array[FacetValue]
   review : Array[FacetValue]
+  rows : Array[FacetValue]
+  shrouded : Array[FacetValue]
   size : Array[FacetValue]
 }
 pub impl @json.FromJson for CatalogFacets
@@ -158,17 +163,22 @@ pub(all) struct CatalogItem {
   category : ComponentCategory?
   device : String
   existence : ExistenceStatus
+  exposed_pad : Bool?
+  gender : Gender?
   lead_count : Int32?
   lifecycle : LifecycleStatus
   manufacturer : String
   manufacturer_name : String
   mounting : Mounting?
   mpn : String
+  orientation : Orientation?
   package_ : String
   package_family : PackageFamily?
   parameters : Map[String, CatalogParameter]
   pitch : Double?
   review : ReviewSummary
+  rows : String?
+  shrouded : Bool?
   size_code : String?
   size_code_metric : String?
 }
@@ -490,6 +500,15 @@ pub fn FootprintStatus::wire(Self) -> String
 pub impl @json.FromJson for FootprintStatus
 
 #derive(Eq, @debug.Debug)
+pub(all) enum Gender {
+  Male
+  Female
+}
+pub fn Gender::all() -> Array[Self]
+pub fn Gender::wire(Self) -> String
+pub impl @json.FromJson for Gender
+
+#derive(Eq, @debug.Debug)
 pub(all) enum GeometryType {
   Parametric
   Procedural
@@ -611,6 +630,15 @@ pub(all) enum Mounting {
 pub fn Mounting::all() -> Array[Self]
 pub fn Mounting::wire(Self) -> String
 pub impl @json.FromJson for Mounting
+
+#derive(Eq, @debug.Debug)
+pub(all) enum Orientation {
+  Vertical
+  RightAngle
+}
+pub fn Orientation::all() -> Array[Self]
+pub fn Orientation::wire(Self) -> String
+pub impl @json.FromJson for Orientation
 
 #derive(Eq)
 pub(all) struct Package {

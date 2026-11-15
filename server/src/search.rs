@@ -10,15 +10,19 @@
 //! trailing decimal zeros, `3v3`-style values, separators removed), so
 //! `ＲＰ２０４０`, `rp-2040` and `rp 2040` all find the RP2040. A query is
 //! split into words that must all match (AND); Japanese and common
-//! English terms are first rewritten to the indexed vocabulary.
+//! English terms are first rewritten to the indexed vocabulary. The
+//! package's structure is indexed too: pin rows x pins per row (`1x20`,
+//! matched exactly, so `1x2` doesn't find a 1x20 header), connector
+//! gender (`male`/`female`, オス/メス) and orientation (`vertical`,
+//! `right_angle`, ライトアングル), a shroud and an exposed pad.
 
 pub(crate) use openparts_core::family::{chip_codes, CHIP_SIZES};
 use openparts_core::text::{
     fold, infix_value, is_separator, normalize, normalize_folded, trim_decimal_zeros,
 };
 use openparts_core::{
-    effective_parameters, format_value, parameter_spec, ComponentCategory, Normalized,
-    PackageFamily, ParameterSpec, Part,
+    effective_parameters, format_value, parameter_spec, ComponentCategory, Gender, Normalized,
+    Orientation, PackageFamily, ParameterSpec, Part,
 };
 use openparts_data::Dataset;
 
@@ -53,6 +57,8 @@ impl Field {
 struct Entry {
     mpn: String,
     terms: Vec<(Field, Term)>,
+    /// Pin rows x pins per row (`1x20`), matched whole.
+    rows: Option<String>,
 }
 
 /// Normalised text with its word starts: a query word matches only
@@ -101,6 +107,14 @@ impl Term {
             .iter()
             .any(|&i| self.text[i..].starts_with(word))
     }
+
+    /// [`Term::matches`], not followed by another digit.
+    fn matches_whole(&self, word: &str) -> bool {
+        self.starts.iter().any(|&i| {
+            self.text[i..].starts_with(word)
+                && !self.text[i + word.len()..].starts_with(|c: char| c.is_ascii_digit())
+        })
+    }
 }
 
 /// The search index over every Part of a dataset, in `Dataset::parts`
@@ -148,8 +162,14 @@ fn score(e: &Entry, word: &str) -> Option<u32> {
     } else if e.mpn.starts_with(word) {
         best = Some(60);
     }
+    if e.rows.as_deref() == Some(word) {
+        best = best.max(Some(Field::Package.weight()));
+    }
+    // A rows x pins word (`1x2`) must not match inside a longer number
+    // (`1x20` in a package id).
+    let whole = crate::catalog::rows_key(word).is_some();
     for (field, text) in &e.terms {
-        if text.matches(word) {
+        if (whole && text.matches_whole(word)) || (!whole && text.matches(word)) {
             let s = field.weight();
             if best.is_none_or(|b| s > b) {
                 best = Some(s);
@@ -161,6 +181,7 @@ fn score(e: &Entry, word: &str) -> Option<u32> {
 
 fn entry(ds: &Dataset, p: &Part) -> Entry {
     let mut terms = Vec::new();
+    let mut rows = None;
     let mut add = |field: Field, text: &str| {
         let t = Term::new(text);
         if !t.text.is_empty() {
@@ -228,10 +249,37 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
                 }
             }
         }
+        let st = pkg.structure();
+        rows = st.rows.map(|(r, n)| format!("{r}x{n}"));
+        if let Some(g) = st.gender {
+            add(
+                Field::Package,
+                match g {
+                    Gender::Male => "male plug",
+                    Gender::Female => "female receptacle",
+                },
+            );
+        }
+        if let Some(o) = st.orientation {
+            add(
+                Field::Package,
+                match o {
+                    Orientation::Vertical => "vertical straight",
+                    Orientation::RightAngle => "right_angle horizontal",
+                },
+            );
+        }
+        if st.shrouded == Some(true) {
+            add(Field::Package, "shrouded box_header");
+        }
+        if st.exposed_pad == Some(true) {
+            add(Field::Package, "exposed_pad thermal_pad epad");
+        }
     }
     Entry {
         mpn: normalize(&p.mpn).replace(" ", ""),
         terms,
+        rows,
     }
 }
 
@@ -324,6 +372,20 @@ fn category_name(c: ComponentCategory) -> &'static str {
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
+    ("ライトアングル", "right_angle"),
+    ("シュラウド付き", "shrouded"),
+    ("シュラウド", "shrouded"),
+    ("ボックスヘッダー", "shrouded"),
+    ("ボックスヘッダ", "shrouded"),
+    ("露出パッド", "exposed_pad"),
+    ("サーマルパッド", "exposed_pad"),
+    ("ストレート", "vertical"),
+    ("横向き", "right_angle"),
+    ("縦型", "vertical"),
+    ("垂直", "vertical"),
+    ("l型", "right_angle"),
+    ("メス", "female"),
+    ("オス", "male"),
     ("リアルタイムクロック", "rtc"),
     ("スイッチングレギュレータ", "switching_regulator"),
     ("スイッチングレギュレーター", "switching_regulator"),
@@ -445,6 +507,11 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("ram", "sram"),
     ("tact", "tact_switch"),
     ("accel", "accelerometer"),
+    ("angled", "rightangle"),
+    ("horizontal", "rightangle"),
+    ("straight", "vertical"),
+    ("boxheader", "shrouded"),
+    ("epad", "exposedpad"),
 ];
 
 /// The query as words, each with its alternative spellings (a word
@@ -462,6 +529,26 @@ fn query_words(query: &str) -> Vec<Vec<String>> {
         if i + 1 < words.len() && words[i + 1] == "c" && matches!(words[i], "usb" | "type") {
             out.push(vec!["usbc".into()]);
             i += 2;
+            continue;
+        }
+        // "right angle", "exposed pad", "box header" too.
+        if i + 1 < words.len() {
+            let pair = match (words[i], words[i + 1]) {
+                ("right", "angle") => Some("rightangle"),
+                ("exposed" | "thermal", "pad") => Some("exposedpad"),
+                ("box", "header") => Some("shrouded"),
+                _ => None,
+            };
+            if let Some(w) = pair {
+                out.push(vec![w.into()]);
+                i += 2;
+                continue;
+            }
+        }
+        // Pin rows x pins per row: `1x20`, `1×20`, `1*20`.
+        if let Some(key) = crate::catalog::rows_key(words[i]) {
+            out.push(vec![key]);
+            i += 1;
             continue;
         }
         let w = normalize_folded(words[i]);
@@ -513,6 +600,20 @@ mod tests {
         );
         assert_eq!(query_words("USB C"), vec![vec!["usbc"]]);
         assert_eq!(query_words("xtal")[0], vec!["xtal", "crystal"]);
+    }
+
+    #[test]
+    fn reads_structure_words() {
+        assert_eq!(query_words("1x20"), vec![vec!["1x20"]]);
+        assert_eq!(query_words("1×20"), vec![vec!["1x20"]]);
+        assert_eq!(query_words("2.54 header 1x20")[2], vec!["1x20"]);
+        assert_eq!(query_words("right angle"), vec![vec!["rightangle"]]);
+        assert_eq!(query_words("ライトアングル"), vec![vec!["rightangle"]]);
+        assert_eq!(query_words("ピンソケット メス")[1], vec!["female"]);
+        assert_eq!(query_words("オス"), vec![vec!["male"]]);
+        assert_eq!(query_words("exposed pad"), vec![vec!["exposedpad"]]);
+        let t = Term::new("WR-PHD-PinHeader-1x20-P2.54");
+        assert!(t.matches_whole("1x20") && !t.matches_whole("1x2"));
     }
 
     #[test]

@@ -1000,3 +1000,89 @@ async fn placement_of_a_usb_c_receptacle() {
         assert_eq!(m["basis"]["edge"]["kind"], "datasheet");
     }
 }
+
+/// The Pico board mistake: a 2x10 header where a 1x20 was meant. The
+/// structure facets and the free-text forms tell them apart.
+#[tokio::test]
+async fn catalog_structure_facets_tell_1x20_from_2x10() {
+    let body = catalog("category=connector&rows=1x20&pitch=2.54&limit=100").await;
+    let items = body["items"].as_array().unwrap();
+    assert!(!items.is_empty());
+    assert!(items.iter().all(|i| i["rows"] == "1x20"));
+    assert!(items.iter().any(|i| i["mpn"] == "61302011121"));
+    assert!(!items.iter().any(|i| i["mpn"] == "61302021121"));
+    // Facet counts: 2x10 still offered (the rows facet ignores itself).
+    assert!(count_of(&body, "rows", "2x10") > 0);
+    assert!(count_of(&body, "rows", "1x20") > 0);
+    let gender = facet(&body, "gender");
+    assert!(gender.iter().any(|v| v["value"] == "male"));
+    // `1×20` and the `layout` alias normalise to the same filter.
+    let alias = catalog("category=connector&layout=1%C3%9720&pitch=2.54&limit=100").await;
+    assert_eq!(alias["total"], body["total"]);
+    let sockets = catalog("category=connector&gender=female&orientation=vertical&limit=200").await;
+    assert!(sockets["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|i| i["gender"] == "female" && i["orientation"] == "vertical"));
+    let angled = catalog("category=connector&orientation=right_angle&limit=200").await;
+    assert!(angled["total"].as_u64().unwrap() > 0);
+    let shrouded = catalog("shrouded=yes&limit=200").await;
+    assert!(shrouded["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|i| i["package_family"] == "shrouded_header"));
+    let ep = catalog("q=RP2040&exposed_pad=yes").await;
+    assert_eq!(ep["items"][0]["mpn"], "RP2040");
+    assert_eq!(catalog("q=RP2040&exposed_pad=no").await["total"], 0);
+}
+
+#[tokio::test]
+async fn search_finds_structure_by_free_text() {
+    let mpns = |hits: Vec<(String, String)>| hits.into_iter().map(|h| h.0).collect::<Vec<_>>();
+    let hits = mpns(search_mpns("2.54 header 1x20").await);
+    assert!(hits.contains(&"61302011121".to_string()), "{hits:?}");
+    assert!(!hits.contains(&"61302021121".to_string()));
+    let hits = mpns(search_mpns("2x10").await);
+    assert!(hits.contains(&"61302021121".to_string()));
+    assert!(!hits.contains(&"61302011121".to_string()));
+    // Rows are matched whole: 1x2 is not 1x20.
+    assert!(!mpns(search_mpns("1x2").await).contains(&"61302011121".to_string()));
+    assert_eq!(
+        mpns(search_mpns("1×20 header").await),
+        mpns(search_mpns("1x20 header").await)
+    );
+    for (q, family) in [
+        ("right angle", "right_angle_header"),
+        ("ライトアングル ヘッダ", "right_angle_header"),
+        ("ピンソケット", "socket"),
+        ("メス 2.54", "socket"),
+        ("オス 2.54", "header"),
+    ] {
+        let body = catalog(&format!(
+            "q={}&limit=200",
+            q.bytes().map(|b| format!("%{b:02X}")).collect::<String>()
+        ))
+        .await;
+        let items = body["items"].as_array().unwrap();
+        assert!(!items.is_empty(), "{q}");
+        assert!(
+            items.iter().any(|i| i["package_family"] == family),
+            "{q}: no {family}"
+        );
+    }
+    // Female finds no pin headers, male no sockets.
+    let female = catalog("q=%E3%83%A1%E3%82%B9&limit=500").await;
+    assert!(female["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|i| i["gender"] == "female"));
+    let male = catalog("q=%E3%82%AA%E3%82%B9&limit=500").await;
+    assert!(male["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|i| i["gender"] == "male"));
+}

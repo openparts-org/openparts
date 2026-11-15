@@ -131,7 +131,7 @@ async fn search(
     Json(results)
 }
 
-/// `GET /v1/catalog?q=&category=&manufacturer=&family=&size=&pins=&pitch=&mounting=&lifecycle=&existence=&width_min=&width_max=&length_min=&length_max=&height_min=&height_max=&<parameter>=&<parameter>_min=&<parameter>_max=&sort=&order=&offset=&limit=`
+/// `GET /v1/catalog?q=&category=&manufacturer=&family=&size=&pins=&pitch=&mounting=&lifecycle=&existence=&rows=&gender=&orientation=&shrouded=&exposed_pad=&width_min=&width_max=&length_min=&length_max=&height_min=&height_max=&<parameter>=&<parameter>_min=&<parameter>_max=&sort=&order=&offset=&limit=`
 ///
 /// Faceted search (`crate::catalog`): multi-select filters take
 /// comma-separated values or repeat; body ranges are mm; electrical

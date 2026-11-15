@@ -317,14 +317,19 @@ pub(all) struct CatalogFacets {
   category : Array[FacetValue]
   category_tree : Array[CategoryNode]
   existence : Array[FacetValue]
+  exposed_pad : Array[FacetValue]
+  gender : Array[FacetValue]
   lifecycle : Array[FacetValue]
   manufacturer : Array[FacetValue]
   mounting : Array[FacetValue]
+  orientation : Array[FacetValue]
   package_family : Array[FacetValue]
   parameters : Array[ParameterFacet]
   pins : Array[FacetValue]
   pitch : Array[FacetValue]
   review : Array[FacetValue]
+  rows : Array[FacetValue]
+  shrouded : Array[FacetValue]
   size : Array[FacetValue]
 }
 
@@ -340,14 +345,19 @@ pub impl @json.FromJson for CatalogFacets with fn from_json(json, path) {
     category: field(obj, "category", path),
     category_tree: field(obj, "category_tree", path),
     existence: field(obj, "existence", path),
+    exposed_pad: field(obj, "exposed_pad", path),
+    gender: field(obj, "gender", path),
     lifecycle: field(obj, "lifecycle", path),
     manufacturer: field(obj, "manufacturer", path),
     mounting: field(obj, "mounting", path),
+    orientation: field(obj, "orientation", path),
     package_family: field(obj, "package_family", path),
     parameters: field(obj, "parameters", path),
     pins: field(obj, "pins", path),
     pitch: field(obj, "pitch", path),
     review: field(obj, "review", path),
+    rows: field(obj, "rows", path),
+    shrouded: field(obj, "shrouded", path),
     size: field(obj, "size", path),
   }
 }
@@ -364,17 +374,22 @@ pub(all) struct CatalogItem {
   category : ComponentCategory?
   device : String
   existence : ExistenceStatus
+  exposed_pad : Bool?
+  gender : Gender?
   lead_count : Int32?
   lifecycle : LifecycleStatus
   manufacturer : String
   manufacturer_name : String
   mounting : Mounting?
   mpn : String
+  orientation : Orientation?
   package_ : String
   package_family : PackageFamily?
   parameters : Map[String, CatalogParameter]
   pitch : Double?
   review : ReviewSummary
+  rows : String?
+  shrouded : Bool?
   size_code : String?
   size_code_metric : String?
 }
@@ -391,17 +406,22 @@ pub impl @json.FromJson for CatalogItem with fn from_json(json, path) {
     category: opt_field(obj, "category", path),
     device: field(obj, "device", path),
     existence: field(obj, "existence", path),
+    exposed_pad: opt_field(obj, "exposed_pad", path),
+    gender: opt_field(obj, "gender", path),
     lead_count: opt_field(obj, "lead_count", path),
     lifecycle: field(obj, "lifecycle", path),
     manufacturer: field(obj, "manufacturer", path),
     manufacturer_name: field(obj, "manufacturer_name", path),
     mounting: opt_field(obj, "mounting", path),
     mpn: field(obj, "mpn", path),
+    orientation: opt_field(obj, "orientation", path),
     package_: field(obj, "package", path),
     package_family: opt_field(obj, "package_family", path),
     parameters: field(obj, "parameters", path),
     pitch: opt_field(obj, "pitch", path),
     review: field(obj, "review", path),
+    rows: opt_field(obj, "rows", path),
+    shrouded: opt_field(obj, "shrouded", path),
     size_code: opt_field(obj, "size_code", path),
     size_code_metric: opt_field(obj, "size_code_metric", path),
   }
@@ -1399,6 +1419,37 @@ pub impl @json.FromJson for FootprintStatus with fn from_json(json, path) {
 
 ///|
 #derive(Eq, Debug)
+pub(all) enum Gender {
+  Male
+  Female
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Gender::wire(self : Gender) -> String {
+  match self {
+    Male => "male"
+    Female => "female"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Gender::all() -> Array[Gender] {
+  [Male, Female]
+}
+
+///|
+pub impl @json.FromJson for Gender with fn from_json(json, path) {
+  match json {
+    String("male") => Male
+    String("female") => Female
+    _ => raise @json.JsonDecodeError((path, "expected a Gender"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
 pub(all) enum GeometryType {
   Parametric
   Procedural
@@ -1812,6 +1863,37 @@ pub impl @json.FromJson for Mounting with fn from_json(json, path) {
     String("tht") => Tht
     String("mixed") => Mixed
     _ => raise @json.JsonDecodeError((path, "expected a Mounting"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum Orientation {
+  Vertical
+  RightAngle
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Orientation::wire(self : Orientation) -> String {
+  match self {
+    Vertical => "vertical"
+    RightAngle => "right_angle"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Orientation::all() -> Array[Orientation] {
+  [Vertical, RightAngle]
+}
+
+///|
+pub impl @json.FromJson for Orientation with fn from_json(json, path) {
+  match json {
+    String("vertical") => Vertical
+    String("right_angle") => RightAngle
+    _ => raise @json.JsonDecodeError((path, "expected a Orientation"))
   }
 }
 

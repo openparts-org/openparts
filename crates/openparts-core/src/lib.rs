@@ -24,6 +24,7 @@ pub mod rejected;
 pub mod review;
 pub mod serde_util;
 pub mod source;
+pub mod structure;
 pub mod text;
 
 pub use category::ComponentCategory;
@@ -52,3 +53,4 @@ pub use provenance::{ProvenanceEntry, ProvenanceMap};
 pub use rejected::Rejected;
 pub use review::{DocumentReview, ReviewStatus};
 pub use source::{DocumentType, Source};
+pub use structure::{Gender, Orientation, PackageStructure};

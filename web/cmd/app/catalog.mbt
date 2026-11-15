@@ -8,7 +8,7 @@
 /// The multi-select facets (URL and API parameter names), in sidebar order.
 let facet_keys : Array[String] = [
   "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
-  "existence", "review",
+  "existence", "review", "rows", "gender", "orientation", "shrouded", "exposed_pad",
 ]
 
 ///|
@@ -20,8 +20,8 @@ let pick_keys : Array[String] = build_pick_keys()
 fn build_pick_keys() -> Array[String] {
   let out = [
     "category", "manufacturer", "family", "size", "pins", "pitch", "mounting", "lifecycle",
-    "existence", "review", "width_min", "width_max", "length_min", "length_max",
-    "height_min", "height_max",
+    "existence", "review", "rows", "gender", "orientation", "shrouded", "exposed_pad",
+    "width_min", "width_max", "length_min", "length_max", "height_min", "height_max",
   ]
   for p in param_names {
     out.push(p.0)
@@ -479,6 +479,8 @@ fn option_label(
     "lifecycle" => lifecycle_label(lang, value)
     "existence" => existence_label(lang, value)
     "review" => review_option_label(lang, value)
+    "gender" | "orientation" | "shrouded" | "exposed_pad" =>
+      structure_label(lang, key, value).unwrap_or(fallback)
     k if enum_param_keys.contains(k) => param_value_label(lang, k, value)
     _ => fallback
   }
@@ -497,6 +499,11 @@ fn group_title(k : CatalogCopy, key : String) -> String {
     "lifecycle" => k.f_lifecycle
     "existence" => k.f_existence
     "review" => k.f_review
+    "rows" => k.f_rows
+    "gender" => k.f_gender
+    "orientation" => k.f_orientation
+    "shrouded" => k.f_shrouded
+    "exposed_pad" => k.f_exposed_pad
     "width" => k.f_width
     "length" => k.f_length
     _ => k.f_height
@@ -515,6 +522,11 @@ fn facet_values(f : @api.CatalogFacets, key : String) -> Array[@api.FacetValue] 
     "mounting" => f.mounting
     "lifecycle" => f.lifecycle
     "review" => f.review
+    "rows" => f.rows
+    "gender" => f.gender
+    "orientation" => f.orientation
+    "shrouded" => f.shrouded
+    "exposed_pad" => f.exposed_pad
     _ => f.existence
   }
 }
@@ -1067,6 +1079,16 @@ fn sidebar(
   }
   if !f.pitch.is_empty() {
     out.push(group("pitch", facet_chips(emit, "pitch", f.pitch)))
+  }
+  // The package's structure, where the results have it.
+  if !f.rows.is_empty() {
+    out.push(group("rows", facet_chips(emit, "rows", f.rows)))
+  }
+  for key in ["gender", "orientation", "shrouded", "exposed_pad"] {
+    let values = facet_values(f, key)
+    if !values.is_empty() {
+      out.push(group(key, facet_checks(lang, s, emit, key, values, 8)))
+    }
   }
   out.push(group("width", facet_range(lang, s, emit, "width", f.body_width)))
   out.push(group("length", facet_range(lang, s, emit, "length", f.body_length)))
