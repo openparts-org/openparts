@@ -1283,6 +1283,19 @@ mod tests {
         assert!(CatalogQuery::from_pairs([("resistance_max", "4k7")]).is_ok());
         // An enumerated key takes no range.
         assert!(CatalogQuery::from_pairs([("dielectric_min", "1")]).is_ok());
+        // Zener and optocoupler keys filter in their display units.
+        let q = parse(&[
+            ("zener_voltage", "5.1V"),
+            ("current_transfer_ratio_min", "100"),
+            ("isolation_voltage_min", "3.75k"),
+        ]);
+        assert!(q.params["zener_voltage"]
+            .numbers
+            .iter()
+            .all(|n| (n - 5.1).abs() < 1e-12));
+        let ctr = q.params["current_transfer_ratio"].min.unwrap();
+        assert!((ctr - 1.0).abs() < 1e-12);
+        assert_eq!(q.params["isolation_voltage"].min, Some(3750.0));
     }
 
     /// The web catalog names every parameter key in both languages and

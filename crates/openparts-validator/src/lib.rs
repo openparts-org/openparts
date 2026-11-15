@@ -894,4 +894,69 @@ mod tests {
             vec![("device:ex/DEV1", Some("/parameters/rated_voltage"))]
         );
     }
+
+    #[test]
+    fn zener_and_optocoupler_parameters_are_plausible() {
+        use openparts_core::{ComponentCategory as C, ParameterValue};
+        let num = |nominal: f64, unit: &str| ParameterValue {
+            nominal: Some(nominal),
+            unit: Some(unit.into()),
+            ..Default::default()
+        };
+        let implausible = |category: C, keys: &[(&str, ParameterValue)]| -> Vec<String> {
+            let mut device = base_device();
+            device.category = category;
+            let mut part = base_part();
+            for (key, value) in keys {
+                part.parameters.insert((*key).into(), value.clone());
+                part.provenance.insert(
+                    format!("/parameters/{key}"),
+                    vec![openparts_core::ProvenanceEntry {
+                        source: SourceId::from("ex/DS1"),
+                        page: Some(1),
+                        locator: Some("Electrical characteristics".into()),
+                    }],
+                );
+            }
+            let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
+            assert!(
+                !diags
+                    .iter()
+                    .any(|d| d.rule_id.starts_with("parameter.") && d.is_error()),
+                "{diags:?}"
+            );
+            diags
+                .iter()
+                .filter(|d| d.rule_id == "parameter.implausible")
+                .filter_map(|d| d.field_path.clone())
+                .collect()
+        };
+        let zener = [
+            ("zener_voltage", num(5.1, "V")),
+            ("zener_test_current", num(5.0, "mA")),
+            ("forward_voltage", num(0.9, "V")),
+        ];
+        assert!(implausible(C::Diode, &zener).is_empty());
+        let opto = [
+            ("isolation_voltage", num(5000.0, "V")),
+            ("current_transfer_ratio", num(100.0, "%")),
+            ("forward_voltage", num(1.25, "V")),
+            ("forward_current", num(50.0, "mA")),
+            ("reverse_voltage", num(5.0, "V")),
+            ("collector_emitter_voltage", num(80.0, "V")),
+            ("collector_current", num(50.0, "mA")),
+        ];
+        assert!(implausible(C::Optocoupler, &opto).is_empty());
+        assert_eq!(
+            implausible(C::Transistor, &opto[..2]),
+            vec![
+                "/parameters/current_transfer_ratio",
+                "/parameters/isolation_voltage"
+            ]
+        );
+        assert_eq!(
+            implausible(C::Optocoupler, &zener[..1]),
+            vec!["/parameters/zener_voltage"]
+        );
+    }
 }

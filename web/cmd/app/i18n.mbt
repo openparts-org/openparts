@@ -813,6 +813,10 @@ let param_names : Array[(String, String, String)] = [
   ("forward_voltage", "順方向電圧 (Vf)", "Forward voltage (Vf)"),
   ("reverse_voltage", "逆方向電圧 (Vr)", "Reverse voltage (Vr)"),
   ("forward_current", "順方向電流 (If)", "Forward current (If)"),
+  ("zener_voltage", "ツェナー電圧 (Vz)", "Zener voltage (Vz)"),
+  (
+    "zener_test_current", "ツェナー測定電流 (Izt)", "Zener test current (Izt)",
+  ),
   ("color", "発光色", "Color"),
   ("wavelength", "波長", "Wavelength"),
   ("polarity", "極性", "Polarity"),
@@ -828,6 +832,10 @@ let param_names : Array[(String, String, String)] = [
     "collector_emitter_voltage", "コレクタ-エミッタ間電圧 (Vceo)", "Collector-emitter voltage (Vceo)",
   ),
   ("collector_current", "コレクタ電流 (Ic)", "Collector current (Ic)"),
+  ("isolation_voltage", "絶縁耐圧 (BVs)", "Isolation voltage (BVs)"),
+  (
+    "current_transfer_ratio", "電流伝達率 (CTR)", "Current transfer ratio (CTR)",
+  ),
   ("output_type", "出力タイプ", "Output type"),
   ("output_voltage", "出力電圧", "Output voltage"),
   ("input_voltage_max", "最大入力電圧", "Max input voltage"),

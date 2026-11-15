@@ -285,7 +285,10 @@ const fn enumerated(
 }
 
 const PASSIVE_RLC: &[C] = &[C::Capacitor, C::Resistor, C::Inductor];
-const SEMIS_VF: &[C] = &[C::Diode, C::Led];
+/// Forward/reverse ratings: diodes, LEDs and an optocoupler's input LED.
+const SEMIS_VF: &[C] = &[C::Diode, C::Led, C::Optocoupler];
+/// Collector ratings: BJTs and an optocoupler's phototransistor output.
+const COLLECTOR: &[C] = &[C::Transistor, C::Optocoupler];
 
 /// The closed parameter vocabulary, in display order. Extend it (with
 /// the spec, Canonical Data Specification section 11.1) when a new
@@ -344,6 +347,8 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("forward_voltage", Q::Voltage, SEMIS_VF),
     num("reverse_voltage", Q::Voltage, SEMIS_VF),
     num("forward_current", Q::Current, SEMIS_VF),
+    num("zener_voltage", Q::Voltage, &[C::Diode]),
+    num("zener_test_current", Q::Current, &[C::Diode]),
     enumerated(
         "color",
         &[
@@ -371,8 +376,15 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("drain_current", Q::Current, &[C::Transistor]),
     num("rds_on", Q::Resistance, &[C::Transistor]),
     num("gate_threshold_voltage", Q::Voltage, &[C::Transistor]),
-    num("collector_emitter_voltage", Q::Voltage, &[C::Transistor]),
-    num("collector_current", Q::Current, &[C::Transistor]),
+    num("collector_emitter_voltage", Q::Voltage, COLLECTOR),
+    num("collector_current", Q::Current, COLLECTOR),
+    // Optocouplers (input LED: forward_voltage/forward_current/
+    // reverse_voltage; output: collector_emitter_voltage/collector_current)
+    num("isolation_voltage", Q::Voltage, &[C::Optocoupler]),
+    shown_in(
+        num("current_transfer_ratio", Q::Ratio, &[C::Optocoupler]),
+        "%",
+    ),
     // Regulators
     enumerated("output_type", &["fixed", "adjustable"], &[C::Power]),
     num("output_voltage", Q::Voltage, &[C::Power]),
@@ -929,6 +941,51 @@ mod tests {
         assert_eq!(p("10V", "capacitance"), None);
         assert_eq!(p("abc", "capacitance"), None);
         assert_eq!(p("X7R", "dielectric"), None);
+    }
+
+    #[test]
+    fn zener_and_optocoupler_keys() {
+        let vz = spec("zener_voltage");
+        assert!(plausible_for(vz, C::Diode));
+        assert!(!plausible_for(vz, C::Optocoupler));
+        let n = val(Some(5.1), Some(4.8), Some(5.4), "V")
+            .normalize(vz)
+            .unwrap();
+        assert_eq!(n.label(vz), "5.1 V");
+        assert_eq!(n.stated(vz), Some(5.1));
+        let izt = spec("zener_test_current");
+        let n = val(Some(5.0), None, None, "mA").normalize(izt).unwrap();
+        assert_eq!(n.label(izt), "5 mA");
+
+        let ctr = spec("current_transfer_ratio");
+        assert!(!ctr.deviation);
+        assert!(plausible_for(ctr, C::Optocoupler));
+        assert!(!plausible_for(ctr, C::Transistor));
+        let n = val(None, Some(50.0), Some(600.0), "%")
+            .normalize(ctr)
+            .unwrap();
+        assert_eq!(n.label(ctr), "50%–600%");
+        assert!((n.stated(ctr).unwrap() - 3.25).abs() < 1e-12);
+        assert!((parse_value("100", ctr).unwrap() - 1.0).abs() < 1e-12);
+
+        let iso = spec("isolation_voltage");
+        let n = val(Some(5000.0), None, None, "V").normalize(iso).unwrap();
+        assert_eq!(n.label(iso), "5 kV");
+        assert!(plausible_for(iso, C::Optocoupler));
+
+        for key in [
+            "forward_voltage",
+            "forward_current",
+            "reverse_voltage",
+            "collector_emitter_voltage",
+            "collector_current",
+        ] {
+            assert!(plausible_for(spec(key), C::Optocoupler), "{key}");
+        }
+        assert!(plausible_for(
+            spec("collector_emitter_voltage"),
+            C::Transistor
+        ));
     }
 
     #[test]

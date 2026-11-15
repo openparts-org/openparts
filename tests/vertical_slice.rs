@@ -168,9 +168,15 @@ fn full_pipeline_generates_correct_kicad_and_step_for_a_chip_resistor() {
     let package =
         openparts_data::load_package(data.join("packages/standards/chip/CHIP0603-RC.yaml"))
             .unwrap();
-    let source = openparts_data::load_source(data.join("sources/yageo/PYU-RC_GROUP.yaml")).unwrap();
+    // Every Yageo source: the part cites more than one revision of the
+    // series datasheet (geometry from one, parameters from another).
     let mut known_sources = BTreeSet::new();
-    known_sources.insert(source.id);
+    for entry in std::fs::read_dir(data.join("sources/yageo")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "yaml") {
+            known_sources.insert(openparts_data::load_source(path).unwrap().id);
+        }
+    }
 
     let diags = openparts_validator::validate_part(&part, &device, &package, &known_sources);
     assert!(

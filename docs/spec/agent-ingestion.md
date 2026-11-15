@@ -482,9 +482,10 @@ MPN, so it goes on the Part).
 | resistor | `resistance`, `tolerance`, `power_rating`, `temperature_coefficient` |
 | inductor | `inductance`, `tolerance`, `rated_current`, `saturation_current`, `dcr` |
 | crystal | `frequency`, `load_capacitance`, `frequency_tolerance`, `esr` |
-| diode | `forward_voltage`, `reverse_voltage`, `forward_current` |
+| diode | `forward_voltage`, `reverse_voltage`, `forward_current`; zener `zener_voltage`, `zener_test_current` |
 | LED | `color`, `wavelength`, `forward_voltage`, `forward_current` |
 | transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
+| optocoupler | input LED `forward_voltage`, `forward_current`, `reverse_voltage`; output `collector_emitter_voltage`, `collector_current`; `current_transfer_ratio`, `isolation_voltage` |
 | fuse | `rated_current`, `rated_voltage` |
 | `linear_regulator`, `switching_regulator` (group `power`) | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`; `dropout_voltage` (linear only) |
 | `flash`, `eeprom`, `sram` (group `memory`) | `capacity` (on the Device when all its Parts share it) |
@@ -533,6 +534,14 @@ key.
   the value, the condition in the locator.
 - "typ." -> `nominal`; "max." -> `max`; "min." -> `min`. Vf "typ 2.0,
   max 2.6" -> `nominal: 2.0, max: 2.6`.
+- Zener voltage: record `nominal`/`min`/`max` exactly as the table
+  prints them for this MPN's row, and `zener_test_current` (Izt) from
+  the same row; the test condition goes in both locators.
+- Current transfer ratio: the CTR limits that apply to this MPN, in
+  `%` (`min: 50, max: 600`). When the MPN doesn't fix a CTR rank (rank
+  marking is an ordering option), record the unranked limits and say
+  so in the locator. Isolation voltage: the number as printed (`5000`,
+  `unit: V`), with "Vrms, AC 1 min" etc. in the locator.
 - Enumerated keys: the exact listed spelling (`X7R`, `n_channel`,
   `adjustable`). `X7R(EIA)` is `X7R`. A value not in the list: leave the
   key out and report it.

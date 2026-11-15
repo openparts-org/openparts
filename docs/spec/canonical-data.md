@@ -367,9 +367,11 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `frequency` | frequency | crystal |
 | `load_capacitance` | capacitance | crystal |
 | `frequency_tolerance` | ratio, deviation | crystal |
-| `forward_voltage` | voltage | diode, LED |
-| `reverse_voltage` | voltage | diode, LED |
-| `forward_current` | current | diode, LED |
+| `forward_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
+| `reverse_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
+| `forward_current` | current (an optocoupler's: its input LED) | diode, LED, optocoupler |
+| `zener_voltage` | voltage (Vz at the test current; nominal/min/max as printed) | diode |
+| `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
 | `wavelength` | length (dominant wavelength; peak only if that is all the source gives -- say so in the locator) | LED |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
@@ -377,8 +379,10 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `drain_current` | current (Id continuous) | transistor |
 | `rds_on` | resistance | transistor |
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
-| `collector_emitter_voltage` | voltage (Vceo) | transistor |
-| `collector_current` | current (Ic) | transistor |
+| `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor) | transistor, optocoupler |
+| `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
+| `isolation_voltage` | voltage (input-output isolation, BVs; the rms/duration condition goes into the locator) | optocoupler |
+| `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
 | `output_type` | `fixed` `adjustable` | `power` |
 | `output_voltage` | voltage | `power` |
 | `input_voltage_max` | voltage | `power` |

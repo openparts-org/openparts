@@ -100,7 +100,13 @@ fn param_columns_of_root(category : String) -> Array[String] {
       ["resistance", "tolerance", "power_rating", "temperature_coefficient"]
     "inductor" => ["inductance", "rated_current", "saturation_current", "dcr"]
     "crystal" => ["frequency", "load_capacitance", "frequency_tolerance", "esr"]
-    "diode" => ["reverse_voltage", "forward_current", "forward_voltage"]
+    "diode" =>
+      ["reverse_voltage", "forward_current", "forward_voltage", "zener_voltage"]
+    "optocoupler" =>
+      [
+        "current_transfer_ratio", "isolation_voltage", "collector_emitter_voltage",
+        "forward_voltage",
+      ]
     "led" => ["color", "wavelength", "forward_voltage"]
     "transistor" =>
       ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
