@@ -359,7 +359,8 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Rs232Transceiver => "RS-232トランシーバ"
         LevelShifter => "レベルシフタ"
         Logic => "ロジックIC"
-        Timing => "タイマ・RTC"
+        Timing => "タイミング (発振器・タイマ・RTC)"
+        Oscillator => "水晶発振器・クロック発振器"
         Timer => "タイマIC"
         Rtc => "リアルタイムクロック (RTC)"
         Switch => "スイッチ"
@@ -412,7 +413,8 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Rs232Transceiver => "RS-232 transceiver"
         LevelShifter => "Level shifter"
         Logic => "Logic ICs"
-        Timing => "Timers & RTC"
+        Timing => "Timing (oscillators, timers, RTC)"
+        Oscillator => "Oscillator"
         Timer => "Timer"
         Rtc => "Real-time clock (RTC)"
         Switch => "Switch"
@@ -853,6 +855,13 @@ let param_names : Array[(String, String, String)] = [
   ("frequency", "周波数", "Frequency"),
   ("load_capacitance", "負荷容量", "Load capacitance"),
   ("frequency_tolerance", "周波数許容差", "Frequency tolerance"),
+  (
+    "frequency_stability", "周波数温度特性", "Frequency stability (over temperature)",
+  ),
+  ("aging", "エージング (経年変化)", "Aging"),
+  ("drive_level", "励振レベル", "Drive level"),
+  ("shunt_capacitance", "並列容量 (C0)", "Shunt capacitance (C0)"),
+  ("clock_output", "クロック出力", "Clock output"),
   ("forward_voltage", "順方向電圧 (Vf)", "Forward voltage (Vf)"),
   ("reverse_voltage", "逆方向電圧 (Vr)", "Reverse voltage (Vr)"),
   ("forward_current", "順方向電流 (If)", "Forward current (If)"),
@@ -861,17 +870,17 @@ let param_names : Array[(String, String, String)] = [
     "zener_test_current", "ツェナー測定電流 (Izt)", "Zener test current (Izt)",
   ),
   ("color", "発光色", "Color"),
-  ("wavelength", "波長", "Wavelength"),
+  ("wavelength", "主波長", "Dominant wavelength"),
+  ("peak_wavelength", "ピーク波長", "Peak wavelength"),
   ("luminous_intensity", "光度", "Luminous intensity"),
+  ("viewing_angle", "指向角 (2θ½)", "Viewing angle (2θ½)"),
   ("wavelength_red", "主波長 (赤)", "Dominant wavelength (red)"),
   ("wavelength_green", "主波長 (緑)", "Dominant wavelength (green)"),
   ("wavelength_blue", "主波長 (青)", "Dominant wavelength (blue)"),
   ("luminous_intensity_red", "光度 (赤)", "Luminous intensity (red)"),
   ("luminous_intensity_green", "光度 (緑)", "Luminous intensity (green)"),
   ("luminous_intensity_blue", "光度 (青)", "Luminous intensity (blue)"),
-  ("supply_voltage", "電源電圧", "Supply voltage"),
   ("data_interface", "データ入力", "Data interface"),
-  ("data_rate", "データレート", "Data rate"),
   ("polarity", "極性", "Polarity"),
   (
     "drain_source_voltage", "ドレイン-ソース間電圧 (Vds)", "Drain-source voltage (Vds)",
@@ -897,6 +906,35 @@ let param_names : Array[(String, String, String)] = [
   ("capacity", "記憶容量", "Capacity"),
   ("actuation_force", "操作力", "Actuation force"),
   ("travel", "ストローク", "Travel"),
+  ("supply_voltage", "電源電圧", "Supply voltage"),
+  ("supply_current", "消費電流", "Supply current"),
+  ("operating_temperature", "動作温度範囲", "Operating temperature"),
+  ("esd_hbm", "ESD耐圧 (HBM)", "ESD rating (HBM)"),
+  ("channel_count", "チャネル数", "Channels"),
+  ("gain_bandwidth", "利得帯域幅積 (GBW)", "Gain bandwidth (GBW)"),
+  ("slew_rate", "スルーレート", "Slew rate"),
+  (
+    "input_offset_voltage", "入力オフセット電圧", "Input offset voltage",
+  ),
+  ("input_bias_current", "入力バイアス電流", "Input bias current"),
+  (
+    "supply_current_per_channel", "消費電流 (1回路あたり)", "Supply current per channel",
+  ),
+  ("rail_to_rail_input", "レールツーレール入力", "Rail-to-rail input"),
+  (
+    "rail_to_rail_output", "レールツーレール出力", "Rail-to-rail output",
+  ),
+  ("propagation_delay", "伝搬遅延時間", "Propagation delay"),
+  ("output_structure", "出力構造", "Output structure"),
+  ("logic_function", "論理機能", "Logic function"),
+  (
+    "output_current_high", "Hレベル出力電流 (IOH)", "High-level output current (IOH)",
+  ),
+  (
+    "output_current_low", "Lレベル出力電流 (IOL)", "Low-level output current (IOL)",
+  ),
+  ("data_rate", "データレート", "Data rate"),
+  ("bus_fault_voltage", "バス耐故障電圧", "Bus fault protection"),
 ]
 
 ///|
@@ -942,6 +980,45 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (Ja, "data_interface", "clock_data") => "クロック+データ"
     (En, "data_interface", "single_wire") => "Single-wire serial"
     (En, "data_interface", "clock_data") => "Clock + data"
+    (Ja, "rail_to_rail_input" | "rail_to_rail_output", "yes") => "あり"
+    (Ja, "rail_to_rail_input" | "rail_to_rail_output", "no") => "なし"
+    (En, "rail_to_rail_input" | "rail_to_rail_output", "yes") => "Yes"
+    (En, "rail_to_rail_input" | "rail_to_rail_output", "no") => "No"
+    (_, "clock_output", "cmos") => "CMOS"
+    (_, "clock_output", "ttl") => "TTL"
+    (_, "clock_output", "lvds") => "LVDS"
+    (_, "clock_output", "lvpecl") => "LVPECL"
+    (_, "clock_output", "hcsl") => "HCSL"
+    (_, "clock_output", "cml") => "CML"
+    (Ja, "clock_output", "clipped_sine") => "クリップド正弦波"
+    (Ja, "clock_output", "sine") => "正弦波"
+    (En, "clock_output", "clipped_sine") => "Clipped sine"
+    (En, "clock_output", "sine") => "Sine"
+    (Ja, "output_structure", "push_pull") => "プッシュプル"
+    (Ja, "output_structure", "open_drain") => "オープンドレイン"
+    (Ja, "output_structure", "open_collector") => "オープンコレクタ"
+    (En, "output_structure", "push_pull") => "Push-pull"
+    (En, "output_structure", "open_drain") => "Open drain"
+    (En, "output_structure", "open_collector") => "Open collector"
+    (Ja, "logic_function", "buffer") => "バッファ"
+    (Ja, "logic_function", "inverter") => "インバータ"
+    (Ja, "logic_function", "bus_transceiver") => "バストランシーバ"
+    (Ja, "logic_function", "flip_flop") => "フリップフロップ"
+    (Ja, "logic_function", "latch") => "ラッチ"
+    (Ja, "logic_function", "shift_register") => "シフトレジスタ"
+    (Ja, "logic_function", "counter") => "カウンタ"
+    (Ja, "logic_function", "decoder") => "デコーダ"
+    (Ja, "logic_function", "multiplexer") => "マルチプレクサ"
+    (_, "logic_function", "and") => "AND"
+    (_, "logic_function", "nand") => "NAND"
+    (_, "logic_function", "or") => "OR"
+    (_, "logic_function", "nor") => "NOR"
+    (_, "logic_function", "xor") => "XOR"
+    (_, "logic_function", "xnor") => "XNOR"
+    (En, "logic_function", "bus_transceiver") => "Bus transceiver"
+    (En, "logic_function", "flip_flop") => "Flip-flop"
+    (En, "logic_function", "shift_register") => "Shift register"
+    (En, "logic_function", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
     (En, "color", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
     _ => value
   }

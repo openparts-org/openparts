@@ -389,6 +389,7 @@ pub(all) enum ComponentCategory {
   AnalogSwitch
   LevelShifter
   Logic
+  Oscillator
   GateDriver
 }
 pub fn ComponentCategory::all() -> Array[Self]
@@ -1374,6 +1375,7 @@ pub(all) enum RuleKind {
   AtMost
   Ranked
   Informational
+  Covers
 }
 pub fn RuleKind::all() -> Array[Self]
 pub fn RuleKind::wire(Self) -> String

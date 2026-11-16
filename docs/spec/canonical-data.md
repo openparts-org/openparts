@@ -353,7 +353,7 @@ milli-, `M` mega-):
 | resistance | Ω | `mΩ` `mohm` `Ω` `ohm` `kΩ` `kohm` `MΩ` `Mohm` |
 | inductance | H | `nH` `uH` `µH` `mH` `H` |
 | voltage | V | `uV` `µV` `mV` `V` `kV` |
-| current | A | `nA` `uA` `µA` `mA` `A` |
+| current | A | `fA` `pA` `nA` `uA` `µA` `mA` `A` |
 | power | W | `uW` `µW` `mW` `W` |
 | frequency | Hz | `Hz` `kHz` `MHz` `GHz` |
 | ratio | 1 | `%` `ppm` |
@@ -363,6 +363,10 @@ milli-, `M` mega-):
 | information | bit | `bit` `Kbit` `kbit` `Mbit` `Gbit` (binary: 2^10, 2^20, 2^30, as memory datasheets use them) |
 | luminous intensity | cd | `µcd` `ucd` `mcd` `cd` |
 | data rate | bit/s | `bit/s` `bps` `kbit/s` `kbps` `Kbps` `Mbit/s` `Mbps` (decimal: 10^3, 10^6, as interface datasheets use them) |
+| slew rate | V/s | `V/s` `V/ms` `V/us` `V/µs` |
+| angle | ° (not SI) | `°` `deg` |
+| temperature | °C (not SI) | `°C` |
+| time | s | `ps` `ns` `us` `µs` `ms` `s` |
 
 Vocabulary (key: quantity or values; categories it is plausible for):
 
@@ -381,22 +385,27 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `rated_current` | current | inductor, fuse |
 | `saturation_current` | current | inductor |
 | `dcr` | resistance | inductor |
-| `frequency` | frequency | crystal |
-| `load_capacitance` | capacitance | crystal |
-| `frequency_tolerance` | ratio, deviation | crystal |
+| `frequency` | frequency (nominal) | crystal, oscillator |
+| `load_capacitance` | capacitance (CL the frequency is specified at) | crystal |
+| `frequency_tolerance` | ratio, deviation (at 25 °C, in `ppm`) | crystal, oscillator |
+| `frequency_stability` | ratio, deviation (over temperature, in `ppm`; the range in `at: { TA: -40..85 °C }`) | crystal, oscillator |
+| `aging` | ratio, deviation (frequency change in the first year, `ppm`; "per year" in the locator) | crystal, oscillator |
+| `drive_level` | power (DL; the maximum as `max`, a recommended level as `typ`) | crystal |
+| `shunt_capacitance` | capacitance (C0) | crystal |
+| `clock_output` | `cmos` `ttl` `lvds` `lvpecl` `hcsl` `cml` `clipped_sine` `sine` | oscillator |
 | `forward_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `reverse_voltage` | voltage (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `forward_current` | current (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `zener_voltage` | voltage (Vz at the test current; min/typ/max as printed) | diode |
 | `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
-| `wavelength` | length (dominant wavelength; peak only if that is all the source gives -- say so in the locator) | LED |
+| `wavelength` | length (dominant wavelength λd) | LED |
+| `peak_wavelength` | length (peak emission wavelength λp; infrared LEDs state only this) | LED |
 | `luminous_intensity` | luminous intensity (Iv; the drive current in `at: { IF: ... }`) | LED |
+| `viewing_angle` | angle (full angle at half intensity, 2θ½, in `°`) | LED |
 | `wavelength_red`, `wavelength_green`, `wavelength_blue` | length (an RGB LED's dominant wavelength per emitter, as `wavelength`) | LED |
 | `luminous_intensity_red`, `luminous_intensity_green`, `luminous_intensity_blue` | luminous intensity (an RGB LED's Iv per emitter) | LED |
-| `supply_voltage` | voltage (VDD of an LED with an integrated driver: its operating range as min/max) | LED |
 | `data_interface` | `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class) | LED |
-| `data_rate` | data rate (the serial data input's rate as the source states it) | LED |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
 | `drain_source_voltage` | voltage (Vds max) | transistor |
 | `drain_current` | current (Id continuous) | transistor |
@@ -414,10 +423,42 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `capacity` | information | `memory` |
 | `actuation_force` | force | `switch` |
 | `travel` | length | `switch` |
+| `supply_voltage` | voltage, operating range (the recommended supply range as `min`/`max`; an amplifier's is the total span V+ - V-: "±1.35 V to ±18 V" is `{ min: 2.7 V, max: 36 V }` when the source also prints the single-supply span, else leave it out) | LED (with an integrated driver), ICs except `power` (a regulator's input is `input_voltage_max`) |
+| `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD) | ICs, LED |
+| `operating_temperature` | temperature, operating range (`{ min: -40 °C, max: 85 °C }`, the operating -- not storage -- range) | any |
+| `esd_hbm` | voltage (human-body-model rating that holds for all pins, `typ: 2 kV` for "±2000 V"; a higher bus-pin-only rating is not this key) | ICs, LED |
+| `channel_count` | `1` `2` `3` `4` `6` `8` `16` (identical channels: amplifiers, gates, transceiver channels) | `analog`, `interface`, `logic`, `driver` |
+| `gain_bandwidth` | frequency (GBW / GBP) | `op_amp`, `current_sense_amplifier` |
+| `slew_rate` | slew rate (shown in V/µs) | `op_amp`, `current_sense_amplifier` |
+| `input_offset_voltage` | voltage, a magnitude (VOS "±3 mV max" is `max: 3 mV`) | `op_amp`, `comparator`, `current_sense_amplifier` |
+| `input_bias_current` | current, a magnitude (IB) | `op_amp`, `comparator`, `current_sense_amplifier` |
+| `supply_current_per_channel` | current (IQ per amplifier / comparator, as the source states it per channel) | `op_amp`, `comparator` |
+| `rail_to_rail_input`, `rail_to_rail_output` | `yes` `no` (only when the source says so: "rail-to-rail input", a common-mode range to both rails) | `op_amp`, `comparator` |
+| `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface` |
+| `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface` |
+| `logic_function` | `buffer` `inverter` `and` `nand` `or` `nor` `xor` `xnor` `bus_transceiver` `flip_flop` `latch` `shift_register` `counter` `decoder` `multiplexer` | `logic` |
+| `output_current_high`, `output_current_low` | current, a magnitude (IOH "-24 mA" is `24 mA`; IOL; the supply in `at: { VCC: ... }`) | `logic`, `interface` |
+| `data_rate` | data rate (the signalling rate the source guarantees; an addressable LED's serial input) | LED, `interface` |
+| `bus_fault_voltage` | voltage, operating range (the bus pins' fault-protection / abs-max range as printed: `{ min: -58 V, max: 58 V }`) | `interface` |
 
 A group in the last column covers its subcategories (section 14.1);
 `rated_voltage` and `rated_current` are also plausible for `switch`
-(contact ratings).
+(contact ratings). "ICs" are `microcontroller`, `power`, `memory`,
+`sensor`, `analog`, `interface`, `logic`, `timing` and `driver`.
+
+An *operating-range* key (`supply_voltage`, `operating_temperature`,
+`bus_fault_voltage`) records the range's ends as `min`/`max`. The
+catalog's range filter asks whether the range contains the asked span
+(`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
+3.3 V), and an alternative must cover the original's range.
+
+A *magnitude* key (`input_offset_voltage`, `input_bias_current`,
+`output_current_high`/`_low`) drops the printed sign or ±: the
+comparison is "smaller (or larger) is better" on the size.
+
+Each new key has a plausible range (`ParameterSpec::range`, SI); a
+number outside it (`20 %` written for `20 ppm`, a delay in ms for ns)
+is a warning, `parameter.implausible_value`.
 
 A *deviation* key (a tolerance) records signed bounds: ±10 % is
 `tol: ±10 %` (`min: -10 %, max: 10 %`); an asymmetric -20/+80 % is
@@ -451,7 +492,8 @@ a bad condition (section 11.2) and an uncited value are errors
 (`parameter.unknown_key`, `parameter.unit`, `parameter.invalid`,
 `parameter.out_of_range`, `parameter.condition`, `provenance.missing`).
 A key that is unusual for the Device's category (capacitance on a
-resistor) is a warning (`parameter.implausible`).
+resistor) is a warning (`parameter.implausible`); a number outside
+the key's plausible range is a warning (`parameter.implausible_value`).
 
 The vocabulary grows like `PinType` (section 15): a new component type
 adds keys here, in `PARAMETERS`, in the web catalog's labels and in the
@@ -484,8 +526,10 @@ from the quantity's table in section 11.1):
 
 | Quantity | Symbols |
 |---|---|
-| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VIN` `VOUT` `VR` `VF` |
+| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) |
 | current | `ID` `IC` `IB` `IF` `IR` `IZT` `IPP` `IOUT` `IL` |
+| capacitance | `CL` (load capacitance) |
+| resistance | `RL` (load resistance) |
 | temperature (`°C`) | `TA` (ambient) `TJ` (junction) `TC` (case) `TL` (lead) `TS` (solder point) `TT` (terminal) |
 | frequency | `f` |
 | time (`ns` `µs` `ms` `s`) | `t` |
@@ -621,7 +665,7 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 | `capacitor` | |
 | `resistor` | |
 | `inductor` | |
-| `crystal` | |
+| `crystal` | (bare resonators; a clock oscillator is `oscillator` under `timing`) |
 | `diode` | |
 | `transistor` | |
 | `led` | |
@@ -635,7 +679,7 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 | `analog` | `op_amp`, `comparator`, `current_sense_amplifier`, `power_monitor` (current/power monitors with a digital interface), `analog_switch` (analog switches, multiplexers), `adc`, `dac` |
 | `interface` | `io_expander`, `can_controller`, `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter` |
 | `logic` | (gates, buffers, bus transceivers, shift registers, decoders) |
-| `timing` | `timer`, `rtc` |
+| `timing` | `oscillator` (clock oscillators: XO, TCXO, VCXO, MEMS -- a resonator with its drive circuit and a clock output), `timer`, `rtc` |
 | `driver` | `gate_driver`, `darlington_array` |
 | `other` | |
 

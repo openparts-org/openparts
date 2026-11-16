@@ -3,7 +3,9 @@ test "every results column is a labelled parameter key" {
   for
     category in [
       "power", "linear_regulator", "memory", "switch", "capacitor", "resistor", "inductor",
-      "crystal", "diode", "led", "transistor", "optocoupler", "fuse",
+      "crystal", "diode", "led", "transistor", "optocoupler", "fuse", "op_amp", "comparator",
+      "oscillator", "can_transceiver", "rs485_transceiver", "level_shifter", "analog",
+      "interface", "logic", "timing",
     ] {
     let columns = param_columns(category)
     assert_true(!columns.is_empty())

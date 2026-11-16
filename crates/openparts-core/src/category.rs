@@ -77,6 +77,10 @@ pub enum ComponentCategory {
     Logic,
     // Timing
     Timing,
+    /// Clock oscillators (XO, TCXO, VCXO, MEMS): a resonator with its
+    /// drive circuit, giving a clock output. A bare resonator is
+    /// `crystal`.
+    Oscillator,
     Timer,
     Rtc,
     // Switches
@@ -138,6 +142,7 @@ impl ComponentCategory {
         C::LevelShifter,
         C::Logic,
         C::Timing,
+        C::Oscillator,
         C::Timer,
         C::Rtc,
         C::Driver,
@@ -170,7 +175,7 @@ impl ComponentCategory {
             | C::Rs485Transceiver
             | C::Rs232Transceiver
             | C::LevelShifter => C::Interface,
-            C::Timer | C::Rtc => C::Timing,
+            C::Oscillator | C::Timer | C::Rtc => C::Timing,
             C::GateDriver | C::DarlingtonArray => C::Driver,
             _ => return None,
         })
@@ -240,6 +245,7 @@ impl ComponentCategory {
             C::LevelShifter => "level_shifter",
             C::Logic => "logic",
             C::Timing => "timing",
+            C::Oscillator => "oscillator",
             C::Timer => "timer",
             C::Rtc => "rtc",
             C::Switch => "switch",
@@ -273,7 +279,7 @@ mod tests {
             assert_eq!(C::parse(c.name()), Some(*c));
         }
         // Every variant is in ALL (the match in `name` lists them all).
-        assert_eq!(seen.len(), 50);
+        assert_eq!(seen.len(), 51);
     }
 
     #[test]

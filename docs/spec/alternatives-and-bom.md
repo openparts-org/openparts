@@ -108,26 +108,32 @@ Canonical Data Specification section 11.1):
 
 | Rule | Keys | Pass when |
 | --- | --- | --- |
-| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength, wavelength_red/_green/_blue (2 %), capacity, color, data_interface, polarity, output_type | the same value (relative tolerance 1e-6 unless stated) |
-| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current, data_rate | candidate >= original |
-| `at_most` | tolerance, capacitance_tolerance, esr, dcr, temperature_coefficient, frequency_tolerance, forward_voltage, rds_on, dropout_voltage | candidate <= original |
-| `ranked` | dielectric: C0G = NP0 > U2J > X8R > X8L > X7R > X7S > X7T > X6S > X6T > X5R > X5S > Y5V = Z5U | candidate's grade >= original's |
-| `informational` | gate_threshold_voltage, zener_test_current, luminous_intensity (and its _red/_green/_blue keys), supply_voltage, actuation_force, travel | shown, not judged |
+| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, clock_output, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength, peak_wavelength, wavelength_red/_green/_blue (2 %), capacity, color, data_interface, polarity, output_type, channel_count, output_structure, logic_function | the same value (relative tolerance 1e-6 unless stated) |
+| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current, drive_level, esd_hbm, gain_bandwidth, slew_rate, output_current_high, output_current_low, data_rate | candidate >= original |
+| `at_most` | tolerance, capacitance_tolerance, esr, dcr, temperature_coefficient, frequency_tolerance, frequency_stability, aging, forward_voltage, rds_on, dropout_voltage, supply_current, input_offset_voltage, input_bias_current, supply_current_per_channel, propagation_delay | candidate <= original |
+| `ranked` | dielectric: C0G = NP0 > U2J > X8R > X8L > X7R > X7S > X7T > X6S > X6T > X5R > X5S > Y5V = Z5U; rail_to_rail_input, rail_to_rail_output: yes > no | candidate's grade >= original's |
+| `covers` | supply_voltage, operating_temperature, bus_fault_voltage (the operating-range keys, `span` in the vocabulary) | the candidate's range contains the original's: its `min` <= the original's `min` and its `max` >= the original's `max`, for each limit the original states |
+| `informational` | gate_threshold_voltage, zener_test_current, luminous_intensity (and its _red/_green/_blue keys), viewing_angle, shunt_capacitance, actuation_force, travel | shown, not judged |
 
 - A rating compares its guaranteed limit when both parts state one
   (an `at_least` key's `min`, an `at_most` key's `max`), else the stated
   value (typ, else the middle of min/max). A tolerance compares its
   larger magnitude.
+- A `covers` key: a limit of the original the candidate doesn't state
+  is `unverified`, and so is an original with a lone `typ` (no range to
+  cover). Wider on some side and narrower on none is `better`.
 - A key the original states and the candidate doesn't is `unverified`,
   never a pass. A key only the candidate states is not checked.
 - Identity keys (`identity: true`): capacitance, resistance,
-  inductance, frequency, zener_voltage, color, data_interface, polarity,
-  output_type, output_voltage, capacity. One that differs makes the candidate a
-  different part. The category's required identity keys (a capacitor's
-  capacitance, a resistor's resistance, an inductor's inductance, a
-  crystal's frequency, an LED's colour, a transistor's polarity, a
-  memory's capacity, a linear regulator's output voltage) must be
-  stated by the original too: when it isn't, nothing is `meets`.
+  inductance, frequency, clock_output, zener_voltage, color,
+  data_interface, polarity, output_type, output_voltage, capacity,
+  channel_count, logic_function. One that differs makes the candidate a
+  different part (a quad op-amp is not a dual one). The category's
+  required identity keys (a capacitor's capacitance, a resistor's
+  resistance, an inductor's inductance, a crystal's or an oscillator's
+  frequency, an LED's colour, a transistor's polarity, a memory's
+  capacity, a linear regulator's output voltage) must be stated by the
+  original too: when it isn't, nothing is `meets`.
 
 The verdict: `meets` (every check passes or is better), `unverified`
 (none fails, some unverified), `worse` (some check fails).

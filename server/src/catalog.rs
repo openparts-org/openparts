@@ -599,10 +599,21 @@ impl ParamFilter {
                 .is_some_and(|v| self.numbers.iter().any(|&n| near(n, v)));
         let ranged = self.min.is_some() || self.max.is_some();
         let in_range = !ranged
-            || f.stated.is_some_and(|v| {
-                self.min.is_none_or(|m| v >= m || near(v, m))
-                    && self.max.is_none_or(|m| v <= m || near(v, m))
-            });
+            || match f.span {
+                // An operating range must contain the asked span: a
+                // part for 3.3 V has min <= 3.3 V and max >= 3.3 V.
+                Some((lo, hi)) => {
+                    self.min
+                        .is_none_or(|m| lo.is_some_and(|lo| lo <= m || near(lo, m)))
+                        && self
+                            .max
+                            .is_none_or(|m| hi.is_some_and(|hi| hi >= m || near(hi, m)))
+                }
+                None => f.stated.is_some_and(|v| {
+                    self.min.is_none_or(|m| v >= m || near(v, m))
+                        && self.max.is_none_or(|m| v <= m || near(v, m))
+                }),
+            };
         in_values && in_range
     }
 }
@@ -616,6 +627,9 @@ struct ParamFact {
     stated: Option<f64>,
     /// Option order: the SI value, or the vocabulary index.
     order: f64,
+    /// An operating-range key's (`ParameterSpec::span`) lower and upper
+    /// end in SI (a lone `typ` is both).
+    span: Option<(Option<f64>, Option<f64>)>,
 }
 
 /// One Part's filterable facts.
@@ -717,12 +731,19 @@ impl CatalogIndex {
                         label,
                     },
                 );
+                let span = match n {
+                    Normalized::Numeric { typ, min, max } if spec.span => {
+                        Some((min.or(typ), max.or(typ)))
+                    }
+                    _ => None,
+                };
                 params.insert(
                     spec.key,
                     ParamFact {
                         key: fact_key,
                         stated,
                         order,
+                        span,
                     },
                 );
             }
@@ -1030,7 +1051,11 @@ impl CatalogIndex {
                         continue;
                     };
                     counts.entry(fact.key.as_str()).or_insert((fact.order, 0)).1 += 1;
-                    if let Some(v) = fact.stated {
+                    // An operating range spans its ends, not its middle.
+                    let (lo, hi) = fact.span.map_or((fact.stated, fact.stated), |(lo, hi)| {
+                        (lo.or(fact.stated), hi.or(fact.stated))
+                    });
+                    for v in [lo, hi].into_iter().flatten() {
                         span = Some(span.map_or((v, v), |(a, b)| (a.min(v), b.max(v))));
                     }
                 }
@@ -1047,6 +1072,7 @@ impl CatalogIndex {
                                 && matches!(spec.shape, ParameterShape::Numeric(_)))
                             .then_some(*order),
                             order: *order,
+                            span: None,
                         };
                         let selected = filter.is_some_and(|f| {
                             !f.values.is_empty()
@@ -1495,6 +1521,7 @@ mod tests {
             key: String::new(),
             stated: Some(v),
             order: v,
+            span: None,
         };
         assert!(c.matches(Some(&fact(1e-7))));
         assert!(!c.matches(Some(&fact(2.2e-7))));
@@ -1517,6 +1544,28 @@ mod tests {
         let ctr = q.params["current_transfer_ratio"].min.unwrap();
         assert!((ctr - 1.0).abs() < 1e-12);
         assert_eq!(q.params["isolation_voltage"].min, Some(3750.0));
+    }
+
+    /// An operating range (supply voltage, operating temperature) is
+    /// filtered by containment: `supply_voltage_min=3.3&max=3.3` finds
+    /// a 1.8-5.5 V part, not a 4.5-5.5 V one.
+    #[test]
+    fn operating_ranges_filter_by_containment() {
+        let q = parse(&[("supply_voltage_min", "3.3"), ("supply_voltage_max", "3.3")]);
+        let f = &q.params["supply_voltage"];
+        let part = |lo: f64, hi: f64| ParamFact {
+            key: String::new(),
+            stated: Some((lo + hi) / 2.0),
+            order: (lo + hi) / 2.0,
+            span: Some((Some(lo), Some(hi))),
+        };
+        assert!(f.matches(Some(&part(1.8, 5.5))));
+        assert!(!f.matches(Some(&part(4.5, 5.5))));
+        assert!(!f.matches(Some(&part(1.65, 3.0))));
+        let q = parse(&[("operating_temperature_min", "-40")]);
+        let t = &q.params["operating_temperature"];
+        assert!(t.matches(Some(&part(-40.0, 85.0))));
+        assert!(!t.matches(Some(&part(-20.0, 70.0))));
     }
 
     /// The web catalog names every parameter key in both languages and

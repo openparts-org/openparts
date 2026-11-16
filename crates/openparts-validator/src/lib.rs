@@ -119,6 +119,10 @@ pub const RULES: &[Rule] = &[
         meaning: "warning: a parameter key is unusual for the Device's category (e.g. `capacitance` on a resistor)",
     },
     Rule {
+        id: "parameter.implausible_value",
+        meaning: "warning: a parameter number lies outside its key's plausible range (`ParameterSpec::range`: a frequency tolerance beyond ±1000 ppm, a viewing angle over 360°, a propagation delay over 1 ms...), almost always a unit slip",
+    },
+    Rule {
         id: "category.other",
         meaning: "warning: the Device's category is `other`; use the most specific node of the category tree (Canonical Data Specification section 14.1) its datasheet supports, keeping `other` for component types the tree doesn't have yet",
     },
@@ -1276,5 +1280,88 @@ mod tests {
             implausible(C::Optocoupler, &zener[..1]),
             vec!["/parameters/zener_voltage"]
         );
+    }
+
+    #[test]
+    fn timing_amplifier_and_logic_keys_are_plausible_and_ranged() {
+        use openparts_core::{ComponentCategory as C, ParameterValue};
+        let num = |nominal: f64, unit: &str| ParameterValue {
+            typ: Some(nominal),
+            unit: Some(unit.into()),
+            ..Default::default()
+        };
+        let word = |v: &str| ParameterValue {
+            value: Some(v.into()),
+            ..Default::default()
+        };
+        let run = |category: C, keys: &[(&str, ParameterValue)]| -> Vec<(String, String)> {
+            let mut device = base_device();
+            device.category = category;
+            let mut part = base_part();
+            for (key, value) in keys {
+                part.parameters.insert((*key).into(), value.clone().into());
+                part.provenance.insert(
+                    format!("/parameters/{key}"),
+                    vec![openparts_core::ProvenanceEntry {
+                        source: SourceId::from("ex/DS1"),
+                        page: Some(1),
+                        locator: Some("Electrical characteristics".into()),
+                    }],
+                );
+            }
+            let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
+            assert!(
+                !diags
+                    .iter()
+                    .any(|d| d.rule_id.starts_with("parameter.") && d.is_error()),
+                "{diags:?}"
+            );
+            diags
+                .iter()
+                .filter(|d| d.rule_id.starts_with("parameter."))
+                .map(|d| {
+                    (
+                        d.rule_id.to_string(),
+                        d.field_path.clone().unwrap_or_default(),
+                    )
+                })
+                .collect()
+        };
+        let osc = [
+            ("frequency", num(25.0, "MHz")),
+            ("frequency_stability", num(50.0, "ppm")),
+            ("supply_voltage", num(3.3, "V")),
+            ("clock_output", word("cmos")),
+            ("operating_temperature", num(25.0, "°C")),
+        ];
+        assert!(run(C::Oscillator, &osc).is_empty());
+        let amp = [
+            ("gain_bandwidth", num(1.0, "MHz")),
+            ("slew_rate", num(0.6, "V/µs")),
+            ("input_bias_current", num(1.0, "pA")),
+            ("rail_to_rail_output", word("yes")),
+            ("channel_count", word("2")),
+        ];
+        assert!(run(C::OpAmp, &amp).is_empty());
+        let logic = [
+            ("propagation_delay", num(3.5, "ns")),
+            ("output_current_low", num(24.0, "mA")),
+            ("logic_function", word("nand")),
+        ];
+        assert!(run(C::Logic, &logic).is_empty());
+        // 20 % is not 20 ppm; a viewing angle of 1200° is a slip too.
+        let slips = [
+            ("frequency_tolerance", num(20.0, "%")),
+            ("viewing_angle", num(1200.0, "°")),
+        ];
+        let d = run(C::Crystal, &slips);
+        assert!(d.contains(&(
+            "parameter.implausible_value".into(),
+            "/parameters/frequency_tolerance".into()
+        )));
+        assert!(d.contains(&(
+            "parameter.implausible_value".into(),
+            "/parameters/viewing_angle".into()
+        )));
     }
 }

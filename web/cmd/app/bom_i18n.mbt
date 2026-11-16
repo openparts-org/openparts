@@ -336,11 +336,13 @@ fn rule_label(lang : Lang, r : @api.RuleKind) -> String {
     (Ja, AtMost) => "以下"
     (Ja, Ranked) => "等級以上"
     (Ja, Informational) => "参考"
+    (Ja, Covers) => "範囲を包含"
     (En, Equal) => "equal"
     (En, AtLeast) => "≥ original"
     (En, AtMost) => "≤ original"
     (En, Ranked) => "grade ≥"
     (En, Informational) => "info"
+    (En, Covers) => "range ⊇ original"
   }
 }
 

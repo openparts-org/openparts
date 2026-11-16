@@ -903,6 +903,7 @@ pub(all) enum ComponentCategory {
   AnalogSwitch
   LevelShifter
   Logic
+  Oscillator
   GateDriver
 }
 
@@ -959,6 +960,7 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     AnalogSwitch => "analog_switch"
     LevelShifter => "level_shifter"
     Logic => "logic"
+    Oscillator => "oscillator"
     GateDriver => "gate_driver"
   }
 }
@@ -1016,6 +1018,7 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     AnalogSwitch,
     LevelShifter,
     Logic,
+    Oscillator,
     GateDriver,
   ]
 }
@@ -1072,6 +1075,7 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("analog_switch") => AnalogSwitch
     String("level_shifter") => LevelShifter
     String("logic") => Logic
+    String("oscillator") => Oscillator
     String("gate_driver") => GateDriver
     _ => raise @json.JsonDecodeError((path, "expected a ComponentCategory"))
   }
@@ -3999,6 +4003,7 @@ pub(all) enum RuleKind {
   AtMost
   Ranked
   Informational
+  Covers
 }
 
 ///|
@@ -4010,13 +4015,14 @@ pub fn RuleKind::wire(self : RuleKind) -> String {
     AtMost => "at_most"
     Ranked => "ranked"
     Informational => "informational"
+    Covers => "covers"
   }
 }
 
 ///|
 /// Every value, in declaration order.
 pub fn RuleKind::all() -> Array[RuleKind] {
-  [Equal, AtLeast, AtMost, Ranked, Informational]
+  [Equal, AtLeast, AtMost, Ranked, Informational, Covers]
 }
 
 ///|
@@ -4027,6 +4033,7 @@ pub impl @json.FromJson for RuleKind with fn from_json(json, path) {
     String("at_most") => AtMost
     String("ranked") => Ranked
     String("informational") => Informational
+    String("covers") => Covers
     _ => raise @json.JsonDecodeError((path, "expected a RuleKind"))
   }
 }

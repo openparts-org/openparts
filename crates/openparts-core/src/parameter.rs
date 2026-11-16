@@ -165,9 +165,14 @@ pub enum Quantity {
     /// A serial data rate in bit/s. `kbps`/`Kbps`/`Mbps` are decimal
     /// (10^3, 10^6), as interface datasheets use them.
     DataRate,
-    /// A temperature, in °C (measurement conditions only; not SI).
+    /// An amplifier's output slew rate, in V/s (shown in V/µs).
+    SlewRate,
+    /// A plane angle in degrees (an LED's viewing angle; not SI).
+    Angle,
+    /// A temperature, in °C (not SI): measurement conditions and
+    /// operating ranges.
     Temperature,
-    /// A duration (measurement conditions only).
+    /// A duration: measurement conditions and delays.
     Time,
 }
 
@@ -188,6 +193,8 @@ impl Quantity {
         Quantity::Information,
         Quantity::LuminousIntensity,
         Quantity::DataRate,
+        Quantity::SlewRate,
+        Quantity::Angle,
         Quantity::Temperature,
         Quantity::Time,
     ];
@@ -209,6 +216,8 @@ impl Quantity {
             Quantity::Information => "bit",
             Quantity::LuminousIntensity => "cd",
             Quantity::DataRate => "bit/s",
+            Quantity::SlewRate => "V/s",
+            Quantity::Angle => "°",
             Quantity::Temperature => "°C",
             Quantity::Time => "s",
         }
@@ -255,6 +264,8 @@ impl Quantity {
                 ("kV", 1e3),
             ],
             Quantity::Current => &[
+                ("fA", 1e-15),
+                ("pA", 1e-12),
                 ("nA", 1e-9),
                 ("uA", 1e-6),
                 ("µA", 1e-6),
@@ -305,8 +316,17 @@ impl Quantity {
                 ("Mbit/s", 1e6),
                 ("Mbps", 1e6),
             ],
+            Quantity::SlewRate => &[
+                ("V/s", 1.0),
+                ("V/ms", 1e3),
+                ("V/us", 1e6),
+                ("V/µs", 1e6),
+                ("V/μs", 1e6),
+            ],
+            Quantity::Angle => &[("°", 1.0), ("deg", 1.0)],
             Quantity::Temperature => &[("°C", 1.0)],
             Quantity::Time => &[
+                ("ps", 1e-12),
                 ("ns", 1e-9),
                 ("us", 1e-6),
                 ("µs", 1e-6),
@@ -343,7 +363,7 @@ impl Quantity {
             Quantity::Resistance => (&SMALL[3..], "Ω"),
             Quantity::Inductance => (&SMALL[1..5], "H"),
             Quantity::Voltage => (&SMALL[2..6], "V"),
-            Quantity::Current => (&SMALL[1..5], "A"),
+            Quantity::Current => (&SMALL[..5], "A"),
             Quantity::Power => (&SMALL[2..5], "W"),
             Quantity::Frequency => (&SMALL[4..], "Hz"),
             Quantity::Ratio => (&[("", 1e-2)], "%"),
@@ -361,8 +381,10 @@ impl Quantity {
             ),
             Quantity::LuminousIntensity => (&SMALL[2..5], "cd"),
             Quantity::DataRate => (&SMALL[4..7], "bit/s"),
+            Quantity::SlewRate => (&[("", 1.0)], "V/s"),
+            Quantity::Angle => (&[("", 1.0)], "°"),
             Quantity::Temperature => (&[("", 1.0)], "°C"),
-            Quantity::Time => (&SMALL[1..5], "s"),
+            Quantity::Time => (&SMALL[..5], "s"),
         }
     }
 }
@@ -393,6 +415,27 @@ pub struct ParameterSpec {
     /// states `min`/`max` (e.g. -10/+10 %), and the value it is
     /// compared and filtered by is the larger magnitude of the two.
     pub deviation: bool,
+    /// The plausible SI range (inclusive) of every stated number
+    /// (`min`, `typ`, `max`; a deviation's magnitude): a value outside
+    /// is almost always a unit slip (`20 %` for `20 ppm`), so the
+    /// validator warns (`parameter.implausible_value`).
+    pub range: Option<(f64, f64)>,
+    /// The value is an operating range (`min`..`max`: a supply voltage,
+    /// an operating temperature): a catalog range filter asks whether
+    /// it contains the asked span, and alternatives must cover it.
+    pub span: bool,
+}
+
+impl ParameterSpec {
+    /// Whether SI value `v` lies in the key's plausible range (always,
+    /// without one).
+    pub fn in_range(&self, v: f64) -> bool {
+        let v = if self.deviation { v.abs() } else { v };
+        self.range.is_none_or(|(lo, hi)| {
+            let eps = 1e-9 * lo.abs().max(hi.abs());
+            v >= lo - eps && v <= hi + eps
+        })
+    }
 }
 
 use ComponentCategory as C;
@@ -406,6 +449,8 @@ const fn num(key: &'static str, q: Quantity, categories: &'static [C]) -> Parame
         categories,
         display_unit: None,
         deviation: false,
+        range: None,
+        span: false,
     }
 }
 
@@ -416,6 +461,18 @@ const fn shown_in(mut spec: ParameterSpec, unit: &'static str) -> ParameterSpec 
 
 const fn deviation(mut spec: ParameterSpec) -> ParameterSpec {
     spec.deviation = true;
+    spec
+}
+
+/// An operating-range key (see [`ParameterSpec::span`]).
+const fn span(mut spec: ParameterSpec) -> ParameterSpec {
+    spec.span = true;
+    spec
+}
+
+/// The plausible SI range of the key's values (see [`ParameterSpec::range`]).
+const fn within(mut spec: ParameterSpec, lo: f64, hi: f64) -> ParameterSpec {
+    spec.range = Some((lo, hi));
     spec
 }
 
@@ -430,6 +487,8 @@ const fn enumerated(
         categories,
         display_unit: None,
         deviation: false,
+        range: None,
+        span: false,
     }
 }
 
@@ -438,6 +497,45 @@ const PASSIVE_RLC: &[C] = &[C::Capacitor, C::Resistor, C::Inductor];
 const SEMIS_VF: &[C] = &[C::Diode, C::Led, C::Optocoupler];
 /// Collector ratings: BJTs and an optocoupler's phototransistor output.
 const COLLECTOR: &[C] = &[C::Transistor, C::Optocoupler];
+/// Frequency-control parts: crystals (resonators) and oscillators.
+const XTAL: &[C] = &[C::Crystal, C::Oscillator];
+/// Integrated circuits (a group covers its subcategories) and LEDs
+/// with an integrated driver (addressable RGB LEDs).
+const ICS_AND_LED: &[C] = &[
+    C::Led,
+    C::Microcontroller,
+    C::Power,
+    C::Memory,
+    C::Sensor,
+    C::Analog,
+    C::Interface,
+    C::Logic,
+    C::Timing,
+    C::Driver,
+];
+/// A supply-voltage range: ICs and driver LEDs, but not regulators
+/// (their input is `input_voltage_max`).
+const SUPPLIED: &[C] = &[
+    C::Led,
+    C::Microcontroller,
+    C::Memory,
+    C::Sensor,
+    C::Analog,
+    C::Interface,
+    C::Logic,
+    C::Timing,
+    C::Driver,
+];
+/// Amplifier inputs: op-amps, comparators, current-sense amplifiers.
+const AMPS: &[C] = &[C::OpAmp, C::Comparator, C::CurrentSenseAmplifier];
+/// Digital outputs with a timing: comparators, logic, interface ICs.
+const DIGITAL: &[C] = &[C::Comparator, C::Logic, C::Interface];
+/// Parts made of identical channels (amplifiers, gates, transceivers).
+const CHANNELS: &[C] = &[C::Analog, C::Interface, C::Logic, C::Driver];
+/// `yes` / `no` flags (ranked: `yes` is better).
+const YES_NO: &[&str] = &["yes", "no"];
+/// ±1000 ppm: a frequency deviation beyond it is a unit slip.
+const PPM_1000: f64 = 1e-3;
 
 /// The closed parameter vocabulary, in display order. Extend it (with
 /// the spec, Canonical Data Specification section 11.1) when a new
@@ -485,13 +583,54 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     num("saturation_current", Q::Current, &[C::Inductor]),
     num("dcr", Q::Resistance, &[C::Inductor]),
-    // Crystals
-    num("frequency", Q::Frequency, &[C::Crystal]),
-    num("load_capacitance", Q::Capacitance, &[C::Crystal]),
-    deviation(shown_in(
-        num("frequency_tolerance", Q::Ratio, &[C::Crystal]),
-        "ppm",
-    )),
+    // Crystals and oscillators
+    num("frequency", Q::Frequency, XTAL),
+    within(
+        num("load_capacitance", Q::Capacitance, &[C::Crystal]),
+        0.0,
+        1e-9,
+    ),
+    within(
+        deviation(shown_in(num("frequency_tolerance", Q::Ratio, XTAL), "ppm")),
+        0.0,
+        PPM_1000,
+    ),
+    // Over the operating temperature range (`at: { TA: -40..85 °C }`).
+    within(
+        deviation(shown_in(num("frequency_stability", Q::Ratio, XTAL), "ppm")),
+        0.0,
+        PPM_1000,
+    ),
+    // Frequency change in the first year (ppm/year as printed).
+    within(
+        deviation(shown_in(num("aging", Q::Ratio, XTAL), "ppm")),
+        0.0,
+        PPM_1000,
+    ),
+    within(
+        shown_in(num("drive_level", Q::Power, &[C::Crystal]), "µW"),
+        0.0,
+        1e-2,
+    ),
+    within(
+        num("shunt_capacitance", Q::Capacitance, &[C::Crystal]),
+        0.0,
+        1e-10,
+    ),
+    enumerated(
+        "clock_output",
+        &[
+            "cmos",
+            "ttl",
+            "lvds",
+            "lvpecl",
+            "hcsl",
+            "cml",
+            "clipped_sine",
+            "sine",
+        ],
+        &[C::Oscillator],
+    ),
     // Diodes and LEDs
     num("forward_voltage", Q::Voltage, SEMIS_VF),
     num("reverse_voltage", Q::Voltage, SEMIS_VF),
@@ -515,7 +654,14 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         &[C::Led],
     ),
     shown_in(num("wavelength", Q::Length, &[C::Led]), "nm"),
+    within(
+        shown_in(num("peak_wavelength", Q::Length, &[C::Led]), "nm"),
+        1e-7,
+        1e-5,
+    ),
     num("luminous_intensity", Q::LuminousIntensity, &[C::Led]),
+    // Full angle at half intensity (2θ½).
+    within(num("viewing_angle", Q::Angle, &[C::Led]), 0.0, 360.0),
     // RGB LEDs: one key per emitter colour (dominant wavelength,
     // luminous intensity); addressable ones (an integrated driver) also
     // state their supply and data input.
@@ -525,9 +671,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("luminous_intensity_red", Q::LuminousIntensity, &[C::Led]),
     num("luminous_intensity_green", Q::LuminousIntensity, &[C::Led]),
     num("luminous_intensity_blue", Q::LuminousIntensity, &[C::Led]),
-    num("supply_voltage", Q::Voltage, &[C::Led]),
     enumerated("data_interface", &["single_wire", "clock_data"], &[C::Led]),
-    num("data_rate", Q::DataRate, &[C::Led]),
     // Transistors
     enumerated(
         "polarity",
@@ -558,6 +702,109 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     // Switches
     num("actuation_force", Q::Force, &[C::Switch]),
     shown_in(num("travel", Q::Length, &[C::Switch]), "mm"),
+    // Integrated circuits in general. The supply as a range (min/max);
+    // an amplifier's is the total span V+ - V- (±18 V is 36 V).
+    within(span(num("supply_voltage", Q::Voltage, SUPPLIED)), -1e3, 1e3),
+    within(num("supply_current", Q::Current, ICS_AND_LED), 0.0, 10.0),
+    within(
+        span(num("operating_temperature", Q::Temperature, C::ALL)),
+        -100.0,
+        300.0,
+    ),
+    // Human-body-model ESD rating of all pins.
+    within(num("esd_hbm", Q::Voltage, ICS_AND_LED), 1e2, 1e5),
+    // Amplifiers and comparators
+    enumerated(
+        "channel_count",
+        &["1", "2", "3", "4", "6", "8", "16"],
+        CHANNELS,
+    ),
+    within(
+        num(
+            "gain_bandwidth",
+            Q::Frequency,
+            &[C::OpAmp, C::CurrentSenseAmplifier],
+        ),
+        0.0,
+        1e11,
+    ),
+    within(
+        shown_in(
+            num(
+                "slew_rate",
+                Q::SlewRate,
+                &[C::OpAmp, C::CurrentSenseAmplifier],
+            ),
+            "V/µs",
+        ),
+        0.0,
+        1e11,
+    ),
+    // Magnitudes: the printed ±3 mV max is `max: 3 mV`.
+    within(num("input_offset_voltage", Q::Voltage, AMPS), 0.0, 1.0),
+    within(num("input_bias_current", Q::Current, AMPS), 0.0, 0.1),
+    within(
+        num(
+            "supply_current_per_channel",
+            Q::Current,
+            &[C::OpAmp, C::Comparator],
+        ),
+        0.0,
+        1.0,
+    ),
+    enumerated("rail_to_rail_input", YES_NO, &[C::OpAmp, C::Comparator]),
+    enumerated("rail_to_rail_output", YES_NO, &[C::OpAmp, C::Comparator]),
+    within(num("propagation_delay", Q::Time, DIGITAL), 0.0, 1e-3),
+    enumerated(
+        "output_structure",
+        &["push_pull", "open_drain", "open_collector"],
+        DIGITAL,
+    ),
+    // Logic
+    enumerated(
+        "logic_function",
+        &[
+            "buffer",
+            "inverter",
+            "and",
+            "nand",
+            "or",
+            "nor",
+            "xor",
+            "xnor",
+            "bus_transceiver",
+            "flip_flop",
+            "latch",
+            "shift_register",
+            "counter",
+            "decoder",
+            "multiplexer",
+        ],
+        &[C::Logic],
+    ),
+    // Output drive, as magnitudes (IOH -24 mA is 24 mA).
+    within(
+        num("output_current_high", Q::Current, &[C::Logic, C::Interface]),
+        0.0,
+        1.0,
+    ),
+    within(
+        num("output_current_low", Q::Current, &[C::Logic, C::Interface]),
+        0.0,
+        1.0,
+    ),
+    // Interface (and addressable LEDs' data input)
+    within(
+        num("data_rate", Q::DataRate, &[C::Led, C::Interface]),
+        0.0,
+        1e12,
+    ),
+    // Bus pins' fault-protection range (abs max, min/max as printed).
+    within(
+        span(num("bus_fault_voltage", Q::Voltage, &[C::Interface])),
+        -1e3,
+        1e3,
+    ),
 ];
 
 /// The vocabulary entry for `key`.
@@ -754,8 +1001,8 @@ fn format_value_digits(v: f64, spec: &ParameterSpec, digits: i32) -> String {
     if let Some(unit) = spec.display_unit {
         let factor = q.unit_factor(unit).unwrap_or(1.0);
         let n = trim_number(v / factor, digits);
-        return if unit == "%" {
-            format!("{n}%")
+        return if unit == "%" || unit == "°" {
+            format!("{n}{unit}")
         } else {
             format!("{n} {unit}")
         };
@@ -775,8 +1022,8 @@ fn format_value_digits(v: f64, spec: &ParameterSpec, digits: i32) -> String {
             .unwrap_or(&prefixes[0]);
     }
     let n = trim_number(v / chosen.1, digits);
-    if symbol == "%" {
-        format!("{n}%")
+    if symbol == "%" || symbol == "°" {
+        format!("{n}{symbol}")
     } else {
         format!("{n} {}{symbol}", chosen.0)
     }
@@ -1182,6 +1429,74 @@ mod tests {
             spec("collector_emitter_voltage"),
             C::Transistor
         ));
+    }
+
+    #[test]
+    fn timing_amplifier_and_logic_keys() {
+        let f = |v: f64, k: &str| format_value(v, spec(k));
+        let lab = |v: ParameterValue, k: &str| v.normalize(spec(k)).unwrap().label(spec(k));
+        assert_eq!(
+            lab(val(Some(0.6), None, None, "V/us"), "slew_rate"),
+            "0.6 V/µs"
+        );
+        assert_eq!(f(13e6, "slew_rate"), "13 V/µs");
+        assert_eq!(
+            lab(val(Some(1.0), None, None, "pA"), "input_bias_current"),
+            "1 pA"
+        );
+        assert_eq!(
+            lab(val(Some(3.5), None, None, "ns"), "propagation_delay"),
+            "3.5 ns"
+        );
+        assert_eq!(
+            lab(val(Some(120.0), None, None, "°"), "viewing_angle"),
+            "120°"
+        );
+        assert_eq!(
+            lab(val(Some(100.0), None, None, "µW"), "drive_level"),
+            "100 µW"
+        );
+        assert_eq!(
+            lab(val(Some(940.0), None, None, "nm"), "peak_wavelength"),
+            "940 nm"
+        );
+        let t = spec("operating_temperature");
+        let n = val(None, Some(-40.0), Some(125.0), "°C")
+            .normalize(t)
+            .unwrap();
+        assert_eq!(n.label(t), "-40 °C–125 °C");
+        let st = spec("frequency_stability");
+        let n = val(None, Some(-50.0), Some(50.0), "ppm")
+            .normalize(st)
+            .unwrap();
+        assert_eq!(n.label(st), "±50 ppm");
+        assert!(st.in_range(-50e-6) && !st.in_range(0.2));
+        assert!(close_to(parse_value("20V/us", spec("slew_rate")), 20e6));
+        assert!(close_to(parse_value("0.5", spec("slew_rate")), 0.5e6));
+        assert!(close_to(
+            parse_value("10p", spec("input_bias_current")),
+            1e-11
+        ));
+        // Generalised keys: no longer LED-only.
+        for (key, c) in [
+            ("supply_voltage", C::OpAmp),
+            ("supply_voltage", C::Oscillator),
+            ("supply_voltage", C::Led),
+            ("data_rate", C::CanTransceiver),
+            ("data_rate", C::Led),
+            ("frequency", C::Oscillator),
+            ("propagation_delay", C::Comparator),
+            ("propagation_delay", C::Logic),
+            ("operating_temperature", C::Capacitor),
+        ] {
+            assert!(plausible_for(spec(key), c), "{key} for {c:?}");
+        }
+        assert!(!plausible_for(spec("supply_voltage"), C::LinearRegulator));
+        assert!(!plausible_for(spec("slew_rate"), C::Logic));
+    }
+
+    fn close_to(a: Option<f64>, b: f64) -> bool {
+        a.is_some_and(|a| (a - b).abs() <= b.abs() * 1e-9)
     }
 
     #[test]

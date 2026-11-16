@@ -284,6 +284,7 @@ pub fn reference_prefix(category: openparts_core::ComponentCategory) -> &'static
         C::Diode | C::Led => "D",
         C::Transistor => "Q",
         C::Crystal => "Y",
+        C::Oscillator => "X",
         C::Fuse => "F",
         C::Connector => "J",
         C::Switch | C::TactSwitch => "SW",

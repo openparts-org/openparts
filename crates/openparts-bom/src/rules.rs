@@ -33,6 +33,10 @@ pub enum RuleKind {
     /// Reported side by side, not judged (direction depends on the
     /// design: gate threshold, actuation force).
     Informational,
+    /// A range (`min`..`max`): the candidate's must contain the
+    /// original's -- a supply-voltage or operating-temperature range at
+    /// least as wide on every side the original states.
+    Covers,
 }
 
 /// One row of the rule table.
@@ -67,7 +71,7 @@ const fn within(mut r: ParameterRule, tolerance: f64) -> ParameterRule {
     r
 }
 
-use RuleKind::{AtLeast, AtMost, Equal, Informational, Ranked};
+use RuleKind::{AtLeast, AtMost, Covers, Equal, Informational, Ranked};
 
 /// The comparison rule of every key of `openparts_core::PARAMETERS`
 /// (a test keeps the two in step).
@@ -88,10 +92,15 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("rated_current", AtLeast),
     rule("saturation_current", AtLeast),
     rule("dcr", AtMost),
-    // Crystals
+    // Crystals and oscillators
     identity(rule("frequency", Equal)),
     rule("load_capacitance", Equal),
     rule("frequency_tolerance", AtMost),
+    rule("frequency_stability", AtMost),
+    rule("aging", AtMost),
+    rule("drive_level", AtLeast),
+    rule("shunt_capacitance", Informational),
+    identity(rule("clock_output", Equal)),
     // Diodes and LEDs
     rule("forward_voltage", AtMost),
     rule("reverse_voltage", AtLeast),
@@ -100,16 +109,16 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("zener_test_current", Informational),
     identity(rule("color", Equal)),
     within(rule("wavelength", Equal), 0.02),
+    within(rule("peak_wavelength", Equal), 0.02),
     rule("luminous_intensity", Informational),
+    rule("viewing_angle", Informational),
     within(rule("wavelength_red", Equal), 0.02),
     within(rule("wavelength_green", Equal), 0.02),
     within(rule("wavelength_blue", Equal), 0.02),
     rule("luminous_intensity_red", Informational),
     rule("luminous_intensity_green", Informational),
     rule("luminous_intensity_blue", Informational),
-    rule("supply_voltage", Informational),
     identity(rule("data_interface", Equal)),
-    rule("data_rate", AtLeast),
     // Transistors
     identity(rule("polarity", Equal)),
     rule("drain_source_voltage", AtLeast),
@@ -132,6 +141,29 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     // Switches
     rule("actuation_force", Informational),
     rule("travel", Informational),
+    // Integrated circuits in general
+    rule("supply_voltage", Covers),
+    rule("supply_current", AtMost),
+    rule("operating_temperature", Covers),
+    rule("esd_hbm", AtLeast),
+    // Amplifiers and comparators
+    identity(rule("channel_count", Equal)),
+    rule("gain_bandwidth", AtLeast),
+    rule("slew_rate", AtLeast),
+    rule("input_offset_voltage", AtMost),
+    rule("input_bias_current", AtMost),
+    rule("supply_current_per_channel", AtMost),
+    rule("rail_to_rail_input", Ranked),
+    rule("rail_to_rail_output", Ranked),
+    rule("propagation_delay", AtMost),
+    rule("output_structure", Equal),
+    // Logic
+    identity(rule("logic_function", Equal)),
+    rule("output_current_high", AtLeast),
+    rule("output_current_low", AtLeast),
+    // Interface
+    rule("data_rate", AtLeast),
+    rule("bus_fault_voltage", Covers),
 ];
 
 /// Dielectric grades, best first: temperature stability of the
@@ -165,6 +197,12 @@ fn rank(key: &str, value: &str) -> Option<u8> {
             .iter()
             .find(|(v, _)| *v == value)
             .map(|(_, r)| *r),
+        // A rail-to-rail input/output serves wherever one without does.
+        "rail_to_rail_input" | "rail_to_rail_output" => match value {
+            "yes" => Some(1),
+            "no" => Some(0),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -184,6 +222,11 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
         C::Resistor => &["resistance", "tolerance", "power_rating"],
         C::Inductor => &["inductance", "rated_current", "saturation_current", "dcr"],
         C::Crystal => &["frequency", "load_capacitance", "frequency_tolerance"],
+        C::Oscillator => &["frequency", "supply_voltage", "clock_output"],
+        C::OpAmp => &["gain_bandwidth", "supply_voltage", "input_offset_voltage"],
+        C::Comparator => &["propagation_delay", "supply_voltage", "output_structure"],
+        C::Logic => &["logic_function", "supply_voltage", "propagation_delay"],
+        C::CanTransceiver | C::Rs485Transceiver => &["data_rate", "supply_voltage"],
         C::Led => &["color", "forward_voltage"],
         C::Fuse => &["rated_current", "rated_voltage"],
         C::Optocoupler => &["current_transfer_ratio", "isolation_voltage"],
@@ -350,7 +393,7 @@ pub fn identity_keys(category: ComponentCategory) -> Vec<&'static str> {
         C::Capacitor => vec!["capacitance"],
         C::Resistor => vec!["resistance"],
         C::Inductor => vec!["inductance"],
-        C::Crystal => vec!["frequency"],
+        C::Crystal | C::Oscillator => vec!["frequency"],
         C::Led => vec!["color"],
         C::Transistor => vec!["polarity"],
         c if c.is_within(C::Memory) => vec!["capacity"],
@@ -424,8 +467,11 @@ fn check_one(
                 _ => CheckStatus::Unverified,
             },
             Informational => CheckStatus::Info,
-            AtLeast | AtMost => CheckStatus::Unverified,
+            AtLeast | AtMost | Covers => CheckStatus::Unverified,
         };
+    }
+    if rule.kind == Covers {
+        return covers(rule, orig, cand);
     }
     let Some((a, b)) = compared(rule.kind, orig, cand, spec) else {
         return CheckStatus::Unverified;
@@ -445,6 +491,49 @@ fn check_one(
         AtMost if b < a => CheckStatus::Better,
         AtLeast | AtMost => CheckStatus::Fail,
         Informational => CheckStatus::Info,
+        Covers => unreachable!("handled above"),
+    }
+}
+
+/// A `Covers` check: each limit the original states (`min`, `max`) is
+/// met by the candidate's same limit (lower or equal / higher or
+/// equal). A limit the candidate doesn't state is unverified; an
+/// original with neither (a lone `typ`) can't be judged.
+fn covers(rule: &ParameterRule, orig: &Normalized, cand: &Normalized) -> CheckStatus {
+    let (
+        Normalized::Numeric {
+            min: omin,
+            max: omax,
+            ..
+        },
+        Normalized::Numeric {
+            min: cmin,
+            max: cmax,
+            ..
+        },
+    ) = (orig, cand)
+    else {
+        return CheckStatus::Unverified;
+    };
+    if omin.is_none() && omax.is_none() {
+        return CheckStatus::Unverified;
+    }
+    let near = |a: f64, b: f64| (a - b).abs() <= rule.tolerance.max(1e-9) * a.abs().max(b.abs());
+    let (mut wider, mut unknown) = (false, false);
+    // (original limit, candidate limit, candidate is better when lower)
+    for (o, c, lower_better) in [(omin, cmin, true), (omax, cmax, false)] {
+        let Some(o) = o else { continue };
+        match c {
+            None => unknown = true,
+            Some(c) if near(*o, *c) => {}
+            Some(c) if (*c < *o) == lower_better => wider = true,
+            Some(_) => return CheckStatus::Fail,
+        }
+    }
+    match (unknown, wider) {
+        (true, _) => CheckStatus::Unverified,
+        (false, true) => CheckStatus::Better,
+        (false, false) => CheckStatus::Pass,
     }
 }
 
@@ -547,6 +636,11 @@ mod tests {
         };
         for d in open_parts_dielectrics {
             assert!(rank("dielectric", d).is_some(), "no rank for {d}");
+        }
+        // Operating ranges are compared by containment, and only they.
+        for r in PARAMETER_RULES {
+            let spec = parameter_spec(r.key).unwrap();
+            assert_eq!(spec.span, r.kind == Covers, "{}", r.key);
         }
     }
 
@@ -728,5 +822,74 @@ mod tests {
         assert!(!c.identity_complete());
         assert_eq!(c.identity_missing, vec!["output_voltage"]);
         assert_eq!(status(&c, "output_voltage"), CheckStatus::Unverified);
+    }
+
+    fn range(lo: f64, hi: f64, unit: &str) -> ParameterValue {
+        ParameterValue {
+            min: Some(lo),
+            max: Some(hi),
+            unit: Some(unit.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn ranges_must_cover_the_original() {
+        let orig = params(&[
+            ("supply_voltage", range(2.7, 5.5, "V")),
+            ("operating_temperature", range(-40.0, 85.0, "°C")),
+        ]);
+        let wider = params(&[
+            ("supply_voltage", range(1.8, 5.5, "V")),
+            ("operating_temperature", range(-40.0, 125.0, "°C")),
+        ]);
+        let c = compare(&orig, &wider, None);
+        assert_eq!(c.verdict, Verdict::Meets);
+        assert_eq!(status(&c, "supply_voltage"), CheckStatus::Better);
+        assert_eq!(status(&c, "operating_temperature"), CheckStatus::Better);
+        // 3.0 V minimum: a 2.7 V design is not covered.
+        let narrower = params(&[
+            ("supply_voltage", range(3.0, 5.5, "V")),
+            ("operating_temperature", range(-40.0, 85.0, "°C")),
+        ]);
+        let c = compare(&orig, &narrower, None);
+        assert_eq!(status(&c, "supply_voltage"), CheckStatus::Fail);
+        assert_eq!(status(&c, "operating_temperature"), CheckStatus::Pass);
+        assert_eq!(c.verdict, Verdict::Worse);
+        // The candidate states only a maximum: its minimum is unknown.
+        let mut max_only = num(5.5, "V");
+        max_only.typ = None;
+        max_only.max = Some(5.5);
+        let c = compare(&orig, &params(&[("supply_voltage", max_only)]), None);
+        assert_eq!(status(&c, "supply_voltage"), CheckStatus::Unverified);
+    }
+
+    #[test]
+    fn amplifier_and_logic_rules() {
+        let orig = params(&[
+            ("channel_count", word("2")),
+            ("gain_bandwidth", num(1.0, "MHz")),
+            ("slew_rate", num(0.5, "V/µs")),
+            ("rail_to_rail_output", word("no")),
+            ("propagation_delay", num(10.0, "ns")),
+        ]);
+        let cand = params(&[
+            ("channel_count", word("2")),
+            ("gain_bandwidth", num(10.0, "MHz")),
+            ("slew_rate", num(0.3, "V/us")),
+            ("rail_to_rail_output", word("yes")),
+            ("propagation_delay", num(5.0, "ns")),
+        ]);
+        let c = compare(&orig, &cand, None);
+        assert_eq!(status(&c, "channel_count"), CheckStatus::Pass);
+        assert_eq!(status(&c, "gain_bandwidth"), CheckStatus::Better);
+        assert_eq!(status(&c, "slew_rate"), CheckStatus::Fail);
+        assert_eq!(status(&c, "rail_to_rail_output"), CheckStatus::Better);
+        assert_eq!(status(&c, "propagation_delay"), CheckStatus::Better);
+        let quad = params(&[("channel_count", word("4"))]);
+        assert!(compare(&orig, &quad, None).identity_mismatch);
+        // Rail-to-rail is a grade: "no" does not replace "yes".
+        let back = compare(&cand, &orig, None);
+        assert_eq!(status(&back, "rail_to_rail_output"), CheckStatus::Fail);
     }
 }

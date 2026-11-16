@@ -2,13 +2,13 @@
 //! 11.2): every key is in the vocabulary, each value has its key's
 //! shape and a unit of its key's quantity, `min <= typ <= max`, every
 //! value is cited, its conditions use known symbols with fitting units,
-//! condition variants of one key differ, and the key suits the device's
-//! category.
+//! condition variants of one key differ, the key suits the device's
+//! category, and each number lies in the key's plausible range.
 
 use crate::Diagnostic;
 use openparts_core::{
-    condition::comparable, parameter::plausible_for, parameter_spec, ComponentCategory,
-    ParameterError, Parameters, ProvenanceMap,
+    condition::comparable, format_value, parameter::plausible_for, parameter_spec,
+    ComponentCategory, Normalized, ParameterError, Parameters, ProvenanceMap,
 };
 
 pub(crate) fn check_parameters(
@@ -58,7 +58,29 @@ pub(crate) fn check_parameters(
             } else {
                 path.clone()
             };
-            if let Err(e) = value.normalize(spec) {
+            let normalized = value.normalize(spec);
+            if let (Ok(Normalized::Numeric { typ, min, max }), Some((lo, hi))) =
+                (&normalized, spec.range)
+            {
+                if let Some(v) = [*min, *typ, *max]
+                    .into_iter()
+                    .flatten()
+                    .find(|v| !spec.in_range(*v))
+                {
+                    out.push(Diagnostic::warning(
+                        "parameter.implausible_value",
+                        entity,
+                        Some(&at),
+                        format!(
+                            "parameter \"{key}\": {} is outside the plausible {}..{} (a unit slip?)",
+                            format_value(v, spec),
+                            format_value(lo, spec),
+                            format_value(hi, spec),
+                        ),
+                    ));
+                }
+            }
+            if let Err(e) = normalized {
                 let message = format!("parameter \"{key}\": {e}");
                 out.push(match e {
                     ParameterError::MissingUnit | ParameterError::IncompatibleUnit { .. } => {

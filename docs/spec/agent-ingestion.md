@@ -493,15 +493,21 @@ MPN, so it goes on the Part).
 | capacitor | `capacitance`, `tolerance` (or `capacitance_tolerance` when the source gives pF), `rated_voltage`, `dielectric`, `esr` |
 | resistor | `resistance`, `tolerance`, `power_rating`, `temperature_coefficient` |
 | inductor | `inductance`, `tolerance`, `rated_current`, `saturation_current`, `dcr` |
-| crystal | `frequency`, `load_capacitance`, `frequency_tolerance`, `esr` |
+| crystal | `frequency`, `load_capacitance`, `frequency_tolerance`, `frequency_stability`, `esr`, `drive_level`, `shunt_capacitance`, `aging`, `operating_temperature` |
+| `oscillator` (group `timing`) | `frequency`, `frequency_tolerance`, `frequency_stability`, `aging`, `clock_output`, `supply_voltage`, `supply_current`, `operating_temperature` |
 | diode | `forward_voltage`, `reverse_voltage`, `forward_current`; zener `zener_voltage`, `zener_test_current` |
-| LED | `color`, `wavelength`, `luminous_intensity`, `forward_voltage`, `forward_current`; RGB: `wavelength_red`/`_green`/`_blue`, `luminous_intensity_red`/`_green`/`_blue`; with an integrated driver (addressable): `supply_voltage`, `data_interface`, `data_rate` |
+| LED | `color`, `wavelength` (dominant), `peak_wavelength`, `luminous_intensity`, `viewing_angle`, `forward_voltage`, `forward_current`; RGB: `wavelength_red`/`_green`/`_blue`, `luminous_intensity_red`/`_green`/`_blue`; with an integrated driver (addressable): `supply_voltage`, `data_interface`, `data_rate` |
 | transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
 | optocoupler | input LED `forward_voltage`, `forward_current`, `reverse_voltage`; output `collector_emitter_voltage`, `collector_current`; `current_transfer_ratio`, `isolation_voltage` |
 | fuse | `rated_current`, `rated_voltage` |
 | `linear_regulator`, `switching_regulator` (group `power`) | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`; `dropout_voltage` (linear only) |
 | `flash`, `eeprom`, `sram` (group `memory`) | `capacity` (on the Device when all its Parts share it) |
 | `tact_switch` (group `switch`) | `actuation_force`, `travel`, `rated_voltage`, `rated_current` |
+| `op_amp` (group `analog`) | `channel_count`, `gain_bandwidth`, `slew_rate`, `input_offset_voltage`, `input_bias_current`, `supply_voltage`, `supply_current_per_channel` (or `supply_current` when only the total is printed), `rail_to_rail_input`, `rail_to_rail_output`, `operating_temperature` |
+| `comparator` (group `analog`) | `channel_count`, `propagation_delay`, `output_structure`, `input_offset_voltage`, `input_bias_current`, `supply_voltage`, `supply_current_per_channel` / `supply_current`, `rail_to_rail_input`, `operating_temperature` |
+| `logic` | `logic_function`, `channel_count`, `supply_voltage`, `propagation_delay`, `output_current_high`, `output_current_low`, `output_structure`, `operating_temperature` |
+| `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter`, I2C buffers (group `interface`) | `data_rate`, `supply_voltage`, `supply_current`, `bus_fault_voltage`, `esd_hbm`, `channel_count` (level shifters, buffers), `propagation_delay`, `operating_temperature` |
+| any IC | `supply_voltage`, `supply_current`, `operating_temperature`, `esd_hbm` |
 
 No other keys exist. Don't invent one; propose it in the PR text
 instead.
@@ -559,6 +565,37 @@ Specification section 3.3).
   MPN doesn't fix a CTR rank, record the unranked limits and say so in
   the locator. Isolation voltage: the number as printed (`5000 V`),
   "Vrms" in the locator, `at: { t: 60 s }`.
+- Operating ranges (`supply_voltage`, `operating_temperature`,
+  `bus_fault_voltage`): the ends as `min`/`max`, from the recommended
+  operating conditions (supply, temperature) or the absolute maximum
+  ratings (bus fault protection). An op-amp's supply is the total span
+  V+ - V-: "2.7 V to 36 V (±1.35 V to ±18 V)" -> `{ min: 2.7 V, max: 36 V }`;
+  when the source prints only the dual form, leave the key out. When
+  the supply range depends on a grade the MPN doesn't fix, leave it out.
+- Magnitudes (`input_offset_voltage`, `input_bias_current`,
+  `output_current_high`/`_low`): drop the sign or ±; VOS "±0.5 typ,
+  ±3 max mV" -> `{ typ: 0.5 mV, max: 3 mV }`; IOH -24 mA -> `24 mA`.
+  Conditions such as `at: { VCC: 3 V }` (IOH/IOL, tpd), `VS` (an
+  op-amp's test supply, total span), `CL`/`RL` (load), `VOD`
+  (comparator overdrive), `TA` (the full-range row) as printed.
+- Per channel vs total: `supply_current_per_channel` only when the
+  source states it per amplifier/comparator; a total for the package is
+  `supply_current`. Never divide.
+- `frequency_tolerance` is at 25 °C; `frequency_stability` is over
+  temperature with the range in `at: { TA: -40..85 °C }`; an
+  oscillator's all-inclusive "frequency stability" (tolerance +
+  temperature + aging) goes in `frequency_stability` with "inclusive"
+  in the locator. `aging` is the first-year figure in `ppm`.
+- `propagation_delay`: when tPLH and tPHL are printed separately,
+  record the slower edge's row as printed and name the edge in the
+  locator; one variant per printed supply/load/overdrive condition.
+- `rail_to_rail_input`/`_output`: `yes` only when the source says so;
+  `no` only when it says the range stops short of a rail, else leave
+  the key out.
+- `channel_count`: the identical channels in the package (dual op-amp
+  `2`, quad NAND `4`, 8-bit translator `8`).
+- `esd_hbm`: the HBM rating that holds for all pins; a higher
+  bus-pin-only rating stays in the locator.
 - Enumerated keys: the exact listed spelling (`X7R`, `n_channel`,
   `adjustable`). `X7R(EIA)` is `X7R`. A value not in the list: leave the
   key out and report it.
@@ -580,8 +617,9 @@ their own `src`. Run `openparts data fmt` on the files you changed.
 **6. Validate.** `scripts/validate.sh` in openparts-data (or
 `openparts validate --data <dir>`) must report no errors, and
 `openparts data fmt --check` must pass; with
-`OPENPARTS_SHOW_WARNINGS=1` it lists `parameter.implausible` and
-`provenance.locator_long` warnings -- each one needs a reason in the
+`OPENPARTS_SHOW_WARNINGS=1` it lists `parameter.implausible`,
+`parameter.implausible_value` (a number outside the key's plausible
+range: usually a unit slip) and `provenance.locator_long` warnings -- each one needs a reason in the
 report or a fix.
 
 **7. Commit and report.** Commit messages say

@@ -98,7 +98,8 @@ Run `openparts data fmt <files>` before committing; CI runs
   microcontroller, capacitor, resistor, inductor, diode, transistor, led,
   crystal, fuse, connector, optocoupler, or a subcategory such as
   `linear_regulator`, `eeprom`, `imu`, `op_amp`, `can_transceiver`,
-  `logic`, `rtc`, `tact_switch`, `gate_driver`; `other` only when the tree
+  `logic`, `rtc`, `oscillator` (clock oscillators; a bare resonator is
+  `crystal`), `tact_switch`, `gate_driver`; `other` only when the tree
   has no fitting node (the validator warns). The passive/discrete values
   change how the 3D model is drawn. `document_type` also accepts
   `product_page`, `pcn`, `eol_notice`, `other`.
@@ -128,7 +129,11 @@ Run `openparts data fmt <files>` before committing; CI runs
   docs/spec/agent-ingestion.md section 19.1: closed key list, a unit of
   the key's quantity, a `src` and the printed conditions (`at`) for each,
   and no values decoded from the MPN unless the ordering-code table maps
-  the code (cite that table).
+  the code (cite that table). The key table per category is there
+  (crystals/oscillators, op-amps/comparators, logic, interface ICs and
+  LEDs included); keys for any IC: `supply_voltage` and
+  `operating_temperature` as `min`/`max` ranges, `supply_current`,
+  `esd_hbm`. Magnitudes drop the sign (VOS, IB, IOH/IOL).
 
 ## 3. Devices and pins
 

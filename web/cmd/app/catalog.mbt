@@ -41,7 +41,9 @@ let sort_keys : Array[String] = [
 ///|
 /// The enumerated parameter keys (checkboxes only, not sortable).
 let enum_param_keys : Array[String] = [
-  "dielectric", "color", "polarity", "output_type", "data_interface",
+  "dielectric", "color", "polarity", "output_type", "data_interface", "clock_output",
+  "channel_count", "rail_to_rail_input", "rail_to_rail_output", "output_structure",
+  "logic_function",
 ]
 
 ///|
@@ -86,6 +88,21 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
   match category {
     "linear_regulator" =>
       ["output_type", "output_voltage", "output_current", "dropout_voltage"]
+    "op_amp" =>
+      [
+        "channel_count", "gain_bandwidth", "slew_rate", "input_offset_voltage", "supply_voltage",
+        "rail_to_rail_output",
+      ]
+    "comparator" =>
+      [
+        "channel_count", "propagation_delay", "output_structure", "input_offset_voltage",
+        "supply_voltage",
+      ]
+    "oscillator" =>
+      ["frequency", "frequency_stability", "clock_output", "supply_voltage"]
+    "can_transceiver" | "rs485_transceiver" | "rs232_transceiver" =>
+      ["data_rate", "supply_voltage", "bus_fault_voltage", "esd_hbm"]
+    "level_shifter" => ["channel_count", "data_rate", "supply_voltage"]
     _ => param_columns_of_root(if root.is_empty() { category } else { root })
   }
 }
@@ -101,7 +118,11 @@ fn param_columns_of_root(category : String) -> Array[String] {
     "resistor" =>
       ["resistance", "tolerance", "power_rating", "temperature_coefficient"]
     "inductor" => ["inductance", "rated_current", "saturation_current", "dcr"]
-    "crystal" => ["frequency", "load_capacitance", "frequency_tolerance", "esr"]
+    "crystal" =>
+      [
+        "frequency", "load_capacitance", "frequency_tolerance", "frequency_stability",
+        "esr",
+      ]
     "diode" =>
       ["reverse_voltage", "forward_current", "forward_voltage", "zener_voltage"]
     "optocoupler" =>
@@ -109,7 +130,19 @@ fn param_columns_of_root(category : String) -> Array[String] {
         "current_transfer_ratio", "isolation_voltage", "collector_emitter_voltage",
         "forward_voltage",
       ]
-    "led" => ["color", "wavelength", "forward_voltage", "supply_voltage"]
+    "led" =>
+      [
+        "color", "wavelength", "forward_voltage", "luminous_intensity", "viewing_angle",
+        "supply_voltage",
+      ]
+    "analog" => ["channel_count", "supply_voltage", "supply_current"]
+    "interface" => ["channel_count", "data_rate", "supply_voltage"]
+    "logic" =>
+      [
+        "logic_function", "channel_count", "supply_voltage", "propagation_delay",
+        "output_current_low",
+      ]
+    "timing" => ["frequency", "supply_voltage", "supply_current"]
     "transistor" =>
       ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
     "fuse" => ["rated_current", "rated_voltage"]
@@ -653,7 +686,7 @@ fn category_glyph(c : @api.ComponentCategory) -> String {
     | Rs232Transceiver
     | LevelShifter => "I/F"
     Logic => "74"
-    Timing | Timer | Rtc => "TMR"
+    Timing | Oscillator | Timer | Rtc => "TMR"
     Driver | GateDriver | DarlingtonArray => "DRV"
     Other => "IC"
   }

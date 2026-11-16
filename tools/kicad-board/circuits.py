@@ -53,7 +53,7 @@ DEFAULT_MARGIN = 1.5
 PREFIX = {
     "capacitor": "C", "resistor": "R", "inductor": "L", "crystal": "Y",
     "diode": "D", "led": "D", "connector": "J", "switch": "SW", "fuse": "F",
-    "transistor": "Q",
+    "transistor": "Q", "oscillator": "X",
 }
 
 LEVELS = ("required", "recommended", "example", "optional")
@@ -144,7 +144,8 @@ def close(a, b):
     return abs(a - b) <= 1e-6 * max(abs(a), abs(b), 1e-30)
 
 
-DEVIATION = {"tolerance", "frequency_tolerance", "capacitance_tolerance", "temperature_coefficient"}
+DEVIATION = {"tolerance", "frequency_tolerance", "capacitance_tolerance", "temperature_coefficient",
+             "frequency_stability", "aging"}
 
 
 def meets(key, want, have):
