@@ -61,6 +61,19 @@ pub fn validate_assembly(
                 c.reference
             ));
         }
+        if let Some(real) = &c.stand_in_for {
+            if c.part.is_none() {
+                bad(format!(
+                    "{}: stand_in_for is only for a part standing in for the real component",
+                    c.reference
+                ));
+            } else if real.trim().is_empty() {
+                bad(format!(
+                    "{}: stand_in_for must name the real component (MPN or description)",
+                    c.reference
+                ));
+            }
+        }
         if !(c.x.is_finite() && c.y.is_finite() && c.rotation.is_finite()) {
             bad(format!(
                 "{}: x, y and rotation must be numbers",

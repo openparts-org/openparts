@@ -1518,6 +1518,7 @@ assembly:
 | `ref` | Reference designator from the design file or BOM, unique in the list. |
 | `part` | An OpenParts part id. Exactly one of `part` and `body`. |
 | `body` | A placeholder box: `width` (X), `length` (Y), `height` (Z, from the board surface), the axes of a package's `body_width`/`body_length`/`body_height` in the component's own frame before rotation; optional `color` (`#rrggbb`, default neutral grey). Centred on `x`/`y`. |
+| `stand_in_for` | Only with `part`: the part is an equivalent standing in for the real component, whose maker serves no datasheet to plain fetches or whose MPN the design does not state. Names what is really mounted (its MPN, or a short description such as `micro-USB B receptacle, MPN not stated`). The stand-in should match the real component's footprint size and type (from the design file); the locator says what was matched. |
 | `x`, `y` | mm, where the component's origin lies in the module package's frame (the frame of its `pads`, `pad_rows`, `shield`, `keepouts`; for `module` the board centre, +X right, +Y up, top view, pin 1 upper left). |
 | `rotation` | Degrees, counter-clockwise seen from the top (default 0). |
 | `side` | `top` (default) or `bottom`. |
@@ -1554,7 +1555,7 @@ openparts-data checkout the part file is in (or `--data`); the server, the
 bundler and `kicad-install --data` resolve them in their dataset.
 
 Rules: `assembly.invalid` (no or a repeated `ref`, not exactly one of `part`
-and `body`, a non-positive box size, a `color` that is not `#rrggbb`),
+and `body`, `stand_in_for` without `part` or empty, a non-positive box size, a `color` that is not `#rrggbb`),
 `assembly.unknown_part`, `assembly.nested` (the module itself, or a part with
 an `assembly` of its own), `provenance.missing` (an entry without `src`), and
 the warning `assembly.outside` (a component's pads or body reach past the

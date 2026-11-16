@@ -61,6 +61,12 @@ pub struct AssemblyComponent {
     pub part: Option<PartId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<AssemblyBody>,
+    /// When `part` is an equivalent standing in for the real component
+    /// (its maker's datasheet is not available, or the design names no
+    /// MPN): what is really mounted -- its MPN, or a short description
+    /// such as "micro-USB B receptacle, MPN not stated". Only with `part`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stand_in_for: Option<String>,
     pub x: f64,
     pub y: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -124,6 +130,7 @@ mod tests {
             reference: "U1".into(),
             part: None,
             body: None,
+            stand_in_for: None,
             x,
             y,
             rotation,
