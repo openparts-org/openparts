@@ -7,3 +7,6 @@ edition.workspace = true
 openparts-core = { path = "../../openparts-core" }
 openparts-mcad = { path = "../../mcad/openparts-mcad" }
 openparts-placement = { path = "../openparts-placement" }
+
+[dev-dependencies]
+serde_yaml = { workspace = true }

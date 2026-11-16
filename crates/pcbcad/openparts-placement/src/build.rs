@@ -346,6 +346,8 @@ fn make(
         }
     });
 
+    let polarity = device.and_then(|d| polarity(g.family, d, &pads));
+
     let edge = package.and_then(|p| p.edge.as_ref()).map(|e| {
         let side = t.side(e.side);
         let n = e.side.normal();
@@ -449,6 +451,7 @@ fn make(
             height,
         },
         pin1,
+        polarity,
         edge,
         keepouts,
         tht,
@@ -458,6 +461,39 @@ fn make(
     };
     model.hash = content_hash(&model);
     model
+}
+
+/// The marked terminal of a polarised two-terminal part (Canonical Data
+/// Specification 20.10): the device's cathode or `+` pin, when the
+/// package is a two-terminal family with exactly two plated pad numbers.
+fn polarity(family: F, device: &Device, pads: &[Pad]) -> Option<Polarity> {
+    let mark = match family {
+        F::Chip | F::Sod | F::SodFlat | F::Do214 | F::SmdLed | F::Axial => PolarityMark::Band,
+        F::SmdElectrolytic => PolarityMark::Plus,
+        F::Radial => match device.polarity_pin()?.1 {
+            openparts_core::PolarTerminal::Positive => PolarityMark::Plus,
+            openparts_core::PolarTerminal::Cathode => PolarityMark::Band,
+        },
+        _ => return None,
+    };
+    let mut numbers: Vec<&str> = pads
+        .iter()
+        .filter(|p| p.plated)
+        .map(|p| p.number.as_str())
+        .collect();
+    numbers.sort_unstable();
+    numbers.dedup();
+    if numbers.len() != 2 {
+        return None;
+    }
+    let (pin, terminal) = device.polarity_pin()?;
+    let pad = pads.iter().find(|p| p.plated && p.number == pin)?;
+    Some(Polarity {
+        pad: pad.number.clone(),
+        terminal,
+        mark,
+        position: pad.position,
+    })
 }
 
 /// A dimension's value as the generators read it.

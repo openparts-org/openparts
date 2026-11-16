@@ -371,6 +371,32 @@ pub struct Pin1 {
     pub marker: Option<Point2>,
 }
 
+/// How a polarised part's body shows its marked terminal, and so how the
+/// footprint marks it (section 7).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PolarityMark {
+    /// A band at that end of the body (a diode's or LED's cathode, a
+    /// tantalum capacitor's `+`): the silkscreen brackets that end.
+    Band,
+    /// A `+` sign at that terminal (an electrolytic capacitor's can).
+    Plus,
+}
+
+/// Section 7: the marked terminal of a polarised two-terminal part.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Polarity {
+    /// The marked pad.
+    pub pad: String,
+    /// What that pad's pin is (from the device's pin names).
+    pub terminal: openparts_core::PolarTerminal,
+    pub mark: PolarityMark,
+    /// The marked pad's centre.
+    pub position: Point2,
+}
+
 /// A side of the part in this frame.
 pub use openparts_core::{EdgeRequirement, PackageSide as Side};
 
@@ -485,6 +511,10 @@ pub struct PlacementModel {
     pub courtyard: Courtyard,
     pub body: Body,
     pub pin1: Option<Pin1>,
+    /// The marked terminal of a polarised two-terminal part (built with
+    /// its device).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polarity: Option<Polarity>,
     pub edge: Option<Edge>,
     pub keepouts: Vec<Keepout>,
     pub tht: Option<Tht>,

@@ -1286,6 +1286,35 @@ is the Device pin named `+` (else pin 1). Rule
 plated pad count or below two, a pad without a size, no
 `overall_height` or `can_diameter`, or `can_diameter` on another family.
 
+## 20.10 Polarity Marks
+
+A polarised two-terminal part's footprint marks its polarity, read from
+the Device's pin names (never from pin numbers: Kingbright numbers an
+LED's cathode 1, Everlight its anode), as the 3D model's band does:
+
+| Device `category` | Marked pin (name, any case) | Families | Mark |
+|---|---|---|---|
+| `diode`, `led` (and their subcategories) | `Cathode`, `K` | `chip`, `sod`, `sod_flat`, `do214`, `smd_led`, `axial`, `radial` | band |
+| `capacitor` | `+`, `Anode`, `Positive` | `chip` (tantalum), `axial` | band |
+| `capacitor` | `+`, `Anode`, `Positive` | `smd_electrolytic`, `radial` | plus |
+
+Only a package with exactly two plated pad numbers, and a Device with
+exactly one matching pin, is marked: an MLCC (pins `1`/`2`), a
+bidirectional TVS (`Pin1`/`Pin2`) or a SOT-23 diode is not. Following
+KiCad's libraries (IPC-7351B), a **band** end is bracketed on the
+silkscreen -- the body outline's long sides carried past the marked pad
+and closed by a bar beyond it -- and crossed by a line on the
+fabrication layer a fifth of the body in from that end; leads well clear
+of the body (axial, through-hole) keep the outline and get the band
+printed across the body; a round body (a radial LED) gets a bar outside
+its outline. A **plus** is a `+` sign beside the `+` terminal, outside
+the body (above the pad, beyond the plate's end; at 45° outside a round
+can), and a smaller one inside the body on the fabrication layer. The
+silkscreen keeps the outline's 0.2 mm clearance to copper. Nothing is
+stored: the Placement Model reports the mark as `polarity`
+([placement-model.md](placement-model.md) section 7), and the KiCad
+footprint, the LibrePCB package and the footprint drawing draw it.
+
 ---
 
 # 21. Package Geometry

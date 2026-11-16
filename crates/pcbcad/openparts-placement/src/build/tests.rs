@@ -484,3 +484,61 @@ fn smt_headers_are_level_a_with_smd_signal_and_mechanical_pads() {
         assert_eq!(m.body.regions.len(), 1, "{family}: no pin region");
     }
 }
+
+fn device(category: &str, pins: &str) -> openparts_core::Device {
+    serde_yaml::from_str(&format!(
+        "schema_version: '0.1'\nkind: device\nid: t/T\nmanufacturer: t\ncategory: {category}\npins:\n{pins}"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn polarity_comes_from_the_device_pin_names() {
+    use openparts_core::PolarTerminal;
+    let p = chip0603();
+    let g = openparts_mcad::generate(&p).unwrap();
+    // Everlight numbers the anode 1: the cathode is pad 2.
+    let led = device(
+        "led",
+        "  \"1\": { name: Anode, type: passive }\n  \"2\": { name: Cathode, type: passive }\n",
+    );
+    let m = build(&p, Some(&led), &g, Density::N);
+    let pol = m.polarity.as_ref().expect("an LED is polarised");
+    assert_eq!(pol.pad, "2");
+    assert_eq!(pol.terminal, PolarTerminal::Cathode);
+    assert_eq!(pol.mark, PolarityMark::Band);
+    assert_eq!(pol.position, pad(&m, "2").position);
+    // A tantalum's band is its + terminal.
+    let tantalum = device(
+        "capacitor",
+        "  \"1\": { name: \"+\", type: passive }\n  \"2\": { name: \"-\", type: passive }\n",
+    );
+    let pol = build(&p, Some(&tantalum), &g, Density::N).polarity.unwrap();
+    assert_eq!(
+        (pol.pad.as_str(), pol.terminal),
+        ("1", PolarTerminal::Positive)
+    );
+    // An MLCC, a bidirectional TVS, no device: no mark.
+    let mlcc = device(
+        "capacitor",
+        "  \"1\": { name: \"1\", type: passive }\n  \"2\": { name: \"2\", type: passive }\n",
+    );
+    assert!(build(&p, Some(&mlcc), &g, Density::N).polarity.is_none());
+    let tvs = device(
+        "diode",
+        "  \"1\": { name: Pin1, type: passive }\n  \"2\": { name: Pin2, type: passive }\n",
+    );
+    assert!(build(&p, Some(&tvs), &g, Density::N).polarity.is_none());
+    assert!(model(&p, Density::N).polarity.is_none());
+}
+
+#[test]
+fn polarity_is_only_for_two_terminal_families() {
+    let p = sot23();
+    let g = openparts_mcad::generate(&p).unwrap();
+    let d = device(
+        "diode",
+        "  \"1\": { name: Anode, type: passive }\n  \"2\": { name: NC, type: nc }\n  \"3\": { name: Cathode, type: passive }\n",
+    );
+    assert!(build(&p, Some(&d), &g, Density::N).polarity.is_none());
+}

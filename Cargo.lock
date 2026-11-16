@@ -2737,6 +2737,7 @@ dependencies = [
  "openparts-kicad",
  "openparts-mcad",
  "openparts-pcbcad",
+ "openparts-placement",
  "openparts-solidcraft",
  "openparts-step",
  "openparts-stl",
@@ -2879,6 +2880,7 @@ dependencies = [
  "openparts-core",
  "openparts-mcad",
  "openparts-placement",
+ "serde_yaml",
 ]
 
 [[package]]

@@ -49,6 +49,7 @@ openparts-stl = { path = "crates/mcad/openparts-stl" }
 openparts-solidcraft = { path = "crates/mcad/openparts-solidcraft" }
 openparts-pcbcad = { path = "crates/pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "crates/pcbcad/openparts-kicad" }
+openparts-placement = { path = "crates/pcbcad/openparts-placement" }
 
 # The web site's part viewer (crates/viewer/openparts-viewer) compiled to
 # wasm by web/scripts/build-wasm.sh, built for size: every part page

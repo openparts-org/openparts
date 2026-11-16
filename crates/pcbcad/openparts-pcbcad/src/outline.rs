@@ -4,7 +4,7 @@
 
 use crate::{FpGraphic, FpLayer, FpShape, Pad, Point2};
 use openparts_mcad::Mounting;
-use openparts_placement::{OutlineShape, PlacementModel};
+use openparts_placement::{OutlineShape, PlacementModel, PolarityMark};
 
 /// Stroke width adapters draw the courtyard with.
 pub const COURTYARD_WIDTH: f64 = 0.05;
@@ -133,7 +133,10 @@ pub(crate) fn drawings(m: &PlacementModel, pads: &[Pad]) -> Vec<FpGraphic> {
         .iter()
         .map(|p| pad_rect(p).grow(SILK_PAD_CLEARANCE + SILK_WIDTH / 2.0))
         .collect();
-    if round.is_none() {
+    let polar = polarity_marks(m, pads, b, round.is_some(), &keep_out);
+    let outline = !polar.replaces_outline;
+    out.extend(polar.graphics);
+    if outline && round.is_none() {
         let s = b.grow(SILK_WIDTH / 2.0 + 0.05);
         let edges = [
             (pt(s.x0, s.y1), pt(s.x1, s.y1)),
@@ -152,7 +155,7 @@ pub(crate) fn drawings(m: &PlacementModel, pads: &[Pad]) -> Vec<FpGraphic> {
                 }
             }
         }
-    } else {
+    } else if outline {
         let grow = SILK_WIDTH / 2.0 + 0.05;
         let (sx, sy) = (sx + 2.0 * grow, sy + 2.0 * grow);
         // The outline stays clear when every pad lies wholly inside it
@@ -208,6 +211,220 @@ pub(crate) fn drawings(m: &PlacementModel, pads: &[Pad]) -> Vec<FpGraphic> {
         });
     }
     out
+}
+
+/// A polarised part's marks (Canonical Data Specification 20.10).
+struct PolarityMarks {
+    graphics: Vec<FpGraphic>,
+    /// The silkscreen bracket stands in for the body outline.
+    replaces_outline: bool,
+}
+
+/// The frame of a two-terminal part's axis: `u` along it, towards the
+/// marked terminal; `v` across it.
+#[derive(Clone, Copy)]
+struct Axis {
+    along_x: bool,
+    sign: f64,
+}
+
+impl Axis {
+    fn point(self, u: f64, v: f64) -> Point2 {
+        if self.along_x {
+            pt(self.sign * u, v)
+        } else {
+            pt(v, self.sign * u)
+        }
+    }
+    /// A rectangle as (u0, u1, v0, v1).
+    fn rect(self, r: Rect) -> (f64, f64, f64, f64) {
+        let (a0, a1, c0, c1) = if self.along_x {
+            (r.x0, r.x1, r.y0, r.y1)
+        } else {
+            (r.y0, r.y1, r.x0, r.x1)
+        };
+        let (u0, u1) = if self.sign > 0.0 {
+            (a0, a1)
+        } else {
+            (-a1, -a0)
+        };
+        (u0, u1, c0, c1)
+    }
+}
+
+/// Arm of the silkscreen `+` sign (KiCad's CP_Elec: about 0.8 across).
+const PLUS_ARM: f64 = 0.4;
+/// Arm of the fabrication `+` sign.
+const FAB_PLUS_ARM: f64 = 0.3;
+
+fn line(layer: FpLayer, width: f64, a: Point2, z: Point2) -> FpGraphic {
+    FpGraphic {
+        layer,
+        width,
+        shape: FpShape::Line(a, z),
+    }
+}
+
+/// The marks of the Placement Model's `polarity` (KiCad library
+/// conventions, IPC-7351B): a band end (a diode's or LED's cathode, a
+/// tantalum's `+`) is bracketed on the silkscreen -- the outline's two
+/// long sides carried past the marked pad and closed by a bar beyond it,
+/// all clear of the copper -- and crossed by a bar on the fabrication
+/// layer; an electrolytic can gets a `+` beside its `+` terminal, outside
+/// the body, and one inside the body on the fabrication layer. A round
+/// body keeps its outline and gets a bar outside it at the band end.
+fn polarity_marks(
+    m: &PlacementModel,
+    pads: &[Pad],
+    body: Rect,
+    round: bool,
+    keep_out: &[Rect],
+) -> PolarityMarks {
+    let none = PolarityMarks {
+        graphics: vec![],
+        replaces_outline: false,
+    };
+    let Some(pol) = &m.polarity else { return none };
+    let plated = |p: &&Pad| p.mounting != Mounting::NonPlated;
+    let Some(marked) = pads.iter().filter(plated).find(|p| p.number == pol.pad) else {
+        return none;
+    };
+    let Some(other) = pads.iter().filter(plated).find(|p| p.number != pol.pad) else {
+        return none;
+    };
+    let (dx, dy) = (
+        marked.position.x - other.position.x,
+        marked.position.y - other.position.y,
+    );
+    let along_x = dx.abs() >= dy.abs();
+    let axis = Axis {
+        along_x,
+        sign: if (if along_x { dx } else { dy }) < 0.0 {
+            -1.0
+        } else {
+            1.0
+        },
+    };
+    let grow = SILK_WIDTH / 2.0 + 0.05;
+    let (bu0, bu1, bv0, bv1) = axis.rect(body);
+    let mk = axis.rect(pad_rect(marked).grow(SILK_PAD_CLEARANCE + SILK_WIDTH / 2.0));
+    let clear = |a: Point2, z: Point2, out: &mut Vec<FpGraphic>| {
+        for (p, q) in clip(a, z, keep_out) {
+            if (q.x - p.x).hypot(q.y - p.y) > 0.2 {
+                out.push(line(FpLayer::Silk, SILK_WIDTH, p, q));
+            }
+        }
+    };
+    let plus = |c: Point2, arm: f64, layer: FpLayer, width: f64| {
+        [
+            line(layer, width, pt(c.x - arm, c.y), pt(c.x + arm, c.y)),
+            line(layer, width, pt(c.x, c.y - arm), pt(c.x, c.y + arm)),
+        ]
+    };
+    let mut out = Vec::new();
+    let mut replaces_outline = false;
+    match (pol.mark, round) {
+        (PolarityMark::Band, false) => {
+            // The band on the fabrication layer, where the 3D model puts
+            // it (a fifth of the body in from the marked end).
+            let band_u = bu1 - (bu1 - bu0) * 0.2;
+            out.push(line(
+                FpLayer::Fab,
+                FAB_WIDTH,
+                axis.point(band_u, bv0),
+                axis.point(band_u, bv1),
+            ));
+            if marked.mounting == Mounting::ThroughHole || mk.0 >= bu1 + grow + SILK_WIDTH {
+                // Leads clear of the body (an axial part): the outline
+                // stays, the band is printed across the body.
+                for k in [0.0, 1.0] {
+                    let u = band_u - k * SILK_WIDTH;
+                    clear(
+                        axis.point(u, bv0 - grow),
+                        axis.point(u, bv1 + grow),
+                        &mut out,
+                    );
+                }
+            } else {
+                let (mut v0, mut v1) = (bv0 - grow, bv1 + grow);
+                for k in keep_out {
+                    let (_, _, k0, k1) = axis.rect(*k);
+                    v0 = v0.min(k0);
+                    v1 = v1.max(k1);
+                }
+                let bar = (bu1 + grow).max(mk.1);
+                for (a, z) in [
+                    (axis.point(bu0, v1), axis.point(bar, v1)),
+                    (axis.point(bar, v1), axis.point(bar, v0)),
+                    (axis.point(bar, v0), axis.point(bu0, v0)),
+                ] {
+                    clear(a, z, &mut out);
+                }
+                replaces_outline = true;
+            }
+        }
+        (PolarityMark::Band, true) => {
+            let bar = (bu1 + grow + 0.15).max(mk.1);
+            let half = (bv1 - bv0) * 0.3;
+            let mid = (bv0 + bv1) / 2.0;
+            clear(
+                axis.point(bar, mid - half),
+                axis.point(bar, mid + half),
+                &mut out,
+            );
+        }
+        (PolarityMark::Plus, _) => {
+            let (cu, cv) = if round {
+                // Inside the can above the + pad (KiCad's CP_Radial), else
+                // outside it, towards the marked terminal at 45°.
+                let (mu, mv) = ((bu0 + bu1) / 2.0, (bv0 + bv1) / 2.0);
+                let radius = (bu1 - bu0) / 2.0;
+                let inside = ((mk.0 + mk.1) / 2.0, mk.3 + 0.1 + PLUS_ARM);
+                let fits = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
+                    .iter()
+                    .all(|(du, dv)| {
+                        (inside.0 + du * PLUS_ARM - mu).hypot(inside.1 + dv * PLUS_ARM - mv)
+                            < radius - SILK_WIDTH
+                    });
+                if fits {
+                    inside
+                } else {
+                    let d = (radius + grow + 0.15 + PLUS_ARM * std::f64::consts::SQRT_2)
+                        / std::f64::consts::SQRT_2;
+                    (mu + d, mv + d)
+                }
+            } else {
+                // Beyond the body's marked end, above the marked pad.
+                (bu1 + grow + 0.15 + PLUS_ARM, mk.3 + 0.1 + PLUS_ARM)
+            };
+            out.extend(plus(
+                axis.point(cu, cv),
+                PLUS_ARM,
+                FpLayer::Silk,
+                SILK_WIDTH,
+            ));
+            let (fu, fv) = if round {
+                let r = (bu1 - bu0) / 2.0;
+                // Below the + pad, clear of the silkscreen sign above it.
+                ((bu0 + bu1) / 2.0 + r * 0.45, (bv0 + bv1) / 2.0 - r * 0.45)
+            } else {
+                (
+                    bu1 - (bu1 - bu0) * 0.25,
+                    (bv0 + bv1) / 2.0 + (bv1 - bv0) * 0.25,
+                )
+            };
+            out.extend(plus(
+                axis.point(fu, fv),
+                FAB_PLUS_ARM.min((bu1 - bu0) * 0.1),
+                FpLayer::Fab,
+                FAB_WIDTH,
+            ));
+        }
+    }
+    PolarityMarks {
+        graphics: out,
+        replaces_outline,
+    }
 }
 
 /// A standing cylinder's outline is a circle when its two sizes agree.
@@ -293,4 +510,108 @@ fn clip(a: Point2, z: Point2, keep_out: &[Rect]) -> Vec<(Point2, Point2)> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openparts_placement::Density;
+
+    fn device(category: &str, first: &str, second: &str) -> openparts_core::Device {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: device\nid: t/T\nmanufacturer: t\ncategory: {category}\n\
+             pins:\n  \"1\": {{ name: \"{first}\", type: passive }}\n  \"2\": {{ name: \"{second}\", type: passive }}\n"
+        ))
+        .unwrap()
+    }
+
+    fn footprint(package: &str, device: &openparts_core::Device) -> crate::PcbFootprint {
+        let p: openparts_core::Package = serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\n{package}"
+        ))
+        .unwrap();
+        let g = openparts_mcad::generate(&p).unwrap();
+        let m = openparts_placement::build(&p, Some(device), &g, Density::N);
+        crate::footprint_from_placement("T", &m)
+    }
+
+    const CHIP: &str = "family: chip\nlead_count: 2\npitch: {unit: mm}\ndimensions:\n\
+        \x20 body_width: {nominal: 1.6, unit: mm}\n  body_length: {nominal: 0.8, unit: mm}\n\
+        \x20 body_height: {nominal: 0.45, unit: mm}\n  lead_length: {nominal: 0.3, unit: mm}\n";
+
+    fn silk_lines(fp: &crate::PcbFootprint) -> Vec<(Point2, Point2)> {
+        fp.graphics
+            .iter()
+            .filter(|g| g.layer == FpLayer::Silk)
+            .filter_map(|g| match g.shape {
+                FpShape::Line(a, b) => Some((a, b)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every silkscreen line keeps the clearance to every pad.
+    fn assert_clear(fp: &crate::PcbFootprint) {
+        for (a, b) in silk_lines(fp) {
+            for p in &fp.pads {
+                let r = pad_rect(p).grow(SILK_PAD_CLEARANCE + SILK_WIDTH / 2.0 - 1e-9);
+                let (lo, hi) = ((a.x.min(b.x), a.y.min(b.y)), (a.x.max(b.x), a.y.max(b.y)));
+                let overlaps = lo.0 < r.x1 && hi.0 > r.x0 && lo.1 < r.y1 && hi.1 > r.y0;
+                assert!(!overlaps, "silk {a:?}-{b:?} too near pad {}", p.number);
+            }
+        }
+    }
+
+    #[test]
+    fn a_cathode_is_bracketed_on_its_side() {
+        // Everlight numbers the anode 1: the bracket closes beyond pad 2.
+        let fp = footprint(CHIP, &device("led", "Anode", "Cathode"));
+        let pad2 = fp.pads.iter().find(|p| p.number == "2").unwrap();
+        assert!(pad2.position.x > 0.0);
+        let lines = silk_lines(&fp);
+        let bar = lines
+            .iter()
+            .find(|(a, b)| (a.x - b.x).abs() < 1e-9 && (a.y - b.y).abs() > 0.5)
+            .expect("a bar across the axis");
+        assert!(bar.0.x >= pad2.position.x + pad2.size.0 / 2.0 + SILK_PAD_CLEARANCE);
+        assert_eq!(lines.len(), 3, "the bracket replaces the outline");
+        assert_clear(&fp);
+        // The fabrication band sits at the cathode end.
+        assert!(fp.graphics.iter().any(|g| g.layer == FpLayer::Fab
+            && matches!(g.shape, FpShape::Line(a, b) if a.x == b.x && a.x > 0.0)));
+    }
+
+    #[test]
+    fn an_unpolarised_part_keeps_its_plain_outline() {
+        let fp = footprint(CHIP, &device("capacitor", "1", "2"));
+        assert!(silk_lines(&fp)
+            .iter()
+            .all(|(a, b)| (a.y - b.y).abs() < 1e-9));
+        assert!(!fp
+            .graphics
+            .iter()
+            .any(|g| g.layer == FpLayer::Fab && matches!(g.shape, FpShape::Line(..))));
+    }
+
+    #[test]
+    fn an_electrolytic_gets_a_plus_beside_its_plus_terminal() {
+        let fp = footprint(
+            "family: smd_electrolytic\nlead_count: 2\npitch: {unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 6.6, unit: mm}\n  body_length: {nominal: 6.6, unit: mm}\n\
+             \x20 can_diameter: {nominal: 6.3, unit: mm}\n  overall_height: {nominal: 5.8, unit: mm}\n\
+             pads:\n\
+             \x20 - { number: \"1\", x: -2.7, y: 0, width: 3.5, length: 1.6 }\n\
+             \x20 - { number: \"2\", x: 2.7, y: 0, width: 3.5, length: 1.6 }\n",
+            &device("capacitor", "+", "-"),
+        );
+        assert_clear(&fp);
+        let lines = silk_lines(&fp);
+        // The + sign: two short crossing lines left of the plate.
+        let short: Vec<_> = lines
+            .iter()
+            .filter(|(a, b)| ((a.x - b.x).hypot(a.y - b.y) - 2.0 * PLUS_ARM).abs() < 1e-9)
+            .collect();
+        assert_eq!(short.len(), 2);
+        assert!(short.iter().all(|(a, b)| a.x.max(b.x) < -3.3));
+    }
 }

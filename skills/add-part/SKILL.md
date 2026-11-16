@@ -143,7 +143,8 @@ Run `openparts data fmt <files>` before committing; CI runs
 - **Polarity is read from pin names**, never assumed from numbers: name an
   LED's/diode's terminals `Cathode`/`Anode`, a polarised capacitor's
   `+`/`-`. The 3D model puts the cathode band, the LED flat and the
-  tantalum band from these names (Kingbright numbers the cathode 1,
+  tantalum band, and the footprint its silkscreen polarity mark
+  (canonical-data 20.10), from these names (Kingbright numbers the cathode 1,
   Everlight the anode 1). When a datasheet names terminals but doesn't
   number them (OSRAM, many SOT-23 pinouts), number them in the generator's
   position convention (section 4) or, for LEDs, cathode = 1, and say so

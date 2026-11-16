@@ -77,3 +77,43 @@ pub struct Device {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<crate::review::DocumentReview>,
 }
+
+/// The terminal a polarised two-terminal part marks (Canonical Data
+/// Specification 20.10).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PolarTerminal {
+    /// A diode's or LED's cathode.
+    Cathode,
+    /// A polarised capacitor's `+` terminal.
+    Positive,
+}
+
+impl Device {
+    /// The pin a polarity mark belongs to, read from the source's pin
+    /// names (never assumed from pin numbers: Kingbright LEDs number the
+    /// cathode 1, Everlight the anode): an LED's or diode's cathode
+    /// (`Cathode`, `K`), a polarised capacitor's positive terminal (`+`,
+    /// `Anode`, `Positive`). `None` when the device has no single such
+    /// pin (an MLCC, a bidirectional TVS, a dual diode).
+    pub fn polarity_pin(&self) -> Option<(&str, PolarTerminal)> {
+        let (wanted, terminal): (&[&str], _) = if self.category.is_within(ComponentCategory::Led)
+            || self.category.is_within(ComponentCategory::Diode)
+        {
+            (&["cathode", "k", "kathode"], PolarTerminal::Cathode)
+        } else if self.category.is_within(ComponentCategory::Capacitor) {
+            (&["+", "anode", "positive"], PolarTerminal::Positive)
+        } else {
+            return None;
+        };
+        let mut hits = self
+            .pins
+            .iter()
+            .filter(|(_, pin)| wanted.contains(&pin.name.trim().to_ascii_lowercase().as_str()));
+        match (hits.next(), hits.next()) {
+            (Some((number, _)), None) => Some((number.as_str(), terminal)),
+            _ => None,
+        }
+    }
+}

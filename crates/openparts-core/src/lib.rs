@@ -43,7 +43,7 @@ pub use condition::{
 pub use connector::{
     is_connector_family, CardMechanism, ConnectorInterface, ContactSide, PackageConnector,
 };
-pub use device::{Device, DeviceOverrides, DeviceRevision, RevisionDetection};
+pub use device::{Device, DeviceOverrides, DeviceRevision, PolarTerminal, RevisionDetection};
 pub use dimension::Dimension;
 pub use effective_model::{build_effective_model, EffectiveModel, EffectiveModelError};
 pub use erratum::{Applicability, Erratum, ErratumCategory};

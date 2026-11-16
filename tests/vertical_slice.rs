@@ -406,3 +406,56 @@ fn dataset_footprints_have_a_courtyard_around_pads_and_silk_clear_of_copper() {
     failures.dedup();
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// Canonical Data Specification 20.10: every polarised two-terminal part
+/// of the dataset (built with its device) gets a polarity mark, and its
+/// silkscreen keeps KiCad's 0.2 mm clearance to copper.
+#[test]
+fn dataset_polarity_marks_are_drawn_clear_of_copper() {
+    use openparts_pcbcad::{FpLayer, FpShape};
+    let dataset = openparts_data::Dataset::load(data_dir()).unwrap();
+    let mut failures = Vec::new();
+    let mut marked = 0;
+    for part in &dataset.parts {
+        let Ok((device, package)) = dataset.resolve(part) else {
+            continue;
+        };
+        let Ok(geometry) = openparts_mcad::generate(package) else {
+            continue;
+        };
+        let model = openparts_placement::build(
+            package,
+            Some(device),
+            &geometry,
+            openparts_placement::Density::N,
+        );
+        let Some(polarity) = &model.polarity else {
+            continue;
+        };
+        marked += 1;
+        let fp = openparts_pcbcad::footprint_from_placement("X", &model);
+        if !fp.pads.iter().any(|p| p.number == polarity.pad) {
+            failures.push(format!("{}: no pad {}", part.mpn, polarity.pad));
+        }
+        for g in fp.graphics.iter().filter(|g| g.layer == FpLayer::Silk) {
+            let FpShape::Line(a, b) = &g.shape else {
+                continue;
+            };
+            for i in 0..=20 {
+                let t = i as f64 / 20.0;
+                let (x, y) = (a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+                let reach = 0.2 + g.width / 2.0 - 1e-6;
+                if let Some(p) = fp.pads.iter().find(|p| {
+                    (x - p.position.x).abs() < p.size.0 / 2.0 + reach
+                        && (y - p.position.y).abs() < p.size.1 / 2.0 + reach
+                }) {
+                    failures.push(format!("{}: silkscreen near pad {}", part.mpn, p.number));
+                    break;
+                }
+            }
+        }
+    }
+    failures.dedup();
+    assert!(marked > 0, "no polarised part in the dataset");
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

@@ -72,19 +72,7 @@ impl<'a> ModelInput<'a> {
 /// positive (`+`, anode) terminal of a polarised capacitor. `None` when
 /// the device has no single such pin.
 pub fn polarity_pin(device: &Device) -> Option<&str> {
-    let wanted: &[&str] = match device.category {
-        ComponentCategory::Led | ComponentCategory::Diode => &["cathode", "k", "kathode"],
-        ComponentCategory::Capacitor => &["+", "anode", "positive"],
-        _ => return None,
-    };
-    let mut hits = device
-        .pins
-        .iter()
-        .filter(|(_, pin)| wanted.contains(&pin.name.trim().to_ascii_lowercase().as_str()));
-    match (hits.next(), hits.next()) {
-        (Some((number, _)), None) => Some(number.as_str()),
-        _ => None,
-    }
+    device.polarity_pin().map(|(number, _)| number)
 }
 
 #[derive(Debug, thiserror::Error)]

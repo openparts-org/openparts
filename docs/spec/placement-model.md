@@ -222,11 +222,21 @@ a circle has 32 segments), `z_min` and `z_max` (mm above the top surface).
 header's housing standoff, else the body's `z_min`. `body.height` is the
 highest `z_max`.
 
-## 7. Pin 1
+## 7. Pin 1 and polarity
 
 `pin1`: `{pad, position, marker}`. `pad` is the pad the zero-orientation rule
 places (`1`, `A1`, ...). `marker` is the body's pin-1 dot, when the geometry
 has one.
+
+`polarity` (only when built with the device): `{pad, terminal, mark,
+position}` for a polarised two-terminal part (Canonical Data Specification
+20.10). `pad` is the marked pad, `terminal` `cathode` (a diode or LED) or
+`positive` (a polarised capacitor's `+`), read from the device's pin
+names, `position` that pad's centre. `mark` is `band` (the body is banded
+at that end: diodes, LEDs, tantalum capacitors; the footprint brackets
+that end on the silkscreen) or `plus` (an electrolytic can: a `+` sign
+beside the pad). Absent for unpolarised parts, packages with other than
+two plated pad numbers, and models built without a device.
 
 ## 8. Board edge
 
