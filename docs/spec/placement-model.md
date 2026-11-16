@@ -133,7 +133,7 @@ kept. A test checks every package of the dataset.
 | `module` | Pin 1 upper left (Raspberry Pi Pico: USB end up, antenna end down). |
 | `header`, `socket`, `shrouded_header` | Rows along Y, pin 1 upper left (1×N: pin 1 at the top, the row running down). |
 | `right_angle_header` | Pins in a column along Y, pin 1 at the top; the mating side is +X or −X as the source's hole pattern puts it (a side-entry wire-to-board header's housing stands over the column). |
-| `tact_switch_smd`, `tact_switch_tht` | Pad 1 upper left. A vendor numbering that puts it lower right turns 180°. |
+| `tact_switch_smd`, `tact_switch_tht` | Pad 1 upper left. A vendor numbering that puts it lower right turns 180°. A side-operated switch's actuator (+Y in the family frame, Canonical Data Specification 20.11) turns with it; it is an `actuator` body region inside the courtyard. A top actuator is an `actuator` region too: its plunger sets the height. |
 | `usb_c` | Contact A1 upper left: the opening (mating face) faces −Y. The family's source frame has it facing +Y, so receptacles turn 180°. |
 | `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
 | `terminal_block` | Poles in a row along X, pole 1 on the left; the wire entry faces +Y (the family frame already has it so). |
@@ -190,7 +190,7 @@ Top level, for routing:
 ## 5. Courtyard
 
 `courtyard`: `{density, excess, grid, polygons}`. It is the lands' and the
-body's extents grown by the excess, corners snapped outward to a 0.05 mm grid
+body's extents (with a side-operated switch's actuator) grown by the excess, corners snapped outward to a 0.05 mm grid
 (KiCad's library rule), as counter-clockwise polygons. Silkscreen does not
 count.
 
@@ -217,6 +217,9 @@ a circle has 32 segments), `z_min` and `z_max` (mm above the top surface).
   headers, whose contacts stay inside the housing).
 - `shield`: a module's shield can (`Package::shield`), from the board's top
   face to its stated top.
+- `actuator`: a tactile switch's actuator -- a top plunger (a circle from the
+  housing top to the plunger top) or a side-operated switch's actuator beyond
+  the housing face (Canonical Data Specification 20.11).
 
 `body.standoff` is the board-to-body-underside distance: gull-wing A1, a
 header's housing standoff, else the body's `z_min`. `body.height` is the

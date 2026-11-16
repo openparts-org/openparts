@@ -2,6 +2,37 @@
 // types (schemars JSON Schema). Do not edit; CI fails if it is stale.
 
 ///|
+#derive(Eq, Debug)
+pub(all) enum Actuation {
+  Top
+  Side
+}
+
+///|
+/// The wire (JSON) string.
+pub fn Actuation::wire(self : Actuation) -> String {
+  match self {
+    Top => "top"
+    Side => "side"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn Actuation::all() -> Array[Actuation] {
+  [Top, Side]
+}
+
+///|
+pub impl @json.FromJson for Actuation with fn from_json(json, path) {
+  match json {
+    String("top") => Top
+    String("side") => Side
+    _ => raise @json.JsonDecodeError((path, "expected a Actuation"))
+  }
+}
+
+///|
 /// One candidate replacement.
 #derive(Eq)
 pub(all) struct Alternative {
@@ -2413,6 +2444,7 @@ pub impl @json.FromJson for Orientation with fn from_json(json, path) {
 ///|
 #derive(Eq)
 pub(all) struct Package {
+  actuation : Actuation?
   aux_pads : Array[String]?
   connector : PackageConnector?
   construction : PackageConstruction?
@@ -2444,6 +2476,7 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     raise @json.JsonDecodeError((path, "expected a Package object"))
   }
   {
+    actuation: opt_field(obj, "actuation", path),
     aux_pads: opt_field(obj, "aux_pads", path),
     connector: opt_field(obj, "connector", path),
     construction: opt_field(obj, "construction", path),
@@ -2551,6 +2584,10 @@ pub impl @json.FromJson for PackageConstruction with fn from_json(json, path) {
 #derive(Eq)
 pub(all) struct PackageDimensions {
   actuator_diameter : Dimension?
+  actuator_elevation : Dimension?
+  actuator_length : Dimension?
+  actuator_thickness : Dimension?
+  actuator_width : Dimension?
   aux_pad_length : Dimension?
   aux_pad_width : Dimension?
   aux_row_x : Dimension?
@@ -2561,6 +2598,8 @@ pub(all) struct PackageDimensions {
   body_width : Dimension
   can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
+  ground_terminal_offset : Dimension?
+  ground_terminal_width : Dimension?
   hole_diameter : Dimension?
   lead_inset : Dimension?
   lead_length : Dimension?
@@ -2590,6 +2629,10 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
   }
   {
     actuator_diameter: opt_field(obj, "actuator_diameter", path),
+    actuator_elevation: opt_field(obj, "actuator_elevation", path),
+    actuator_length: opt_field(obj, "actuator_length", path),
+    actuator_thickness: opt_field(obj, "actuator_thickness", path),
+    actuator_width: opt_field(obj, "actuator_width", path),
     aux_pad_length: opt_field(obj, "aux_pad_length", path),
     aux_pad_width: opt_field(obj, "aux_pad_width", path),
     aux_row_x: opt_field(obj, "aux_row_x", path),
@@ -2600,6 +2643,8 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     body_width: field(obj, "body_width", path),
     can_diameter: opt_field(obj, "can_diameter", path),
     exposed_pad: opt_field(obj, "exposed_pad", path),
+    ground_terminal_offset: opt_field(obj, "ground_terminal_offset", path),
+    ground_terminal_width: opt_field(obj, "ground_terminal_width", path),
     hole_diameter: opt_field(obj, "hole_diameter", path),
     lead_inset: opt_field(obj, "lead_inset", path),
     lead_length: opt_field(obj, "lead_length", path),

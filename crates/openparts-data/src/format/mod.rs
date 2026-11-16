@@ -618,6 +618,7 @@ fn top_level_order(map: Mapping, kind: &str, default: Option<String>) -> Mapping
             "tab",
             "aux_pads",
             "pad_order",
+            "actuation",
             "geometry",
             "dimensions",
             "pads",

@@ -1,0 +1,13 @@
+# Side-operated tactile switch: the housing with a rectangular actuator
+# (knob or square stem) leaving its +Y face.
+# Vars: standoff, act_w, act_t, act_len, act_z.
+- include: tact_housing
+- params:
+    act_w: ["{{act_w}}", actuator width (X)]
+    act_t: ["{{act_t}}", actuator thickness (Z)]
+    act_len: ["{{act_len}}", actuator length beyond the housing face]
+    act_z: ["{{act_z}}", "actuator axis above the board (datasheet, else the housing's middle)"]
+- solid.box:
+    {length: act_w, width: act_len + 0.1 mm, height: act_t,
+     center: [0 mm, body_l / 2 + (act_len - 0.1 mm) / 2, act_z],
+     operation: new, body_name: Actuator, name: Actuator}

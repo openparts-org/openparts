@@ -139,7 +139,7 @@ fn band(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use crate::{build_script, run, Format, ModelInput};
     use openparts_core::ComponentCategory;
 

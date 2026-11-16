@@ -890,7 +890,12 @@ dimensions:
 | `pad_diameter` | 一次資料の推奨Land（丸Pad）径（Header系Family） | — | 省略可 |
 | `body_offset` | ピングリッド中心からHousing中心までのX方向の符号付き距離（pin 1を左上にした上面視で+X向きが正。`shrouded_header`/`right_angle_header`） | JST XH: 5.75/2 − (2.35) = 0.525（−X向き）、WR-PHD Angled: 1.5 + 2.54/2 = 2.77 | 省略可（`right_angle_header`では必須） |
 | `lead_inset` | Body端から端子外端までの距離（`lga`の端子が端から引っ込んでいる場合） | — | 省略可（省略時は端と面一） |
-| `actuator_diameter` | スイッチ上面の丸いアクチュエータ（押し子）の直径 | — | 省略可（3D表示のみ） |
+| `actuator_diameter` | スイッチの丸いアクチュエータ（押し子）の直径（上面、または`actuation: side`の横向きPlunger） | — | 省略可（3D表示のみ） |
+| `actuator_length` | 横押しタクトスイッチ（`actuation: side`）: Housingの+Y面からアクチュエータ先端まで（20.11） | B3U-3000: 3.2 − 2.5 = 0.7 | `actuation: side`では必須 |
+| `actuator_elevation` | 横押し: アクチュエータ中心軸の基板面からの高さ | B3F-3100: 4 | 省略可（省略時はHousing高さの中央、3D表示のみ） |
+| `actuator_width` / `actuator_thickness` | 横押しの角形アクチュエータ（Knob、角Stem）のX方向幅／Z方向厚み。2つ揃えて記録し、`actuator_diameter`の代わりになる | B3U-3000: 1.7 / 1 | 省略可（3D表示のみ） |
+| `ground_terminal_offset` | Ground terminal付きタクトスイッチ（奇数の`lead_count`）: Housing中心から−Y方向にGround terminalまでの距離（THT: ピン中心、SMD: 端子先端） | B3F-1100: 4.1、B3U-1100P: 1.9 | Ground terminalがあれば必須（THTで`pads`が全穴を与える場合を除く） |
+| `ground_terminal_width` | SMDのGround terminalのX方向の幅 | B3U-1100P: 0.5 | 省略可（省略時は`lead_width`、3D表示のみ） |
 | `can_diameter` | `smd_electrolytic`: 台座（Base plate）の上に立つ円筒Canの直径（20.9） | øD | `smd_electrolytic`では必須（他のFamilyでは不可） |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
@@ -899,7 +904,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`typ`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_diameter`、`can_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`pads`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_*`、`ground_terminal_*`、`can_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`actuation`、`pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -1343,6 +1348,64 @@ silkscreen keeps the outline's 0.2 mm clearance to copper. Nothing is
 stored: the Placement Model reports the mark as `polarity`
 ([placement-model.md](placement-model.md) section 7), and the KiCad
 footprint, the LibrePCB package and the footprint drawing draw it.
+
+## 20.11 Tactile Switches
+
+`tact_switch_smd` and `tact_switch_tht` are tactile switches: a housing
+(`body_width` along X, `body_length` along Y, `body_height`) with two or
+four terminals on its left and right sides, in the top view as the
+source draws it with the terminals left and right. Positions are
+numbered 1 top-left, 2 bottom-left, 3 bottom-right, 4 top-right (two
+terminals: 1 left, 2 right), `pitch` apart along Y; `pad_order` gives the
+source's numbers in that order. SMD feet reach `overall_width` toe to
+toe (`lead_width`, `lead_length`); THT pins stand `row_spacing` apart in
+`hole_diameter` holes. `pads`, when the source recommends a land pattern
+or PCB holes, replace the generated lands; in `tact_switch_tht` they
+also place the pins (one per plated hole, each with its `drill`; a hole
+without a land gets `pad_diameter` or the generator's ring), which is
+how holes that form no rectangle (a side-operated switch's switch and
+bracket pins) or drills of different sizes are recorded.
+
+**Ground terminal.** An odd `lead_count` (3 or 5) adds a ground terminal
+as the last position, on the Y axis below the housing centre:
+`ground_terminal_offset` is its distance along −Y (THT: the pin's
+centre, the source's hole position; SMD: the terminal's tip; its foot
+runs from the housing edge, `ground_terminal_width` wide, else
+`lead_width`). A source draws the ground terminal on the side the frame
+puts at −Y, or the drawing is read turned so that it is.
+
+**Side operation.** `actuation: side` (the source's "side-operated" /
+"side-actuated" models; absent: `top`) turns the actuator to leave the
+housing's **+Y** face, `actuator_length` beyond it (required), round
+(`actuator_diameter`) or rectangular (`actuator_width` x
+`actuator_thickness`), its axis `actuator_elevation` above the board
+(else the housing's mid-height). Read a drawing whose actuator points
+another way turned so that it points to +Y, and record `pads`
+coordinates in that frame. The actuator sizes are 3D only; the
+Placement Model reports the actuator as a body region inside the
+courtyard (the finger or the enclosure needs it clear) and the parts
+search lists side-operated switches as `orientation: right_angle`, the
+others as `vertical`.
+
+```yaml
+family: tact_switch_smd     # B3U-3100P: 2 terminals + ground, side-actuated
+lead_count: 3
+actuation: side
+pad_order: ["2", "1", "3"]
+dimensions:
+  ground_terminal_offset: { typ: 1.9 mm }   # centre to the ground terminal's tip
+  actuator_length: { min: 0.5 mm, typ: 0.7 mm, max: 0.9 mm }  # 3.2 - 2.5
+  actuator_width: { typ: 1.7 mm }
+  actuator_thickness: { typ: 1 mm }
+```
+
+Rule `tact_switch.invalid`: a `lead_count` other than 2 to 5, a ground
+terminal without `ground_terminal_offset` (unless THT `pads` place every
+hole), `ground_terminal_*` without a ground terminal, `actuation: side`
+without `actuator_length`, `actuator_width` without `actuator_thickness`
+or the reverse, side-actuator dimensions without `actuation: side`, a
+plated THT pad without a drill; or `actuation`, the side-actuator or the
+ground-terminal dimensions on another family.
 
 ---
 

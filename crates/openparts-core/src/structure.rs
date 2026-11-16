@@ -84,6 +84,12 @@ impl Package {
             // Its generator draws the horizontal (mid/top-mount)
             // receptacle: opening parallel to the board.
             F::RightAngleHeader | F::UsbC => Some(Orientation::RightAngle),
+            // A tact switch is pushed from the top (vertical) or from
+            // the side (parallel to the board).
+            F::TactSwitchSmd | F::TactSwitchTht => Some(match self.actuation.unwrap_or_default() {
+                crate::Actuation::Top => Orientation::Vertical,
+                crate::Actuation::Side => Orientation::RightAngle,
+            }),
             // Connector families: as the source states it.
             _ => connector.and_then(|c| c.orientation),
         };
@@ -165,6 +171,10 @@ mod tests {
         );
         let s = pkg("family: chip\nlead_count: 2").structure();
         assert_eq!(s, PackageStructure::default());
+        let s = pkg("family: tact_switch_smd\nlead_count: 2").structure();
+        assert_eq!(s.orientation, Some(Orientation::Vertical));
+        let s = pkg("family: tact_switch_tht\nlead_count: 4\nactuation: side").structure();
+        assert_eq!(s.orientation, Some(Orientation::RightAngle));
         let s = pkg("family: usb_c\nlead_count: 16").structure();
         assert_eq!(
             (s.gender, s.orientation),

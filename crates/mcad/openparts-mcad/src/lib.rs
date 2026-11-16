@@ -35,7 +35,7 @@ pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
 pub use land::pad_shape_error;
 pub use module::{ModuleFeatures, ModuleHoles, ModuleShield, MountingHoles};
 pub use openparts_core::{Orientation, PackageFamily};
-pub use tact::SwitchFeatures;
+pub use tact::{SideActuator, SwitchFeatures};
 pub use to220::To220Features;
 pub use usb_c::UsbCFeatures;
 
@@ -85,9 +85,11 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
     }?;
     renumber(&mut geometry, package)?;
-    // `usb_c` and the connector families draw their leads from the pads.
+    // `usb_c`, the connector families and THT tact switches draw their
+    // leads from the pads.
     if !package.pads.is_empty()
         && package.family != F::UsbC
+        && package.family != F::TactSwitchTht
         && !openparts_core::is_connector_family(package.family)
     {
         geometry.lands = land::from_pads(package)?;

@@ -147,9 +147,37 @@ pub struct PackageDimensions {
     /// from the edge). Absent: flush with the edge.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead_inset: Option<Dimension>,
-    /// Switches: diameter of the round actuator (plunger) on top.
+    /// Switches: diameter of the round actuator (plunger) -- on top, or
+    /// for a side-operated switch (`actuation: side`) across its
+    /// horizontal plunger. 3D model only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_diameter: Option<Dimension>,
+    /// Side-operated tact switches: how far the actuator reaches beyond
+    /// the housing's +Y face (the face it leaves).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_length: Option<Dimension>,
+    /// Side-operated tact switches: height of the actuator's axis above
+    /// the board. Absent: the housing's mid-height. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_elevation: Option<Dimension>,
+    /// Side-operated tact switches with a rectangular (or square)
+    /// actuator: its size along X. With `actuator_thickness`, replaces
+    /// `actuator_diameter`. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_width: Option<Dimension>,
+    /// Side-operated tact switches with a rectangular actuator: its size
+    /// along Z. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_thickness: Option<Dimension>,
+    /// Tact switches with a ground terminal (an odd `lead_count`): the
+    /// distance along -Y from the housing centre to the ground terminal
+    /// -- THT: the pin's centre; SMD: the terminal's outer end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground_terminal_offset: Option<Dimension>,
+    /// Tact switches: width (along X) of an SMD ground terminal. Absent:
+    /// `lead_width`. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground_terminal_width: Option<Dimension>,
     /// Connectors with a round mating interface: the outer diameter of
     /// an RF connector's coupling barrel (SMA thread, MCX body), a barrel
     /// jack's plug opening. 3D model only.
@@ -204,6 +232,18 @@ impl PackageDimensions {
             ("/dimensions/body_offset", &self.body_offset),
             ("/dimensions/lead_inset", &self.lead_inset),
             ("/dimensions/actuator_diameter", &self.actuator_diameter),
+            ("/dimensions/actuator_length", &self.actuator_length),
+            ("/dimensions/actuator_elevation", &self.actuator_elevation),
+            ("/dimensions/actuator_width", &self.actuator_width),
+            ("/dimensions/actuator_thickness", &self.actuator_thickness),
+            (
+                "/dimensions/ground_terminal_offset",
+                &self.ground_terminal_offset,
+            ),
+            (
+                "/dimensions/ground_terminal_width",
+                &self.ground_terminal_width,
+            ),
             ("/dimensions/mating_diameter", &self.mating_diameter),
             ("/dimensions/pin_diameter", &self.pin_diameter),
             ("/dimensions/can_diameter", &self.can_diameter),
@@ -248,6 +288,19 @@ pub enum PackageConstruction {
     Ceramic,
     /// Metal can (crystals, aluminium electrolytics).
     MetalCan,
+}
+
+/// Which way a tact switch's actuator is pushed (`Package::actuation`).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Actuation {
+    /// Down, towards the board: the actuator stands on top (the default).
+    #[default]
+    Top,
+    /// Parallel to the board: the actuator leaves the housing's +Y face
+    /// (side-operated, "side-actuated").
+    Side,
 }
 
 /// The wide tab of a power package (SOT-223, TO-252/DPAK) -- soldered
@@ -733,6 +786,10 @@ pub struct Package {
     /// convention's own numbers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pad_order: Vec<String>,
+    /// Tact switches: which way the actuator is pushed, as the source
+    /// states it (`side`: a side-operated switch); absent: from the top.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuation: Option<Actuation>,
     /// Explicit land pattern (`usb_c`): every pad as the source's
     /// recommended PCB layout gives it, in the family's frame.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

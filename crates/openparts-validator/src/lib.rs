@@ -171,6 +171,10 @@ pub const RULES: &[Rule] = &[
         meaning: "`part.mpn` is empty",
     },
     Rule {
+        id: "tact_switch.invalid",
+        meaning: "a `tact_switch_smd`/`tact_switch_tht` package has a `lead_count` other than 2 to 5 (an odd count adds a ground terminal), a ground terminal without `dimensions.ground_terminal_offset` (unless a THT package's `pads` place its holes), `ground_terminal_*` without one, `actuation: side` without `dimensions.actuator_length`, `actuator_width` without `actuator_thickness` or the reverse, side-actuator dimensions without `actuation: side`, or THT `pads` with a plated pad lacking a drill; or another family states `actuation`, `actuator_length`/`_elevation`/`_width`/`_thickness` or `ground_terminal_*`",
+    },
+    Rule {
         id: "pad_order.invalid",
         meaning: "a package's `pad_order` does not hold exactly `lead_count` distinct numbers",
     },
@@ -361,6 +365,7 @@ pub fn validate_part(
     out.extend(check_package_aux_pads(&package_entity, package));
     out.extend(check_package_header(&package_entity, package));
     out.extend(check_package_pad_order(&package_entity, package));
+    out.extend(check_package_tact_switch(&package_entity, package));
     out.extend(check_package_edge(&package_entity, package));
     out.extend(check_package_keepouts(&package_entity, package));
     out.extend(check_package_pad_layout(&package_entity, package));
@@ -534,6 +539,7 @@ mod tests {
             tab: None,
             aux_pads: vec![],
             pad_order: vec![],
+            actuation: None,
             connector: None,
             edge: None,
             keepouts: vec![],

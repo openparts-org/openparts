@@ -6,7 +6,7 @@ use openparts_core::Package;
 use std::collections::BTreeSet;
 
 /// Paths of the package fields that must carry their own provenance.
-pub(crate) const PROVENANCE_REQUIRED: [&str; 27] = [
+pub(crate) const PROVENANCE_REQUIRED: [&str; 33] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -33,6 +33,12 @@ pub(crate) const PROVENANCE_REQUIRED: [&str; 27] = [
     "/dimensions/body_offset",
     "/dimensions/lead_inset",
     "/dimensions/actuator_diameter",
+    "/dimensions/actuator_length",
+    "/dimensions/actuator_elevation",
+    "/dimensions/actuator_width",
+    "/dimensions/actuator_thickness",
+    "/dimensions/ground_terminal_offset",
+    "/dimensions/ground_terminal_width",
     "/dimensions/can_diameter",
 ];
 
@@ -52,6 +58,9 @@ pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<D
     }
     if !package.pad_order.is_empty() {
         present.push("/pad_order");
+    }
+    if package.actuation.is_some() {
+        present.push("/actuation");
     }
     if !package.pads.is_empty() {
         present.push("/pads");
@@ -356,6 +365,116 @@ pub(crate) fn check_dimension(
     }
 }
 
+/// `tact_switch.invalid`: a tact switch has 2 to 5 terminals (an odd
+/// count: a ground terminal, placed by `ground_terminal_offset` unless a
+/// THT package's `pads` place every hole); `actuation` and the side
+/// actuator and ground-terminal dimensions belong to the tact families,
+/// the side actuator's to `actuation: side`, which needs
+/// `actuator_length`; `actuator_width` and `actuator_thickness` go
+/// together. A THT package with `pads` gives every plated hole a drill.
+pub(crate) fn check_package_tact_switch(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    use openparts_core::{Actuation, PackageFamily as F};
+    let d = &package.dimensions;
+    let mut out = Vec::new();
+    let mut bad = |path: &str, message: &str| {
+        out.push(Diagnostic::error(
+            "tact_switch.invalid",
+            entity,
+            Some(path),
+            message.to_string(),
+        ))
+    };
+    let tact = matches!(package.family, F::TactSwitchSmd | F::TactSwitchTht);
+    let side = [
+        ("/dimensions/actuator_length", d.actuator_length.is_some()),
+        (
+            "/dimensions/actuator_elevation",
+            d.actuator_elevation.is_some(),
+        ),
+        ("/dimensions/actuator_width", d.actuator_width.is_some()),
+        (
+            "/dimensions/actuator_thickness",
+            d.actuator_thickness.is_some(),
+        ),
+    ];
+    let ground = [
+        (
+            "/dimensions/ground_terminal_offset",
+            d.ground_terminal_offset.is_some(),
+        ),
+        (
+            "/dimensions/ground_terminal_width",
+            d.ground_terminal_width.is_some(),
+        ),
+    ];
+    if !tact {
+        if package.actuation.is_some() {
+            bad(
+                "/actuation",
+                "actuation belongs to the tact switch families",
+            );
+        }
+        for (path, present) in side.iter().chain(&ground) {
+            if *present {
+                bad(path, "this dimension belongs to the tact switch families");
+            }
+        }
+        return out;
+    }
+    let n = package.lead_count;
+    let tht_pads = package.family == F::TactSwitchTht && !package.pads.is_empty();
+    if !(2..=5).contains(&n) {
+        bad(
+            "/lead_count",
+            "a tact switch has 2 or 4 terminals, plus an optional ground terminal (3 or 5)",
+        );
+    } else if n % 2 == 1 && d.ground_terminal_offset.is_none() && !tht_pads {
+        bad(
+            "/dimensions/ground_terminal_offset",
+            "a tact switch with a ground terminal (odd lead_count) states ground_terminal_offset",
+        );
+    } else if n.is_multiple_of(2) {
+        for (path, present) in &ground {
+            if *present {
+                bad(
+                    path,
+                    "only a tact switch with a ground terminal (odd lead_count) states this",
+                );
+            }
+        }
+    }
+    if package.actuation == Some(Actuation::Side) {
+        if d.actuator_length.is_none() {
+            bad(
+                "/dimensions/actuator_length",
+                "a side-operated switch states actuator_length (its reach beyond the housing face)",
+            );
+        }
+        if d.actuator_width.is_some() != d.actuator_thickness.is_some() {
+            bad(
+                "/dimensions/actuator_width",
+                "actuator_width and actuator_thickness go together",
+            );
+        }
+    } else {
+        for (path, present) in &side {
+            if *present {
+                bad(
+                    path,
+                    "only a side-operated switch (actuation: side) states this",
+                );
+            }
+        }
+    }
+    if tht_pads && package.pads.iter().any(|p| p.plated && p.drill.is_none()) {
+        bad(
+            "/pads",
+            "a tact_switch_tht pad is a PCB hole: every plated pad states its drill",
+        );
+    }
+    out
+}
+
 /// `pad_order`: exactly one distinct number per lead position.
 pub(crate) fn check_package_pad_order(entity: &str, package: &Package) -> Vec<Diagnostic> {
     let order = &package.pad_order;
@@ -640,5 +759,72 @@ mod edge_keepout_tests {
             "keepouts:\n  - {purpose: antenna, restricts: [components, copper], size: [14, 9]}\n",
         );
         assert!(check_package_keepouts("p", &ok).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tact_switch_tests {
+    use super::*;
+
+    fn switch(family: &str, n: u32, extra: &str, dims: &str) -> Package {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: {family}\n\
+             lead_count: {n}\npitch: {{nominal: 4.5, unit: mm}}\n{extra}dimensions:\n\
+             \x20 body_width: {{nominal: 6, unit: mm}}\n\
+             \x20 body_length: {{nominal: 6, unit: mm}}\n{dims}"
+        ))
+        .unwrap()
+    }
+
+    fn rules(p: &Package) -> Vec<String> {
+        check_package_tact_switch("e", p)
+            .into_iter()
+            .map(|d| format!("{} {}", d.rule_id, d.field_path.unwrap_or_default()))
+            .collect()
+    }
+
+    #[test]
+    fn ground_terminals_and_side_actuators() {
+        let gnd = "  ground_terminal_offset: {nominal: 4.1, unit: mm}\n";
+        assert!(rules(&switch("tact_switch_tht", 5, "", gnd)).is_empty());
+        assert_eq!(
+            rules(&switch("tact_switch_tht", 5, "", "")),
+            ["tact_switch.invalid /dimensions/ground_terminal_offset"]
+        );
+        assert_eq!(
+            rules(&switch("tact_switch_tht", 4, "", gnd)),
+            ["tact_switch.invalid /dimensions/ground_terminal_offset"]
+        );
+        assert_eq!(
+            rules(&switch("tact_switch_smd", 6, "", "")),
+            ["tact_switch.invalid /lead_count"]
+        );
+        let side = "  actuator_length: {nominal: 0.7, unit: mm}\n";
+        assert!(rules(&switch("tact_switch_smd", 2, "actuation: side\n", side)).is_empty());
+        assert_eq!(
+            rules(&switch("tact_switch_smd", 2, "", side)),
+            ["tact_switch.invalid /dimensions/actuator_length"]
+        );
+        assert_eq!(
+            rules(&switch("tact_switch_smd", 2, "actuation: side\n", "")),
+            ["tact_switch.invalid /dimensions/actuator_length"]
+        );
+        let half = format!("{side}  actuator_width: {{nominal: 1.7, unit: mm}}\n");
+        assert_eq!(
+            rules(&switch("tact_switch_smd", 2, "actuation: side\n", &half)),
+            ["tact_switch.invalid /dimensions/actuator_width"]
+        );
+        assert_eq!(
+            rules(&switch("soic", 8, "actuation: side\n", side)),
+            [
+                "tact_switch.invalid /actuation",
+                "tact_switch.invalid /dimensions/actuator_length"
+            ]
+        );
+        // THT holes from pads: no ground offset needed, drills required.
+        let pads = "pads:\n  - {number: '1', x: -3, y: 0, drill: 1}\n  \
+                    - {number: '2', x: 3, y: 0, drill: 1}\n  - {number: '3', x: 0, y: -4}\n";
+        let p = switch("tact_switch_tht", 3, pads, "");
+        assert_eq!(rules(&p), ["tact_switch.invalid /pads"]);
     }
 }

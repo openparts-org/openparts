@@ -11,6 +11,15 @@ import {
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
+pub(all) enum Actuation {
+  Top
+  Side
+}
+pub fn Actuation::all() -> Array[Self]
+pub fn Actuation::wire(Self) -> String
+pub impl @json.FromJson for Actuation
+
 #derive(Eq)
 pub(all) struct Alternative {
   class : AlternativeClass
@@ -821,6 +830,7 @@ pub impl @json.FromJson for Orientation
 
 #derive(Eq)
 pub(all) struct Package {
+  actuation : Actuation?
   aux_pads : Array[String]?
   connector : PackageConnector?
   construction : PackageConstruction?
@@ -873,6 +883,10 @@ pub impl @json.FromJson for PackageConstruction
 #derive(Eq)
 pub(all) struct PackageDimensions {
   actuator_diameter : Dimension?
+  actuator_elevation : Dimension?
+  actuator_length : Dimension?
+  actuator_thickness : Dimension?
+  actuator_width : Dimension?
   aux_pad_length : Dimension?
   aux_pad_width : Dimension?
   aux_row_x : Dimension?
@@ -883,6 +897,8 @@ pub(all) struct PackageDimensions {
   body_width : Dimension
   can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
+  ground_terminal_offset : Dimension?
+  ground_terminal_width : Dimension?
   hole_diameter : Dimension?
   lead_inset : Dimension?
   lead_length : Dimension?

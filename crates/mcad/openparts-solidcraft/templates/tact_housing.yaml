@@ -1,0 +1,7 @@
+# Tactile switch housing: a box on the board (or on its stand-offs).
+# Vars: standoff.
+- params:
+    standoff: ["{{standoff}}", housing underside above the board]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Body, name: Body}

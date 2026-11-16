@@ -542,3 +542,53 @@ fn polarity_is_only_for_two_terminal_families() {
     );
     assert!(build(&p, Some(&d), &g, Density::N).polarity.is_none());
 }
+
+#[test]
+fn a_side_actuator_is_a_region_inside_the_courtyard_and_a_plunger_sets_the_height() {
+    // B3U-3100P-like: two terminals, a ground foot, a knob on +Y.
+    let p = pkg(
+        "family: tact_switch_smd\nlead_count: 3\npitch: {nominal: 3.4, unit: mm}\n\
+         actuation: side\npad_order: [\"2\", \"1\", \"3\"]\ndimensions:\n\
+         \x20 body_width: {nominal: 3.0, unit: mm}\n\
+         \x20 body_length: {nominal: 2.5, unit: mm}\n\
+         \x20 body_height: {nominal: 1.2, unit: mm}\n\
+         \x20 overall_width: {nominal: 4.0, unit: mm}\n\
+         \x20 lead_width: {nominal: 1.4, unit: mm}\n\
+         \x20 ground_terminal_offset: {nominal: 1.9, unit: mm}\n\
+         \x20 actuator_length: {nominal: 0.7, unit: mm}\n\
+         \x20 actuator_width: {nominal: 1.7, unit: mm}\n\
+         \x20 actuator_thickness: {nominal: 1.0, unit: mm}\n",
+    );
+    let m = model(&p, Density::N);
+    let act = m
+        .body
+        .regions
+        .iter()
+        .find(|r| r.name == "actuator")
+        .unwrap();
+    assert_eq!(
+        (act.size.x.min(act.size.y), act.size.x.max(act.size.y)),
+        (0.7, 1.7)
+    );
+    assert_eq!((act.z_min, act.z_max), (0.1, 1.1));
+    // The courtyard reaches past the knob's tip, wherever the turn put it.
+    let reach = |pts: &[Point2]| {
+        pts.iter()
+            .map(|p| p.x.abs().max(p.y.abs()))
+            .fold(0.0, f64::max)
+    };
+    assert!(reach(&m.courtyard.polygons[0]) > reach(&act.outline));
+    assert_eq!(m.pads.len(), 3);
+
+    let top = pkg(
+        "family: tact_switch_tht\nlead_count: 4\npitch: {nominal: 4.5, unit: mm}\n\
+         dimensions:\n\
+         \x20 body_width: {nominal: 6.0, unit: mm}\n\
+         \x20 body_length: {nominal: 6.0, unit: mm}\n\
+         \x20 body_height: {nominal: 3.4, unit: mm}\n\
+         \x20 overall_height: {nominal: 5.0, unit: mm}\n\
+         \x20 row_spacing: {nominal: 6.5, unit: mm}\n\
+         \x20 hole_diameter: {nominal: 1.0, unit: mm}\n",
+    );
+    assert_eq!(model(&top, Density::N).body.height, 5.0);
+}

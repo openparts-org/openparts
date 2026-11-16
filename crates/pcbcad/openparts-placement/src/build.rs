@@ -642,6 +642,49 @@ fn body_regions(g: &MechanicalGeometry, t: ToModel) -> Vec<BodyRegion> {
             out.push(region("pins", OutlineShape::Rect, center, size, z));
         }
     }
+    // A switch's actuator: on top (its plunger sets the height), or
+    // leaving the housing's +Y face (side-operated).
+    if let Details::Switch(f) = &g.details {
+        let top = z.1;
+        let (x0, y0, x1, y1, zr, shape) = match f.side {
+            Some(a) => {
+                let face = b.position.y + b.size.y / 2.0;
+                (
+                    b.position.x - a.width / 2.0,
+                    face,
+                    b.position.x + a.width / 2.0,
+                    face + a.length,
+                    (
+                        a.elevation - a.thickness / 2.0,
+                        a.elevation + a.thickness / 2.0,
+                    ),
+                    OutlineShape::Rect,
+                )
+            }
+            None => {
+                let r = f.actuator_diameter / 2.0;
+                (
+                    b.position.x - r,
+                    b.position.y - r,
+                    b.position.x + r,
+                    b.position.y + r,
+                    (top, f.actuator_top.max(top)),
+                    OutlineShape::Circle,
+                )
+            }
+        };
+        let a = t.point(x0, y0);
+        let c = t.point(x1, y1);
+        let center = Point2 {
+            x: r4((a.x + c.x) / 2.0),
+            y: r4((a.y + c.y) / 2.0),
+        };
+        let size = Size2 {
+            x: r4((a.x - c.x).abs()),
+            y: r4((a.y - c.y).abs()),
+        };
+        out.push(region("actuator", shape, center, size, zr));
+    }
     // A module's shield can stands on the board's top face.
     if let Details::Module(openparts_mcad::ModuleFeatures {
         shield: Some(s), ..
@@ -682,9 +725,13 @@ fn courtyard(pads: &[Pad], regions: &[BodyRegion], excess: f64, density: Density
         let (lo, hi) = p.bounds();
         add(lo, hi);
     }
-    if let Some(body) = regions.first() {
-        for p in &body.outline {
-            add(*p, *p);
+    // The body, and a side-operated switch's actuator (the finger or
+    // the enclosure needs it clear).
+    for (i, r) in regions.iter().enumerate() {
+        if i == 0 || r.name == "actuator" {
+            for p in &r.outline {
+                add(*p, *p);
+            }
         }
     }
     // Snap with a tolerance, so a value already on the grid stays.
@@ -931,7 +978,10 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
             "right-angle header",
             "pins in a column along Y, pin 1 at the top, mating side +X or -X",
         ),
-        F::TactSwitchSmd | F::TactSwitchTht => ("tactile switch", "pad 1 upper left"),
+        F::TactSwitchSmd | F::TactSwitchTht => (
+            "tactile switch",
+            "pad 1 upper left; a side actuator (+Y in the source frame) turns with it",
+        ),
         F::UsbC => ("USB-C receptacle", "contact A1 upper left: the opening faces −Y"),
         F::CardSocket | F::BarrelJack | F::FpcConnector | F::RfCoax | F::MicroUsbB => (
             "connector",
