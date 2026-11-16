@@ -121,6 +121,7 @@ mod tests {
                 replacement: vec![],
             },
             sources: vec![],
+            assembly: vec![],
             provenance: BTreeMap::new(),
             review: None,
         }

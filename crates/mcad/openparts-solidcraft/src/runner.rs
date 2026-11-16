@@ -97,6 +97,12 @@ fn resolve() -> Option<Cli> {
 
 impl Cli {
     fn command(&self, workdir: &Path) -> Command {
+        let mut c = self.bare_command(workdir);
+        c.current_dir(workdir);
+        c
+    }
+
+    fn bare_command(&self, workdir: &Path) -> Command {
         match self {
             Cli::Binary(path) => Command::new(path),
             Cli::Flatpak(app) => {
@@ -159,8 +165,44 @@ pub fn run(
     product_name: &str,
     formats: &[Format],
 ) -> Result<Vec<Vec<u8>>, RunError> {
+    run_with_inputs(script, &[], product_name, formats)
+}
+
+/// [`run`], after first exporting each of `inputs` (file stem, script)
+/// to `<stem>.step` in the same working directory -- in parallel, each
+/// its own SolidCraft run -- so `script` can insert them by those
+/// relative names (`file.insert_step`; every run's working directory is
+/// that directory).
+pub fn run_with_inputs(
+    script: &Script,
+    inputs: &[(String, Script)],
+    product_name: &str,
+    formats: &[Format],
+) -> Result<Vec<Vec<u8>>, RunError> {
     let cli = cli()?;
     let work = WorkDir::new()?;
+    std::thread::scope(|scope| {
+        let runs: Vec<_> = inputs
+            .iter()
+            .map(|(stem, input)| {
+                let work = &work;
+                scope.spawn(move || -> Result<(), RunError> {
+                    let path = work.0.join(format!("{stem}.json"));
+                    std::fs::write(&path, input.to_string_pretty())?;
+                    let out = work.0.join(format!("{stem}.step"));
+                    let mut cmd = cli.command(&work.0);
+                    cmd.arg("run").arg(&path).arg("--out").arg(&out).args([
+                        "--quiet",
+                        "--param-check",
+                        "strict",
+                    ]);
+                    check(cmd.output()?)
+                })
+            })
+            .collect();
+        runs.into_iter()
+            .try_for_each(|r| r.join().expect("a SolidCraft run thread panicked"))
+    })?;
     let script_path = work.0.join("script.json");
     std::fs::write(&script_path, script.to_string_pretty())?;
     let stem = file_stem(product_name);
@@ -189,6 +231,7 @@ pub fn run(
             "--param-check",
             "strict",
         ]);
+
         check(cmd.output()?)?;
     }
     if let Some(png) = png {

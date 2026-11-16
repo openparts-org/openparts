@@ -18,12 +18,14 @@
 //! bend radii, plating colours, ...) are generator defaults,
 //! never written back into Canonical Data.
 
+pub mod assembly;
 mod common;
 mod families;
 pub mod runner;
 mod script;
 mod template;
 
+pub use assembly::{generate_assembly, Mounted, Placed};
 pub use runner::{available, available_for_test, run, version, Format, RunError};
 pub use script::{looks, mm, Look, Script};
 

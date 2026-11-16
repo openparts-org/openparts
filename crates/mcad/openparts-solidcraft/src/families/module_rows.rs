@@ -7,12 +7,17 @@
 //! so every row keeps its own pitch and start; each pad is drawn on its
 //! own (rows of different pitch and grids don't share one pattern).
 //!
+//! A pad with a drill is a plated through-hole (a pin-header development
+//! board): its land on both faces and the plated barrel; a non-plated
+//! hole (a mounting hole) is drilled through the board.
+//!
 //! The antenna (a PCB trace or a ceramic part) and the parts under the
-//! can are not drawn: module drawings don't dimension them.
+//! can are not drawn here: a part's `assembly` places them (openparts-
+//! artifacts composes the board with each component's own model).
 
 use crate::script::{looks, mm};
 use crate::{ModelError, ModelInput, Script};
-use openparts_mcad::{Details, Lead};
+use openparts_mcad::{Details, Lead, Mounting};
 use serde_json::json;
 
 use super::module::SOLDER_MASK;
@@ -48,6 +53,24 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let mut metal = Vec::new();
     for (i, lead) in g.leads.iter().enumerate() {
         let name = format!("Pad{}", i + 1);
+        match (lead.mounting, lead.drill) {
+            (Mounting::ThroughHole, Some(d)) => {
+                through_hole(s, &name, lead, d);
+                metal.push(name);
+                continue;
+            }
+            (Mounting::NonPlated, Some(d)) => {
+                let (x, y) = (lead.position.x, lead.position.y);
+                s.cmd(
+                    "solid.cylinder",
+                    json!({"diameter": mm(d), "height": "body_h + 0.2 mm",
+                           "base": [mm(x), mm(y), "-0.1 mm"],
+                           "operation": "cut", "targets": ["Board"], "name": format!("{name}Npth")}),
+                );
+                continue;
+            }
+            _ => {}
+        }
         let (x0, x1) = (
             (lead.position.x - lead.size.x / 2.0).max(-hw),
             (lead.position.x + lead.size.x / 2.0).min(hw),
@@ -105,6 +128,47 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     s.paint(&["Board".into()], SOLDER_MASK);
     s.paint(&metal, looks::GOLD);
     Ok(())
+}
+
+/// A plated through-hole (a pin-header row): its land on both faces,
+/// the plated barrel between them, and the hole through board and copper.
+fn through_hole(s: &mut Script, name: &str, lead: &Lead, drill: f64) {
+    let (x, y) = (lead.position.x, lead.position.y);
+    let round = matches!(lead.shape, openparts_mcad::LandShape::Circle);
+    for (z, op, part) in [("0 mm", "new", "Bottom"), ("body_h - pad_t", "join", "Top")] {
+        let mut p = if round {
+            json!({"diameter": mm(lead.size.x), "height": "pad_t", "base": [mm(x), mm(y), z]})
+        } else {
+            json!({"length": mm(lead.size.x), "width": mm(lead.size.y), "height": "pad_t",
+                   "center": [mm(x), mm(y), format!("{z} + pad_t / 2")]})
+        };
+        p["operation"] = json!(op);
+        p["name"] = json!(format!("{name}{part}"));
+        if op == "new" {
+            p["body_name"] = json!(name);
+        } else {
+            p["targets"] = json!([name]);
+        }
+        s.cmd(if round { "solid.cylinder" } else { "solid.box" }, p);
+    }
+    s.cmd(
+        "solid.cylinder",
+        json!({"diameter": format!("{} + 2 * plating_t", mm(drill)), "height": "body_h",
+               "base": [mm(x), mm(y), 0], "operation": "join", "targets": [name],
+               "name": format!("{name}Barrel")}),
+    );
+    s.cmd(
+        "solid.cylinder",
+        json!({"diameter": mm(drill), "height": "body_h + 0.2 mm",
+               "base": [mm(x), mm(y), "-0.1 mm"],
+               "operation": "cut", "targets": [name], "name": format!("{name}Hole")}),
+    );
+    s.cmd(
+        "solid.cylinder",
+        json!({"diameter": format!("{} + 2 * plating_t", mm(drill)), "height": "body_h + 0.2 mm",
+               "base": [mm(x), mm(y), "-0.1 mm"],
+               "operation": "cut", "targets": ["Board"], "name": format!("{name}Drill")}),
+    );
 }
 
 /// Where a pad meets the board edge (the castellation's centre), if it
@@ -210,6 +274,51 @@ mod tests {
             let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
             let step = String::from_utf8(step).unwrap();
             assert_eq!(step.matches("MANIFOLD_SOLID_BREP(").count(), 1 + 47 + 1);
+        }
+    }
+
+    #[test]
+    fn a_pin_header_board_has_plated_through_holes_and_drilled_mounting_holes() {
+        let package: openparts_core::Package = serde_yaml::from_str(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: module\n\
+             lead_count: 4\npitch: {nominal: 2.54, unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {nominal: 18, unit: mm}\n\
+             \x20 body_length: {nominal: 10, unit: mm}\n\
+             \x20 body_height: {nominal: 1.6, unit: mm}\n\
+             pad_rows:\n\
+             \x20 - {side: -x, first: 1, count: 2, pitch: 2.54, start: 3, inset: 1.27, pad: [1.7, 1.7], drill: 1.0}\n\
+             \x20 - {side: +x, first: 3, count: 2, pitch: 2.54, start: 3, inset: 1.27, pad: [1.7, 1.7], drill: 1.0}\n\
+             pads:\n\
+             \x20 - {number: '', x: 0, y: 0, width: 3.2, length: 3.2, drill: 3.2, plated: false}\n",
+        )
+        .unwrap();
+        let geometry = openparts_mcad::generate(&package).unwrap();
+        let script = build_script(&ModelInput {
+            package: &package,
+            geometry: &geometry,
+            category: None,
+            marked_pin: None,
+        })
+        .unwrap();
+        let named = |suffix: &str| {
+            script
+                .commands()
+                .iter()
+                .filter(|c| {
+                    c["params"]["name"]
+                        .as_str()
+                        .is_some_and(|n| n.ends_with(suffix))
+                })
+                .count()
+        };
+        assert_eq!(named("Barrel"), 4);
+        assert_eq!(named("Top"), 4);
+        assert_eq!(named("Npth"), 1);
+        if crate::available_for_test(module_path!()) {
+            let step = run(&script, "TEST", &[Format::Step]).unwrap().remove(0);
+            let step = String::from_utf8(step).unwrap();
+            assert_eq!(step.matches("MANIFOLD_SOLID_BREP(").count(), 1 + 4);
         }
     }
 }

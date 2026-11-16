@@ -593,6 +593,7 @@ fn top_level_order(map: Mapping, kind: &str, default: Option<String>) -> Mapping
             "existence",
             "lifecycle",
             "parameters",
+            "assembly",
         ],
         "device" => &[
             "schema_version",
@@ -830,6 +831,45 @@ parameters:
         assert_eq!(typed(&text), old);
         // fmt is idempotent.
         assert_eq!(format(&text).unwrap(), text);
+    }
+
+    #[test]
+    fn an_assembly_reads_its_src_per_component_and_writes_back() {
+        let text = r##"schema_version: "0.2"
+kind: part
+id: t/M
+manufacturer: t
+mpn: M
+device: t/M
+package: standards/M
+sources: [t/DS, t/DESIGN]
+source: t/DS
+existence: { status: verified, src: p1 "M" }
+lifecycle: { status: unknown }
+assembly:
+  - { ref: U1, part: t/U1, x: 0, y: 1.5, rotation: 45, src: t/DESIGN "U1" }
+  - ref: J1
+    body: { width: 8, length: 5.6, height: 2.9, color: "#c8c8c8" }
+    x: 0
+    y: 24.7
+    side: bottom
+    src: [t/DESIGN "J1", p2 "Outline"]
+"##;
+        let v = read(text).unwrap();
+        assert_eq!(
+            v["provenance"]["/assembly/0"][0]["locator"].as_str(),
+            Some("U1")
+        );
+        assert_eq!(v["provenance"]["/assembly/1"][1]["page"].as_u64(), Some(2));
+        let part: openparts_core::Part = serde_yaml::from_value(v.clone()).unwrap();
+        assert_eq!(part.assembly.len(), 2);
+        assert_eq!(part.assembly[1].side, openparts_core::AssemblySide::Bottom);
+        let out = format(text).unwrap();
+        assert_eq!(format(&out).unwrap(), out);
+        assert_eq!(
+            canonical(read(&out).unwrap()).unwrap(),
+            canonical(v).unwrap()
+        );
     }
 
     #[test]

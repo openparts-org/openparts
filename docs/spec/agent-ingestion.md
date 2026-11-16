@@ -656,6 +656,50 @@ section 41).
 7. Validate (`openparts validate --data`), format (`openparts data
    fmt`), and commit as an AI candidate: never write a `review` block.
 
+## 19.3 Development Board Ingestion
+
+How an agent records a development board or module (a Raspberry Pi Pico,
+an ESP32 DevKit, an Arduino) with the components on it (Canonical Data
+Specification sections 20.4 and 20.12).
+
+1. **Sources.** Only the board maker's own publications: the datasheet or
+   product brief, dimension drawings, and design files (KiCad, Eagle,
+   Altium, Allegro, PDF layouts, BOM, centroid file) from the maker's site
+   or its official repository. Record each as a Source (`reference_design`
+   for design files) with URL, SHA-256, revision/date, and the licence as
+   the maker states it (or "no licence stated") in the comment. Fetch with
+   plain tools; no distributor copies or mirrors.
+2. **Package.** A `module` package: the board outline (`body_width`,
+   `body_length`, `body_height` = board thickness) and the carrier-board
+   land pattern -- castellated `pad_rows` or the two default rows for
+   castellated modules, `pad_rows` with `drill` or explicit `pads` for
+   pin-header boards (section 20.4). Hole positions are facts from the
+   drawing or the design file.
+3. **Placements.** Read each fitted component's reference, MPN (BOM),
+   position, rotation and side from the design file; convert to the
+   package frame (board-outline centre as origin, Y up) and to the
+   component's Placement Model origin and zero orientation (land-pattern
+   centroid, pin 1 upper left; KiCad back side: rotation − 180°; KiCad
+   THT footprints: pin 1 origin → pad-extent centre). Check one
+   asymmetric component (a connector, an IC) against the drawing before
+   converting the rest. Opening a non-KiCad layout in KiCad's importer
+   (`kicad-cli pcb import`, e.g. Allegro `.brd`) to read placements is
+   fine; the imported file is a scratch file, never committed.
+4. **Components.** Use an existing OpenParts part when the BOM's MPN is
+   in the dataset; add it from its manufacturer's datasheet (normal
+   ingestion) when that manufacturer serves it; else a `body` box sized
+   from the component's datasheet, else from the design file's BOM or
+   footprint data (say which in the locator). Prioritise what is visible
+   (MCU, module, flash, regulators, connectors, buttons, LEDs, crystals,
+   shields); small passives may be left out.
+5. **Facts only.** Never copy footprints, symbols, 3D models, artwork or
+   files; never use a vendor 3D model as the board's model -- OpenParts
+   generates it.
+6. Check the result: `openparts validate --data` (the `assembly.outside`
+   warning flags components off the board; an overhanging USB connector is
+   expected) and `openparts generate` for the part, looking at the 3D
+   model. Commit as an AI candidate (no `review` block).
+
 ---
 
 # 20. Incremental Research

@@ -85,11 +85,13 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
     }?;
     renumber(&mut geometry, package)?;
-    // `usb_c`, the connector families and THT tact switches draw their
-    // leads from the pads.
+    // `usb_c`, the connector families, THT tact switches and modules
+    // draw their leads from the pads.
+    // A module's explicit pads are among its leads already.
     if !package.pads.is_empty()
         && package.family != F::UsbC
         && package.family != F::TactSwitchTht
+        && package.family != F::Module
         && !openparts_core::is_connector_family(package.family)
     {
         geometry.lands = land::from_pads(package)?;

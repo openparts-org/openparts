@@ -14,6 +14,7 @@
 //!
 //! Every rule is listed, with what it means, in [`RULES`].
 
+mod assembly;
 mod circuit;
 #[cfg(test)]
 mod circuit_tests;
@@ -26,6 +27,7 @@ mod parameter;
 mod provenance;
 mod review;
 
+pub use assembly::{validate_assembly, AssemblyContext};
 pub use circuit::{validate_circuit, validate_circuit_location, CircuitContext};
 pub use cross::{validate_location, validate_source, DocKind};
 pub use diagnostic::{Diagnostic, Severity};
@@ -88,7 +90,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "provenance.missing",
-        meaning: "a circuit fact (a net's voltage, a condition, a connection, a role's `requires`/`level`/`place`/`example`/`expects`, a formula, a literal input or result, a hint, an include) has no `src` at it or an ancestor; or a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path, or a pin's `diff_pair` has none at `/pins/<n>/diff_pair` or `/pins/<n>` (these fields were added with field-level provenance required from the start)",
+        meaning: "a circuit fact (a net's voltage, a condition, a connection, a role's `requires`/`level`/`place`/`example`/`expects`, a formula, a literal input or result, a hint, an include) has no `src` at it or an ancestor; or a Part or Device `parameters` value has no provenance entry at `/parameters/<key>`; or a package lead/outline dimension (`overall_*`, `standoff`, `lead_*`, `tab_*`, and `module`'s `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*`; the header families' `mating_length`, `tail_length`, `pad_diameter`, `body_offset`; `lead_inset`, `actuator_diameter`), `construction`, `tab`, `aux_pads`, `pad_order` or `pads` is present without a provenance entry for its path, or a pin's `diff_pair` has none at `/pins/<n>/diff_pair` or `/pins/<n>`, or a part's `assembly` component has none at `/assembly/<i>` (these fields were added with field-level provenance required from the start)",
     },
     Rule {
         id: "parameter.unknown_key",
@@ -168,7 +170,23 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "pad_layout.invalid",
-        meaning: "a package's `pad_rows`/`pad_grids`/`shield` is on a family other than `module`, has a non-positive size or count, a pitch not above its pad, a pad number used twice, a grid with neither one number nor one per pad, `pad_grids` without `pad_rows`, a `shield` without `dimensions.overall_height`, or `smt` has a non-positive pad size or an empty `mech_number`",
+        meaning: "a package's `pad_rows`/`pad_grids`/`shield` is on a family other than `module`, has a non-positive size or count, a pitch not above its pad, a row `drill` not inside its pad, a pad number used twice (rows, grids and a module's plated `pads`), a grid with neither one number nor one per pad, `pad_grids` without `pad_rows` or `pads`, a `shield` without `dimensions.overall_height`, or `smt` has a non-positive pad size or an empty `mech_number`",
+    },
+    Rule {
+        id: "assembly.invalid",
+        meaning: "a module assembly component (Canonical Data Specification 20.12) has no or a repeated `ref`, not exactly one of `part` and `body`, a non-numeric position, a body without a positive width, length and height, or a `color` that is not `#rrggbb`",
+    },
+    Rule {
+        id: "assembly.unknown_part",
+        meaning: "an assembly component's `part` is not a part of the dataset",
+    },
+    Rule {
+        id: "assembly.nested",
+        meaning: "an assembly component's `part` is the module itself or has an `assembly` of its own (assemblies don't nest)",
+    },
+    Rule {
+        id: "assembly.outside",
+        meaning: "warning: an assembly component's pads or body reach past the board outline (expected for an overhanging connector; otherwise its x/y/rotation is off)",
     },
     Rule {
         id: "mpn.empty",
@@ -429,6 +447,7 @@ mod tests {
             include_str!("review.rs"),
             include_str!("circuit.rs"),
             include_str!("connector.rs"),
+            include_str!("assembly.rs"),
         ]
         .concat();
         let documented: BTreeSet<&str> = RULES.iter().map(|r| r.id).collect();
@@ -479,6 +498,7 @@ mod tests {
                 replacement: vec![],
             },
             sources: vec![],
+            assembly: vec![],
             provenance: BTreeMap::new(),
             review: None,
         }

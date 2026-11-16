@@ -2965,6 +2965,7 @@ version = "0.1.0"
 dependencies = [
  "openparts-core",
  "openparts-mcad",
+ "openparts-placement",
  "serde",
  "serde_json",
  "serde_yaml",

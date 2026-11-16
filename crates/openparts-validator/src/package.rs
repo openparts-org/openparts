@@ -576,10 +576,11 @@ pub(crate) fn check_package_pad_layout(entity: &str, package: &Package) -> Vec<D
             );
         }
     }
-    if !package.pad_grids.is_empty() && package.pad_rows.is_empty() {
+    if !package.pad_grids.is_empty() && package.pad_rows.is_empty() && package.pads.is_empty() {
         bad(
             "/pad_grids",
-            "pad_grids needs pad_rows (the module's edge or LGA pads)".to_string(),
+            "pad_grids needs pad_rows or pads (the module's edge, LGA or through-hole pads)"
+                .to_string(),
         );
     }
     let mut numbers = BTreeSet::new();
@@ -599,6 +600,17 @@ pub(crate) fn check_package_pad_layout(entity: &str, package: &Package) -> Vec<D
                     r.pitch, r.pad[0]
                 ),
             );
+        }
+        if let Some(d) = r.drill {
+            if !(d > 0.0 && d < r.pad[0].min(r.pad[1])) {
+                bad(
+                    &path,
+                    format!(
+                        "drill ({d}) must be positive and leave copper around it (pad {:?})",
+                        r.pad
+                    ),
+                );
+            }
         }
         for n in r.first..r.first + r.count {
             if !numbers.insert(n.to_string()) {
@@ -634,6 +646,17 @@ pub(crate) fn check_package_pad_layout(entity: &str, package: &Package) -> Vec<D
         for n in own {
             if numbers.contains(n) {
                 bad(&path, format!("pad \"{n}\" is also in a pad row"));
+            }
+        }
+    }
+    // A module's explicit pads join its rows and grids: one number each.
+    if module && !package.pad_rows.is_empty() {
+        for (i, p) in package.pads.iter().enumerate() {
+            if p.plated && numbers.contains(&p.number) {
+                bad(
+                    &format!("/pads/{i}"),
+                    format!("pad \"{}\" is also in a pad row", p.number),
+                );
             }
         }
     }

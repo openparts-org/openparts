@@ -33,6 +33,10 @@ pub struct Part {
         deserialize_with = "deserialize_no_dup_map"
     )]
     pub parameters: Parameters,
+    /// The components mounted on a module board (section 20.12), each
+    /// cited at `/assembly/<i>`; empty for an ordinary part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assembly: Vec<crate::assembly::AssemblyComponent>,
     #[serde(default, deserialize_with = "deserialize_no_dup_map")]
     pub provenance: ProvenanceMap,
     /// Human review status (section 26.1); `None`: unreviewed.

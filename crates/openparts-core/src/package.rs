@@ -675,6 +675,11 @@ pub struct PackagePadRow {
     pub inset: f64,
     /// Pad size: `[along the edge, across it]` (mm).
     pub pad: [f64; 2],
+    /// Plated through-holes of this diameter (mm): a pin-header row of
+    /// a development board, `pad` its copper land (round when both sizes
+    /// are equal). Absent: SMD pads (castellations, LGA).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drill: Option<f64>,
 }
 
 /// `Package::pad_grids` (`module`): a rectangular grid of equal pads,

@@ -310,6 +310,8 @@ sources:
 
 PartへPinoutやPackage dimensionsを重複保存しない。
 
+Module boardのPartは、基板上に実装された部品を`assembly`に記録できる（section 20.12）。3D Modelだけが使い、FootprintとSymbolは変わらない。
+
 ## 11.1 Electrical Parameters
 
 A Part may carry a `parameters` map of electrical facts of that
@@ -1140,12 +1142,46 @@ shield:                 # the can on the top face; its top is dimensions.overall
   src: p40 "Figure 10"
 ```
 
+**Through-hole modules.** A pin-header development board (ESP32-DevKitC: 2 x 19
+holes, rows 25.4 mm apart; Arduino Nano: 2 x 15, 15.24 mm apart; Arduino
+Uno: headers at irregular offsets) states its holes in two ways, which may be
+combined (pad numbers must not repeat):
+
+- a `pad_rows` entry with `drill` (mm): the row's pads are plated
+  through-holes of that drill, `pad` their copper land (round when both sizes
+  are equal). `inset` is from the board edge to the hole centres and may be
+  any value, so rows inside the board work too; several rows may share an
+  edge, each with its own `start` (two separated headers).
+- explicit `pads` (section 20.6 `pads`, every family): one entry per hole,
+  any position and number (`"D13"`, `"GND"`), `plated: false` with an empty
+  number for a mounting hole. Use them for irregular layouts or numbering
+  that doesn't follow the counter-clockwise row order.
+
+```yaml
+pad_rows:
+  value:
+    - { side: -x, first: 1, count: 19, pitch: 2.54, start: 4.0, inset: 1.25, pad: [1.7, 1.7], drill: 1.0 }
+    - { side: +x, first: 20, count: 19, pitch: 2.54, start: 4.0, inset: 1.25, pad: [1.7, 1.7], drill: 1.0 }
+  src: p3 "Pin layout"
+pads:
+  value:
+    - { number: "", x: 0, y: -24.1, width: 3.2, length: 3.2, drill: 3.2, plated: false }
+  src: p3 "Mounting hole"
+```
+
+The footprint gets plated holes (KiCad `thru_hole`, LibrePCB THT pads) and
+the 3D model draws each land on both faces with its plated barrel; a
+non-plated hole is drilled through the board. `lead_count` counts the
+distinct plated pad numbers. The pin headers themselves may be `assembly`
+components (section 20.12).
+
 A pad reaching the board edge is a castellation (Placement Model `castellated`;
 the 3D model drills a plated half-hole of `dimensions.hole_diameter` there when
 stated); the others are LGA pads. Rule `pad_layout.invalid`: these fields on
-another family, non-positive sizes or counts, a pitch not above the pad, a pad
-number in two rows or in a row and a grid, a grid with neither one number nor
-one per pad, `pad_grids` without `pad_rows`, a `shield` without
+another family, non-positive sizes or counts, a pitch not above the pad, a row
+`drill` not inside its pad, a pad number in two rows, in a row and a grid or in
+a row and a plated `pads` entry, a grid with neither one number nor one per
+pad, `pad_grids` without `pad_rows` or `pads`, a `shield` without
 `dimensions.overall_height`. `provenance.missing` for `/pad_rows`,
 `/pad_grids`, `/shield`.
 
@@ -1450,6 +1486,79 @@ without `actuator_length`, `actuator_width` without `actuator_thickness`
 or the reverse, side-actuator dimensions without `actuation: side`, a
 plated THT pad without a drill; or `actuation`, the side-actuator or the
 ground-terminal dimensions on another family.
+
+## 20.12 Module Assemblies
+
+A module board (a Raspberry Pi Pico, an ESP32 DevKit, an Arduino) is soldered
+or plugged onto a carrier board as a whole, but its 3D model should show what
+is mounted on it. A Part may therefore carry `assembly`: the components on the
+board, each either an OpenParts part (its own generated 3D model is placed) or
+a placeholder box. The part's 3D model (STEP, STL, 3MF, `.sc`) is the package
+(the bare board) plus every component, placed as stated. The footprint, the
+symbol and the Placement Model do not change: the carrier board sees only the
+package's pads.
+
+```yaml
+assembly:
+  - { ref: U1, part: raspberrypi/RP2040, x: 0, y: -0.5, src: 'raspberrypi/RP-008379-DS "BOM item 25; U1 placement"' }
+  - { ref: U2, part: richtek/RT6150B-33GQW, x: 2.9, y: 14.6, rotation: 180, src: '...' }
+  - ref: J1
+    body: { width: 6.9, length: 5, height: 2.6, color: "#c8c8c8" }
+    x: 0
+    y: 24
+    rotation: 180
+    src:
+      - 'raspberrypi/RP-008379-DS "BOM item 9; J1 placement"'
+      - 'edac/690-005-298-486 "shell width 6.90, depth 5.00, height 2.60"'
+  - { ref: TP1, body: { width: 1.5, length: 1.5, height: 0.1 }, x: 0, y: -21, side: bottom, src: '...' }
+```
+
+| Field | Meaning |
+|---|---|
+| `ref` | Reference designator from the design file or BOM, unique in the list. |
+| `part` | An OpenParts part id. Exactly one of `part` and `body`. |
+| `body` | A placeholder box: `width` (X), `length` (Y), `height` (Z, from the board surface), the axes of a package's `body_width`/`body_length`/`body_height` in the component's own frame before rotation; optional `color` (`#rrggbb`, default neutral grey). Centred on `x`/`y`. |
+| `x`, `y` | mm, where the component's origin lies in the module package's frame (the frame of its `pads`, `pad_rows`, `shield`, `keepouts`; for `module` the board centre, +X right, +Y up, top view, pin 1 upper left). |
+| `rotation` | Degrees, counter-clockwise seen from the top (default 0). |
+| `side` | `top` (default) or `bottom`. |
+| `src` | Required: the design file (placement, MPN) and, for a box, the source of its size. |
+
+**Component frame.** A `part` component's origin and zero orientation are its
+Placement Model frame ([placement-model.md](placement-model.md) sections 2-3):
+the land-pattern centroid, IPC-7351B Level A orientation. The 3D model is
+taken there by the part's own `model3d` alignment, then placed:
+`board = T(x, y) · R(rotation) · M · p` with `M` the mirror x → −x on the
+bottom side (placement-model.md 2.3). In 3D a top component stands on the
+board's top surface; a bottom component is turned over about its own Y axis
+and hangs under the board's bottom surface. From a KiCad board: x = X − cx,
+y = −(Y − cy) for the board-outline centre (cx, cy); rotation = the KiCad
+orientation on the front, KiCad orientation − 180° on the back. KiCad
+through-hole library footprints have their origin at pin 1: move it to the
+centre of the pad extents.
+
+**Sources.** Placements, references and MPNs are facts read from the board
+maker's own design files (layout, BOM, centroid file) or drawings. Use an
+OpenParts part when the BOM's MPN is (or can be added to) the dataset;
+otherwise a `body` sized from that component's datasheet, else from the design
+file's BOM or footprint data (the locator says which). Small passives may be
+left out. Footprints, symbols, 3D models and artwork are never copied
+(section 26.2).
+
+**Generation.** Each distinct component part is generated once (its own
+SolidCraft model, exported to STEP) and inserted at every placement with a
+rigid transform; boxes are drawn in the board's script. Components keep their
+own colours. A component part's own `assembly` is not drawn. An assembly that
+can't be resolved (an unknown part, a component that fails to build) fails
+only the 3D artifacts. `openparts generate` resolves components in the
+openparts-data checkout the part file is in (or `--data`); the server, the
+bundler and `kicad-install --data` resolve them in their dataset.
+
+Rules: `assembly.invalid` (no or a repeated `ref`, not exactly one of `part`
+and `body`, a non-positive box size, a `color` that is not `#rrggbb`),
+`assembly.unknown_part`, `assembly.nested` (the module itself, or a part with
+an `assembly` of its own), `provenance.missing` (an entry without `src`), and
+the warning `assembly.outside` (a component's pads or body reach past the
+board outline -- expected for an overhanging USB connector).
 
 ---
 

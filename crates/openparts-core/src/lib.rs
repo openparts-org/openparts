@@ -4,6 +4,7 @@
 //! YAML, HTTP, PostgreSQL, KiCad, STEP, glTF, or any server implementation.
 //! It only knows about Rust types and the format-agnostic `serde` traits.
 
+pub mod assembly;
 pub mod category;
 pub mod circuit;
 pub mod condition;
@@ -30,6 +31,7 @@ pub mod source;
 pub mod structure;
 pub mod text;
 
+pub use assembly::{AssemblyBody, AssemblyComponent, AssemblySide};
 pub use category::ComponentCategory;
 pub use circuit::{
     Categories, Circuit, CircuitHost, CircuitNet, Connect, Example, Formula, FormulaInput,

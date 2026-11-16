@@ -31,7 +31,7 @@ use openparts_core::Package;
 /// docs). Every pad dimension is required: modules have no JEDEC outline
 /// a default could come from.
 pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !package.pad_rows.is_empty() {
+    if !package.pad_rows.is_empty() || !package.pads.is_empty() {
         return generate_pad_rows(package);
     }
     let lead_count = package.lead_count;
@@ -187,9 +187,11 @@ pub struct ModuleFeatures {
     pub mounting_holes: Option<MountingHoles>,
     /// The shield can (`Package::shield`), when stated.
     pub shield: Option<ModuleShield>,
-    /// The pads come from `Package::pad_rows` / `pad_grids` (an
-    /// ESP32-style module): castellations where a pad reaches the board
-    /// edge, LGA pads elsewhere, all on the board's underside.
+    /// The pads come from `Package::pad_rows` / `pad_grids` / `pads` (an
+    /// ESP32-style module, a pin-header development board): castellations
+    /// where an SMD pad reaches the board edge, LGA pads elsewhere, all on
+    /// the board's underside; plated through-holes where a pad has a
+    /// drill.
     pub pad_rows: bool,
 }
 
@@ -205,10 +207,13 @@ pub struct ModuleShield {
     pub top: f64,
 }
 
-/// Mechanical Geometry for a module whose pads are `pad_rows` and
-/// `pad_grids` (section 20.4): each row's pads along its board edge at
-/// its own pitch and start, set in (or out) by `inset`; each grid's pads
-/// about its centre. Every pad is SMD, the body is the bare board.
+/// Mechanical Geometry for a module whose pads are `pad_rows`,
+/// `pad_grids` and explicit `pads` (section 20.4): each row's pads along
+/// its board edge at its own pitch and start, set in (or out) by
+/// `inset`; each grid's pads about its centre; each explicit pad where
+/// it says. A row with a `drill` is a row of plated through-holes (a
+/// pin-header development board), round when its pad is square; the
+/// other row and grid pads are SMD. The body is the bare board.
 fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError> {
     use openparts_core::PackageSide as S;
     let d = &package.dimensions;
@@ -241,12 +246,26 @@ fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError>
         for i in 0..row.count {
             let s = row.start + f64::from(i) * row.pitch;
             let number = (row.first + i).to_string();
-            leads.push(match row.side {
+            let mut lead = match row.side {
                 S::MinusX => pad(number, -hw + row.inset, hl - s, across, along),
                 S::MinusY => pad(number, -hw + s, -hl + row.inset, along, across),
                 S::PlusX => pad(number, hw - row.inset, -hl + s, across, along),
                 S::PlusY => pad(number, hw - s, hl - row.inset, along, across),
-            });
+            };
+            if let Some(drill) = row.drill {
+                if !(drill > 0.0 && drill < along.min(across)) {
+                    return Err(McadError::InconsistentDimensions(format!(
+                        "pad row drill {drill} must be positive and smaller than its pad {:?}",
+                        row.pad
+                    )));
+                }
+                lead.mounting = Mounting::ThroughHole;
+                lead.drill = Some(drill);
+                if (along - across).abs() < 1e-9 {
+                    lead.shape = crate::LandShape::Circle;
+                }
+            }
+            leads.push(lead);
         }
     }
     for grid in &package.pad_grids {
@@ -267,8 +286,24 @@ fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError>
             }
         }
     }
-    let distinct: std::collections::BTreeSet<&str> =
-        leads.iter().map(|l| l.number.as_str()).collect();
+    // Explicit pads (irregular pin headers, mounting holes) join them.
+    for mut lead in crate::land::from_pads_with(package, pad_t)? {
+        if lead.mounting != Mounting::Smd {
+            lead.position.z = pad_t / 2.0;
+            lead.size.z = pad_t;
+        }
+        leads.push(lead);
+    }
+    if leads.is_empty() {
+        return Err(McadError::InconsistentDimensions(
+            "a module needs pad_rows, pads or its two castellated rows".into(),
+        ));
+    }
+    let distinct: std::collections::BTreeSet<&str> = leads
+        .iter()
+        .filter(|l| l.mounting != Mounting::NonPlated)
+        .map(|l| l.number.as_str())
+        .collect();
     if distinct.len() != package.lead_count as usize {
         return Err(McadError::InconsistentDimensions(format!(
             "pad_rows and pad_grids give {} pad numbers for lead_count {}",
@@ -288,6 +323,7 @@ fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError>
     let pin1 = leads
         .iter()
         .find(|l| l.number == "1")
+        .or_else(|| leads.iter().find(|l| l.mounting != Mounting::NonPlated))
         .unwrap_or(&leads[0])
         .position;
     let body = Body {
@@ -396,7 +432,7 @@ pub fn module_features(package: &Package) -> Result<ModuleFeatures, McadError> {
         holes,
         mounting_holes,
         shield,
-        pad_rows: !package.pad_rows.is_empty(),
+        pad_rows: !package.pad_rows.is_empty() || !package.pads.is_empty(),
     })
 }
 
@@ -700,5 +736,62 @@ mod tests {
             generate_module(&p),
             Err(McadError::MissingDimension("dimensions.overall_height"))
         ));
+    }
+
+    /// A pin-header development board (ESP32-DevKitC-like): two rows of
+    /// 19 plated holes 25.4 mm apart, and an Arduino-Uno-like irregular
+    /// header plus a mounting hole as explicit `pads`.
+    pub(crate) fn devkit(extra: &str) -> Package {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\nfamily: module\n\
+             lead_count: {}\npitch: {{nominal: 2.54, unit: mm}}\n\
+             dimensions:\n\
+             \x20 body_width: {{nominal: 27.9, unit: mm}}\n\
+             \x20 body_length: {{nominal: 54.4, unit: mm}}\n\
+             \x20 body_height: {{nominal: 1.6, unit: mm}}\n\
+             pad_rows:\n\
+             \x20 - {{side: -x, first: 1, count: 19, pitch: 2.54, start: 4, inset: 1.25, pad: [1.7, 1.7], drill: 1.0}}\n\
+             \x20 - {{side: +x, first: 20, count: 19, pitch: 2.54, start: 4, inset: 1.25, pad: [1.7, 1.7], drill: 1.0}}\n\
+             {extra}",
+            if extra.is_empty() { 38 } else { 40 }
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn pad_rows_with_a_drill_are_plated_through_holes() {
+        let g = generate_module(&devkit("")).unwrap();
+        assert_eq!(g.leads.len(), 38);
+        let (p1, p20) = (lead(&g, "1"), lead(&g, "20"));
+        assert_eq!(p1.mounting, Mounting::ThroughHole);
+        assert_eq!(p1.drill, Some(1.0));
+        assert_eq!(p1.shape, crate::LandShape::Circle);
+        // 25.4 mm between the rows: 27.9 - 2 x 1.25.
+        assert!(close(p20.position.x - p1.position.x, 25.4));
+        assert!(close(p1.position.y, 27.2 - 4.0));
+        let mut bad = devkit("");
+        bad.pad_rows[0].drill = Some(1.7);
+        assert!(generate_module(&bad).is_err());
+    }
+
+    #[test]
+    fn explicit_pads_join_the_rows_with_their_own_numbers_and_holes() {
+        let p = devkit(
+            "pads:\n\
+             \x20 - {number: '39', x: 0, y: 20, width: 1.7, length: 1.7, drill: 1.0, shape: circle}\n\
+             \x20 - {number: '40', x: 2.54, y: 20.16, width: 1.7, length: 1.7, drill: 1.0, shape: circle}\n\
+             \x20 - {number: '', x: 0, y: -20, width: 3.2, length: 3.2, drill: 3.2, plated: false}\n",
+        );
+        let g = generate_module(&p).unwrap();
+        assert_eq!(g.leads.len(), 41);
+        assert!(close(lead(&g, "40").position.y, 20.16));
+        assert!(g.leads.iter().any(|l| l.mounting == Mounting::NonPlated));
+        // The footprint is the leads: the explicit pads are among them.
+        let full = crate::generate(&p).unwrap();
+        assert!(full.lands.is_empty());
+        let crate::Details::Module(f) = full.details else {
+            panic!()
+        };
+        assert!(f.pad_rows);
     }
 }

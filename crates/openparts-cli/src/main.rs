@@ -45,6 +45,10 @@ enum Commands {
         /// Silicon revision to apply when building the Effective Model.
         #[arg(long)]
         revision: Option<String>,
+        /// The openparts-data checkout a module's `assembly` components
+        /// are looked up in (default: the checkout the part file is in).
+        #[arg(long)]
+        data: Option<PathBuf>,
         #[arg(long)]
         out: PathBuf,
     },
@@ -206,8 +210,9 @@ fn main() -> anyhow::Result<()> {
             package,
             sources,
             revision,
+            data,
             out,
-        } => cmd_generate(part, device, package, sources, revision, out),
+        } => cmd_generate(part, device, package, sources, revision, data, out),
         Commands::Validate {
             data: Some(data), ..
         } => cmd_validate_dataset(&data),
@@ -371,10 +376,23 @@ fn cmd_validate_dataset(data: &std::path::Path) -> anyhow::Result<()> {
             .path_of(kind, id)
             .map_or_else(|| id.to_string(), |p| p.display().to_string())
     };
+    let parts_by_id: std::collections::BTreeMap<String, &openparts_core::Part> =
+        dataset.parts.iter().map(|p| (p.id.0.clone(), p)).collect();
+    let assembly_ctx = openparts_validator::AssemblyContext {
+        parts: &parts_by_id,
+        devices: &dataset.devices,
+        packages: &dataset.packages,
+    };
     for part in &dataset.parts {
         let diags = match dataset.resolve(part) {
             Ok((device, package)) => {
-                openparts_validator::validate_part(part, device, package, &sources)
+                let mut diags = openparts_validator::validate_part(part, device, package, &sources);
+                diags.extend(openparts_validator::validate_assembly(
+                    part,
+                    package,
+                    &assembly_ctx,
+                ));
+                diags
             }
             Err(e) => {
                 eprintln!("FAIL {}: {e}", shown(Kind::Part, &part.id.0));
@@ -598,6 +616,7 @@ fn cmd_generate(
     package_path: PathBuf,
     sources: Vec<PathBuf>,
     revision: Option<String>,
+    data: Option<PathBuf>,
     out_dir: PathBuf,
 ) -> anyhow::Result<()> {
     use openparts_artifacts::{ArtifactKind, BuildError, PartBuild};
@@ -620,6 +639,15 @@ fn cmd_generate(
             );
         }
         Err(e) => return Err(e).context("building the effective model"),
+    };
+    // A module's assembly: its components come from the dataset.
+    let build = if part.assembly.is_empty() {
+        build
+    } else {
+        let root = data.or_else(|| dataset_root(&part_path)).context(
+            "the part has an assembly: pass --data <openparts-data checkout> to resolve its components",
+        )?;
+        build.with_assembly(&openparts_data::Dataset::load(&root)?)
     };
 
     std::fs::create_dir_all(&out_dir)?;
@@ -678,6 +706,15 @@ fn cmd_generate(
         out_dir.display()
     );
     Ok(())
+}
+
+/// The openparts-data checkout `file` lies in: the nearest ancestor with
+/// `parts/` and `packages/`.
+fn dataset_root(file: &std::path::Path) -> Option<PathBuf> {
+    let file = std::fs::canonicalize(file).ok()?;
+    file.ancestors()
+        .find(|d| d.join("parts").is_dir() && d.join("packages").is_dir())
+        .map(std::path::Path::to_path_buf)
 }
 
 fn rustc_version() -> String {
