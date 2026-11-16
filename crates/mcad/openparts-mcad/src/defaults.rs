@@ -508,6 +508,25 @@ pub(crate) mod connector {
     pub const RF_BASE_HEIGHT: f64 = 1.5;
 }
 
+/// `smd_electrolytic` generator defaults (3D only: the footprint is the
+/// stated land pattern). Sources dimension the plate's outline, the can
+/// and the terminals' outline, not the plate's thickness or the size of
+/// its corner cuts.
+pub(crate) mod smd_electrolytic {
+    /// The base plate's thickness, of the overall height, kept within
+    /// the limits below.
+    pub const PLATE_THICKNESS_RATIO: f64 = 0.1;
+    pub const PLATE_THICKNESS_MIN: f64 = 0.4;
+    pub const PLATE_THICKNESS_MAX: f64 = 1.2;
+    /// The terminals' thickness under the plate.
+    pub const TERMINAL_THICKNESS: f64 = 0.2;
+    /// A terminal's length under the plate, of the plate width, when the
+    /// source doesn't state it.
+    pub const TERMINAL_LENGTH_RATIO: f64 = 0.35;
+    /// The + side's corner cuts, of the plate's smaller side.
+    pub const CHAMFER_RATIO: f64 = 0.15;
+}
+
 /// `radial` generator defaults.
 pub(crate) mod radial {
     /// Engineering defaults used only when the datasheet doesn't supply a

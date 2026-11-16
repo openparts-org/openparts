@@ -151,6 +151,10 @@ pub const RULES: &[Rule] = &[
         meaning: "an `smd_led` package has no `pads`, a `lead_count` other than its plated pad count, a pad without a size, or neither `dimensions.body_height` nor `overall_height`",
     },
     Rule {
+        id: "smd_electrolytic.invalid",
+        meaning: "an `smd_electrolytic` package has no `pads`, a `lead_count` other than its plated pad count (at least two), a pad without a size, no `dimensions.overall_height` or no `dimensions.can_diameter`; or another family states `can_diameter`",
+    },
+    Rule {
         id: "keepout.invalid",
         meaning: "a package keep-out has both or neither of `rect` (located) and `size` (only sized), a non-positive length, or restricts nothing",
     },
@@ -359,6 +363,7 @@ pub fn validate_part(
     out.extend(connector::check_package_connector(&package_entity, package));
     out.extend(connector::check_pad_shapes(&package_entity, package));
     out.extend(connector::check_smd_led(&package_entity, package));
+    out.extend(connector::check_smd_electrolytic(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,

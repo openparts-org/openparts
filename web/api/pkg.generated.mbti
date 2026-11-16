@@ -881,6 +881,7 @@ pub(all) struct PackageDimensions {
   body_length : Dimension
   body_offset : Dimension?
   body_width : Dimension
+  can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
   hole_diameter : Dimension?
   lead_inset : Dimension?
@@ -954,6 +955,7 @@ pub(all) enum PackageFamily {
   RfCoax
   MicroUsbB
   SmdLed
+  SmdElectrolytic
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String

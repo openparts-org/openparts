@@ -778,6 +778,7 @@ fn basis(package: &Package, g: &MechanicalGeometry, tht: bool) -> Basis {
         "/dimensions/overall_height",
         "/dimensions/standoff",
         "/dimensions/body_offset",
+        "/dimensions/can_diameter",
     ];
     let mut body_defaults = vec![];
     if !has("/dimensions/body_height") && !has("/dimensions/overall_height") {
@@ -842,7 +843,13 @@ fn basis(package: &Package, g: &MechanicalGeometry, tht: bool) -> Basis {
 /// (families, convention).
 pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
     match f {
-        F::Chip | F::Sod | F::SodFlat | F::Do214 | F::Axial | F::Radial => (
+        F::Chip
+        | F::Sod
+        | F::SodFlat
+        | F::Do214
+        | F::Axial
+        | F::Radial
+        | F::SmdElectrolytic => (
             "two-terminal",
             "body along X, pin 1 (cathode, +, pad 1) on the left",
         ),

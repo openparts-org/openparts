@@ -1,0 +1,53 @@
+# SMD aluminium electrolytic ("V-chip"): a black base plate with its two
+# corners cut on the + side, standing on the terminals, and an aluminium
+# can on it with a crimp groove near its foot, a rolled rim and a dark
+# marking on the - half of its top. Needs body_w, body_l, body_h (the
+# overall height). Vars: can_d, term_t, plate_t, chamfer, pos / neg ("-"
+# when the + / - terminal lies on -X).
+- params:
+    can_d: ["{{can_d}}", can diameter (datasheet øD)]
+    term_t: ["{{term_t}}", terminal thickness under the plate]
+    plate_t: ["{{plate_t}}", base plate thickness]
+    chamfer: ["{{chamfer}}", corner cut of the plate on the + side]
+    can_z: [term_t + plate_t, can foot above the board]
+    groove_z: [can_z + (body_h - can_z) * 0.2, crimp groove height]
+    rim: [0.35 mm, rolled rim width over the top]
+    top_t: [0.12 mm, recess of the top inside the rim]
+- sketch.create: {plane: XY, offset: term_t, name: PlateOutline}
+- sketch.line:
+    closed: true
+    ids: [pl0, pl1, pl2, pl3, pl4, pl5]
+    points:
+      - ["{{pos}}(body_w / 2)", body_l / 2 - chamfer]
+      - ["{{pos}}(body_w / 2 - chamfer)", body_l / 2]
+      - ["{{neg}}(body_w / 2)", body_l / 2]
+      - ["{{neg}}(body_w / 2)", -(body_l / 2)]
+      - ["{{pos}}(body_w / 2 - chamfer)", -(body_l / 2)]
+      - ["{{pos}}(body_w / 2)", chamfer - body_l / 2]
+- sketch.finish: {}
+- solid.extrude: {sketch: PlateOutline, distance: plate_t, operation: new, body_name: Plate, name: Plate}
+- sketch.create: {plane: XZ, flip: x, offset: 0 mm, name: CanSection}
+- sketch.line:
+    closed: true
+    ids: [cs0, cs1, cs2, cs3, cs4, cs5, cs6, cs7, cs8]
+    points:
+      - [0 mm, can_z]
+      - [can_d / 2, can_z]
+      - [can_d / 2, groove_z - 0.3 mm]
+      - [can_d / 2 - 0.25 mm, groove_z]
+      - [can_d / 2, groove_z + 0.3 mm]
+      - [can_d / 2, body_h]
+      - [can_d / 2 - rim, body_h]
+      - [can_d / 2 - rim, body_h - top_t]
+      - [0 mm, body_h - top_t]
+- sketch.fillet: {a: cs0, b: cs1, radius: 0.2 mm}
+- sketch.fillet: {a: cs4, b: cs5, radius: rim * 0.8}
+- sketch.finish: {}
+- solid.revolve: {sketch: CanSection, axis: Z, angle: 360 deg, direction: symmetric, operation: new, body_name: Can, name: Can}
+- solid.cylinder:
+    {diameter: (can_d - 2 * rim) * 0.92, height: 0.02 mm, base: [0 mm, 0 mm, body_h - top_t],
+     operation: new, body_name: Mark, name: Mark}
+- solid.box:
+    {length: can_d * 1.2, width: can_d, height: 0.1 mm,
+     center: ["{{neg}}(can_d * 0.15 - can_d * 0.6)", 0 mm, body_h - top_t],
+     operation: cut, targets: [Mark], name: MarkTrim}

@@ -11,6 +11,7 @@ mod connector;
 mod defaults;
 mod diode;
 mod dip;
+mod electrolytic;
 mod header;
 mod ipc;
 mod land;
@@ -29,6 +30,7 @@ mod to92;
 mod usb_c;
 
 pub use connector::ConnectorFeatures;
+pub use electrolytic::ElectrolyticFeatures;
 pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
 pub use land::pad_shape_error;
 pub use module::{ModuleFeatures, ModuleHoles, ModuleShield, MountingHoles};
@@ -80,6 +82,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         | F::RfCoax
         | F::MicroUsbB => connector::generate_connector(package),
         F::SmdLed => led::generate_smd_led(package),
+        F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
     }?;
     renumber(&mut geometry, package)?;
     // `usb_c` and the connector families draw their leads from the pads.
@@ -315,6 +318,8 @@ pub enum Details {
     UsbC(UsbCFeatures),
     /// The connector families (`connector.rs`).
     Connector(ConnectorFeatures),
+    /// `smd_electrolytic`: the can and the base plate.
+    Electrolytic(ElectrolyticFeatures),
     /// TO-252/TO-263: lead positions cut short at the body, as (lead
     /// number, Y position).
     TrimmedLeads(Vec<(u32, f64)>),

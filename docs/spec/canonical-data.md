@@ -891,6 +891,7 @@ dimensions:
 | `body_offset` | ピングリッド中心からHousing中心までのX方向の符号付き距離（pin 1を左上にした上面視で+X向きが正。`shrouded_header`/`right_angle_header`） | JST XH: 5.75/2 − (2.35) = 0.525（−X向き）、WR-PHD Angled: 1.5 + 2.54/2 = 2.77 | 省略可（`right_angle_header`では必須） |
 | `lead_inset` | Body端から端子外端までの距離（`lga`の端子が端から引っ込んでいる場合） | — | 省略可（省略時は端と面一） |
 | `actuator_diameter` | スイッチ上面の丸いアクチュエータ（押し子）の直径 | — | 省略可（3D表示のみ） |
+| `can_diameter` | `smd_electrolytic`: 台座（Base plate）の上に立つ円筒Canの直径（20.9） | øD | `smd_electrolytic`では必須（他のFamilyでは不可） |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -898,7 +899,7 @@ dimensions:
 だけが記載されている場合は`min`/`max`だけを記録し、中央値を`typ`として捏造しない
 （Generatorは描画のためにのみ範囲の中央を使う）。
 
-新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`pads`には、Fieldごとの
+新しく追加した寸法（`overall_*`、`standoff`、`lead_*`、`tab_*`、`row_spacing`、`hole_diameter`、`aux_*`、`mounting_hole_*`、`mating_length`、`tail_length`、`pad_diameter`、`body_offset`、`lead_inset`、`actuator_diameter`、`can_diameter`）と`construction`、`tab`、`aux_pads`、`pad_order`、`pads`には、Fieldごとの
 Provenance（Source、page、表名＋記号のlocator）を必須とする（Validator rule
 `provenance.missing`）。また、Lead span がBody以下である、`standoff`や`body_height`が
 `overall_height`以上である、といった矛盾は`dimension.inconsistent`として検出する。
@@ -1252,6 +1253,38 @@ pads stand in for them. The emitting window is a generator default (80 %
 of the smaller body side, 3D only). Rule `smd_led.invalid`: no `pads`, a
 `lead_count` other than the plated pad count, a pad without a size, no
 height.
+
+## 20.9 SMD Aluminium Electrolytic Capacitors
+
+`smd_electrolytic` (alias `v_chip`) is a surface-mount aluminium
+electrolytic capacitor ("V-chip"): a round can standing on a square
+insulating base plate, with two flat terminals bent under the plate and
+reaching past its edges (Panasonic FK/FT, Nichicon UWT/UCW and their
+like). Frame: top view, origin at the plate's centre, the terminals
+along X, pin 1 (the `+` terminal, as the dataset's radial
+electrolytics) at -X. Sources usually draw the terminals along Y (the
+`-` terminal at the top): turn the drawing and say so.
+
+| Field | The source's | Note |
+|---|---|---|
+| `body_width` x `body_length` | plate A x B | the footprint's body outline; `body_width` along the terminals |
+| `can_diameter` | øD | required |
+| `overall_height` | L | required: the can's top above the board |
+| `overall_width` | H | terminal tip to tip; often a lone max, drawn there |
+| `lead_width`, `lead_length`, `lead_thickness` | W, I, (thickness) | the terminal; I is often a reference value (say so) |
+
+The footprint is the source's recommended land pattern (`pads`,
+required, one plated pad per lead). The 3D model draws the terminals from
+`overall_width` + `lead_width` (+ `lead_length`, else 35 % of the plate
+width) when stated, else at the pads. The plate's thickness (10 % of the
+height, 0.4-1.2 mm), the terminals' thickness (0.2 mm unless
+`lead_thickness`), the plate's corner cuts on the `+` side (15 % of the
+smaller plate side) and the can's groove, rim and top marking over the
+`-` terminal are drawing defaults, never written back. The `+` terminal
+is the Device pin named `+` (else pin 1). Rule
+`smd_electrolytic.invalid`: no `pads`, a `lead_count` other than the
+plated pad count or below two, a pad without a size, no
+`overall_height` or `can_diameter`, or `can_diameter` on another family.
 
 ---
 

@@ -6,7 +6,7 @@ use openparts_core::Package;
 use std::collections::BTreeSet;
 
 /// Paths of the package fields that must carry their own provenance.
-pub(crate) const PROVENANCE_REQUIRED: [&str; 26] = [
+pub(crate) const PROVENANCE_REQUIRED: [&str; 27] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -33,6 +33,7 @@ pub(crate) const PROVENANCE_REQUIRED: [&str; 26] = [
     "/dimensions/body_offset",
     "/dimensions/lead_inset",
     "/dimensions/actuator_diameter",
+    "/dimensions/can_diameter",
 ];
 
 pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {

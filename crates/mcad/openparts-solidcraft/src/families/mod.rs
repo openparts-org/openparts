@@ -7,6 +7,7 @@ mod chip;
 mod connector;
 mod diode;
 mod dip;
+mod electrolytic;
 mod gullwing;
 mod header;
 mod led;
@@ -48,6 +49,7 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         | F::RfCoax
         | F::MicroUsbB => connector::build(&mut s, input)?,
         F::SmdLed => led::build(&mut s, input)?,
+        F::SmdElectrolytic => electrolytic::build(&mut s, input)?,
         F::Qfn | F::Dfn | F::Son | F::Lga => qfn::build(&mut s, input)?,
         F::Chip => chip::build(&mut s, input)?,
         F::Radial => radial::build(&mut s, input)?,

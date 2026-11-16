@@ -158,6 +158,10 @@ pub struct PackageDimensions {
     /// `barrel_jack`: diameter of the centre pin (2.0, 2.1, 2.5 mm).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pin_diameter: Option<Dimension>,
+    /// `smd_electrolytic`: the diameter of the round can (øD) standing
+    /// on the base plate (`body_width` x `body_length`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub can_diameter: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -202,6 +206,7 @@ impl PackageDimensions {
             ("/dimensions/actuator_diameter", &self.actuator_diameter),
             ("/dimensions/mating_diameter", &self.mating_diameter),
             ("/dimensions/pin_diameter", &self.pin_diameter),
+            ("/dimensions/can_diameter", &self.can_diameter),
         ];
         out.extend(
             optional

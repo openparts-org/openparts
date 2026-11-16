@@ -2,7 +2,8 @@
 //! a stated land pattern and body, a `connector` record whose fields fit
 //! the family, an edge-mount part with its board edge, and provenance for
 //! the connector facts. Also the land shapes of any stated pad
-//! (section 20.7) and the `smd_led` family's land pattern.
+//! (section 20.7) and the land patterns of the `smd_led` and
+//! `smd_electrolytic` families.
 
 use crate::Diagnostic;
 use openparts_core::{is_connector_family, Package, PackageFamily as F};
@@ -59,6 +60,64 @@ pub(crate) fn check_smd_led(entity: &str, package: &Package) -> Vec<Diagnostic> 
         bad(
             "/dimensions/body_height",
             "an smd_led package states body_height or overall_height",
+        );
+    }
+    out
+}
+
+/// `smd_electrolytic.invalid`: an `smd_electrolytic` package states its
+/// land pattern (`pads`, one plated pad per lead, at least two), its
+/// height and its can; `can_diameter` belongs to this family only.
+pub(crate) fn check_smd_electrolytic(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let d = &package.dimensions;
+    let mut out = Vec::new();
+    let mut bad = |path: &str, message: &str| {
+        out.push(Diagnostic::error(
+            "smd_electrolytic.invalid",
+            entity,
+            Some(path),
+            message.to_string(),
+        ))
+    };
+    if package.family != F::SmdElectrolytic {
+        if d.can_diameter.is_some() {
+            bad(
+                "/dimensions/can_diameter",
+                "can_diameter belongs to the smd_electrolytic family",
+            );
+        }
+        return out;
+    }
+    if package.pads.is_empty() {
+        bad(
+            "/pads",
+            "an smd_electrolytic package lists its land pattern in pads",
+        );
+    } else {
+        let plated = package.pads.iter().filter(|p| p.plated).count();
+        if plated != package.lead_count as usize || plated < 2 {
+            bad(
+                "/lead_count",
+                "lead_count must equal the number of plated pads (at least two)",
+            );
+        }
+        if package.pads.iter().any(|p| p.land_unstated()) {
+            bad(
+                "/pads",
+                "every pad of an smd_electrolytic package states its size",
+            );
+        }
+    }
+    if d.overall_height.is_none() {
+        bad(
+            "/dimensions/overall_height",
+            "an smd_electrolytic package states overall_height (the can top above the board)",
+        );
+    }
+    if d.can_diameter.is_none() {
+        bad(
+            "/dimensions/can_diameter",
+            "an smd_electrolytic package states can_diameter",
         );
     }
     out
@@ -290,5 +349,29 @@ mod tests {
         p.pads[0].drill = Some(1.0);
         p.pads[1].slot_axis = Some(openparts_core::SlotAxis::Y);
         assert!(check_package_connector("p", &p).is_empty());
+    }
+
+    #[test]
+    fn an_smd_electrolytic_states_its_can_and_height() {
+        let p = pkg("smd_electrolytic", "");
+        assert_eq!(
+            paths(&check_smd_electrolytic("p", &p)),
+            [
+                "smd_electrolytic.invalid /dimensions/overall_height",
+                "smd_electrolytic.invalid /dimensions/can_diameter"
+            ]
+        );
+        let mut ok = p.clone();
+        let d = ok.dimensions.body_height.clone();
+        ok.dimensions.overall_height = d.clone();
+        ok.dimensions.can_diameter = d;
+        assert!(check_smd_electrolytic("p", &ok).is_empty());
+        // The can belongs to this family only.
+        let mut led = pkg("smd_led", "");
+        led.dimensions.can_diameter = ok.dimensions.can_diameter.clone();
+        assert_eq!(
+            paths(&check_smd_electrolytic("p", &led)),
+            ["smd_electrolytic.invalid /dimensions/can_diameter"]
+        );
     }
 }

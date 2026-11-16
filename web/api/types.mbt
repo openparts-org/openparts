@@ -2559,6 +2559,7 @@ pub(all) struct PackageDimensions {
   body_length : Dimension
   body_offset : Dimension?
   body_width : Dimension
+  can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
   hole_diameter : Dimension?
   lead_inset : Dimension?
@@ -2597,6 +2598,7 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     body_length: field(obj, "body_length", path),
     body_offset: opt_field(obj, "body_offset", path),
     body_width: field(obj, "body_width", path),
+    can_diameter: opt_field(obj, "can_diameter", path),
     exposed_pad: opt_field(obj, "exposed_pad", path),
     hole_diameter: opt_field(obj, "hole_diameter", path),
     lead_inset: opt_field(obj, "lead_inset", path),
@@ -2685,6 +2687,7 @@ pub(all) enum PackageFamily {
   RfCoax
   MicroUsbB
   SmdLed
+  SmdElectrolytic
 }
 
 ///|
@@ -2730,6 +2733,7 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     RfCoax => "rf_coax"
     MicroUsbB => "micro_usb_b"
     SmdLed => "smd_led"
+    SmdElectrolytic => "smd_electrolytic"
   }
 }
 
@@ -2776,6 +2780,7 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     RfCoax,
     MicroUsbB,
     SmdLed,
+    SmdElectrolytic,
   ]
 }
 
@@ -2821,6 +2826,7 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("rf_coax") => RfCoax
     String("micro_usb_b") => MicroUsbB
     String("smd_led") => SmdLed
+    String("smd_electrolytic") => SmdElectrolytic
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }

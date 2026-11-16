@@ -283,3 +283,20 @@ fn chamfer_corners_turn_with_the_model() {
     );
     assert_eq!(m.frame.zero_orientation.family, "SMD LED");
 }
+
+/// An SMD electrolytic keeps its frame (+ terminal, pad 1, on the left)
+/// and lists the can among the body's sources.
+#[test]
+fn an_smd_electrolytic_keeps_the_two_terminal_frame() {
+    let p = pkg("family: smd_electrolytic\nlead_count: 2\npitch: {unit: mm}\n\
+         dimensions:\n  body_width: {nominal: 6.6, unit: mm}\n  body_length: {nominal: 6.6, unit: mm}\n\
+         \x20 overall_height: {nominal: 5.8, unit: mm}\n  can_diameter: {nominal: 6.3, unit: mm}\n\
+         pads:\n\
+         \x20 - {number: '1', x: -2.5, y: 0, width: 3.2, length: 1.6}\n\
+         \x20 - {number: '2', x: 2.5, y: 0, width: 3.2, length: 1.6}\n");
+    let (g, m) = model(&p);
+    assert!(upper_left(&m));
+    assert_eq!(m.model3d.rotation, 0.0);
+    assert!(aligned(&g, &m));
+    assert_eq!(m.frame.zero_orientation.family, "two-terminal");
+}

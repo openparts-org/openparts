@@ -428,6 +428,9 @@ const SYNONYMS: &[(&str, &str)] = &[
     ("アドレサブルled", "single_wire"),
     ("フルカラーled", "rgb"),
     ("チップled", "smd_led"),
+    ("チップ電解コンデンサ", "smd_electrolytic"),
+    ("表面実装電解コンデンサ", "smd_electrolytic"),
+    ("面実装電解コンデンサ", "smd_electrolytic"),
     ("プッシュプッシュ", "push_push"),
     ("プッシュプル", "push_pull"),
     ("シュラウド付き", "shrouded"),
@@ -569,6 +572,7 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("straight", "vertical"),
     ("boxheader", "shrouded"),
     ("epad", "exposedpad"),
+    ("vchip", "smd_electrolytic"),
 ];
 
 /// The query as words, each with its alternative spellings (a word
@@ -657,6 +661,11 @@ mod tests {
         );
         assert_eq!(query_words("USB C"), vec![vec!["usbc"]]);
         assert_eq!(query_words("xtal")[0], vec!["xtal", "crystal"]);
+        assert_eq!(
+            query_words("チップ電解コンデンサ"),
+            vec![vec!["smdelectrolytic"]]
+        );
+        assert_eq!(query_words("vchip")[0], vec!["vchip", "smd_electrolytic"]);
     }
 
     #[test]

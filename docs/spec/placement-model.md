@@ -124,7 +124,7 @@ kept. A test checks every package of the dataset.
 
 | Families | At θ = 0 |
 | --- | --- |
-| `chip`, `sod`, `sod_flat`, `do214`, `axial`, `radial` | Body along X; pin 1 (cathode, +, pad 1) on the left. |
+| `chip`, `sod`, `sod_flat`, `do214`, `axial`, `radial`, `smd_electrolytic` | Body along X; pin 1 (cathode, +, pad 1) on the left. |
 | `to92`, `to220`, `sip` | Leads in a row along X; pin 1 on the left. |
 | `sot`, `sot223`, `dpak`, `d2pak` | Leads down the left side, pin 1 at the top; the opposite lead or the tab on the right. SOT-23: pins 1 and 2 on the left, 3 on the right. The generator draws SOT leads along the bottom, so SOT packages turn −90°. |
 | `soic`, `tssop`, `ssop`, `msop`, `son`, `dfn`, `dip` | Rows along Y; pin 1 at the top of the left row; numbering counter-clockwise. |

@@ -85,6 +85,11 @@ families! {
     /// 3535 PLCC, 2020 chip-scale), addressable RGB LEDs among them; the
     /// footprint is the source's land pattern (`pads`).
     SmdLed: "smd_led" | "plcc_led",
+    /// SMD aluminium electrolytic capacitors ("V-chip"): a round can
+    /// standing on a square insulating base plate, two flat terminals
+    /// bent under the plate; the footprint is the source's land pattern
+    /// (`pads`).
+    SmdElectrolytic: "smd_electrolytic" | "v_chip",
 }
 
 impl PackageFamily {
