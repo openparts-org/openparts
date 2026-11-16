@@ -1,10 +1,68 @@
 //! The connector families (Canonical Data Specification section 20.6):
 //! a stated land pattern and body, a `connector` record whose fields fit
 //! the family, an edge-mount part with its board edge, and provenance for
-//! the connector facts.
+//! the connector facts. Also the land shapes of any stated pad
+//! (section 20.7) and the `smd_led` family's land pattern.
 
 use crate::Diagnostic;
 use openparts_core::{is_connector_family, Package, PackageFamily as F};
+
+/// `pad_shape.invalid`: a stated pad whose shape fields can't be drawn.
+pub(crate) fn check_pad_shapes(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    package
+        .pads
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| {
+            let why = openparts_mcad::pad_shape_error(p)?;
+            Some(Diagnostic::error(
+                "pad_shape.invalid",
+                entity,
+                Some(&format!("/pads/{i}")),
+                format!("pad \"{}\": {why}", p.number),
+            ))
+        })
+        .collect()
+}
+
+/// `smd_led.invalid`: an `smd_led` package states its land pattern
+/// (`pads`, one plated pad per lead) and a height.
+pub(crate) fn check_smd_led(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    if package.family != F::SmdLed {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let mut bad = |path: &str, message: &str| {
+        out.push(Diagnostic::error(
+            "smd_led.invalid",
+            entity,
+            Some(path),
+            message.to_string(),
+        ))
+    };
+    if package.pads.is_empty() {
+        bad("/pads", "an smd_led package lists its land pattern in pads");
+    } else {
+        let plated = package.pads.iter().filter(|p| p.plated).count();
+        if plated != package.lead_count as usize {
+            bad(
+                "/lead_count",
+                "lead_count must equal the number of plated pads",
+            );
+        }
+        if package.pads.iter().any(|p| p.land_unstated()) {
+            bad("/pads", "every pad of an smd_led package states its size");
+        }
+    }
+    let d = &package.dimensions;
+    if d.body_height.is_none() && d.overall_height.is_none() {
+        bad(
+            "/dimensions/body_height",
+            "an smd_led package states body_height or overall_height",
+        );
+    }
+    out
+}
 
 /// `connector.invalid` and the connector facts' `provenance.missing`.
 pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Diagnostic> {

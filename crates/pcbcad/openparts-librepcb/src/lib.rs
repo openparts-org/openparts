@@ -299,9 +299,17 @@ fn render_package(
         // pad); each needs its own uuid.
         let pad_uuid = uuid_gen::derive(&format!("pkg-pad:{mpn}:{}", pad.number));
         let fp_pad_uuid = uuid_gen::derive(&format!("fp-pad:{mpn}:{}:{i}", pad.number));
+        // A chamfered or polygon pad is a `custom` pad: its outline as
+        // vertices relative to the pad's position.
+        let outline = pad.shape.outline(pad.size);
         out.push_str(&format!(
-            "  (pad {} (side top) (shape roundrect)\n",
-            fmt_uuid(fp_pad_uuid)
+            "  (pad {} (side top) (shape {})\n",
+            fmt_uuid(fp_pad_uuid),
+            if outline.is_some() {
+                "custom"
+            } else {
+                "roundrect"
+            }
         ));
         // LibrePCB has no separate "circle" pad shape -- a pad is
         // always `roundrect`, and `radius` (a 0.0-1.0 "how rounded"
@@ -310,8 +318,8 @@ fn render_package(
         // `PadShape::Rect`, 1.0 (fully rounded: a circle, or an obround
         // on a non-square pad) for `Circle` and `Oval`.
         let radius = match pad.shape {
-            openparts_pcbcad::PadShape::Rect => 0.0,
             openparts_pcbcad::PadShape::Circle | openparts_pcbcad::PadShape::Oval => 1.0,
+            _ => 0.0,
         };
         out.push_str(&format!(
             "   (position {:.3} {:.3}) (rotation 0.0) (size {:.3} {:.3}) (radius {radius:.1})\n",
@@ -321,6 +329,12 @@ fn render_package(
             "   (stop_mask auto) (solder_paste auto) (clearance 0.0) (function standard)\n",
         );
         out.push_str(&format!("   (package_pad {})\n", fmt_uuid(pad_uuid)));
+        for v in outline.iter().flatten() {
+            out.push_str(&format!(
+                "   (vertex (position {:.3} {:.3}) (angle 0.0))\n",
+                v.x, v.y
+            ));
+        }
         // LibrePCB has no separate through-hole pad type either -- a
         // pad becomes through-hole by attaching a `hole` child (a
         // single centered vertex for a plain round drill), matching

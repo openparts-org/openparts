@@ -126,6 +126,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         });
         pin += 1;
     };
@@ -160,6 +161,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         });
     }
 

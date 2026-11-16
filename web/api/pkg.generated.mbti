@@ -736,6 +736,17 @@ pub fn Kind::wire(Self) -> String
 pub impl @json.FromJson for Kind
 
 #derive(Eq, @debug.Debug)
+pub(all) enum LandShape {
+  Rect
+  Circle
+  Chamfered
+  Polygon
+}
+pub fn LandShape::all() -> Array[Self]
+pub fn LandShape::wire(Self) -> String
+pub impl @json.FromJson for LandShape
+
+#derive(Eq, @debug.Debug)
 pub(all) enum LevelValue {
   Required
   Recommended
@@ -942,6 +953,7 @@ pub(all) enum PackageFamily {
   FpcConnector
   RfCoax
   MicroUsbB
+  SmdLed
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String
@@ -966,11 +978,16 @@ pub impl @json.FromJson for PackageKeepout
 
 #derive(Eq)
 pub(all) struct PackagePad {
+  chamfer : Double?
+  corners : Array[PadCorner]?
+  cutout : PadCutout?
   drill : Double?
   drill_length : Double?
   length : Double?
   number : String
   plated : Bool?
+  points : Array[Array[Double]]?
+  shape : LandShape?
   slot_axis : SlotAxis?
   width : Double?
   x : Double
@@ -1037,6 +1054,25 @@ pub(all) struct PackageTab {
   trimmed_leads : Array[String]?
 }
 pub impl @json.FromJson for PackageTab
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PadCorner {
+  TopLeft
+  TopRight
+  BottomRight
+  BottomLeft
+}
+pub fn PadCorner::all() -> Array[Self]
+pub fn PadCorner::wire(Self) -> String
+pub impl @json.FromJson for PadCorner
+
+#derive(Eq)
+pub(all) struct PadCutout {
+  diameter : Double
+  x : Double
+  y : Double
+}
+pub impl @json.FromJson for PadCutout
 
 #derive(Eq)
 pub(all) struct PadDiff {

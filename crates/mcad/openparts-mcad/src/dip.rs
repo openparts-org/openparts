@@ -73,6 +73,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         });
         pin_num += 1;
     }
@@ -91,6 +92,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         });
         pin_num += 1;
     }

@@ -56,6 +56,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         },
         Lead {
             number: "2".to_string(),
@@ -68,6 +69,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         },
     ];
 

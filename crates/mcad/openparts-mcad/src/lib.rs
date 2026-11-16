@@ -14,6 +14,7 @@ mod dip;
 mod header;
 mod ipc;
 mod land;
+mod led;
 mod lqfp;
 mod module;
 mod qfn;
@@ -29,6 +30,7 @@ mod usb_c;
 
 pub use connector::ConnectorFeatures;
 pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
+pub use land::pad_shape_error;
 pub use module::{ModuleFeatures, ModuleHoles, ModuleShield, MountingHoles};
 pub use openparts_core::{Orientation, PackageFamily};
 pub use tact::SwitchFeatures;
@@ -77,6 +79,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         | F::FpcConnector
         | F::RfCoax
         | F::MicroUsbB => connector::generate_connector(package),
+        F::SmdLed => led::generate_smd_led(package),
     }?;
     renumber(&mut geometry, package)?;
     // `usb_c` and the connector families draw their leads from the pads.
@@ -212,6 +215,29 @@ pub struct Lead {
     /// longer side; `drill` is then the slot width. `None` for a round
     /// hole.
     pub slot: Option<f64>,
+    /// The footprint land's outline within `size` (a lead's own 3D
+    /// shape ignores it): a rectangle unless the source draws another.
+    pub shape: LandShape,
+}
+
+/// A footprint land's outline (Canonical Data Specification 20.7).
+/// `size` stays the land's extent.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum LandShape {
+    /// The full `size` rectangle.
+    #[default]
+    Rect,
+    /// A round land (`size` x = y, the diameter).
+    Circle,
+    /// The rectangle with 45° cuts of `size` (mm, along both edges) at
+    /// `corners` (top view).
+    Chamfered {
+        size: f64,
+        corners: Vec<openparts_core::PadCorner>,
+    },
+    /// An outline relative to the lead's position (mm),
+    /// counter-clockwise, the last point not repeated.
+    Polygon(Vec<[f64; 2]>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

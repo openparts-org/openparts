@@ -119,6 +119,7 @@ pub fn generate_bga(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 mounting: Mounting::Smd,
                 drill: None,
                 slot: None,
+                shape: crate::LandShape::Rect,
             });
         }
     }

@@ -78,6 +78,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                 mounting: Mounting::ThroughHole,
                 drill: Some(drill),
                 slot: None,
+                shape: crate::LandShape::Rect,
             })
             .collect();
         (standoff, leads)
@@ -112,6 +113,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                 mounting: Mounting::Smd,
                 drill: None,
                 slot: None,
+                shape: crate::LandShape::Rect,
             })
             .collect();
         (0.0, leads)

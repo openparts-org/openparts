@@ -122,7 +122,30 @@ pub enum PadShape {
     Circle,
     /// Obround (a slot-shaped land).
     Oval,
+    /// A rectangle with 45° corner cuts (`chamfer`).
+    Chamfered,
     Polygon,
+}
+
+/// A corner of a pad in the model frame (X right, Y up).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PadCorner {
+    TopLeft,
+    TopRight,
+    BottomRight,
+    BottomLeft,
+}
+
+/// A `chamfered` pad's corner cuts.
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PadChamfer {
+    /// The cut along each edge from the corner (mm).
+    pub size: f64,
+    /// The corners cut.
+    pub corners: Vec<PadCorner>,
 }
 
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -236,6 +259,9 @@ pub struct Pad {
     /// `polygon`: the outline, relative to `position`, before `rotation`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub polygon: Option<Vec<Point2>>,
+    /// `chamfered`: the corner cuts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chamfer: Option<PadChamfer>,
     pub kind: PadKind,
     pub layers: PadLayers,
     /// Hole diameter; a slot's width.

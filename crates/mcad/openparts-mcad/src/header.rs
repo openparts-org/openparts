@@ -291,6 +291,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
                 mounting: Mounting::ThroughHole,
                 drill: Some(hole),
                 slot: None,
+                shape: crate::LandShape::Rect,
             }
         })
         .collect();
@@ -384,6 +385,7 @@ fn generate_smt(package: &Package, f: HeaderFeatures) -> Result<MechanicalGeomet
         mounting: Mounting::Smd,
         drill: None,
         slot: None,
+        shape: crate::LandShape::Rect,
     };
     let mech = package
         .smt

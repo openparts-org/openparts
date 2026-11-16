@@ -69,6 +69,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
         Lead {
             number: "2".to_string(),
@@ -81,6 +82,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
         Lead {
             number: "3".to_string(),
@@ -93,6 +95,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
     ];
 

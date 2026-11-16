@@ -361,6 +361,8 @@ milli-, `M` mega-):
 | length | m | `nm` `um` `µm` `mm` `m` |
 | force | N | `mN` `N` `gf` (= 9.80665 mN) |
 | information | bit | `bit` `Kbit` `kbit` `Mbit` `Gbit` (binary: 2^10, 2^20, 2^30, as memory datasheets use them) |
+| luminous intensity | cd | `µcd` `ucd` `mcd` `cd` |
+| data rate | bit/s | `bit/s` `bps` `kbit/s` `kbps` `Kbps` `Mbit/s` `Mbps` (decimal: 10^3, 10^6, as interface datasheets use them) |
 
 Vocabulary (key: quantity or values; categories it is plausible for):
 
@@ -389,6 +391,12 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
 | `wavelength` | length (dominant wavelength; peak only if that is all the source gives -- say so in the locator) | LED |
+| `luminous_intensity` | luminous intensity (Iv; the drive current in `at: { IF: ... }`) | LED |
+| `wavelength_red`, `wavelength_green`, `wavelength_blue` | length (an RGB LED's dominant wavelength per emitter, as `wavelength`) | LED |
+| `luminous_intensity_red`, `luminous_intensity_green`, `luminous_intensity_blue` | luminous intensity (an RGB LED's Iv per emitter) | LED |
+| `supply_voltage` | voltage (VDD of an LED with an integrated driver: its operating range as min/max) | LED |
+| `data_interface` | `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class) | LED |
+| `data_rate` | data rate (the serial data input's rate as the source states it) | LED |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
 | `drain_source_voltage` | voltage (Vds max) | transistor |
 | `drain_current` | current (Id continuous) | transistor |
@@ -1189,6 +1197,61 @@ Rule `connector.invalid`: a connector family without `pads`, with a
 `rf_coax`); an SMD pad without a size, a land-less slot without `slot_axis`; a
 missing required `connector` field; a `connector` field outside its family; an
 `edge_mount` part without `edge.pcb_edge`.
+
+## 20.7 Pad Shapes
+
+A `pads` entry is a rectangle `width` x `length` unless the source draws
+another outline. `shape` (any family) says which:
+
+| `shape` | Fields | The land |
+|---|---|---|
+| `rect` (default) | `width`, `length`; optional `cutout` | the rectangle, less the `cutout` circle |
+| `circle` | `width` = `length` (the diameter) | a round land |
+| `chamfered` | `width`, `length`, `chamfer`, `corners` | the rectangle with 45° cuts of `chamfer` mm along both edges at each listed corner (`top_left`, `top_right`, `bottom_right`, `bottom_left`, top view; all four when `corners` is left out) |
+| `polygon` | `points` (no `width`/`length`) | the outline `[[x, y], ...]` relative to the pad's `x`/`y`, which must lie inside it |
+
+`cutout: { x, y, diameter }` is a circle, centred in the package frame,
+that the source clears from a rectangular land: an RF connector's ground
+pads notched around the centre contact (Samtec MMCX-J-P-X-ST-SM1:
+"Ø2.50" about the centre pad). It must cut one notch: cross the outline
+twice and leave the pad's centre. The generators draw the notch's arc in
+segments of at most 5°.
+
+```yaml
+pads:
+  value:
+    - { number: "1", x: 0, y: 0, width: 1.2, length: 1.2, shape: circle }
+    - { number: "2", x: 1.3, y: 1.3, width: 1.35, length: 1.35, cutout: { x: 0, y: 0, diameter: 2.5 } }
+    - { number: "3", x: 2, y: 0, width: 1, length: 0.8, shape: chamfered, chamfer: 0.2, corners: [top_left] }
+```
+
+A chamfer or polygon read off a drawing is computed like any coordinate:
+write the arithmetic in the locator or a comment. The footprint keeps the
+shape (KiCad: `circle`, `roundrect` with `chamfer`, a `custom` pad with
+the outline as a primitive; LibrePCB: a `custom` pad), and so do the
+Placement Model ([placement-model.md](placement-model.md) section 4) and
+the footprint drawing. Rule `pad_shape.invalid`: a field of another shape
+(`chamfer`/`corners` without `chamfered`, `points` without `polygon`, a
+`cutout` on another shape), a circle whose sides differ, a chamfer over
+half the shorter side, a polygon of fewer than three points, without
+area, with a stated size or around a point that isn't the pad's, a
+cutout that misses the pad, covers its centre or cuts more than one notch.
+
+## 20.8 SMD LEDs
+
+`smd_led` (alias `plcc_led`) is a top-view SMD LED with its terminals on
+two opposite sides: 5050 and 3535 PLCC packages, 2020 chip-scale ones,
+addressable RGB LEDs (WS2812B-class) among them. Its footprint is the
+source's recommended land pattern (`pads`, required, one plated pad per
+lead), in the top view with the body outline `body_width` x
+`body_length` centred on the origin. `body_height` or `overall_height`
+(less `standoff`) gives the height. When the outline states the
+terminals (`overall_width` tip to tip along X, `lead_width`,
+`lead_length`), the 3D model draws them at the pads' rows; otherwise the
+pads stand in for them. The emitting window is a generator default (80 %
+of the smaller body side, 3D only). Rule `smd_led.invalid`: no `pads`, a
+`lead_count` other than the plated pad count, a pad without a size, no
+height.
 
 ---
 

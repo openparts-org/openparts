@@ -108,11 +108,11 @@ Canonical Data Specification section 11.1):
 
 | Rule | Keys | Pass when |
 | --- | --- | --- |
-| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength (2 %), capacity, color, polarity, output_type | the same value (relative tolerance 1e-6 unless stated) |
-| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current | candidate >= original |
+| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength, wavelength_red/_green/_blue (2 %), capacity, color, data_interface, polarity, output_type | the same value (relative tolerance 1e-6 unless stated) |
+| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current, data_rate | candidate >= original |
 | `at_most` | tolerance, capacitance_tolerance, esr, dcr, temperature_coefficient, frequency_tolerance, forward_voltage, rds_on, dropout_voltage | candidate <= original |
 | `ranked` | dielectric: C0G = NP0 > U2J > X8R > X8L > X7R > X7S > X7T > X6S > X6T > X5R > X5S > Y5V = Z5U | candidate's grade >= original's |
-| `informational` | gate_threshold_voltage, zener_test_current, actuation_force, travel | shown, not judged |
+| `informational` | gate_threshold_voltage, zener_test_current, luminous_intensity (and its _red/_green/_blue keys), supply_voltage, actuation_force, travel | shown, not judged |
 
 - A rating compares its guaranteed limit when both parts state one
   (an `at_least` key's `min`, an `at_most` key's `max`), else the stated
@@ -121,8 +121,8 @@ Canonical Data Specification section 11.1):
 - A key the original states and the candidate doesn't is `unverified`,
   never a pass. A key only the candidate states is not checked.
 - Identity keys (`identity: true`): capacitance, resistance,
-  inductance, frequency, zener_voltage, color, polarity, output_type,
-  output_voltage, capacity. One that differs makes the candidate a
+  inductance, frequency, zener_voltage, color, data_interface, polarity,
+  output_type, output_voltage, capacity. One that differs makes the candidate a
   different part. The category's required identity keys (a capacitor's
   capacitance, a resistor's resistance, an inductor's inductance, a
   crystal's frequency, an LED's colour, a transistor's polarity, a

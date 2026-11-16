@@ -28,7 +28,7 @@ pub fn build_footprint(name: &str, geometry: &MechanicalGeometry) -> PcbFootprin
 /// pad marks pin 1 as KiCad's own footprints do (`Capacitor_THT.pretty/
 /// CP_Radial_D5.0mm_P2.00mm.kicad_mod`): pin "1" `rect`, the others
 /// `circle`; a longer-than-wide through-hole pad (a slotted tab) is
-/// `Oval`.
+/// `Oval`. A shape the source states (round, chamfered, polygon) is kept.
 pub fn footprint_from_placement(name: &str, model: &PlacementModel) -> PcbFootprint {
     use openparts_mcad::Mounting;
     let pads: Vec<Pad> = model
@@ -41,10 +41,17 @@ pub fn footprint_from_placement(name: &str, model: &PlacementModel) -> PcbFootpr
                 y: p.position.y,
             },
             size: (p.size.x, p.size.y),
-            shape: match p.shape {
-                openparts_placement::PadShape::Circle => PadShape::Circle,
-                openparts_placement::PadShape::Oval => PadShape::Oval,
-                // The generators draw no rounded or polygon pads yet.
+            shape: match (p.shape, &p.chamfer, &p.polygon) {
+                (openparts_placement::PadShape::Circle, _, _) => PadShape::Circle,
+                (openparts_placement::PadShape::Oval, _, _) => PadShape::Oval,
+                (openparts_placement::PadShape::Chamfered, Some(c), _) => PadShape::Chamfered {
+                    size: c.size,
+                    corners: c.corners.clone(),
+                },
+                (openparts_placement::PadShape::Polygon, _, Some(points)) => {
+                    PadShape::Polygon(points.iter().map(|q| Point2 { x: q.x, y: q.y }).collect())
+                }
+                // The generators draw no rounded pads yet.
                 _ => PadShape::Rect,
             },
             mounting: match p.kind {
@@ -142,6 +149,7 @@ mod tests {
                 mounting: Mounting::Smd,
                 drill: None,
                 slot: None,
+                shape: openparts_mcad::LandShape::Rect,
             }],
             markers: vec![],
             lead_form: None,
@@ -175,6 +183,7 @@ mod tests {
             mounting: Mounting::ThroughHole,
             drill: Some(0.8),
             slot: None,
+            shape: openparts_mcad::LandShape::Rect,
         };
         let geometry = MechanicalGeometry {
             family: openparts_mcad::PackageFamily::Qfn,
@@ -223,6 +232,7 @@ mod tests {
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: openparts_mcad::LandShape::Rect,
         };
         let geometry = MechanicalGeometry {
             family: openparts_mcad::PackageFamily::Qfn,

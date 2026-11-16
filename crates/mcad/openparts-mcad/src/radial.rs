@@ -66,6 +66,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::radial::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
         Lead {
             number: "2".to_string(),
@@ -78,6 +79,7 @@ pub fn generate_radial(package: &Package) -> Result<MechanicalGeometry, McadErro
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::radial::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
     ];
 

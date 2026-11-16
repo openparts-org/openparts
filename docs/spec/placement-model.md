@@ -137,6 +137,7 @@ kept. A test checks every package of the dataset.
 | `usb_c` | Contact A1 upper left: the opening (mating face) faces −Y. The family's source frame has it facing +Y, so receptacles turn 180°. |
 | `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
 | `terminal_block` | Poles in a row along X, pole 1 on the left; the wire entry faces +Y (the family frame already has it so). |
+| `smd_led` | Pad 1 upper left. A source that numbers it lower right (WS2812B-2020: DO is pad 1) turns 180°. |
 
 The model reports the rule (`frame.zero_orientation`: rule, family row,
 convention, pin-1 pad). The turn and the move from the generator's frame are
@@ -149,7 +150,7 @@ Each pad has:
 | Field | Meaning |
 | --- | --- |
 | `number` | As the source numbers it ("" for a non-plated hole). |
-| `shape` | `rect`, `roundrect` (with `corner_ratio`), `circle`, `oval` (obround), `polygon` (with `polygon`, relative to `position`). |
+| `shape` | `rect`, `roundrect` (with `corner_ratio`), `circle`, `oval` (obround), `chamfered` (with `chamfer`: `{size, corners}`, the 45° cut in mm and the corners cut, in this frame), `polygon` (with `polygon`, relative to `position`, counter-clockwise). |
 | `position`, `rotation`, `size` | Centre in the frame; degrees CCW; size before the rotation. Every generated pad is axis-aligned (rotation 0); quarter turns swap `size`. |
 | `kind` | `smd`, `tht` (plated hole), `npth`. |
 | `layers` | `copper`: `top` / `all` / `none`; `mask`: `top` / `both`; `paste`: bool. |
@@ -163,7 +164,10 @@ Each pad has:
 
 Pad shape: SMD lands are `rect`. A square plated through-hole pad numbered 1 is
 `rect` (the pin-1 cue), other square ones `circle`, longer ones `oval`. These
-are KiCad's library conventions.
+are KiCad's library conventions. A shape the package states (Canonical Data
+Specification 20.7: `circle`, `chamfered`, `polygon`, a `cutout` drawn as a
+polygon) is kept; its corners and points turn with the frame. `size` stays the
+land's extent, which the courtyard and `min_pad_gap` use.
 
 Where lands come from (`basis.pads`):
 
@@ -372,6 +376,6 @@ viewed from the top, applied after the mirror.
   than 1608). Version 1 uses the general 0.10/0.25/0.50 mm.
 - Windowed exposed-pad paste and per-pad mask expansion. No generator states
   them, so every SMD pad has `paste: full` and `mask_expansion: null`.
-- `roundrect` and `polygon` pads. No generator draws them yet.
+- `roundrect` pads. No generator draws them yet.
 - Body regions beyond the main body, header posts and module shield cans
   (a USB-C shell's tabs).

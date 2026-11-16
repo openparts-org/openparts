@@ -101,7 +101,7 @@ fn default_lands(package: &Package) -> Result<Vec<openparts_core::PackagePad>, M
             let (qx, qy) = if bare {
                 hole_size(q).unwrap_or((0.0, 0.0))
             } else {
-                (q.width, q.length)
+                q.extent()
             };
             let gap_x = (q.x - p.x).abs() - (qx + hole_x) / 2.0;
             let gap_y = (q.y - p.y).abs() - (qy + hole_y) / 2.0;

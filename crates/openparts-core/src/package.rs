@@ -274,6 +274,13 @@ pub struct PackageTab {
 /// no land around it leaves `width`/`length` out (0): the connector
 /// families then draw a generator-default annular ring, and a slot needs
 /// `slot_axis` (Canonical Data Specification 20.6).
+///
+/// A land is a rectangle unless `shape` says otherwise (section 20.7):
+/// `circle` (`width` = `length`, the diameter), `chamfered` (corners cut
+/// by `chamfer`, the corners listed in `corners`, all four when empty) or
+/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out). A
+/// `cutout` circle clears copper from a rectangular land (an RF
+/// connector's ground pads notched around its centre contact).
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -298,6 +305,87 @@ pub struct PackagePad {
     /// number may be empty).
     #[serde(default = "plated_default", skip_serializing_if = "is_plated")]
     pub plated: bool,
+    /// The land's outline; absent: a rectangle `width` x `length`.
+    #[serde(default, skip_serializing_if = "LandShape::is_rect")]
+    pub shape: LandShape,
+    /// `chamfered`: how far each cut corner is cut back along both edges
+    /// (mm, a 45° chamfer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chamfer: Option<f64>,
+    /// `chamfered`: the corners cut, in the top view; empty: all four.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corners: Vec<PadCorner>,
+    /// `polygon`: the outline's vertices `[x, y]` relative to the pad's
+    /// `x`/`y` (mm), in order around it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<[f64; 2]>,
+    /// A circle the source clears from a rectangular land.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cutout: Option<PadCutout>,
+}
+
+/// The outline of a `PackagePad`'s land (Canonical Data Specification
+/// section 20.7).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LandShape {
+    /// `width` x `length` (the default).
+    #[default]
+    Rect,
+    /// A round land: `width` = `length` is the diameter.
+    Circle,
+    /// A rectangle with 45° corner cuts (`chamfer`, `corners`).
+    Chamfered,
+    /// An arbitrary outline (`points`).
+    Polygon,
+}
+
+impl LandShape {
+    pub fn is_rect(&self) -> bool {
+        *self == LandShape::Rect
+    }
+}
+
+/// A corner of a pad, in the package's top view (X right, Y up).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PadCorner {
+    TopLeft,
+    TopRight,
+    BottomRight,
+    BottomLeft,
+}
+
+impl PadCorner {
+    pub const ALL: [PadCorner; 4] = [
+        PadCorner::TopLeft,
+        PadCorner::TopRight,
+        PadCorner::BottomRight,
+        PadCorner::BottomLeft,
+    ];
+
+    /// The corner's direction from the pad centre: (sign x, sign y).
+    pub fn signs(self) -> (f64, f64) {
+        match self {
+            PadCorner::TopLeft => (-1.0, 1.0),
+            PadCorner::TopRight => (1.0, 1.0),
+            PadCorner::BottomRight => (1.0, -1.0),
+            PadCorner::BottomLeft => (-1.0, -1.0),
+        }
+    }
+}
+
+/// `PackagePad::cutout`: a circle cleared from the land, centre in the
+/// package frame (mm).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PadCutout {
+    pub x: f64,
+    pub y: f64,
+    pub diameter: f64,
 }
 
 /// The axis a slotted hole runs along (`PackagePad::slot_axis`).
@@ -316,7 +404,29 @@ fn is_zero(v: &f64) -> bool {
 impl PackagePad {
     /// The source draws no land around this hole.
     pub fn land_unstated(&self) -> bool {
-        self.width == 0.0 && self.length == 0.0
+        self.width == 0.0 && self.length == 0.0 && self.points.is_empty()
+    }
+
+    /// The corners a `chamfered` land cuts (all four when none listed).
+    pub fn chamfered_corners(&self) -> Vec<PadCorner> {
+        if self.corners.is_empty() {
+            PadCorner::ALL.to_vec()
+        } else {
+            self.corners.clone()
+        }
+    }
+
+    /// The land's extent `(width, length)`: the stated size, or a
+    /// polygon's bounding box (twice its reach from the pad centre, so
+    /// the pad stays centred on `x`/`y`).
+    pub fn extent(&self) -> (f64, f64) {
+        if self.shape == LandShape::Polygon && !self.points.is_empty() {
+            let rx = self.points.iter().map(|p| p[0].abs()).fold(0.0, f64::max);
+            let ry = self.points.iter().map(|p| p[1].abs()).fold(0.0, f64::max);
+            (2.0 * rx, 2.0 * ry)
+        } else {
+            (self.width, self.length)
+        }
     }
 }
 

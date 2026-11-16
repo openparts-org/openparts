@@ -125,13 +125,64 @@ pub struct PcbSymbol {
     pub graphics: Vec<Graphic>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PadShape {
     Rect,
     Circle,
     /// Obround: a through-hole pad longer than it is wide (slotted
     /// shell tabs).
     Oval,
+    /// The `size` rectangle with 45° cuts of `size` (mm, along both
+    /// edges) at `corners` (Y up: `TopLeft` is at -x, +y).
+    Chamfered {
+        size: f64,
+        corners: Vec<PadCorner>,
+    },
+    /// An outline relative to the pad's position (mm, Y up),
+    /// counter-clockwise; `size` is its extent.
+    Polygon(Vec<Point2>),
+}
+
+pub use openparts_placement::PadCorner;
+
+impl PadShape {
+    /// The outline of a `Chamfered` or `Polygon` pad of size `(w, h)`,
+    /// relative to its position (Y up, counter-clockwise); `None` for
+    /// the shapes every tool draws natively.
+    pub fn outline(&self, (w, h): (f64, f64)) -> Option<Vec<Point2>> {
+        match self {
+            PadShape::Rect | PadShape::Circle | PadShape::Oval => None,
+            PadShape::Polygon(points) => Some(points.clone()),
+            PadShape::Chamfered { size, corners } => {
+                let (hw, hh) = (w / 2.0, h / 2.0);
+                let mut out = Vec::new();
+                // Counter-clockwise from the bottom-left corner.
+                for (corner, (sx, sy)) in [
+                    (PadCorner::BottomLeft, (-1.0, -1.0)),
+                    (PadCorner::BottomRight, (1.0, -1.0)),
+                    (PadCorner::TopRight, (1.0, 1.0)),
+                    (PadCorner::TopLeft, (-1.0, 1.0)),
+                ] {
+                    let (x, y) = (sx * hw, sy * hh);
+                    if corners.contains(&corner) {
+                        // The cut's two ends, in walking order: the
+                        // side arriving at the corner, then the leaving one.
+                        let along_x = (sx * sy) < 0.0;
+                        let (a, b) = if along_x {
+                            ((x - sx * size, y), (x, y - sy * size))
+                        } else {
+                            ((x, y - sy * size), (x - sx * size, y))
+                        };
+                        out.push(Point2 { x: a.0, y: a.1 });
+                        out.push(Point2 { x: b.0, y: b.1 });
+                    } else {
+                        out.push(Point2 { x, y });
+                    }
+                }
+                Some(out)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -299,6 +350,29 @@ pub fn default_model_path(footprint_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_chamfered_outline_cuts_only_its_corners_counter_clockwise() {
+        use crate::{PadCorner, PadShape, Point2};
+        let shape = PadShape::Chamfered {
+            size: 0.25,
+            corners: vec![PadCorner::TopRight, PadCorner::BottomLeft],
+        };
+        let pts = shape.outline((2.0, 1.0)).unwrap();
+        let p = |x: f64, y: f64| Point2 { x, y };
+        assert_eq!(
+            pts,
+            vec![
+                p(-1.0, -0.25),
+                p(-0.75, -0.5),
+                p(1.0, -0.5),
+                p(1.0, 0.25),
+                p(0.75, 0.5),
+                p(-1.0, 0.5),
+            ]
+        );
+        assert_eq!(PadShape::Rect.outline((1.0, 1.0)), None);
+    }
+
     use super::*;
 
     #[test]

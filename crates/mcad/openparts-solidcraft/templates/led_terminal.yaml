@@ -1,0 +1,4 @@
+# An SMD LED terminal (or a contact foot on its pad). Vars: name, x, y, w, l, h.
+- solid.box:
+    {length: "{{w}}", width: "{{l}}", height: "{{h}}", center: ["{{x}}", "{{y}}", "{{h}} / 2"],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

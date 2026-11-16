@@ -143,6 +143,14 @@ pub const RULES: &[Rule] = &[
         meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height` (except `rf_coax`), an SMD pad without a size or a land-less slot without `slot_axis`, or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
     },
     Rule {
+        id: "pad_shape.invalid",
+        meaning: "a stated pad's land shape can't be drawn: `chamfer`/`corners` without `shape: chamfered` (or a chamfer that isn't positive and at most half the shorter side), `points` without `shape: polygon` (or fewer than three, no area, a stated width/length, or the pad's x/y outside the outline), a `circle` whose width and length differ, or a `cutout` on a non-rectangular pad, covering the pad's centre or the whole pad, missing it, or cutting more than one notch",
+    },
+    Rule {
+        id: "smd_led.invalid",
+        meaning: "an `smd_led` package has no `pads`, a `lead_count` other than its plated pad count, a pad without a size, or neither `dimensions.body_height` nor `overall_height`",
+    },
+    Rule {
         id: "keepout.invalid",
         meaning: "a package keep-out has both or neither of `rect` (located) and `size` (only sized), a non-positive length, or restricts nothing",
     },
@@ -349,6 +357,8 @@ pub fn validate_part(
     out.extend(check_package_keepouts(&package_entity, package));
     out.extend(check_package_pad_layout(&package_entity, package));
     out.extend(connector::check_package_connector(&package_entity, package));
+    out.extend(connector::check_pad_shapes(&package_entity, package));
+    out.extend(connector::check_smd_led(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,

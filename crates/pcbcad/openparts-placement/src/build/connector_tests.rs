@@ -236,3 +236,50 @@ fn zero_orientation_rows_name_the_connector_families() {
     }
     assert_eq!(zero_orientation_row(F::TerminalBlock).0, "terminal block");
 }
+
+/// Stated land shapes (Canonical Data Specification 20.7) reach the
+/// model: an MMCX jack's round centre pad and notched ground pads keep
+/// the family frame (pin 1 is the centroid).
+#[test]
+fn stated_land_shapes_reach_the_model() {
+    let p = pkg("family: rf_coax\nlead_count: 2\npitch: {unit: mm}\n\
+         connector: {gender: female, orientation: vertical, interface: mmcx}\n\
+         dimensions:\n  body_width: {nominal: 3.45, unit: mm}\n  body_length: {nominal: 3.45, unit: mm}\n\
+         pads:\n\
+         \x20 - {number: '1', x: 0, y: 0, width: 1.2, length: 1.2, shape: circle}\n\
+         \x20 - {number: '2', x: 1.3, y: 1.3, width: 1.35, length: 1.35, cutout: {x: 0, y: 0, diameter: 2.5}}\n");
+    let (_, m) = model(&p);
+    assert_eq!(m.frame.zero_orientation.pin1.as_deref(), Some("1"));
+    assert_eq!(pad(&m, "1").shape, PadShape::Circle);
+    let g = pad(&m, "2");
+    assert_eq!(g.shape, PadShape::Polygon);
+    let poly = g.polygon.as_ref().unwrap();
+    assert!(poly.len() > 6, "the arc is segmented");
+    assert!((g.size.x - 1.35).abs() < 1e-9);
+}
+
+/// A chamfered land's corners turn with the model: a 2020 LED whose pad 1
+/// is lower right turns 180°, so its cut top-right corner ends up bottom
+/// left.
+#[test]
+fn chamfer_corners_turn_with_the_model() {
+    let p = pkg("family: smd_led\nlead_count: 4\npitch: {unit: mm}\n\
+         dimensions:\n  body_width: {nominal: 2.2, unit: mm}\n  body_length: {nominal: 2.0, unit: mm}\n\
+         \x20 overall_height: {nominal: 0.84, unit: mm}\n\
+         pads:\n\
+         \x20 - {number: '1', x: 0.915, y: -0.55, width: 0.7, length: 0.7, shape: chamfered, chamfer: 0.2, corners: [top_right]}\n\
+         \x20 - {number: '2', x: 0.915, y: 0.55, width: 0.7, length: 0.7}\n\
+         \x20 - {number: '3', x: -0.915, y: 0.55, width: 0.7, length: 0.7}\n\
+         \x20 - {number: '4', x: -0.915, y: -0.55, width: 0.7, length: 0.7}\n");
+    let (g, m) = model(&p);
+    assert!(upper_left(&m));
+    assert_eq!(m.model3d.rotation, 180.0);
+    assert!(aligned(&g, &m));
+    let p1 = pad(&m, "1");
+    assert_eq!(p1.shape, PadShape::Chamfered);
+    assert_eq!(
+        p1.chamfer.as_ref().unwrap().corners,
+        vec![PadCorner::BottomLeft]
+    );
+    assert_eq!(m.frame.zero_orientation.family, "SMD LED");
+}

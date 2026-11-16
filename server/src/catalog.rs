@@ -1385,6 +1385,7 @@ fn family_label(f: PackageFamily) -> String {
         F::FpcConnector => "FPC/FFC connector".into(),
         F::RfCoax => "RF coaxial".into(),
         F::MicroUsbB => "Micro-USB B".into(),
+        F::SmdLed => "SMD LED".into(),
         F::SodFlat => "SOD (flat)".into(),
         F::Sot223 => "SOT-223".into(),
         F::Do214 => "DO-214".into(),

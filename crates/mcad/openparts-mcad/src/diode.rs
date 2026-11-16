@@ -52,6 +52,7 @@ pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> 
         mounting: Mounting::Smd,
         drill: None,
         slot: None,
+        shape: crate::LandShape::Rect,
     });
     let lead_form = if flat {
         LeadForm::Flat { thickness: t }
@@ -108,6 +109,7 @@ pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError
         mounting: Mounting::Smd,
         drill: None,
         slot: None,
+        shape: crate::LandShape::Rect,
     });
     Ok(MechanicalGeometry {
         family: package.family,

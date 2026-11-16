@@ -101,8 +101,8 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
         let label = label.join("/");
         let (cx, cy, w, h) = (p.position.x, -p.position.y, p.size.0, p.size.1);
         let r = match p.shape {
-            PadShape::Rect => 0.0,
             PadShape::Circle | PadShape::Oval => w.min(h) / 2.0,
+            _ => 0.0,
         };
         let fill = if p.mounting == Mounting::NonPlated {
             "#0b1a12"
@@ -114,11 +114,22 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
         } else {
             ""
         };
-        s.push_str(&format!(
-            "<rect x=\"{:.3}\" y=\"{:.3}\" width=\"{w:.3}\" height=\"{h:.3}\" rx=\"{r:.3}\" fill=\"{fill}\"{stroke}/>\n",
-            cx - w / 2.0,
-            cy - h / 2.0
-        ));
+        if let Some(outline) = p.shape.outline(p.size) {
+            let points: Vec<String> = outline
+                .iter()
+                .map(|q| format!("{:.3},{:.3}", cx + q.x, cy - q.y))
+                .collect();
+            s.push_str(&format!(
+                "<polygon points=\"{}\" fill=\"{fill}\"{stroke}/>\n",
+                points.join(" ")
+            ));
+        } else {
+            s.push_str(&format!(
+                "<rect x=\"{:.3}\" y=\"{:.3}\" width=\"{w:.3}\" height=\"{h:.3}\" rx=\"{r:.3}\" fill=\"{fill}\"{stroke}/>\n",
+                cx - w / 2.0,
+                cy - h / 2.0
+            ));
+        }
         if let (Some(d), true) = (p.drill, p.mounting != Mounting::NonPlated) {
             let (dw, dh) = match p.slot {
                 Some(l) if w >= h => (l, d),

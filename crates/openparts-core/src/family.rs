@@ -81,6 +81,10 @@ families! {
     RfCoax: "rf_coax",
     /// Micro-USB B receptacles.
     MicroUsbB: "micro_usb_b",
+    /// Top-view SMD LEDs with terminals on two opposite sides (5050 and
+    /// 3535 PLCC, 2020 chip-scale), addressable RGB LEDs among them; the
+    /// footprint is the source's land pattern (`pads`).
+    SmdLed: "smd_led" | "plcc_led",
 }
 
 impl PackageFamily {

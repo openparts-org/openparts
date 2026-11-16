@@ -61,6 +61,7 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 mounting: Mounting::ThroughHole,
                 drill: Some(crate::defaults::sip::DRILL_DIAMETER),
                 slot: None,
+                shape: crate::LandShape::Rect,
             }
         })
         .collect();

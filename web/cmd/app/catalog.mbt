@@ -41,7 +41,7 @@ let sort_keys : Array[String] = [
 ///|
 /// The enumerated parameter keys (checkboxes only, not sortable).
 let enum_param_keys : Array[String] = [
-  "dielectric", "color", "polarity", "output_type",
+  "dielectric", "color", "polarity", "output_type", "data_interface",
 ]
 
 ///|
@@ -109,7 +109,7 @@ fn param_columns_of_root(category : String) -> Array[String] {
         "current_transfer_ratio", "isolation_voltage", "collector_emitter_voltage",
         "forward_voltage",
       ]
-    "led" => ["color", "wavelength", "forward_voltage"]
+    "led" => ["color", "wavelength", "forward_voltage", "supply_voltage"]
     "transistor" =>
       ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
     "fuse" => ["rated_current", "rated_voltage"]

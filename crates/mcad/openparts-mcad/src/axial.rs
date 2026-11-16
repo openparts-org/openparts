@@ -72,6 +72,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
         Lead {
             number: "2".to_string(),
@@ -84,6 +85,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             mounting: Mounting::ThroughHole,
             drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
+            shape: crate::LandShape::Rect,
         },
     ];
 

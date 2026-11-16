@@ -94,6 +94,7 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         });
         pin_num += 1;
     }
@@ -130,6 +131,7 @@ pub fn generate_sot(package: &Package) -> Result<MechanicalGeometry, McadError> 
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         });
         pin_num += 1;
     }

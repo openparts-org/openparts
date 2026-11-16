@@ -2135,6 +2135,43 @@ pub impl @json.FromJson for Kind with fn from_json(json, path) {
 
 ///|
 #derive(Eq, Debug)
+pub(all) enum LandShape {
+  Rect
+  Circle
+  Chamfered
+  Polygon
+}
+
+///|
+/// The wire (JSON) string.
+pub fn LandShape::wire(self : LandShape) -> String {
+  match self {
+    Rect => "rect"
+    Circle => "circle"
+    Chamfered => "chamfered"
+    Polygon => "polygon"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn LandShape::all() -> Array[LandShape] {
+  [Rect, Circle, Chamfered, Polygon]
+}
+
+///|
+pub impl @json.FromJson for LandShape with fn from_json(json, path) {
+  match json {
+    String("rect") => Rect
+    String("circle") => Circle
+    String("chamfered") => Chamfered
+    String("polygon") => Polygon
+    _ => raise @json.JsonDecodeError((path, "expected a LandShape"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
 pub(all) enum LevelValue {
   Required
   Recommended
@@ -2647,6 +2684,7 @@ pub(all) enum PackageFamily {
   FpcConnector
   RfCoax
   MicroUsbB
+  SmdLed
 }
 
 ///|
@@ -2691,6 +2729,7 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     FpcConnector => "fpc_connector"
     RfCoax => "rf_coax"
     MicroUsbB => "micro_usb_b"
+    SmdLed => "smd_led"
   }
 }
 
@@ -2736,6 +2775,7 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     FpcConnector,
     RfCoax,
     MicroUsbB,
+    SmdLed,
   ]
 }
 
@@ -2780,6 +2820,7 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("fpc_connector") => FpcConnector
     String("rf_coax") => RfCoax
     String("micro_usb_b") => MicroUsbB
+    String("smd_led") => SmdLed
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }
@@ -2839,13 +2880,25 @@ pub impl @json.FromJson for PackageKeepout with fn from_json(json, path) {
 /// no land around it leaves `width`/`length` out (0): the connector
 /// families then draw a generator-default annular ring, and a slot needs
 /// `slot_axis` (Canonical Data Specification 20.6).
+///
+/// A land is a rectangle unless `shape` says otherwise (section 20.7):
+/// `circle` (`width` = `length`, the diameter), `chamfered` (corners cut
+/// by `chamfer`, the corners listed in `corners`, all four when empty) or
+/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out). A
+/// `cutout` circle clears copper from a rectangular land (an RF
+/// connector's ground pads notched around its centre contact).
 #derive(Eq)
 pub(all) struct PackagePad {
+  chamfer : Double?
+  corners : Array[PadCorner]?
+  cutout : PadCutout?
   drill : Double?
   drill_length : Double?
   length : Double?
   number : String
   plated : Bool?
+  points : Array[Array[Double]]?
+  shape : LandShape?
   slot_axis : SlotAxis?
   width : Double?
   x : Double
@@ -2858,11 +2911,16 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
     raise @json.JsonDecodeError((path, "expected a PackagePad object"))
   }
   {
+    chamfer: opt_field(obj, "chamfer", path),
+    corners: opt_field(obj, "corners", path),
+    cutout: opt_field(obj, "cutout", path),
     drill: opt_field(obj, "drill", path),
     drill_length: opt_field(obj, "drill_length", path),
     length: opt_field(obj, "length", path),
     number: field(obj, "number", path),
     plated: opt_field(obj, "plated", path),
+    points: opt_field(obj, "points", path),
+    shape: opt_field(obj, "shape", path),
     slot_axis: opt_field(obj, "slot_axis", path),
     width: opt_field(obj, "width", path),
     x: field(obj, "x", path),
@@ -3040,6 +3098,65 @@ pub impl @json.FromJson for PackageTab with fn from_json(json, path) {
   {
     number: field(obj, "number", path),
     trimmed_leads: opt_field(obj, "trimmed_leads", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PadCorner {
+  TopLeft
+  TopRight
+  BottomRight
+  BottomLeft
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PadCorner::wire(self : PadCorner) -> String {
+  match self {
+    TopLeft => "top_left"
+    TopRight => "top_right"
+    BottomRight => "bottom_right"
+    BottomLeft => "bottom_left"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PadCorner::all() -> Array[PadCorner] {
+  [TopLeft, TopRight, BottomRight, BottomLeft]
+}
+
+///|
+pub impl @json.FromJson for PadCorner with fn from_json(json, path) {
+  match json {
+    String("top_left") => TopLeft
+    String("top_right") => TopRight
+    String("bottom_right") => BottomRight
+    String("bottom_left") => BottomLeft
+    _ => raise @json.JsonDecodeError((path, "expected a PadCorner"))
+  }
+}
+
+///|
+/// `PackagePad::cutout`: a circle cleared from the land, centre in the
+/// package frame (mm).
+#derive(Eq)
+pub(all) struct PadCutout {
+  diameter : Double
+  x : Double
+  y : Double
+}
+
+///|
+pub impl @json.FromJson for PadCutout with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PadCutout object"))
+  }
+  {
+    diameter: field(obj, "diameter", path),
+    x: field(obj, "x", path),
+    y: field(obj, "y", path),
   }
 }
 

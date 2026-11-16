@@ -495,7 +495,7 @@ MPN, so it goes on the Part).
 | inductor | `inductance`, `tolerance`, `rated_current`, `saturation_current`, `dcr` |
 | crystal | `frequency`, `load_capacitance`, `frequency_tolerance`, `esr` |
 | diode | `forward_voltage`, `reverse_voltage`, `forward_current`; zener `zener_voltage`, `zener_test_current` |
-| LED | `color`, `wavelength`, `forward_voltage`, `forward_current` |
+| LED | `color`, `wavelength`, `luminous_intensity`, `forward_voltage`, `forward_current`; RGB: `wavelength_red`/`_green`/`_blue`, `luminous_intensity_red`/`_green`/`_blue`; with an integrated driver (addressable): `supply_voltage`, `data_interface`, `data_rate` |
 | transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
 | optocoupler | input LED `forward_voltage`, `forward_current`, `reverse_voltage`; output `collector_emitter_voltage`, `collector_current`; `current_transfer_ratio`, `isolation_voltage` |
 | fuse | `rated_current`, `rated_voltage` |

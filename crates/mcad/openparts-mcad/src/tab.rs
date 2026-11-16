@@ -181,6 +181,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
             mounting: Mounting::Smd,
             drill: None,
             slot: None,
+            shape: crate::LandShape::Rect,
         })
         .collect();
     leads.push(Lead {
@@ -198,6 +199,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
         mounting: Mounting::Smd,
         drill: None,
         slot: None,
+        shape: crate::LandShape::Rect,
     });
 
     let inset = (body_w.min(body_l) * 0.15).min(0.5);

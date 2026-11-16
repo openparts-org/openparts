@@ -10,7 +10,9 @@
 use crate::hash::content_hash;
 use crate::*;
 use openparts_core::{Device, Package, PackageFamily as F, PackageSide};
-use openparts_mcad::{BodyShape, Details, HeaderKind, LeadForm, MarkerKind, MechanicalGeometry};
+use openparts_mcad::{
+    BodyShape, Details, HeaderKind, LandShape, LeadForm, MarkerKind, MechanicalGeometry,
+};
 
 /// Courtyard corners snap outward to this grid (KiCad's libraries' rule).
 const COURTYARD_GRID: f64 = 0.05;
@@ -75,6 +77,18 @@ fn turn(q: u8, x: f64, y: f64) -> (f64, f64) {
         1 => (-y, x),
         2 => (-x, -y),
         _ => (y, -x),
+    }
+}
+
+/// A pad corner turned q quarter turns CCW.
+fn turn_corner(q: u8, c: openparts_core::PadCorner) -> PadCorner {
+    let (sx, sy) = c.signs();
+    let (x, y) = turn(q, sx, sy);
+    match (x > 0.0, y > 0.0) {
+        (false, true) => PadCorner::TopLeft,
+        (true, true) => PadCorner::TopRight,
+        (true, false) => PadCorner::BottomRight,
+        (false, false) => PadCorner::BottomLeft,
     }
 }
 
@@ -155,8 +169,19 @@ fn make(
         .iter()
         .map(|lead| {
             let square = (lead.size.x - lead.size.y).abs() < 1e-9;
+            // A shape the source states (Canonical Data Specification
+            // 20.7) wins over the library conventions below.
+            let stated = match &lead.shape {
+                LandShape::Rect => None,
+                LandShape::Circle => Some(PadShape::Circle),
+                LandShape::Chamfered { .. } => Some(PadShape::Chamfered),
+                LandShape::Polygon(_) => Some(PadShape::Polygon),
+            };
             let (kind, shape) = match lead.mounting {
-                Mounting::Smd => (PadKind::Smd, PadShape::Rect),
+                Mounting::Smd => (PadKind::Smd, stated.unwrap_or(PadShape::Rect)),
+                Mounting::ThroughHole if stated.is_some() => {
+                    (PadKind::Tht, stated.unwrap_or(PadShape::Rect))
+                }
                 // A square through-hole pad marks pin 1, as KiCad's own
                 // footprints do (CP_Radial_D5.0mm_P2.00mm).
                 Mounting::ThroughHole if lead.number == "1" && square => {
@@ -193,7 +218,25 @@ fn make(
                 rotation: 0.0,
                 size: t.size(lead.size.x, lead.size.y),
                 corner_ratio: None,
-                polygon: None,
+                polygon: match &lead.shape {
+                    LandShape::Polygon(points) => Some(
+                        points
+                            .iter()
+                            .map(|p| {
+                                let (x, y) = turn(q, p[0], p[1]);
+                                Point2 { x: r4(x), y: r4(y) }
+                            })
+                            .collect(),
+                    ),
+                    _ => None,
+                },
+                chamfer: match &lead.shape {
+                    LandShape::Chamfered { size, corners } => Some(PadChamfer {
+                        size: r4(*size),
+                        corners: corners.iter().map(|c| turn_corner(q, *c)).collect(),
+                    }),
+                    _ => None,
+                },
                 kind,
                 layers,
                 drill: lead.drill.map(r4),
@@ -832,6 +875,7 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
             "connector",
             "contact 1 upper left; the mating face (+Y in the source frame) turns with it",
         ),
+        F::SmdLed => ("SMD LED", "pad 1 upper left"),
         F::TerminalBlock => (
             "terminal block",
             "poles in a row along X, pole 1 on the left; the wire entry faces +Y",

@@ -1,0 +1,16 @@
+# Top-view SMD LED: a white housing with a round emitting window
+# (a cavity filled with a clear lens over the dies). Vars: window_d.
+- params:
+    window_d: ["{{window_d}}", emitting window diameter]
+    cavity_h: [body_h * 0.4, cavity depth below the top]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     operation: new, body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: window_d, height: cavity_h, base: [0 mm, 0 mm, standoff + body_h - cavity_h],
+     operation: new, body_name: Lens, name: Lens}
+- solid.combine: {target: Housing, tools: [Lens], operation: cut, keep_tools: true}
+- solid.box:
+    {length: window_d * 0.3, width: window_d * 0.3, height: cavity_h * 0.3,
+     center: [0 mm, 0 mm, standoff + body_h - cavity_h + cavity_h * 0.15], operation: new, body_name: Die, name: Die}
+- solid.combine: {target: Lens, tools: [Die], operation: cut, keep_tools: true}

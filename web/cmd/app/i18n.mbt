@@ -675,6 +675,7 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (Ja, "fpc_connector") => "FPC/FFCコネクタ"
     (Ja, "rf_coax") => "同軸コネクタ"
     (Ja, "micro_usb_b") => "マイクロUSB B"
+    (Ja, "smd_led") => "表面実装LED"
     (En, "chip") => "Chip"
     (En, "radial") => "Radial lead"
     (En, "axial") => "Axial lead"
@@ -692,6 +693,7 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (En, "fpc_connector") => "FPC/FFC connector"
     (En, "rf_coax") => "RF coaxial"
     (En, "micro_usb_b") => "Micro-USB B"
+    (En, "smd_led") => "SMD LED"
     (_, "usb_c") => "USB Type-C"
     (_, "sot223") => "SOT-223"
     (_, "do214") => "DO-214"
@@ -858,6 +860,16 @@ let param_names : Array[(String, String, String)] = [
   ),
   ("color", "発光色", "Color"),
   ("wavelength", "波長", "Wavelength"),
+  ("luminous_intensity", "光度", "Luminous intensity"),
+  ("wavelength_red", "主波長 (赤)", "Dominant wavelength (red)"),
+  ("wavelength_green", "主波長 (緑)", "Dominant wavelength (green)"),
+  ("wavelength_blue", "主波長 (青)", "Dominant wavelength (blue)"),
+  ("luminous_intensity_red", "光度 (赤)", "Luminous intensity (red)"),
+  ("luminous_intensity_green", "光度 (緑)", "Luminous intensity (green)"),
+  ("luminous_intensity_blue", "光度 (青)", "Luminous intensity (blue)"),
+  ("supply_voltage", "電源電圧", "Supply voltage"),
+  ("data_interface", "データ入力", "Data interface"),
+  ("data_rate", "データレート", "Data rate"),
   ("polarity", "極性", "Polarity"),
   (
     "drain_source_voltage", "ドレイン-ソース間電圧 (Vds)", "Drain-source voltage (Vds)",
@@ -924,6 +936,10 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (Ja, "color", "infrared") => "赤外"
     (Ja, "color", "ultraviolet") => "紫外"
     (_, "color", "rgb") => "RGB"
+    (Ja, "data_interface", "single_wire") => "1線式シリアル"
+    (Ja, "data_interface", "clock_data") => "クロック+データ"
+    (En, "data_interface", "single_wire") => "Single-wire serial"
+    (En, "data_interface", "clock_data") => "Clock + data"
     (En, "color", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
     _ => value
   }

@@ -101,26 +101,34 @@ pub fn render_footprint(footprint: &PcbFootprint) -> String {
 /// CP_Radial_D5.0mm_P2.00mm.kicad_mod`): `thru_hole` pad type, a
 /// `(drill ...)` field, and `*.Cu`/`*.Mask` layers -- no `F.Paste`,
 /// since a through-hole pad has no solder-paste stencil opening.
+///
+/// A chamfered pad is KiCad's `roundrect` with `chamfer_ratio` (the cut
+/// over the shorter side) and its `chamfer` corners; a polygon pad is a
+/// `custom` pad: a small round anchor at the pad's position and the
+/// outline as a filled `gr_poly` primitive.
 fn render_pad(pad: &Pad) -> String {
     let shape = match pad.shape {
         PadShape::Rect => "rect",
         PadShape::Circle => "circle",
         PadShape::Oval => "oval",
+        PadShape::Chamfered { .. } => "roundrect",
+        PadShape::Polygon(_) => "custom",
     };
     // IR is Y-up, KiCad footprints are Y-down (see `render_footprint`).
     let y = flip_y(pad.position.y);
+    let (size, extra) = shape_fields(pad);
     match pad.mounting {
         Mounting::Smd => format!(
-            "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"))\n",
-            pad.number, pad.position.x, y, pad.size.0, pad.size.1
+            "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"){extra})\n",
+            pad.number, pad.position.x, y, size.0, size.1
         ),
         Mounting::ThroughHole => format!(
-            "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {}) (layers \"*.Cu\" \"*.Mask\"))\n",
+            "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {}) (layers \"*.Cu\" \"*.Mask\"){extra})\n",
             pad.number,
             pad.position.x,
             y,
-            pad.size.0,
-            pad.size.1,
+            size.0,
+            size.1,
             drill(pad)
         ),
         // A non-plated hole is its own size and carries no number.
@@ -138,6 +146,50 @@ fn render_pad(pad: &Pad) -> String {
                 drill(pad)
             )
         }
+    }
+}
+
+/// The `(size ...)` KiCad wants and the fields after `(layers ...)` that
+/// a chamfered or custom pad needs.
+fn shape_fields(pad: &Pad) -> ((f64, f64), String) {
+    match &pad.shape {
+        PadShape::Chamfered { size, corners } => {
+            let ratio = size / pad.size.0.min(pad.size.1);
+            // KiCad's corner names are as drawn (Y down on screen), which
+            // is what the IR's Y-up "top" is too.
+            let names: Vec<&str> = corners
+                .iter()
+                .map(|c| match c {
+                    openparts_pcbcad::PadCorner::TopLeft => "top_left",
+                    openparts_pcbcad::PadCorner::TopRight => "top_right",
+                    openparts_pcbcad::PadCorner::BottomRight => "bottom_right",
+                    openparts_pcbcad::PadCorner::BottomLeft => "bottom_left",
+                })
+                .collect();
+            (
+                pad.size,
+                format!(
+                    " (roundrect_rratio 0) (chamfer_ratio {ratio:.4}) (chamfer {})",
+                    names.join(" ")
+                ),
+            )
+        }
+        PadShape::Polygon(points) => {
+            // The anchor stays inside the outline (the pad's position
+            // lies inside it): a quarter of the extent's smaller side.
+            let anchor = (pad.size.0.min(pad.size.1) / 4.0).clamp(0.05, 0.5);
+            let pts: String = points
+                .iter()
+                .map(|p| format!(" (xy {:.4} {:.4})", p.x, flip_y(p.y)))
+                .collect();
+            (
+                (anchor, anchor),
+                format!(
+                    " (options (clearance outline) (anchor circle)) (primitives (gr_poly (pts{pts}) (width 0) (fill yes)))"
+                ),
+            )
+        }
+        _ => (pad.size, String::new()),
     }
 }
 
@@ -615,5 +667,51 @@ mod tests {
             assert_eq!(pad.mounting, Mounting::ThroughHole);
             assert_eq!(pad.drill, Some(0.8));
         }
+    }
+
+    #[test]
+    fn chamfered_and_polygon_pads_are_roundrect_and_custom() {
+        let footprint = PcbFootprint {
+            name: "TEST".into(),
+            placement_hash: None,
+            pads: vec![
+                Pad {
+                    number: "1".into(),
+                    position: Point2 { x: 0.0, y: 1.0 },
+                    size: (1.0, 0.8),
+                    shape: PadShape::Chamfered {
+                        size: 0.2,
+                        corners: vec![openparts_pcbcad::PadCorner::TopLeft],
+                    },
+                    mounting: Mounting::Smd,
+                    drill: None,
+                    slot: None,
+                },
+                Pad {
+                    number: "2".into(),
+                    position: Point2 { x: 1.0, y: 1.0 },
+                    size: (1.0, 1.0),
+                    shape: PadShape::Polygon(vec![
+                        Point2 { x: -0.5, y: -0.5 },
+                        Point2 { x: 0.5, y: -0.5 },
+                        Point2 { x: 0.0, y: 0.5 },
+                    ]),
+                    mounting: Mounting::Smd,
+                    drill: None,
+                    slot: None,
+                },
+            ],
+            graphics: vec![],
+            courtyard: None,
+            model: None,
+        };
+        let text = render_footprint(&footprint);
+        assert!(text.contains(
+            "(pad \"1\" smd roundrect (at 0.000 -1.000) (size 1.000 0.800) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (roundrect_rratio 0) (chamfer_ratio 0.2500) (chamfer top_left))"
+        ));
+        // The outline in KiCad's Y-down frame, a small anchor inside it.
+        assert!(text.contains("(pad \"2\" smd custom (at 1.000 -1.000) (size 0.250 0.250)"));
+        assert!(text.contains("(primitives (gr_poly (pts (xy -0.5000 0.5000) (xy 0.5000 0.5000) (xy 0.0000 -0.5000)) (width 0) (fill yes)))"));
+        assert_eq!(parse_footprint_pads(&text).len(), 2);
     }
 }

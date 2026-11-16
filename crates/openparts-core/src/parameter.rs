@@ -160,6 +160,11 @@ pub enum Quantity {
     /// Storage capacity in bits. `Kbit`/`Mbit`/`Gbit` are binary
     /// (2^10, 2^20, 2^30), as memory datasheets use them (JEDEC).
     Information,
+    /// Luminous intensity (an LED's brightness), in candela.
+    LuminousIntensity,
+    /// A serial data rate in bit/s. `kbps`/`Kbps`/`Mbps` are decimal
+    /// (10^3, 10^6), as interface datasheets use them.
+    DataRate,
     /// A temperature, in °C (measurement conditions only; not SI).
     Temperature,
     /// A duration (measurement conditions only).
@@ -181,6 +186,8 @@ impl Quantity {
         Quantity::Length,
         Quantity::Force,
         Quantity::Information,
+        Quantity::LuminousIntensity,
+        Quantity::DataRate,
         Quantity::Temperature,
         Quantity::Time,
     ];
@@ -200,6 +207,8 @@ impl Quantity {
             Quantity::Length => "m",
             Quantity::Force => "N",
             Quantity::Information => "bit",
+            Quantity::LuminousIntensity => "cd",
+            Quantity::DataRate => "bit/s",
             Quantity::Temperature => "°C",
             Quantity::Time => "s",
         }
@@ -284,6 +293,18 @@ impl Quantity {
                 ("Mbit", 1048576.0),
                 ("Gbit", 1073741824.0),
             ],
+            Quantity::LuminousIntensity => {
+                &[("ucd", 1e-6), ("µcd", 1e-6), ("mcd", 1e-3), ("cd", 1.0)]
+            }
+            Quantity::DataRate => &[
+                ("bit/s", 1.0),
+                ("bps", 1.0),
+                ("kbit/s", 1e3),
+                ("kbps", 1e3),
+                ("Kbps", 1e3),
+                ("Mbit/s", 1e6),
+                ("Mbps", 1e6),
+            ],
             Quantity::Temperature => &[("°C", 1.0)],
             Quantity::Time => &[
                 ("ns", 1e-9),
@@ -338,6 +359,8 @@ impl Quantity {
                 ],
                 "bit",
             ),
+            Quantity::LuminousIntensity => (&SMALL[2..5], "cd"),
+            Quantity::DataRate => (&SMALL[4..7], "bit/s"),
             Quantity::Temperature => (&[("", 1.0)], "°C"),
             Quantity::Time => (&SMALL[1..5], "s"),
         }
@@ -492,6 +515,19 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         &[C::Led],
     ),
     shown_in(num("wavelength", Q::Length, &[C::Led]), "nm"),
+    num("luminous_intensity", Q::LuminousIntensity, &[C::Led]),
+    // RGB LEDs: one key per emitter colour (dominant wavelength,
+    // luminous intensity); addressable ones (an integrated driver) also
+    // state their supply and data input.
+    shown_in(num("wavelength_red", Q::Length, &[C::Led]), "nm"),
+    shown_in(num("wavelength_green", Q::Length, &[C::Led]), "nm"),
+    shown_in(num("wavelength_blue", Q::Length, &[C::Led]), "nm"),
+    num("luminous_intensity_red", Q::LuminousIntensity, &[C::Led]),
+    num("luminous_intensity_green", Q::LuminousIntensity, &[C::Led]),
+    num("luminous_intensity_blue", Q::LuminousIntensity, &[C::Led]),
+    num("supply_voltage", Q::Voltage, &[C::Led]),
+    enumerated("data_interface", &["single_wire", "clock_data"], &[C::Led]),
+    num("data_rate", Q::DataRate, &[C::Led]),
     // Transistors
     enumerated(
         "polarity",
