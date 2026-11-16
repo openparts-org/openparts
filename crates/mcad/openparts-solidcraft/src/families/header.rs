@@ -98,6 +98,29 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             )?;
             Some("standoff + body_h - post_recess")
         }
+        HeaderKind::RightAngle if f.over_holes => {
+            // A side-entry wire-to-board header: the housing stands over
+            // the row, open at its front face; the posts end inside.
+            let front = g.body.position.x + f.body_offset.signum() * g.body.size.x / 2.0;
+            let wall = side_wall(&f);
+            let depth = (front.abs() - f.pin_width / 2.0 - wall).max(wall);
+            side_cavity(s, g, &f, depth);
+            s.param(
+                "mating_l",
+                mm(f.mating_length.max(0.0) - depth * 0.6),
+                "post tip inside the opening (generator default)",
+            );
+            let (dir, inv) = if f.body_offset >= 0.0 {
+                ("+", "-")
+            } else {
+                ("-", "+")
+            };
+            s.fragment(
+                fragment!("header_ra_pin"),
+                &vars!(bend_h = mm(f.bend_height), dir = dir, inv = inv),
+            )?;
+            None
+        }
         HeaderKind::RightAngle => {
             s.param(
                 "mating_l",
@@ -127,11 +150,43 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     }
     let (housing, pins) = match f.kind {
         HeaderKind::Shrouded => (looks::NYLON_NATURAL, looks::TIN),
+        HeaderKind::RightAngle if f.over_holes => (looks::NYLON_NATURAL, looks::TIN),
         _ => (looks::MOLD, looks::GOLD),
     };
     s.paint(&["Housing".into()], housing);
     s.paint(&common::copies("Pin", g.leads.len() as u32), pins);
     Ok(())
+}
+
+/// A side-entry housing's wall around its front opening (generator
+/// default: the drawings dimension only the outline).
+fn side_wall(f: &openparts_mcad::HeaderFeatures) -> f64 {
+    (f.pin_width * 1.2).max(0.3)
+}
+
+/// Cuts a side-entry housing's opening, `depth` deep, into its front face
+/// (the face on the housing's side of the contact row).
+fn side_cavity(
+    s: &mut Script,
+    g: &openparts_mcad::MechanicalGeometry,
+    f: &openparts_mcad::HeaderFeatures,
+    depth: f64,
+) {
+    use serde_json::json;
+    let toward = if f.body_offset >= 0.0 { 1.0 } else { -1.0 };
+    let front = g.body.position.x + toward * g.body.size.x / 2.0;
+    s.param(
+        "wall_t",
+        mm(side_wall(f)),
+        "housing wall (generator default)",
+    );
+    s.cmd(
+        "solid.box",
+        json!({"length": mm(depth + 0.1), "width": "body_l - 2 * wall_t",
+               "height": "body_h - 2 * wall_t",
+               "center": [mm(front - toward * (depth - 0.1) / 2.0), 0, "standoff + body_h / 2"],
+               "operation": "cut", "targets": ["Housing"], "name": "Cavity"}),
+    );
 }
 
 /// A surface-mount wire-to-board header (`Package::smt`): the housing
@@ -195,17 +250,8 @@ fn build_smt(
         _ => {
             // Side entry: the opening on the housing face away from the
             // contacts, the posts reaching into it.
-            let wall = (f.pin_width * 1.2).max(0.3);
             let depth = g.body.size.x * 0.7;
-            let front = g.body.position.x - away * g.body.size.x / 2.0;
-            s.param("wall_t", mm(wall), "housing wall (generator default)");
-            s.cmd(
-                "solid.box",
-                json!({"length": mm(depth + 0.1), "width": "body_l - 2 * wall_t",
-                       "height": "body_h - 2 * wall_t",
-                       "center": [mm(front + away * (depth - 0.1) / 2.0), 0, "standoff + body_h / 2"],
-                       "operation": "cut", "targets": ["Housing"], "name": "Cavity"}),
-            );
+            side_cavity(s, g, f, depth);
             s.param(
                 "mating_l",
                 mm(-depth * 0.6),

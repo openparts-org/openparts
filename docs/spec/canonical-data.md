@@ -969,9 +969,14 @@ Footprint規則に従う（一次資料の推奨穴パターンを部品面か�
 外形（`body_*`）は一次資料の寸法だが、壁厚・底面高さ・ピン先端の高さは外形図に寸法が
 無いのが普通なので、Generatorの既定値で3D Modelだけを描き、記録しない。図に描かれていても
 寸法の無いLock窓や極性Slotは描かない。`right_angle_header`は1列のみで、Housingが基板上に
-寝て穴の横にあり、ピンはTailから90°曲がってHousingを貫き+X（または−X）へ伸びる。
-`body_width`はピン方向のHousing奥行き、`body_height`は基板からの高さ、`mating_length`は
-Housing前面からピン先端まで、曲げたピンの高さは記載が無ければHousing高さの中央に描く。
+寝ており、ピンはTailから90°曲がって+X（または−X）へ伸びる。Housingは穴の横にある
+（Right-angle pin header：ピンはHousingを貫いて前面から突き出る）か、穴の上に覆い被さる
+（JST PH/XH/ZHのSide entry type：ピンは前面に開いた嵌合口の中で終わる）。どちらかは
+`body_offset`と`body_width`から決まり（ピン列がHousing外形の内側なら後者）、Housingの
+端面がピン列に掛かる配置はエラーとする。`body_width`はピン方向のHousing奥行き、
+`body_height`は基板からの高さ、`mating_length`はHousing前面からピン先端まで（穴の上の
+Housingでは記載が無ければ0：ピンは嵌合口の中）、曲げたピンの高さは記載が無ければHousing
+高さの中央に描く。嵌合口の壁厚・深さとピン先端の位置はGeneratorの既定値（3D Modelのみ）。
 
 `body_offset`は、Housingがピン列に対して中心からずれている量（Housing中心のX座標、
 ピングリッド中心基準）である。一次資料が直接印刷するのは通常「ピン列からHousing端面まで」
@@ -979,7 +984,10 @@ Housing前面からピン先端まで、曲げたピンの高さは記載が無�
 ピン列から端面まで(2.35)、奥行き5.75 → 5.75/2 − 2.35 = 0.525、端面がpin 1を上にした
 上面視で+X側なので`-0.525`）。どちら側の端面かは推奨穴パターン上のNo. 1 circuitとBoss、
 Connector outline、Housingの位置から決め、記載が無ければ記録しない（`shrouded_header`は
-中心に描き、`right_angle_header`は生成を停止する）。Validator rule `header.invalid`は
+中心に描き、`right_angle_header`は生成を停止する）。Side entry typeの推奨穴パターンでは
+Connector outlineが穴列の上に描かれ、穴列から嵌合面（前面）までの距離が印刷される
+（JST PH "(6.25)"、XH "C"、ZH "(4.6)"）：`body_offset` = 奥行き/2 − その距離（前面の向きの
+符号、例：PH 7.6/2 − 6.25 = −2.45）。Validator rule `header.invalid`は
 `right_angle_header`の1列と`body_offset`も検査する。
 
 ```yaml

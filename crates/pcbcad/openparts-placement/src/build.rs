@@ -929,7 +929,7 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
         ),
         F::RightAngleHeader => (
             "right-angle header",
-            "pins in a column along Y, pin 1 at the top, mating side +X",
+            "pins in a column along Y, pin 1 at the top, mating side +X or -X",
         ),
         F::TactSwitchSmd | F::TactSwitchTht => ("tactile switch", "pad 1 upper left"),
         F::UsbC => ("USB-C receptacle", "contact A1 upper left: the opening faces −Y"),

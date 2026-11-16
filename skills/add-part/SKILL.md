@@ -203,7 +203,7 @@ match number-for-number stay separate (each cites its own drawing).
 | `module` | castellated board (Pico): pins 1..N/2 down the left edge from the top, the rest up the right; optional `aux_pads` row (debug pads) | body = the PCB (`body_height` = board thickness); pads are the source's recommended land: `overall_width` outer span, `lead_length`/`lead_width` pad size; `row_spacing`, `hole_diameter`, `aux_*`, `mounting_hole_*` per canonical-data 20.1 |
 | `header`, `socket` | straight THT pin header / socket strip; `lead_layout: [rows, pins_per_row]` (1 or 2 rows), rows along Y at `pitch`, `row_spacing` apart in X; pin 1 top-left, numbers zig-zag across the rows (pin 2 beside pin 1, pin 3 below it) -- check the drawing's "1"/"2" labels (Würth: first-angle projection, the hole pattern is the component side) | `body_*` = housing (`body_width` across the rows, `body_length` = L along them); `hole_diameter` (recommended PCB hole, required) is the drill, `pad_diameter` the land if given (else hole + ring default); `lead_width` square pin, `mating_length` post above the housing, `tail_length` below it; row-by-row numbering and 3+ rows not supported |
 | `shrouded_header` | box-shaped wire-to-board header (JST XH/PH), top entry; same frame, numbering and footprint rules as `header` (turn the source's PC-board layout, viewed from the mounting side, so pin 1 is on top and numbers run down) | `body_*` = housing outline (`body_width` = depth across the row); `body_offset` = housing centre's signed X offset from the pin grid (printed row-to-face distance and depth, arithmetic in the locator: XH 5.75/2 - (2.35) towards the boss side = -0.525); walls/floor/post height are generator defaults; undimensioned lock slots aren't drawn; drawn natural nylon + tin |
-| `right_angle_header` | 1-row right-angle pin header: housing lying on the board beside the holes, pins bent 90° | `body_offset` required (Würth: tail-to-housing "1,5" + depth 2.54/2 = 2.77, +X when the hole pattern's housing is below the row and pin 1 on the right); `body_width` = housing depth along the pins, `body_height` = its height, `mating_length` = housing front face to tip, `tail_length` = board to tail end |
+| `right_angle_header` | 1-row right-angle header: housing lying on the board beside the holes (pin header) or over them (JST PH/XH/ZH side entry: `body_offset` = depth/2 - the layout's row-to-front distance, negative when the front faces -X), pins bent 90° | `body_offset` required (Würth: tail-to-housing "1,5" + depth 2.54/2 = 2.77, +X when the hole pattern's housing is below the row and pin 1 on the right); `body_width` = housing depth along the pins, `body_height` = its height, `mating_length` = housing front face to tip, `tail_length` = board to tail end |
 
 Covered, not missing: SC-70-6/SOT-363 and SOT-563 are `sot` with
 `lead_layout: [3, 3]` (TI DRL0006A); SOD-523/SOD-923 `sod_flat` (or `sod`
@@ -211,8 +211,7 @@ for gull-wing leads); 4-pad ceramic crystals `lga` (Abracon ABM8), 2-pad
 ones `chip`; RGB LEDs `smd_led`.
 
 Not supported (report, don't force): SOIC-EP, X2QFN/USON, multi-die LEDs, round drum
-inductors, HC-49 ovals, 2-row right-angle headers, side-entry or SMT
-wire-to-board headers, connectors with extra board holes (boss/peg
+inductors, HC-49 ovals, 2-row right-angle headers, connectors with extra board holes (boss/peg
 variants such as JST B?B-XH-AM: the footprint would lack the hole).
 
 ### Dimensions (canonical-data.md 20.1)

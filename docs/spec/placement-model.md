@@ -132,7 +132,7 @@ kept. A test checks every package of the dataset.
 | `bga` | Ball A1 upper left; rows A… downward, columns 1… to the right. |
 | `module` | Pin 1 upper left (Raspberry Pi Pico: USB end up, antenna end down). |
 | `header`, `socket`, `shrouded_header` | Rows along Y, pin 1 upper left (1×N: pin 1 at the top, the row running down). |
-| `right_angle_header` | Pins in a column along Y, pin 1 at the top; mating side +X. |
+| `right_angle_header` | Pins in a column along Y, pin 1 at the top; the mating side is +X or −X as the source's hole pattern puts it (a side-entry wire-to-board header's housing stands over the column). |
 | `tact_switch_smd`, `tact_switch_tht` | Pad 1 upper left. A vendor numbering that puts it lower right turns 180°. |
 | `usb_c` | Contact A1 upper left: the opening (mating face) faces −Y. The family's source frame has it facing +Y, so receptacles turn 180°. |
 | `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |

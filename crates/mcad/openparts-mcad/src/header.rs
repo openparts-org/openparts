@@ -20,8 +20,12 @@
 //! (along Y) x `body_height`, `standoff` above the board (0 when not
 //! stated). Its centre sits `dimensions.body_offset` along X from the
 //! grid's centre (0 when not stated; required for a right-angle header,
-//! whose housing lies on the board beside its holes, its pins bent 90°
-//! towards +X for a positive offset). What only the 3D model needs (pin
+//! whose pins bend 90° towards +X for a positive offset). A right-angle
+//! header's housing lies on the board either beside its holes (a
+//! right-angle pin header: the posts run out of its front face) or over
+//! them (a side-entry wire-to-board header, JST PH/XH/ZH side entry: the
+//! posts end in a cavity open at the front face); a housing edge across
+//! the pin row is an error. What only the 3D model needs (pin
 //! size, post and tail lengths, the shroud's walls) is resolved by
 //! [`header_features`] with the same value rules.
 
@@ -84,6 +88,11 @@ pub struct HeaderFeatures {
     /// `RightAngle` only: the bent post's centre line above the board
     /// (the housing's mid-height: drawings rarely dimension it).
     pub bend_height: f64,
+    /// `RightAngle` only: the housing stands over the holes (a side-entry
+    /// wire-to-board header) rather than beside them. Its posts end
+    /// inside a cavity open at the front face; `mating_length` is 0
+    /// unless stated.
+    pub over_holes: bool,
     /// Surface-mount contacts (`Package::smt`): no holes, an SMD land
     /// per contact and two mechanical pads.
     pub smt: Option<HeaderSmt>,
@@ -165,6 +174,12 @@ pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
         None => 0.0,
     };
     let pin_width = stated(&d.lead_width).unwrap_or(HEADER.pin_width * scale);
+    // A single-row right-angle header whose housing covers its row (the
+    // row is at x = 0).
+    let over_holes = kind == HeaderKind::RightAngle
+        && package.smt.is_none()
+        && stated_body_width(package)
+            .is_some_and(|w| body_offset.abs() + pin_width / 2.0 < w / 2.0);
     let shroud = (kind == HeaderKind::Shrouded).then_some(Shroud {
         wall: HEADER.shroud_wall * scale,
         floor: body_height * HEADER.shroud_floor_ratio,
@@ -177,6 +192,7 @@ pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
         row_spacing,
         pin_width,
         mating_length: match kind {
+            HeaderKind::RightAngle if over_holes => stated(&d.mating_length).unwrap_or(0.0),
             HeaderKind::Pin | HeaderKind::RightAngle => {
                 stated(&d.mating_length).unwrap_or(HEADER.mating_length * scale)
             }
@@ -192,12 +208,18 @@ pub fn header_features(package: &Package) -> Result<HeaderFeatures, McadError> {
         } else {
             0.0
         },
+        over_holes,
         smt: package.smt.as_ref().map(|s| HeaderSmt {
             pad: s.pad,
             mech_pad: s.mech_pad,
             mech_at: s.mech_pad_at,
         }),
     })
+}
+
+/// `dimensions.body_width` as the generators read it, when stated.
+fn stated_body_width(package: &Package) -> Option<f64> {
+    defaults::required(&package.dimensions.body_width)
 }
 
 /// The pin rows' X positions, pin 1's row first.
@@ -252,10 +274,10 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
         .map(|x| (x - f.body_offset).abs())
         .fold(0.0, f64::max);
     match f.kind {
-        HeaderKind::RightAngle if reach - f.pin_width / 2.0 <= body_w / 2.0 => {
+        HeaderKind::RightAngle if !f.over_holes && reach - f.pin_width / 2.0 <= body_w / 2.0 => {
             return Err(McadError::InconsistentDimensions(format!(
-                "a right-angle header's housing lies beside its holes: body_offset ({}) must \
-                 exceed half the body width ({body_w}) plus half the pin",
+                "a right-angle header's housing lies beside its holes or over them: \
+                 body_offset ({}) puts the {body_w} mm housing's edge across the pin row",
                 f.body_offset
             )));
         }
@@ -675,6 +697,33 @@ mod tests {
         p.dimensions.body_length = mm(10.16);
         p.dimensions.body_offset = Some(mm(2.77));
         p
+    }
+
+    #[test]
+    fn a_side_entry_header_stands_over_its_holes() {
+        // JST S4B-PH-K-S: housing 7.6 deep, the row 6.25 behind its front
+        // face (towards -X): body_offset = 7.6 / 2 - 6.25 = -2.45.
+        let mut p = wrphd_ra_4();
+        p.pitch = mm(2.0);
+        p.dimensions.body_width = mm(7.6);
+        p.dimensions.body_height = Some(mm(4.8));
+        p.dimensions.body_offset = Some(mm(-2.45));
+        p.dimensions.mating_length = None;
+        p.dimensions.hole_diameter = Some(mm(0.7));
+        let f = header_features(&p).unwrap();
+        assert!(f.over_holes);
+        assert_eq!(f.mating_length, 0.0, "the posts end inside the housing");
+        let g = crate::generate(&p).unwrap();
+        assert!(close(g.body.position.x, -2.45));
+        assert!(g.leads.iter().all(|l| close(l.position.x, 0.0)));
+        // A housing edge across the row is refused.
+        p.dimensions.body_offset = Some(mm(-3.8));
+        assert!(matches!(
+            generate_header(&p),
+            Err(McadError::InconsistentDimensions(_))
+        ));
+        // A pin header beside its holes is not over them.
+        assert!(!header_features(&wrphd_ra_4()).unwrap().over_holes);
     }
 
     #[test]
