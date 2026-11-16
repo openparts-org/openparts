@@ -49,6 +49,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                         name = name.clone(),
                         x = mm(l.position.x),
                         y = mm(l.position.y),
+                        z = mm(0.05),
                         w = mm(l.size.x * 0.8),
                         l = mm(l.size.y * 0.8),
                     ),

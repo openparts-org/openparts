@@ -70,6 +70,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
         Lead {
             number: "2".to_string(),
@@ -83,6 +84,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
         Lead {
             number: "3".to_string(),
@@ -96,6 +98,7 @@ pub fn generate_to92(package: &Package) -> Result<MechanicalGeometry, McadError>
             drill: Some(crate::defaults::to92::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
     ];
 

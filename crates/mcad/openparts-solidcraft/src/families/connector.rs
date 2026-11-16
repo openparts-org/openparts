@@ -80,7 +80,8 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                 frag,
                 &vars!(
                     barrel_d = mm(f.mating_diameter),
-                    barrel_l = mm(f.mating_length)
+                    barrel_l = mm(f.mating_length),
+                    body_y = mm(b.position.y)
                 ),
             )?;
             looks_of.extend([
@@ -107,6 +108,11 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                         name = name.clone(),
                         x = mm(l.position.x),
                         y = mm(l.position.y),
+                        // A bottom-side land's foot hangs under the board.
+                        z = mm(match l.side {
+                            openparts_core::PadSide::Bottom => l.position.z - 0.05,
+                            openparts_core::PadSide::Top => 0.05,
+                        }),
                         w = mm(l.size.x * 0.8),
                         l = mm(l.size.y * 0.8),
                     ),

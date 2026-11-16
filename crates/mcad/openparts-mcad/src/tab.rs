@@ -182,6 +182,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
             drill: None,
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         })
         .collect();
     leads.push(Lead {
@@ -200,6 +201,7 @@ fn generate_tabbed(package: &Package, kind: Kind) -> Result<MechanicalGeometry, 
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     });
 
     let inset = (body_w.min(body_l) * 0.15).min(0.5);

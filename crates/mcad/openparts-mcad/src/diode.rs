@@ -53,6 +53,7 @@ pub fn generate_sod(package: &Package) -> Result<MechanicalGeometry, McadError> 
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     });
     let lead_form = if flat {
         LeadForm::Flat { thickness: t }
@@ -110,6 +111,7 @@ pub fn generate_do214(package: &Package) -> Result<MechanicalGeometry, McadError
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     });
     Ok(MechanicalGeometry {
         family: package.family,

@@ -43,13 +43,22 @@ pub(crate) fn from_pads_with(package: &Package, standoff: f64) -> Result<Vec<Lea
                 (Some(_), false) => Mounting::NonPlated,
             };
             let smd = mounting == Mounting::Smd;
+            let bottom = p.side == openparts_core::PadSide::Bottom;
+            if bottom && !smd {
+                return Err(bad("only an SMD land can be on the bottom side"));
+            }
+            // A bottom land lies under the board (a generator-default
+            // board thickness, as an edge-mount connector's).
+            let pad_t = crate::defaults::land::PAD_T;
             Ok(Lead {
                 number: p.number.clone(),
                 position: Point3 {
                     x: p.x,
                     y: p.y,
-                    z: if smd {
-                        crate::defaults::land::PAD_T / 2.0
+                    z: if bottom {
+                        -crate::defaults::connector::EDGE_BOARD_THICKNESS - pad_t / 2.0
+                    } else if smd {
+                        pad_t / 2.0
                     } else {
                         0.0
                     },
@@ -67,6 +76,7 @@ pub(crate) fn from_pads_with(package: &Package, standoff: f64) -> Result<Vec<Lea
                 drill: p.drill,
                 slot: p.drill_length,
                 shape,
+                side: p.side,
             })
         })
         .collect()

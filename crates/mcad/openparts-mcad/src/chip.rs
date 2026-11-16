@@ -57,6 +57,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             drill: None,
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
         Lead {
             number: "2".to_string(),
@@ -70,6 +71,7 @@ pub fn generate_chip(package: &Package) -> Result<MechanicalGeometry, McadError>
             drill: None,
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
     ];
 

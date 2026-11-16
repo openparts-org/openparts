@@ -82,18 +82,22 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
         s.push_str(&shape(&g.shape, g.width, "#9aa3ad", None));
     }
     // Overlaid pads (one contact, several numbers) are drawn once, with
-    // their numbers joined.
+    // their numbers joined. Bottom-side lands are drawn first, under the
+    // top copper, in blue and outlined.
     let same = |a: &crate::Pad, b: &crate::Pad| {
         (a.position.x - b.position.x).abs() < 1e-9
             && (a.position.y - b.position.y).abs() < 1e-9
             && (a.size.0 - b.size.0).abs() < 1e-9
             && (a.size.1 - b.size.1).abs() < 1e-9
+            && a.side == b.side
     };
-    for (i, p) in footprint.pads.iter().enumerate() {
-        if footprint.pads[..i].iter().any(|q| same(p, q)) {
+    let mut pads: Vec<&crate::Pad> = footprint.pads.iter().collect();
+    pads.sort_by_key(|p| p.side.is_top());
+    for (i, p) in pads.iter().copied().enumerate() {
+        if pads[..i].iter().any(|q| same(p, q)) {
             continue;
         }
-        let label: Vec<&str> = footprint.pads[i..]
+        let label: Vec<&str> = pads[i..]
             .iter()
             .filter(|q| same(p, q) && !q.number.is_empty())
             .map(|q| q.number.as_str())
@@ -104,13 +108,18 @@ pub fn render_svg(footprint: &PcbFootprint) -> String {
             PadShape::Circle | PadShape::Oval => w.min(h) / 2.0,
             _ => 0.0,
         };
+        let bottom = !p.side.is_top();
         let fill = if p.mounting == Mounting::NonPlated {
             "#0b1a12"
+        } else if bottom {
+            "#3a62a8"
         } else {
             "#c9a227"
         };
         let stroke = if p.mounting == Mounting::NonPlated {
             " stroke=\"#9aa3ad\" stroke-width=\"0.05\""
+        } else if bottom {
+            " stroke=\"#9fbef0\" stroke-width=\"0.05\" stroke-dasharray=\"0.2 0.12\" fill-opacity=\"0.7\""
         } else {
             ""
         };

@@ -327,6 +327,30 @@ pub struct PackagePad {
     /// A circle the source clears from a rectangular land.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutout: Option<PadCutout>,
+    /// The board side an SMD land is on (Canonical Data Specification
+    /// 20.6): `top` (the default, the part's own side) or `bottom` (an
+    /// edge-mount connector's legs soldered under the board). Seen from
+    /// the top like every other pad (`x`/`y` in the package frame).
+    #[serde(default, skip_serializing_if = "PadSide::is_top")]
+    pub side: PadSide,
+}
+
+/// The board side a land is on (`PackagePad::side`).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PadSide {
+    /// The side the part is placed on.
+    #[default]
+    Top,
+    /// The opposite side of the board.
+    Bottom,
+}
+
+impl PadSide {
+    pub fn is_top(&self) -> bool {
+        *self == PadSide::Top
+    }
 }
 
 /// The outline of a `PackagePad`'s land (Canonical Data Specification

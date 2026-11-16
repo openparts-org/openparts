@@ -26,6 +26,27 @@ pub(crate) fn check_pad_shapes(entity: &str, package: &Package) -> Vec<Diagnosti
         .collect()
 }
 
+/// `pad_side.invalid`: a bottom-side pad with a hole.
+pub(crate) fn check_pad_sides(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    package
+        .pads
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.side == openparts_core::PadSide::Bottom && p.drill.is_some())
+        .map(|(i, p)| {
+            Diagnostic::error(
+                "pad_side.invalid",
+                entity,
+                Some(&format!("/pads/{i}")),
+                format!(
+                    "pad \"{}\": only an SMD land can be on the bottom side",
+                    p.number
+                ),
+            )
+        })
+        .collect()
+}
+
 /// `smd_led.invalid`: an `smd_led` package states its land pattern
 /// (`pads`, one plated pad per lead) and a height.
 pub(crate) fn check_smd_led(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -166,6 +187,23 @@ pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Di
                     package.lead_count
                 ),
             );
+        }
+        // An edge-mount RF connector's flange depth may be unprinted: its
+        // frame then starts at the PCB edge line (20.6).
+        let depth = &package.dimensions.body_length;
+        if depth.typ.or(depth.min).or(depth.max).is_none() {
+            match openparts_mcad::edge_flange(package) {
+                None => bad(
+                    "/dimensions/body_length",
+                    format!("a {family} package states dimensions.body_length"),
+                ),
+                Some(edge) if edge.abs() > 1e-9 => bad(
+                    "/edge/pcb_edge",
+                    "without body_length, the frame's Y origin is the PCB edge line: pcb_edge is 0"
+                        .to_string(),
+                ),
+                Some(_) => {}
+            }
         }
         // An RF connector's base height is often not printed (3D default).
         if package.dimensions.body_height.is_none() && family != F::RfCoax {
@@ -373,5 +411,30 @@ mod tests {
             paths(&check_smd_electrolytic("p", &led)),
             ["smd_electrolytic.invalid /dimensions/can_diameter"]
         );
+    }
+
+    #[test]
+    fn a_bottom_land_has_no_hole_and_an_edge_flange_may_leave_its_depth_out() {
+        let mut p = pkg(
+            "rf_coax",
+            "connector: {interface: sma, orientation: right_angle, edge_mount: true}\n\
+             edge: {side: +y, pcb_edge: 0}\n",
+        );
+        p.dimensions.body_length = openparts_core::Dimension::default();
+        assert!(!check_package_connector("p", &p)
+            .iter()
+            .any(|d| d.field_path.as_deref() == Some("/dimensions/body_length")));
+        p.edge.as_mut().unwrap().pcb_edge = Some(-0.8);
+        assert!(check_package_connector("p", &p)
+            .iter()
+            .any(|d| d.field_path.as_deref() == Some("/edge/pcb_edge")));
+        p.connector.as_mut().unwrap().edge_mount = false;
+        assert!(check_package_connector("p", &p)
+            .iter()
+            .any(|d| d.field_path.as_deref() == Some("/dimensions/body_length")));
+        p.pads[0].side = openparts_core::PadSide::Bottom;
+        assert!(check_pad_sides("p", &p).is_empty());
+        p.pads[0].drill = Some(0.5);
+        assert_eq!(check_pad_sides("p", &p)[0].rule_id, "pad_side.invalid");
     }
 }

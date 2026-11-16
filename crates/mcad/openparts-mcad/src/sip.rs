@@ -62,6 +62,7 @@ pub fn generate_sip(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 drill: Some(crate::defaults::sip::DRILL_DIAMETER),
                 slot: None,
                 shape: crate::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             }
         })
         .collect();

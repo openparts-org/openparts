@@ -33,7 +33,18 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
     }
     let d = &package.dimensions;
     let body_w = defaults::dim(&d.body_width, "dimensions.body_width")?;
-    let body_l = defaults::dim(&d.body_length, "dimensions.body_length")?;
+    // An edge-mount RF connector whose flange depth isn't printed: the
+    // frame's Y origin is the PCB edge line (`edge.pcb_edge: 0` on +y)
+    // and the flange is drawn from it outward at the default depth.
+    let edge_flange = edge_flange(package);
+    let (body_l, body_y) = match (defaults::required(&d.body_length), edge_flange) {
+        (Some(l), _) => (l, 0.0),
+        (None, Some(edge)) => {
+            let depth = defaults::connector::RF_FLANGE_DEPTH;
+            (depth, edge + depth / 2.0)
+        }
+        (None, None) => return Err(McadError::MissingDimension("dimensions.body_length")),
+    };
     let body_h = match defaults::stated(&d.body_height) {
         Some(h) => h,
         // An RF base's height is often not printed (3D only).
@@ -59,7 +70,11 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
         pitch: defaults::required(&package.pitch),
         details: crate::Details::Connector(features),
         body: Body {
-            position: Point3 { x: 0.0, y: 0.0, z },
+            position: Point3 {
+                x: 0.0,
+                y: body_y,
+                z,
+            },
             size: Size3 {
                 x: body_w,
                 y: body_l,
@@ -71,6 +86,18 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
         markers: vec![],
         lead_form: None,
     })
+}
+
+/// The PCB edge line an edge-mount `rf_coax` flange stands on when its
+/// depth (`body_length`) isn't printed: the stated `edge.pcb_edge` on the
+/// +y side (the mating face). `None` for any other package.
+pub fn edge_flange(package: &Package) -> Option<f64> {
+    let edge = package.edge.as_ref()?;
+    (package.family == F::RfCoax
+        && package.connector.as_ref().is_some_and(|c| c.edge_mount)
+        && edge.side == openparts_core::PackageSide::PlusY)
+        .then_some(edge.pcb_edge)
+        .flatten()
 }
 
 /// The pads with a land for every plated hole the source draws without
@@ -292,25 +319,63 @@ mod tests {
         assert_eq!(f.tail_length, defaults::connector::TAIL_LENGTH);
     }
 
-    #[test]
-    fn an_edge_mount_rf_connector_sits_on_the_board_mid_plane() {
-        let p = pkg("family: rf_coax\nlead_count: 3\npitch: {unit: mm}\n\
+    /// Samtec SMA-J-P-X-ST-EM1's recommended layout (rev G): the flange
+    /// depth is not printed ("1.73 REF" is the gap between the leg pairs,
+    /// which straddle the board), so the frame starts at the PCB edge.
+    /// The two bottom lands are this test's own, not the print's.
+    pub(crate) fn sma_edge_mount() -> Package {
+        pkg("family: rf_coax\nlead_count: 5\npitch: {unit: mm}\n\
              dimensions:\n\
              \x20 body_width: {typ: 6.35, unit: mm}\n\
-             \x20 body_length: {typ: 1.73, unit: mm}\n\
+             \x20 body_length: {unit: mm}\n\
              \x20 body_height: {typ: 6.35, unit: mm}\n\
              connector: {gender: female, orientation: right_angle, interface: sma, edge_mount: true}\n\
              pads:\n\
-             \x20 - {number: '1', x: 0, y: -3.0, width: 1.27, length: 4.2}\n\
-             \x20 - {number: '2', x: -2.865, y: -3.0, width: 1.27, length: 4.2}\n\
-             \x20 - {number: '2', x: 2.865, y: -3.0, width: 1.27, length: 4.2}\n\
-             edge: {side: +y, pcb_edge: -0.8}\n");
-        let g = generate(&p).unwrap();
+             \x20 - {number: '1', x: 0, y: -1.9, width: 1.27, length: 3.6}\n\
+             \x20 - {number: '2', x: -2.825, y: -2.1, width: 1.35, length: 4.2}\n\
+             \x20 - {number: '2', x: 2.825, y: -2.1, width: 1.35, length: 4.2}\n\
+             \x20 - {number: '2', x: -2.825, y: -2.1, width: 1.35, length: 4.2, side: bottom}\n\
+             \x20 - {number: '2', x: 2.825, y: -2.1, width: 1.35, length: 4.2, side: bottom}\n\
+             edge: {side: +y, pcb_edge: 0}\n")
+    }
+
+    #[test]
+    fn an_edge_mount_rf_connector_sits_on_the_board_mid_plane() {
+        let g = generate(&sma_edge_mount()).unwrap();
         assert!((g.body.position.z + defaults::connector::EDGE_BOARD_THICKNESS / 2.0).abs() < 1e-9);
         let crate::Details::Connector(f) = g.details else {
             panic!()
         };
         assert!(f.edge_mount);
+        // The unprinted flange: the default depth, from the edge outward.
+        let depth = defaults::connector::RF_FLANGE_DEPTH;
+        assert!((g.body.size.y - depth).abs() < 1e-9);
+        assert!((g.body.position.y - depth / 2.0).abs() < 1e-9);
+        // Bottom lands hang under the board.
+        let bottom: Vec<_> = g
+            .leads
+            .iter()
+            .filter(|l| l.side == openparts_core::PadSide::Bottom)
+            .collect();
+        assert_eq!(bottom.len(), 2);
+        assert!(bottom
+            .iter()
+            .all(|l| l.position.z < -defaults::connector::EDGE_BOARD_THICKNESS));
+    }
+
+    #[test]
+    fn a_connector_states_its_depth_unless_an_edge_flange_starts_at_the_edge() {
+        let mut p = sma_edge_mount();
+        p.edge = None;
+        assert!(matches!(
+            generate(&p),
+            Err(McadError::MissingDimension("dimensions.body_length"))
+        ));
+        // A hole cannot be on the bottom side.
+        let mut p = sma_edge_mount();
+        p.pads[3].drill = Some(0.5);
+        p.pads[3].width = 1.35;
+        assert!(generate(&p).is_err());
     }
 
     #[test]

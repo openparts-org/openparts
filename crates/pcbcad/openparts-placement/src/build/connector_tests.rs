@@ -138,35 +138,52 @@ fn a_terminal_block_keeps_pole_1_on_the_left() {
 
 #[test]
 fn an_edge_mount_rf_connector_reports_its_edge_and_overhang() {
-    // Samtec SMA-J-P-X-ST-EM1-like: pads end 0.10 before the PCB edge,
-    // the flange beyond it.
-    let p = pkg("family: rf_coax\nlead_count: 3\npitch: {unit: mm}\n\
+    // Samtec SMA-J-P-X-ST-EM1's layout (rev G): the flange depth is not
+    // printed ("1.73 REF" is the gap between the leg pairs), so the frame
+    // starts at the PCB edge line. The bottom lands are this test's own.
+    let p = pkg("family: rf_coax\nlead_count: 5\npitch: {unit: mm}\n\
          dimensions:\n\
          \x20 body_width: {typ: 6.35, unit: mm}\n\
-         \x20 body_length: {typ: 1.73, unit: mm}\n\
+         \x20 body_length: {unit: mm}\n\
          \x20 body_height: {typ: 6.35, unit: mm}\n\
          connector: {gender: female, orientation: right_angle, interface: sma, edge_mount: true}\n\
          pads:\n\
-         \x20 - {number: '1', x: 0, y: -3.065, width: 1.27, length: 4.2}\n\
-         \x20 - {number: '2', x: -2.865, y: -3.065, width: 1.27, length: 4.2}\n\
-         \x20 - {number: '2', x: 2.865, y: -3.065, width: 1.27, length: 4.2}\n\
-         edge: {side: +y, pcb_edge: -0.865}\n\
+         \x20 - {number: '1', x: 0, y: -1.9, width: 1.27, length: 3.6}\n\
+         \x20 - {number: '2', x: -2.825, y: -2.1, width: 1.35, length: 4.2}\n\
+         \x20 - {number: '2', x: 2.825, y: -2.1, width: 1.35, length: 4.2}\n\
+         \x20 - {number: '2', x: -2.825, y: -2.1, width: 1.35, length: 4.2, side: bottom}\n\
+         \x20 - {number: '2', x: 2.825, y: -2.1, width: 1.35, length: 4.2, side: bottom}\n\
+         edge: {side: +y, pcb_edge: 0}\n\
          provenance:\n  /edge: [{source: x/Y, page: 1}]\n  /pads: [{source: x/Y, page: 1}]\n  \
          /connector: [{source: x/Y, page: 1}]\n");
     let (g, m) = model(&p);
-    // The centre contact (pin 1) is the land centroid: no turn places
-    // it upper left, so the family frame stays (barrel toward +Y).
-    assert_eq!(m.model3d.rotation, 0.0);
-    let p1 = m.pin1.as_ref().unwrap().position;
-    assert!(p1.x.abs() < 1e-9 && p1.y.abs() < 1e-9);
     assert!(aligned(&g, &m));
     let e = m.edge.as_ref().unwrap();
     assert_eq!(e.requirement, openparts_core::EdgeRequirement::Required);
-    // The flange (1.73 deep, centred at the origin) reaches 0.865 + 0.865
-    // = 1.73 past the edge line.
-    assert!((e.overhang.unwrap() - 1.73).abs() < 1e-3, "{e:?}");
+    // The flange, drawn at the default depth from the edge line, reaches
+    // that depth past it.
+    let depth = openparts_mcad_flange_depth();
+    assert!((e.overhang.unwrap() - depth).abs() < 1e-3, "{e:?}");
+    assert!(m
+        .basis
+        .body
+        .defaults
+        .contains(&"/dimensions/body_length".to_string()));
     // The body sits on the board's mid-plane, partly below the top face.
     assert!(m.body.regions[0].z_min < 0.0);
+    // Bottom lands: the opposite copper, mask and paste; no gap is counted
+    // between a top land and the bottom land under it.
+    let bottom: Vec<_> = m.pads.iter().filter(|p| p.is_bottom()).collect();
+    assert_eq!(bottom.len(), 2);
+    assert!(bottom
+        .iter()
+        .all(|p| p.layers.mask == MaskLayers::Bottom && p.layers.paste));
+    assert!(m.min_pad_gap.unwrap() > 0.5, "{:?}", m.min_pad_gap);
+}
+
+fn openparts_mcad_flange_depth() -> f64 {
+    // `defaults::connector::RF_FLANGE_DEPTH` (private to openparts-mcad).
+    1.5
 }
 
 #[test]

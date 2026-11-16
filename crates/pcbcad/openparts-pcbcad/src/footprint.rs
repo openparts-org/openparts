@@ -61,6 +61,11 @@ pub fn footprint_from_placement(name: &str, model: &PlacementModel) -> PcbFootpr
             },
             drill: p.drill,
             slot: p.slot,
+            side: if p.is_bottom() {
+                openparts_core::PadSide::Bottom
+            } else {
+                openparts_core::PadSide::Top
+            },
         })
         .collect();
     let graphics = crate::outline::drawings(model, &pads);
@@ -150,6 +155,7 @@ mod tests {
                 drill: None,
                 slot: None,
                 shape: openparts_mcad::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             }],
             markers: vec![],
             lead_form: None,
@@ -184,6 +190,7 @@ mod tests {
             drill: Some(0.8),
             slot: None,
             shape: openparts_mcad::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         };
         let geometry = MechanicalGeometry {
             family: openparts_mcad::PackageFamily::Qfn,
@@ -233,6 +240,7 @@ mod tests {
             drill: None,
             slot: None,
             shape: openparts_mcad::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         };
         let geometry = MechanicalGeometry {
             family: openparts_mcad::PackageFamily::Qfn,

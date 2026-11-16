@@ -82,6 +82,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     };
     let mut leads: Vec<Lead> = (1..=per_side)
         .map(|n| pad(n, -pad_x, half_span - (n - 1) as f64 * pitch))
@@ -117,6 +118,7 @@ pub fn generate_module(package: &Package) -> Result<MechanicalGeometry, McadErro
                 drill: None,
                 slot: None,
                 shape: crate::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             });
         }
     }
@@ -231,6 +233,7 @@ fn generate_pad_rows(package: &Package) -> Result<MechanicalGeometry, McadError>
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     };
     let mut leads = Vec::new();
     for row in &package.pad_rows {

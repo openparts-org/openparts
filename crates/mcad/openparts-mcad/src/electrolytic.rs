@@ -105,6 +105,7 @@ pub fn generate_smd_electrolytic(package: &Package) -> Result<MechanicalGeometry
                     drill: None,
                     slot: None,
                     shape: crate::LandShape::Rect,
+                    side: openparts_core::PadSide::Top,
                 }
             }
             None => Lead {

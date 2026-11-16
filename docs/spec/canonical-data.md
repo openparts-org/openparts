@@ -1163,7 +1163,7 @@ states about how the part mates:
 family: rf_coax
 lead_count: 3
 connector: { gender: female, orientation: right_angle, interface: sma, edge_mount: true, src: p1 "Title; -EM1: EDGE MOUNT" }
-edge: { side: +y, pcb_edge: -0.865, src: p1 "RECOMMENDED PCB LAYOUT, PCB EDGE" }
+edge: { side: +y, pcb_edge: 0, src: p1 "RECOMMENDED PCB LAYOUT, PCB EDGE" }   # flange depth unprinted: Y origin on the edge
 ```
 
 Two optional dimensions serve the 3D model only: `mating_diameter` (an RF
@@ -1193,11 +1193,32 @@ An RF connector's base height is often not printed: `body_height` may be left
 out for `rf_coax` (the generator draws a 1.5 mm base), and a vertical one's
 barrel reaches `overall_height` when that is stated.
 
+An edge-mount RF connector's flange depth (along its axis) is often not
+printed either (Samtec SMA-J-P-X-ST-EM1: "1.73 REF" in its bottom view is
+the gap between the leg pairs that straddle the board, not the flange).
+Such a package leaves `body_length` out and states `edge` on `+y` with
+`pcb_edge: 0`: the frame's Y origin is then the PCB edge line instead of
+the body's centre (X stays on the body's centre line), and the generator
+draws the flange from that line outward at a default depth (1.5 mm, 3D
+and body outline only, listed among the Placement Model's body defaults).
+
+**Bottom-side lands.** A `pads` entry may say `side: bottom` (default
+`top`): an SMD land on the board's other side, seen from the top like
+every pad (`x`/`y` in the package frame) -- an edge-mount connector's
+lower legs. The footprint puts it on the bottom copper, paste and mask
+(KiCad `B.Cu`/`B.Paste`/`B.Mask`, LibrePCB `(side bottom)`; the footprint
+drawing shows it in blue, outlined), the Placement Model on `copper:
+bottom`, and the 3D model draws its foot under the board. Record one only
+when the source dimensions it; a land pattern drawn for one side is not a
+statement about the other. Rule `pad_side.invalid`: a bottom-side pad
+with a `drill`.
+
 Rule `connector.invalid`: a connector family without `pads`, with a
 `lead_count` other than its plated pad count, or without `body_height` (except
 `rf_coax`); an SMD pad without a size, a land-less slot without `slot_axis`; a
 missing required `connector` field; a `connector` field outside its family; an
-`edge_mount` part without `edge.pcb_edge`.
+`edge_mount` part without `edge.pcb_edge`; no `body_length` except on an
+edge-mount `rf_coax` whose `+y` edge line is at 0.
 
 ## 20.7 Pad Shapes
 

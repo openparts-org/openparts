@@ -506,6 +506,10 @@ pub(crate) mod connector {
     /// An RF connector's base (flange) height when the source doesn't
     /// print it.
     pub const RF_BASE_HEIGHT: f64 = 1.5;
+    /// An edge-mount RF connector's flange depth (along its axis) when the
+    /// source doesn't print it (Samtec SMA-J-P-X-ST-EM1): drawn from the
+    /// PCB edge line outward, 3D and body outline only.
+    pub const RF_FLANGE_DEPTH: f64 = 1.5;
 }
 
 /// `smd_electrolytic` generator defaults (3D only: the footprint is the

@@ -73,6 +73,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
         Lead {
             number: "2".to_string(),
@@ -86,6 +87,7 @@ pub fn generate_axial(package: &Package) -> Result<MechanicalGeometry, McadError
             drill: Some(crate::defaults::axial::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         },
     ];
 

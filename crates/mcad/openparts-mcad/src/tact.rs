@@ -79,6 +79,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                 drill: Some(drill),
                 slot: None,
                 shape: crate::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             })
             .collect();
         (standoff, leads)
@@ -114,6 +115,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                 drill: None,
                 slot: None,
                 shape: crate::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             })
             .collect();
         (0.0, leads)

@@ -105,7 +105,8 @@ pub fn render_footprint(footprint: &PcbFootprint) -> String {
 /// A chamfered pad is KiCad's `roundrect` with `chamfer_ratio` (the cut
 /// over the shorter side) and its `chamfer` corners; a polygon pad is a
 /// `custom` pad: a small round anchor at the pad's position and the
-/// outline as a filled `gr_poly` primitive.
+/// outline as a filled `gr_poly` primitive. A bottom-side SMD land
+/// takes the `B.*` layers.
 fn render_pad(pad: &Pad) -> String {
     let shape = match pad.shape {
         PadShape::Rect => "rect",
@@ -118,10 +119,19 @@ fn render_pad(pad: &Pad) -> String {
     let y = flip_y(pad.position.y);
     let (size, extra) = shape_fields(pad);
     match pad.mounting {
-        Mounting::Smd => format!(
-            "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"){extra})\n",
-            pad.number, pad.position.x, y, size.0, size.1
-        ),
+        // A bottom-side land (an edge-mount connector's lower legs) is on
+        // the back layers of a front-side footprint; KiCad mirrors it
+        // with the footprint when the part is flipped.
+        Mounting::Smd => {
+            let side = match pad.side {
+                openparts_pcbcad::PadSide::Top => 'F',
+                openparts_pcbcad::PadSide::Bottom => 'B',
+            };
+            format!(
+                "  (pad \"{}\" smd {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (layers \"{side}.Cu\" \"{side}.Paste\" \"{side}.Mask\"){extra})\n",
+                pad.number, pad.position.x, y, size.0, size.1
+            )
+        }
         Mounting::ThroughHole => format!(
             "  (pad \"{}\" thru_hole {shape} (at {:.3} {:.3}) (size {:.3} {:.3}) (drill {}) (layers \"*.Cu\" \"*.Mask\"){extra})\n",
             pad.number,
@@ -451,6 +461,7 @@ mod tests {
                 mounting: Mounting::Smd,
                 drill: None,
                 slot: None,
+                side: openparts_pcbcad::PadSide::Top,
             }],
             graphics: vec![],
             courtyard: None,
@@ -485,6 +496,7 @@ mod tests {
                     mounting: Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
                 Pad {
                     number: "2".into(),
@@ -494,6 +506,7 @@ mod tests {
                     mounting: Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
             ],
             graphics: vec![],
@@ -535,6 +548,7 @@ mod tests {
                 mounting: Mounting::Smd,
                 drill: None,
                 slot: None,
+                side: openparts_pcbcad::PadSide::Top,
             }],
             graphics: vec![],
             courtyard: None,
@@ -596,6 +610,7 @@ mod tests {
             mounting: Mounting::NonPlated,
             drill: Some(0.65),
             slot: None,
+            side: openparts_pcbcad::PadSide::Top,
         };
         let line = render_pad(&pad);
         assert!(
@@ -616,6 +631,7 @@ mod tests {
             mounting: Mounting::ThroughHole,
             drill: Some(0.6),
             slot: Some(1.7),
+            side: openparts_pcbcad::PadSide::Top,
         };
         assert!(render_pad(&pad((1.0, 2.1))).contains("(drill oval 0.600 1.700)"));
         assert!(render_pad(&pad((2.1, 1.0))).contains("(drill oval 1.700 0.600)"));
@@ -635,6 +651,7 @@ mod tests {
                     mounting: Mounting::ThroughHole,
                     drill: Some(0.8),
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
                 Pad {
                     number: "2".into(),
@@ -644,6 +661,7 @@ mod tests {
                     mounting: Mounting::ThroughHole,
                     drill: Some(0.8),
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
             ],
             graphics: vec![],
@@ -686,6 +704,7 @@ mod tests {
                     mounting: Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
                 Pad {
                     number: "2".into(),
@@ -699,6 +718,18 @@ mod tests {
                     mounting: Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
+                },
+                // A bottom-side land (an edge-mount connector's lower leg).
+                Pad {
+                    number: "3".into(),
+                    position: Point2 { x: 2.0, y: 0.0 },
+                    size: (1.35, 4.2),
+                    shape: PadShape::Rect,
+                    mounting: Mounting::Smd,
+                    drill: None,
+                    slot: None,
+                    side: openparts_pcbcad::PadSide::Bottom,
                 },
             ],
             graphics: vec![],
@@ -707,11 +738,14 @@ mod tests {
         };
         let text = render_footprint(&footprint);
         assert!(text.contains(
+            "(pad \"3\" smd rect (at 2.000 0.000) (size 1.350 4.200) (layers \"B.Cu\" \"B.Paste\" \"B.Mask\"))"
+        ));
+        assert!(text.contains(
             "(pad \"1\" smd roundrect (at 0.000 -1.000) (size 1.000 0.800) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\") (roundrect_rratio 0) (chamfer_ratio 0.2500) (chamfer top_left))"
         ));
         // The outline in KiCad's Y-down frame, a small anchor inside it.
         assert!(text.contains("(pad \"2\" smd custom (at 1.000 -1.000) (size 0.250 0.250)"));
         assert!(text.contains("(primitives (gr_poly (pts (xy -0.5000 0.5000) (xy 0.5000 0.5000) (xy 0.0000 -0.5000)) (width 0) (fill yes)))"));
-        assert_eq!(parse_footprint_pads(&text).len(), 2);
+        assert_eq!(parse_footprint_pads(&text).len(), 3);
     }
 }

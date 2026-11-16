@@ -990,6 +990,7 @@ pub(all) struct PackagePad {
   plated : Bool?
   points : Array[Array[Double]]?
   shape : LandShape?
+  side : PadSide?
   slot_axis : SlotAxis?
   width : Double?
   x : Double
@@ -1101,6 +1102,15 @@ pub(all) enum PadReason {
 pub fn PadReason::all() -> Array[Self]
 pub fn PadReason::wire(Self) -> String
 pub impl @json.FromJson for PadReason
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PadSide {
+  Top
+  Bottom
+}
+pub fn PadSide::all() -> Array[Self]
+pub fn PadSide::wire(Self) -> String
+pub impl @json.FromJson for PadSide
 
 #derive(Eq, @debug.Debug)
 pub(all) enum PadStatus {

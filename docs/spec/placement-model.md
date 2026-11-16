@@ -153,7 +153,7 @@ Each pad has:
 | `shape` | `rect`, `roundrect` (with `corner_ratio`), `circle`, `oval` (obround), `chamfered` (with `chamfer`: `{size, corners}`, the 45° cut in mm and the corners cut, in this frame), `polygon` (with `polygon`, relative to `position`, counter-clockwise). |
 | `position`, `rotation`, `size` | Centre in the frame; degrees CCW; size before the rotation. Every generated pad is axis-aligned (rotation 0); quarter turns swap `size`. |
 | `kind` | `smd`, `tht` (plated hole), `npth`. |
-| `layers` | `copper`: `top` / `all` / `none`; `mask`: `top` / `both`; `paste`: bool. |
+| `layers` | `copper`: `top` / `bottom` / `all` / `none`; `mask`: `top` / `bottom` / `both`; `paste`: bool (an aperture on the pad's copper side). `bottom` is a land on the opposite outer layer (Canonical Data Specification 20.6, `side: bottom`: an edge-mount connector's lower legs); `min_pad_gap` does not compare lands on opposite sides. |
 | `drill`, `slot`, `plated` | Hole diameter; a slot's overall length along the pad's longer side (`drill` is then its width). |
 | `mask_expansion` | mm; `null` uses the board's rule. |
 | `paste` | `{mode: full}` (the land), `{mode: windowed, windows: [...]}` (segmented exposed-pad paste), or `null` (holes). |

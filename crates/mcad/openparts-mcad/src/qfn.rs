@@ -127,6 +127,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             drill: None,
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         });
         pin += 1;
     };
@@ -162,6 +163,7 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
             drill: None,
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         });
     }
 

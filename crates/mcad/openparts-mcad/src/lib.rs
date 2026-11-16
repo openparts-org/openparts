@@ -29,7 +29,7 @@ mod to220;
 mod to92;
 mod usb_c;
 
-pub use connector::ConnectorFeatures;
+pub use connector::{edge_flange, ConnectorFeatures};
 pub use electrolytic::ElectrolyticFeatures;
 pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
 pub use land::pad_shape_error;
@@ -221,6 +221,9 @@ pub struct Lead {
     /// The footprint land's outline within `size` (a lead's own 3D
     /// shape ignores it): a rectangle unless the source draws another.
     pub shape: LandShape,
+    /// The board side an SMD land is on (`PackagePad::side`); `Bottom`
+    /// leads sit under the board (their `position.z` below it).
+    pub side: openparts_core::PadSide,
 }
 
 /// A footprint land's outline (Canonical Data Specification 20.7).

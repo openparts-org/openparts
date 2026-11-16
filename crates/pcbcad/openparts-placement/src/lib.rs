@@ -166,6 +166,8 @@ pub enum PadKind {
 pub enum CopperLayers {
     /// The placement side's outer layer.
     Top,
+    /// The opposite outer layer (an edge-mount connector's lower legs).
+    Bottom,
     /// Every copper layer (a plated hole).
     All,
     None,
@@ -177,6 +179,8 @@ pub enum CopperLayers {
 #[serde(rename_all = "snake_case")]
 pub enum MaskLayers {
     Top,
+    /// The opposite side's mask only (a bottom-side land).
+    Bottom,
     Both,
 }
 
@@ -185,7 +189,7 @@ pub enum MaskLayers {
 pub struct PadLayers {
     pub copper: CopperLayers,
     pub mask: MaskLayers,
-    /// A solder paste aperture on the placement side.
+    /// A solder paste aperture on the pad's copper side.
     pub paste: bool,
 }
 
@@ -308,6 +312,11 @@ impl Pad {
     /// Copper on a board layer (not a non-plated hole).
     pub fn has_copper(&self) -> bool {
         self.layers.copper != CopperLayers::None
+    }
+
+    /// Copper on the outer layer opposite the placement side only.
+    pub fn is_bottom(&self) -> bool {
+        self.layers.copper == CopperLayers::Bottom
     }
 }
 

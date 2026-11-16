@@ -74,6 +74,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         });
         pin_num += 1;
     }
@@ -93,6 +94,7 @@ pub fn generate_dip(package: &Package) -> Result<MechanicalGeometry, McadError> 
             drill: Some(crate::defaults::dip::DRILL_DIAMETER),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         });
         pin_num += 1;
     }

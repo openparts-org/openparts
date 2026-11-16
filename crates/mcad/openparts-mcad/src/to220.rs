@@ -76,6 +76,7 @@ pub fn generate_to220(package: &Package) -> Result<MechanicalGeometry, McadError
             drill: Some(drill),
             slot: None,
             shape: crate::LandShape::Rect,
+            side: openparts_core::PadSide::Top,
         })
         .collect();
     Ok(MechanicalGeometry {

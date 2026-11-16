@@ -302,8 +302,15 @@ fn render_package(
         // A chamfered or polygon pad is a `custom` pad: its outline as
         // vertices relative to the pad's position.
         let outline = pad.shape.outline(pad.size);
+        // A bottom-side land (an edge-mount connector's lower legs) is on
+        // the footprint's bottom side; a through-hole pad is listed on
+        // the top as LibrePCB does.
+        let side = match pad.side {
+            openparts_pcbcad::PadSide::Bottom => "bottom",
+            openparts_pcbcad::PadSide::Top => "top",
+        };
         out.push_str(&format!(
-            "  (pad {} (side top) (shape {})\n",
+            "  (pad {} (side {side}) (shape {})\n",
             fmt_uuid(fp_pad_uuid),
             if outline.is_some() {
                 "custom"
@@ -683,6 +690,7 @@ mod tests {
                     mounting: openparts_mcad::Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
                 Pad {
                     number: "2".into(),
@@ -692,6 +700,7 @@ mod tests {
                     mounting: openparts_mcad::Mounting::Smd,
                     drill: None,
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
             ],
             graphics: vec![],
@@ -750,6 +759,7 @@ mod tests {
                     mounting: openparts_mcad::Mounting::ThroughHole,
                     drill: Some(0.8),
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
                 Pad {
                     number: "2".into(),
@@ -759,6 +769,7 @@ mod tests {
                     mounting: openparts_mcad::Mounting::ThroughHole,
                     drill: Some(0.8),
                     slot: None,
+                    side: openparts_pcbcad::PadSide::Top,
                 },
             ],
             graphics: vec![],

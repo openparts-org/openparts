@@ -1,20 +1,22 @@
 # Right-angle or edge-launch RF connector: the base (flange) with the
 # coupling barrel out of its +Y face, the barrel's bore and the
-# insulator. Vars: barrel_d, barrel_l.
+# insulator. Vars: barrel_d, barrel_l, body_y (the base centre's Y: an
+# edge-mount flange stands beyond the PCB edge line).
 - params:
     barrel_d: ["{{barrel_d}}", coupling barrel diameter]
     barrel_l: ["{{barrel_l}}", barrel length beyond the base]
     axis_z: [standoff + body_h / 2, "barrel axis height (the base's middle)"]
+    body_y: ["{{body_y}}", base centre along the barrel axis]
 - solid.box:
-    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, body_y, standoff + body_h / 2],
      body_name: Base, name: Base}
 - solid.cylinder:
-    {diameter: barrel_d, height: barrel_l, axis: Y, base: [0 mm, body_l / 2, axis_z],
+    {diameter: barrel_d, height: barrel_l, axis: Y, base: [0 mm, body_y + body_l / 2, axis_z],
      operation: new, body_name: Barrel, name: Barrel}
 - solid.cylinder:
-    {diameter: barrel_d * 0.7, height: barrel_l * 0.8, axis: Y, base: [0 mm, body_l / 2 + barrel_l * 0.2 + 0.05 mm, axis_z],
+    {diameter: barrel_d * 0.7, height: barrel_l * 0.8, axis: Y, base: [0 mm, body_y + body_l / 2 + barrel_l * 0.2 + 0.05 mm, axis_z],
      operation: new, body_name: Bore, name: Bore}
 - solid.combine: {target: Barrel, tools: [Bore], operation: cut, keep_tools: false}
 - solid.cylinder:
-    {diameter: barrel_d * 0.7, height: barrel_l * 0.6, axis: Y, base: [0 mm, body_l / 2 + barrel_l * 0.2, axis_z],
+    {diameter: barrel_d * 0.7, height: barrel_l * 0.6, axis: Y, base: [0 mm, body_y + body_l / 2 + barrel_l * 0.2, axis_z],
      operation: new, body_name: Insulator, name: Insulator}

@@ -292,6 +292,7 @@ pub fn generate_header(package: &Package) -> Result<MechanicalGeometry, McadErro
                 drill: Some(hole),
                 slot: None,
                 shape: crate::LandShape::Rect,
+                side: openparts_core::PadSide::Top,
             }
         })
         .collect();
@@ -386,6 +387,7 @@ fn generate_smt(package: &Package, f: HeaderFeatures) -> Result<MechanicalGeomet
         drill: None,
         slot: None,
         shape: crate::LandShape::Rect,
+        side: openparts_core::PadSide::Top,
     };
     let mech = package
         .smt

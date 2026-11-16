@@ -192,7 +192,13 @@ fn make(
                 Mounting::NonPlated if square => (PadKind::Npth, PadShape::Circle),
                 Mounting::NonPlated => (PadKind::Npth, PadShape::Oval),
             };
+            let bottom = lead.side == openparts_core::PadSide::Bottom;
             let layers = match kind {
+                PadKind::Smd if bottom => PadLayers {
+                    copper: CopperLayers::Bottom,
+                    mask: MaskLayers::Bottom,
+                    paste: true,
+                },
                 PadKind::Smd => PadLayers {
                     copper: CopperLayers::Top,
                     mask: MaskLayers::Top,
@@ -693,17 +699,24 @@ fn courtyard(pads: &[Pad], regions: &[BodyRegion], excess: f64, density: Density
 }
 
 /// The smallest gap between the copper of two pads (axis-aligned
-/// extents), pads of one number (a shared contact) excepted.
+/// extents), pads of one number (a shared contact) and lands on opposite
+/// outer layers excepted.
 fn min_pad_gap(pads: &[Pad]) -> Option<f64> {
     let copper: Vec<_> = pads
         .iter()
         .filter(|p| p.has_copper() && p.shares_contact_with.is_none())
-        .map(|p| (p.number.as_str(), p.bounds()))
+        .map(|p| (p.number.as_str(), p.layers.copper, p.bounds()))
         .collect();
+    let opposite = |a: CopperLayers, b: CopperLayers| {
+        matches!(
+            (a, b),
+            (CopperLayers::Top, CopperLayers::Bottom) | (CopperLayers::Bottom, CopperLayers::Top)
+        )
+    };
     let mut best: Option<f64> = None;
-    for (i, (na, (alo, ahi))) in copper.iter().enumerate() {
-        for (nb, (blo, bhi)) in &copper[i + 1..] {
-            if na == nb {
+    for (i, (na, la, (alo, ahi))) in copper.iter().enumerate() {
+        for (nb, lb, (blo, bhi)) in &copper[i + 1..] {
+            if na == nb || opposite(*la, *lb) {
                 continue;
             }
             let dx = (blo.x - ahi.x).max(alo.x - bhi.x).max(0.0);
@@ -819,6 +832,12 @@ fn basis(package: &Package, g: &MechanicalGeometry, tht: bool) -> Basis {
     let mut body_defaults = vec![];
     if !has("/dimensions/body_height") && !has("/dimensions/overall_height") {
         body_defaults.push("/dimensions/body_height".to_string());
+    }
+    // An edge-mount RF flange of unprinted depth (Canonical Data
+    // Specification 20.6): drawn at the generator's depth from the edge.
+    let depth = &package.dimensions.body_length;
+    if depth.typ.or(depth.min).or(depth.max).is_none() {
+        body_defaults.push("/dimensions/body_length".to_string());
     }
     let body = BasisEntry {
         kind: if body_defaults.is_empty() {

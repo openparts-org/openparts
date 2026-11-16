@@ -2905,6 +2905,7 @@ pub(all) struct PackagePad {
   plated : Bool?
   points : Array[Array[Double]]?
   shape : LandShape?
+  side : PadSide?
   slot_axis : SlotAxis?
   width : Double?
   x : Double
@@ -2927,6 +2928,7 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
     plated: opt_field(obj, "plated", path),
     points: opt_field(obj, "points", path),
     shape: opt_field(obj, "shape", path),
+    side: opt_field(obj, "side", path),
     slot_axis: opt_field(obj, "slot_axis", path),
     width: opt_field(obj, "width", path),
     x: field(obj, "x", path),
@@ -3248,6 +3250,37 @@ pub impl @json.FromJson for PadReason with fn from_json(json, path) {
     String("unused_on_candidate") => UnusedOnCandidate
     String("missing_pin") => MissingPin
     _ => raise @json.JsonDecodeError((path, "expected a PadReason"))
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PadSide {
+  Top
+  Bottom
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PadSide::wire(self : PadSide) -> String {
+  match self {
+    Top => "top"
+    Bottom => "bottom"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PadSide::all() -> Array[PadSide] {
+  [Top, Bottom]
+}
+
+///|
+pub impl @json.FromJson for PadSide with fn from_json(json, path) {
+  match json {
+    String("top") => Top
+    String("bottom") => Bottom
+    _ => raise @json.JsonDecodeError((path, "expected a PadSide"))
   }
 }
 

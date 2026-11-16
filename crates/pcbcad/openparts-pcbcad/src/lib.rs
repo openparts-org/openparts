@@ -13,6 +13,7 @@ pub use svg::render_svg;
 mod symbol;
 
 pub use footprint::{add_shared_pads, build_footprint, footprint_from_placement};
+pub use openparts_core::PadSide;
 pub use openparts_placement;
 pub use symbol::{build_symbol, reference_prefix};
 
@@ -200,6 +201,9 @@ pub struct Pad {
     /// Slot length (mm) for a slotted hole, along the pad's longer side
     /// (`drill` is the slot width); `None` for a round hole.
     pub slot: Option<f64>,
+    /// The board side of an SMD land (`Bottom`: on the opposite outer
+    /// layer, seen from the top like the rest of the footprint).
+    pub side: openparts_core::PadSide,
 }
 
 #[derive(Debug, Clone, PartialEq)]

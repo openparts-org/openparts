@@ -71,6 +71,7 @@ pub fn generate_smd_led(package: &Package) -> Result<MechanicalGeometry, McadErr
                     drill: None,
                     slot: None,
                     shape: crate::LandShape::Rect,
+                    side: openparts_core::PadSide::Top,
                 }
             })
             .collect(),
