@@ -423,7 +423,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `viewing_angle` | angle (full angle at half intensity, 2θ½, in `°`) | LED |
 | `wavelength_red`, `wavelength_green`, `wavelength_blue` | length (an RGB LED's dominant wavelength per emitter, as `wavelength`) | LED |
 | `luminous_intensity_red`, `luminous_intensity_green`, `luminous_intensity_blue` | luminous intensity (an RGB LED's Iv per emitter) | LED |
-| `data_interface` | multi-valued: `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class), `analog` `pdm` `i2s` `tdm` `i2c` `spi` `i2c_spi` (both; prefer `values: [i2c, spi]`) `uart` `usb` `sdio` `pwm` `phase_enable` `step_dir` `parallel` `lvds` `jesd204` (the part's signal or control interface; several selectable ones as `values`) | LED, `sensor`, `analog` (ADCs, DACs included), `driver`, `audio`, `rf` |
+| `data_interface` | multi-valued: `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class), `analog` `pdm` `i2s` `tdm` `i2c` `spi` `i2c_spi` (both; prefer `values: [i2c, spi]`) `uart` `usb` `sdio` `pwm` `phase_enable` `step_dir` `parallel` `lvds` `jesd204` (the part's signal or control interface; several selectable ones as `values`) | LED, `sensor`, `analog` (ADCs, DACs included), `driver`, `audio`, `rf`, `usb_pd_controller` (its host interface) |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
 | `drain_source_voltage` | voltage (Vds max) | transistor |
 | `drain_current` | current (Id continuous) | transistor |
@@ -431,12 +431,12 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
 | `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor) | transistor, optocoupler |
 | `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
-| `isolation_voltage` | voltage (input-output isolation, BVs; a relay's coil-contact dielectric strength; the rms/duration condition goes into the locator, or `at: { t: 60 s }`) | optocoupler, relay |
+| `isolation_voltage` | voltage (input-output isolation, BVs; a relay's coil-contact dielectric strength; the rms/duration condition goes into the locator, or `at: { t: 60 s }`; a digital isolator's or isolated DC/DC converter's VISO) | optocoupler, relay, `digital_isolator`, `switching_regulator` (isolated DC/DC) |
 | `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
 | `cmr` | slew rate (common-mode transient immunity CMR / CMTI, shown in `kV/µs`; the min as printed, `min: 35 kV/µs`) | optocoupler, `interface` (digital isolators) |
 | `trigger_current` | current (the input LED current that turns the output on: a triac driver's IFT, a photorelay's or SSR's IFON / must-operate input current; the max as printed) | optocoupler, relay |
 | `off_state_voltage` | voltage (the output's off-state rating: a triac driver's VDRM, a photorelay's VOFF) | optocoupler, relay |
-| `on_resistance` | resistance (a photorelay's / MOSFET SSR's output RON; an analog switch's RON, the supply in `at: { VDD: 5 V }`) | optocoupler, relay, `analog_switch` |
+| `on_resistance` | resistance (a photorelay's / MOSFET SSR's output RON; an analog switch's RON, the supply in `at: { VDD: 5 V }`; a load switch's or eFuse's RON) | optocoupler, relay, `analog_switch`, `power_switch`, `efuse` |
 | `on_resistance_flatness` | resistance (RFLAT(ON), the RON change over the signal range) | `analog_switch` |
 | `output_type` | `fixed` `adjustable` | `power` |
 | `output_voltage` | voltage | `power` |
@@ -452,7 +452,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `analog_supply_current`, `digital_supply_current` | current (the current of each rail, IAVDD / IDVDD) | as `supply_current` |
 | `operating_temperature` | temperature, operating range (`{ min: -40 °C, max: 85 °C }`, the operating -- not storage -- range) | any |
 | `esd_hbm` | voltage (human-body-model rating that holds for all pins, `typ: 2 kV` for "±2000 V"; a higher bus-pin-only rating is not this key) | ICs, LED |
-| `channel_count` | `1` `2` `3` `4` `5` `6` `8` `9` `10` `12` `16` `18` `24` `32` `36` `48` `64` `144` (identical channels: amplifiers, gates, transceiver channels, motor bridges, LED outputs, audio channels) | `analog`, `interface`, `logic`, `driver`, `audio` |
+| `channel_count` | `1` `2` `3` `4` `5` `6` `7` `8` `9` `10` `12` `16` `18` `24` `32` `36` `48` `64` `144` (identical channels: amplifiers, gates, transceiver channels, motor bridges, LED outputs, audio channels, touch inputs) | `analog`, `interface`, `logic`, `driver`, `audio`, `touch_sensor` |
 | `gain_bandwidth` | frequency (GBW / GBP) | `op_amp`, `current_sense_amplifier` |
 | `slew_rate` | slew rate (shown in V/µs) | `op_amp`, `current_sense_amplifier` |
 | `input_offset_voltage` | voltage, a magnitude (VOS "±3 mV max" is `max: 3 mV`) | `op_amp`, `comparator`, `current_sense_amplifier` |
@@ -460,7 +460,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `supply_current_per_channel` | current (IQ per amplifier / comparator, as the source states it per channel) | `op_amp`, `comparator` |
 | `rail_to_rail_input`, `rail_to_rail_output` | `yes` `no` (only when the source says so: "rail-to-rail input", a common-mode range to both rails) | `op_amp`, `comparator` |
 | `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface`, optocoupler |
-| `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface`, `magnetic_sensor` |
+| `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface`, `magnetic_sensor`, `touch_sensor` |
 | `logic_function` | `buffer` `inverter` `and` `nand` `or` `nor` `xor` `xnor` `bus_transceiver` `flip_flop` `latch` `shift_register` `counter` `decoder` `multiplexer` | `logic` |
 | `output_current_high`, `output_current_low` | current, a magnitude (IOH "-24 mA" is `24 mA`; IOL; the supply in `at: { VCC: ... }`) | `logic`, `interface` |
 | `data_rate` | data rate (the signalling rate the source guarantees; an addressable LED's serial input) | LED, `interface` |
@@ -474,7 +474,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `microstepping` | `1` `2` `4` `8` `16` `32` `64` `128` `256` (the finest step, 1/N) | `motor_driver` |
 | `led_driver_type` | `constant_current` (linear current sinks/sources) `switching` (boost/buck LED driver) `matrix` (scanned LED matrix) `pwm` (PWM outputs without current regulation) | `led_driver` |
 | `amplifier_class` | `a` `ab` `d` `g` `h` | `audio_amplifier` |
-| `output_power` | power (per channel; load, supply and distortion in `at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`) | `audio_amplifier` |
+| `output_power` | power (per channel; load, supply and distortion in `at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`; an isolated DC/DC module's rated output power) | `audio_amplifier`, `switching_regulator` |
 | `thd_n` | ratio (THD+N, in `%`) | `audio_amplifier`, `audio_codec` |
 | `snr` | decibel | `audio` |
 | `sensitivity` | level re 1 V (an analog microphone's, `dBV` at 94 dB SPL / 1 kHz) | `microphone` |
@@ -518,6 +518,16 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `rx_sensitivity` | RF power level (`dBm`; the data rate in the locator) | `rf` |
 | `antenna_type` | `pcb_trace` `chip` `ceramic_patch` `external_connector` `external_pad` `whip` `flex` (a module's antenna, or an antenna's construction) | `rf` |
 | `peak_gain` | antenna gain (`dBi`) | `antenna` |
+| `display_type` | `oled` `lcd` (segment / passive-matrix LCD) `tft_lcd` `led` (LED 7-segment, bar-graph and dot-matrix displays) `e_paper` `vfd` (the panel technology driven) | `display_driver` |
+| `segment_count` | `4` `7` `8` `16` `24` `32` `40` `48` `64` `80` `96` `100` `101` `102` `104` `120` `128` `132` `160` `176` `240` `256` `320` `384` `396` `480` `720` (segment / column / source outputs as printed; an RGB OLED driver's counts each colour: 128 RGB is `384`) | `display_driver` |
+| `common_count` | `1` `2` `3` `4` `8` `16` `24` `32` `39` `40` `48` `64` `65` `68` `80` `96` `128` `132` `160` `176` `240` `296` `320` `480` (common / row / gate outputs, or digits of an LED display driver) | `display_driver` |
+| `current_limit` | current, operating range (an adjustable limit's settable range as `min`/`max`; a fixed limit's typ/min/max as printed) | `power_switch`, `efuse` |
+| `overvoltage_threshold` | voltage (an eFuse's overvoltage cut-off or clamp, as printed; per variant on the Part) | `efuse` |
+| `reverse_channel_count` | `0` `1` `2` `3` `4` `5` `6` `8` (a digital isolator's channels in the reverse direction, of `channel_count` in total: ISO7721 is `2` with `1`) | `digital_isolator` |
+| `default_output` | `high` `low` (a digital isolator's output with the input side unpowered; per variant, ISO7721 vs ISO7721F) | `digital_isolator` |
+| `usb_power_role` | `source` `sink` `dual_role` (DRP; a port configurable as either) | `usb_pd_controller` |
+| `usb_pd_revision` | `none` (Type-C CC logic only, no PD messaging) `2.0` `3.0` `3.1` `3.2` (the latest USB PD revision the source states compliance with) | `usb_pd_controller` |
+| `touch_sensing_method` | `self_capacitance` `mutual_capacitance` `self_and_mutual_capacitance` | `touch_sensor` |
 
 A group in the last column covers its subcategories (section 14.1);
 `rated_voltage` and `rated_current` are also plausible for `switch`
@@ -529,7 +539,8 @@ operating range).
 An *operating-range* key (`supply_voltage`, `analog_supply_voltage`,
 `digital_supply_voltage`, `operating_temperature`,
 `bus_fault_voltage`, `motor_supply_voltage`, `illuminance_range`,
-`concentration_range`, `magnetic_range`, `frequency_band`) records the range's ends as `min`/`max`. The
+`concentration_range`, `magnetic_range`, `frequency_band`,
+`current_limit`) records the range's ends as `min`/`max`. The
 catalog's range filter asks whether the range contains the asked span
 (`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
 3.3 V), and an alternative must cover the original's range.
@@ -808,14 +819,14 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 | `connector` | |
 | `relay` | (electromechanical, reed and solid-state relays) |
 | `switch` | `tact_switch`, `rotary_encoder` |
-| `power` | `linear_regulator`, `switching_regulator`, `battery_charger`, `voltage_reference`, `power_switch` (load switches, power muxes) |
+| `power` | `linear_regulator`, `switching_regulator`, `battery_charger`, `voltage_reference`, `power_switch` (load switches, power muxes), `efuse` (eFuses and hot-swap controllers: a protected power path with current limiting and OV/UV protection); an isolated DC/DC converter is a `switching_regulator` with `isolation_voltage` |
 | `memory` | `flash`, `eeprom`, `sram` |
-| `sensor` | `pressure_sensor`, `imu` (accelerometers, gyroscopes, IMUs), `temperature_sensor`, `light_sensor` (ambient light, proximity, colour, UV), `gas_sensor` (gas, VOC, CO2), `magnetic_sensor` (Hall switches/latches, linear Hall, magnetometers) |
+| `sensor` | `pressure_sensor`, `imu` (accelerometers, gyroscopes, IMUs), `temperature_sensor`, `light_sensor` (ambient light, proximity, colour, UV), `gas_sensor` (gas, VOC, CO2), `magnetic_sensor` (Hall switches/latches, linear Hall, magnetometers), `touch_sensor` (capacitive touch and proximity controllers) |
 | `analog` | `op_amp`, `comparator`, `current_sense_amplifier`, `power_monitor` (current/power monitors with a digital interface), `analog_switch` (analog switches, multiplexers), `adc`, `dac` |
-| `interface` | `io_expander`, `can_controller`, `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter` |
+| `interface` | `io_expander`, `can_controller`, `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter`, `usb_pd_controller` (USB Type-C port and Power Delivery controllers: CC logic, PD PHYs, PD source/sink controllers), `digital_isolator` (capacitive/magnetic digital isolators, also with an integrated isolated supply) |
 | `logic` | (gates, buffers, bus transceivers, shift registers, decoders) |
 | `timing` | `oscillator` (clock oscillators: XO, TCXO, VCXO, MEMS -- a resonator with its drive circuit and a clock output), `timer`, `rtc` |
-| `driver` | `gate_driver`, `darlington_array`, `motor_driver` (brushed DC, stepper, BLDC), `led_driver` (constant-current, matrix, PWM and switching LED drivers) |
+| `driver` | `gate_driver`, `darlington_array`, `motor_driver` (brushed DC, stepper, BLDC), `led_driver` (constant-current, matrix, PWM and switching LED drivers), `display_driver` (OLED/LCD panel drivers and controllers, LED segment and dot-matrix display drivers; a general LED matrix/PWM driver without display RAM stays `led_driver`) |
 | `audio` | `audio_amplifier`, `audio_codec`, `microphone`, `buzzer` (buzzers and sounders) |
 | `rf` | `wireless_module` (a radio with its antenna or antenna connector on a module), `antenna`; a bare RF transceiver IC is `rf` itself |
 | `other` | |

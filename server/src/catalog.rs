@@ -1442,6 +1442,10 @@ fn category_label(c: ComponentCategory) -> String {
         C::Microphone => "Microphone".into(),
         C::Buzzer => "Buzzer".into(),
         C::Rf => "RF / wireless".into(),
+        C::Efuse => "eFuse / hot-swap".into(),
+        C::TouchSensor => "Touch sensor".into(),
+        C::UsbPdController => "USB-C / PD controller".into(),
+        C::DisplayDriver => "Display driver".into(),
         other => title_case(other.name()),
     }
 }

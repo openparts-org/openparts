@@ -999,16 +999,21 @@ pub(all) enum ComponentCategory {
   Relay
   Optocoupler
   PowerSwitch
+  Efuse
   Imu
+  TouchSensor
   PowerMonitor
   AnalogSwitch
   LevelShifter
+  UsbPdController
+  DigitalIsolator
   Logic
   Oscillator
   RotaryEncoder
   GateDriver
   MotorDriver
   LedDriver
+  DisplayDriver
   Potentiometer
   FerriteBead
   CommonModeChoke
@@ -1074,16 +1079,21 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     Relay => "relay"
     Optocoupler => "optocoupler"
     PowerSwitch => "power_switch"
+    Efuse => "efuse"
     Imu => "imu"
+    TouchSensor => "touch_sensor"
     PowerMonitor => "power_monitor"
     AnalogSwitch => "analog_switch"
     LevelShifter => "level_shifter"
+    UsbPdController => "usb_pd_controller"
+    DigitalIsolator => "digital_isolator"
     Logic => "logic"
     Oscillator => "oscillator"
     RotaryEncoder => "rotary_encoder"
     GateDriver => "gate_driver"
     MotorDriver => "motor_driver"
     LedDriver => "led_driver"
+    DisplayDriver => "display_driver"
     Potentiometer => "potentiometer"
     FerriteBead => "ferrite_bead"
     CommonModeChoke => "common_mode_choke"
@@ -1150,16 +1160,21 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     Relay,
     Optocoupler,
     PowerSwitch,
+    Efuse,
     Imu,
+    TouchSensor,
     PowerMonitor,
     AnalogSwitch,
     LevelShifter,
+    UsbPdController,
+    DigitalIsolator,
     Logic,
     Oscillator,
     RotaryEncoder,
     GateDriver,
     MotorDriver,
     LedDriver,
+    DisplayDriver,
     Potentiometer,
     FerriteBead,
     CommonModeChoke,
@@ -1225,16 +1240,21 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("relay") => Relay
     String("optocoupler") => Optocoupler
     String("power_switch") => PowerSwitch
+    String("efuse") => Efuse
     String("imu") => Imu
+    String("touch_sensor") => TouchSensor
     String("power_monitor") => PowerMonitor
     String("analog_switch") => AnalogSwitch
     String("level_shifter") => LevelShifter
+    String("usb_pd_controller") => UsbPdController
+    String("digital_isolator") => DigitalIsolator
     String("logic") => Logic
     String("oscillator") => Oscillator
     String("rotary_encoder") => RotaryEncoder
     String("gate_driver") => GateDriver
     String("motor_driver") => MotorDriver
     String("led_driver") => LedDriver
+    String("display_driver") => DisplayDriver
     String("potentiometer") => Potentiometer
     String("ferrite_bead") => FerriteBead
     String("common_mode_choke") => CommonModeChoke

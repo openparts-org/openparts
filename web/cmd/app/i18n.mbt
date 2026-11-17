@@ -386,6 +386,11 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Rf => "RF・無線"
         WirelessModule => "無線モジュール"
         Antenna => "アンテナ"
+        Efuse => "eFuse・ホットスワップ"
+        TouchSensor => "タッチセンサ"
+        UsbPdController => "USB-C・PDコントローラ"
+        DigitalIsolator => "デジタルアイソレータ"
+        DisplayDriver => "ディスプレイドライバ"
       }
     En =>
       match c {
@@ -458,6 +463,11 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Rf => "RF / wireless"
         WirelessModule => "Wireless module"
         Antenna => "Antenna"
+        Efuse => "eFuse / hot-swap"
+        TouchSensor => "Touch sensor"
+        UsbPdController => "USB-C / PD controller"
+        DigitalIsolator => "Digital isolator"
+        DisplayDriver => "Display driver"
       }
   }
 }
@@ -1067,6 +1077,16 @@ let param_names : Array[(String, String, String)] = [
   ("rx_sensitivity", "受信感度", "RX sensitivity"),
   ("antenna_type", "アンテナ", "Antenna"),
   ("peak_gain", "ピーク利得", "Peak gain"),
+  ("display_type", "表示デバイス", "Display type"),
+  ("segment_count", "セグメント出力数", "Segment outputs"),
+  ("common_count", "コモン出力数", "Common outputs"),
+  ("current_limit", "電流制限", "Current limit"),
+  ("overvoltage_threshold", "過電圧保護しきい値", "Overvoltage threshold"),
+  ("reverse_channel_count", "逆方向チャネル数", "Reverse channels"),
+  ("default_output", "入力無電源時の出力", "Default output"),
+  ("usb_power_role", "電源ロール", "Power role"),
+  ("usb_pd_revision", "USB PDリビジョン", "USB PD revision"),
+  ("touch_sensing_method", "検出方式", "Sensing method"),
 ]
 
 ///|
@@ -1337,6 +1357,33 @@ fn param_word_label(lang : Lang, key : String, value : String) -> String {
     (En, "antenna_type", "external_pad") => "External (pad)"
     (En, "antenna_type", "whip") => "Whip"
     (En, "antenna_type", "flex") => "Flex"
+    (_, "display_type", "oled") => "OLED"
+    (_, "display_type", "lcd") => "LCD"
+    (_, "display_type", "tft_lcd") => "TFT LCD"
+    (_, "display_type", "led") => "LED"
+    (Ja, "display_type", "e_paper") => "電子ペーパー"
+    (En, "display_type", "e_paper") => "E-paper"
+    (_, "display_type", "vfd") => "VFD"
+    (Ja, "default_output", "high") => "High"
+    (Ja, "default_output", "low") => "Low"
+    (En, "default_output", "high") => "High"
+    (En, "default_output", "low") => "Low"
+    (Ja, "usb_power_role", "source") => "ソース"
+    (Ja, "usb_power_role", "sink") => "シンク"
+    (Ja, "usb_power_role", "dual_role") => "デュアルロール (DRP)"
+    (En, "usb_power_role", "source") => "Source"
+    (En, "usb_power_role", "sink") => "Sink"
+    (En, "usb_power_role", "dual_role") => "Dual role (DRP)"
+    (Ja, "usb_pd_revision", "none") => "なし (Type-C のみ)"
+    (En, "usb_pd_revision", "none") => "None (Type-C only)"
+    (_, "usb_pd_revision", v) => "PD " + v
+    (Ja, "touch_sensing_method", "self_capacitance") => "自己容量"
+    (Ja, "touch_sensing_method", "mutual_capacitance") => "相互容量"
+    (Ja, "touch_sensing_method", "self_and_mutual_capacitance") => "自己容量・相互容量"
+    (En, "touch_sensing_method", "self_capacitance") => "Self capacitance"
+    (En, "touch_sensing_method", "mutual_capacitance") => "Mutual capacitance"
+    (En, "touch_sensing_method", "self_and_mutual_capacitance") =>
+      "Self and mutual capacitance"
     (En, "resistive_element", v) =>
       v[:1].to_owned().to_upper() + v[1:].to_owned()
     (En, "logic_function", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()

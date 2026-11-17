@@ -103,7 +103,8 @@ Run `openparts data fmt <files>` before committing; CI runs
   `audio_amplifier`, `audio_codec`, `microphone`, `buzzer`, `relay`,
   `potentiometer`, `rotary_encoder`, `ferrite_bead`, `common_mode_choke`,
   `light_sensor`, `gas_sensor`, `magnetic_sensor`, `wireless_module`,
-  `antenna` (a bare RF transceiver IC is the group `rf`); `other` only when the tree
+  `antenna`, `touch_sensor`, `display_driver`, `usb_pd_controller`,
+  `digital_isolator`, `efuse` (a bare RF transceiver IC is the group `rf`); `other` only when the tree
   has no fitting node (the validator warns). The passive/discrete values
   change how the 3D model is drawn. `document_type` also accepts
   `product_page`, `pcn`, `eol_notice`, `other`.

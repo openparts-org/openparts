@@ -524,6 +524,12 @@ MPN, so it goes on the Part).
 | `ferrite_bead`, `common_mode_choke` (group `inductor`) | `impedance` (`at: { f: 100 MHz }`), `tolerance`, `rated_current`, `dcr`, `inductance` (chokes), `rated_voltage` (chokes) |
 | `wireless_module` (group `rf`) | `radio_protocol`, `frequency_band`, `tx_power`, `rx_sensitivity`, `antenna_type`, `data_interface` (host interface), `supply_voltage`, `supply_current` |
 | `antenna` (group `rf`) | `frequency_band`, `peak_gain`, `antenna_type` |
+| `touch_sensor` (group `sensor`) | `touch_sensing_method`, `channel_count` (touch inputs), `data_interface` (none for a part with only a digital touch output), `output_structure` (its touch output), `supply_voltage`, `supply_current` |
+| `display_driver` (group `driver`) | `display_type`, `segment_count`, `common_count` (SSD1306: 128 x 64; MAX7219: 8 segments x 8 digits), `data_interface` (several as `values: [i2c, spi, parallel]`), `output_current` (segment drive), `supply_voltage` (the logic supply VDD; a panel supply only in the locator) |
+| `usb_pd_controller` (group `interface`) | `usb_power_role`, `usb_pd_revision` (`none` for Type-C CC logic only), `data_interface` (host: `i2c`...), `supply_voltage`, `supply_current`, `bus_fault_voltage` (CC / VBUS pin abs max) |
+| `digital_isolator` (group `interface`) | `channel_count` (total), `reverse_channel_count`, `default_output` (per variant on the Part), `isolation_voltage` (VISO, `at: { t: 60 s }` or in the locator), `cmr` (CMTI), `data_rate`, `propagation_delay`, `supply_voltage` (per side: the common range), `supply_current` |
+| isolated DC/DC converter (`switching_regulator`) | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`, `output_power`, `isolation_voltage` |
+| `efuse` (group `power`); load switches (`power_switch`) | `input_voltage_max`, `output_current`, `current_limit` (adjustable: the settable range), `on_resistance` (RON), `overvoltage_threshold` (eFuse, per variant) |
 | any IC | `supply_voltage`, `supply_current`, `operating_temperature`, `esd_hbm`; separate analog/digital supply pins: `analog_supply_voltage`, `digital_supply_voltage`, `analog_supply_current`, `digital_supply_current` (not `supply_voltage`); a supply range printed as alternatives with a gap ("1.8 V or 3.3 V"): `ranges: [{ min: 1.65 V, max: 1.95 V }, { min: 3.0 V, max: 3.6 V }]` (canonical-data 11.1) |
 
 No other keys exist. Don't invent one; propose it in the PR text

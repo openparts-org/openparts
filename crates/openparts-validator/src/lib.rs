@@ -1510,6 +1510,64 @@ mod tests {
                     ("frequency_band", num(2.45, "GHz")),
                     ("peak_gain", num(1.5, "dBi")),
                 ],
+            ),            // Round 5: touch, display drivers, USB-C/PD, isolators,
+            // isolated DC/DC, eFuses.
+            (
+                C::TouchSensor,
+                &[
+                    ("touch_sensing_method", word("self_capacitance")),
+                    ("channel_count", word("8")),
+                    ("data_interface", word("i2c_spi")),
+                    ("output_structure", word("open_drain")),
+                    ("supply_voltage", num(3.3, "V")),
+                ],
+            ),
+            (
+                C::DisplayDriver,
+                &[
+                    ("display_type", word("oled")),
+                    ("segment_count", word("128")),
+                    ("common_count", word("64")),
+                    ("data_interface", word("i2c_spi")),
+                    ("output_current", num(40.0, "mA")),
+                ],
+            ),
+            (
+                C::UsbPdController,
+                &[
+                    ("usb_power_role", word("dual_role")),
+                    ("usb_pd_revision", word("3.0")),
+                    ("data_interface", word("i2c")),
+                    ("supply_voltage", num(3.3, "V")),
+                ],
+            ),
+            (
+                C::DigitalIsolator,
+                &[
+                    ("channel_count", word("2")),
+                    ("reverse_channel_count", word("1")),
+                    ("default_output", word("high")),
+                    ("isolation_voltage", num(3000.0, "V")),
+                    ("data_rate", num(100.0, "Mbps")),
+                    ("cmr", num(100.0, "kV/µs")),
+                    ("propagation_delay", num(11.0, "ns")),
+                ],
+            ),
+            (
+                C::SwitchingRegulator,
+                &[
+                    ("isolation_voltage", num(1000.0, "V")),
+                    ("output_power", num(1.0, "W")),
+                ],
+            ),
+            (
+                C::Efuse,
+                &[
+                    ("input_voltage_max", num(21.0, "V")),
+                    ("current_limit", num(5.4, "A")),
+                    ("overvoltage_threshold", num(5.7, "V")),
+                    ("on_resistance", num(31.0, "mΩ")),
+                ],
             ),
         ];
         for (category, keys) in cases {

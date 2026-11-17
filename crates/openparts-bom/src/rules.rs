@@ -244,6 +244,21 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("rx_sensitivity", AtMost),
     rule("antenna_type", Informational),
     rule("peak_gain", Informational),
+    // Display drivers
+    identity(rule("display_type", Equal)),
+    rule("segment_count", Equal),
+    rule("common_count", Equal),
+    // eFuses and load switches
+    rule("current_limit", Covers),
+    rule("overvoltage_threshold", Informational),
+    // Digital isolators
+    identity(rule("reverse_channel_count", Equal)),
+    rule("default_output", Equal),
+    // USB Type-C / PD controllers
+    identity(rule("usb_power_role", Equal)),
+    rule("usb_pd_revision", Ranked),
+    // Touch controllers
+    rule("touch_sensing_method", Informational),
 ];
 
 /// Dielectric grades, best first: temperature stability of the
@@ -287,6 +302,15 @@ fn rank(key: &str, value: &str) -> Option<u8> {
         // rank 8).
         "resolution" => value.parse::<u8>().ok(),
         "microstepping" => value.parse::<u16>().ok().map(|n| n.trailing_zeros() as u8),
+        // A later PD revision serves where an earlier one does.
+        "usb_pd_revision" => match value {
+            "none" => Some(0),
+            "2.0" => Some(1),
+            "3.0" => Some(2),
+            "3.1" => Some(3),
+            "3.2" => Some(4),
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -334,6 +358,11 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
         C::MagneticSensor => &["magnetic_sensor_type", "supply_voltage"],
         C::WirelessModule => &["radio_protocol", "supply_voltage", "antenna_type"],
         C::Antenna => &["frequency_band", "peak_gain"],
+        C::TouchSensor => &["channel_count", "touch_sensing_method", "supply_voltage"],
+        C::DisplayDriver => &["display_type", "segment_count", "common_count", "data_interface"],
+        C::UsbPdController => &["usb_power_role", "usb_pd_revision", "data_interface"],
+        C::DigitalIsolator => &["channel_count", "isolation_voltage", "data_rate"],
+        C::Efuse => &["input_voltage_max", "current_limit", "on_resistance"],
         c if c.is_within(C::Memory) => &["capacity"],
         c if c.is_within(C::Power) => &["output_type", "output_voltage", "output_current"],
         _ => &[],
@@ -521,6 +550,9 @@ pub fn identity_keys(category: ComponentCategory) -> Vec<&'static str> {
         C::Relay => vec!["coil_voltage", "contact_form"],
         C::RotaryEncoder => vec!["pulses_per_revolution"],
         C::WirelessModule => vec!["radio_protocol"],
+        C::DisplayDriver => vec!["display_type"],
+        C::UsbPdController => vec!["usb_power_role"],
+        C::DigitalIsolator => vec!["channel_count", "reverse_channel_count"],
         _ => vec![],
     }
 }
@@ -800,6 +832,7 @@ mod tests {
         }
         assert!(rank("microstepping", "256") > rank("microstepping", "16"));
         assert!(rank("resolution", "24") > rank("resolution", "16"));
+        assert!(rank("usb_pd_revision", "3.1") > rank("usb_pd_revision", "none"));
         // Operating ranges are compared by containment, and only they.
         for r in PARAMETER_RULES {
             let spec = parameter_spec(r.key).unwrap();

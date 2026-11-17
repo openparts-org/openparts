@@ -433,12 +433,36 @@ fn category_name(c: ComponentCategory) -> &'static str {
         C::Rf => "rf radio wireless transceiver",
         C::WirelessModule => "wireless_module module wifi bluetooth ble",
         C::Antenna => "antenna chip_antenna",
+        C::Efuse => "efuse e-fuse hot_swap hotswap protection",
+        C::TouchSensor => "touch_sensor touch capacitive_touch capsense",
+        C::UsbPdController => "usb_pd_controller usb_pd power_delivery type-c usbc cc_controller",
+        C::DigitalIsolator => "digital_isolator isolator",
+        C::DisplayDriver => "display_driver display oled lcd led_matrix segment",
     }
 }
 
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
+    ("デジタルアイソレータ", "digital_isolator"),
+    ("デジタルアイソレーター", "digital_isolator"),
+    ("アイソレータ", "isolator"),
+    ("アイソレーター", "isolator"),
+    ("ディスプレイドライバー", "display_driver"),
+    ("ディスプレイドライバ", "display_driver"),
+    ("ディスプレイコントローラ", "display_driver"),
+    ("ディスプレイ", "display"),
+    ("液晶ドライバ", "display_driver lcd"),
+    ("有機el", "oled"),
+    ("タッチセンサー", "touch_sensor"),
+    ("タッチセンサ", "touch_sensor"),
+    ("タッチコントローラ", "touch_sensor"),
+    ("静電容量タッチ", "touch_sensor"),
+    ("タッチ", "touch"),
+    ("pdコントローラ", "usb_pd_controller"),
+    ("ホットスワップ", "hot_swap"),
+    ("電子ヒューズ", "efuse"),
+    ("eヒューズ", "efuse"),
     ("リセッタブルヒューズ", "fuse"),
     ("ポリスイッチ", "fuse"),
     ("フォトリレー", "relay"),
@@ -700,6 +724,8 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("hbridge", "h-bridge"),
     ("classd", "class-d"),
     ("cmc", "common_mode_choke"),
+    ("e-fuse", "efuse"),
+    ("capsense", "touch"),
 ];
 
 /// The query as words, each with its alternative spellings (a word
@@ -917,6 +943,20 @@ mod tests {
             ("wifi", C::WirelessModule),
             ("アンテナ", C::Antenna),
             ("チップアンテナ", C::Antenna),
+            ("タッチセンサ", C::TouchSensor),
+            ("静電容量タッチ", C::TouchSensor),
+            ("touch", C::TouchSensor),
+            ("ディスプレイドライバ", C::DisplayDriver),
+            ("OLED", C::DisplayDriver),
+            ("有機EL", C::DisplayDriver),
+            ("USB PD", C::UsbPdController),
+            ("USB-C", C::UsbPdController),
+            ("PDコントローラ", C::UsbPdController),
+            ("デジタルアイソレータ", C::DigitalIsolator),
+            ("isolator", C::DigitalIsolator),
+            ("eFuse", C::Efuse),
+            ("電子ヒューズ", C::Efuse),
+            ("ホットスワップ", C::Efuse),
         ] {
             assert!(hit(c, q), "{q} should find {c:?}");
         }

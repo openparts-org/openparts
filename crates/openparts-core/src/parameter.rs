@@ -671,13 +671,47 @@ const OPTO_ISOLATORS: &[C] = &[C::Optocoupler, C::Interface];
 /// or relays) and solid-state relays.
 const OPTO_OUTPUTS: &[C] = &[C::Optocoupler, C::Relay];
 /// Digital outputs: [`DIGITAL`] and Hall switches.
-const DIGITAL_OUT: &[C] = &[C::Comparator, C::Logic, C::Interface, C::MagneticSensor];
+const DIGITAL_OUT: &[C] = &[
+    C::Comparator,
+    C::Logic,
+    C::Interface,
+    C::MagneticSensor,
+    C::TouchSensor,
+];
 /// Parts made of identical channels (amplifiers, gates, transceivers,
-/// motor bridges, LED outputs, audio channels).
-const CHANNELS: &[C] = &[C::Analog, C::Interface, C::Logic, C::Driver, C::Audio];
+/// motor bridges, LED outputs, audio channels, touch inputs).
+const CHANNELS: &[C] = &[
+    C::Analog,
+    C::Interface,
+    C::Logic,
+    C::Driver,
+    C::Audio,
+    C::TouchSensor,
+];
 /// A digital (or analog) signal interface: addressable LEDs, sensors,
-/// converters, drivers, audio parts and radio modules.
-const INTERFACED: &[C] = &[C::Led, C::Sensor, C::Analog, C::Driver, C::Audio, C::Rf];
+/// converters, drivers, audio parts, radio modules and USB-C/PD
+/// controllers (their host interface).
+const INTERFACED: &[C] = &[
+    C::Led,
+    C::Sensor,
+    C::Analog,
+    C::Driver,
+    C::Audio,
+    C::Rf,
+    C::UsbPdController,
+];
+/// Protected power paths: load switches and eFuses.
+const POWER_PATHS: &[C] = &[C::PowerSwitch, C::Efuse];
+/// Display drivers' segment (column) outputs, as printed.
+const SEGMENT_COUNTS: &[&str] = &[
+    "4", "7", "8", "16", "24", "32", "40", "48", "64", "80", "96", "100", "101", "102", "104",
+    "120", "128", "132", "160", "176", "240", "256", "320", "384", "396", "480", "720",
+];
+/// Display drivers' common (row) outputs, as printed.
+const COMMON_COUNTS: &[&str] = &[
+    "1", "2", "3", "4", "8", "16", "24", "32", "39", "40", "48", "64", "65", "68", "80", "96",
+    "128", "132", "160", "176", "240", "296", "320", "480",
+];
 /// Converters with a resolution and a sample rate.
 const CONVERTERS: &[C] = &[C::Adc, C::Dac, C::AudioCodec];
 /// Coil-driven parts: relays and magnetic buzzers.
@@ -891,7 +925,18 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("collector_current", Q::Current, COLLECTOR),
     // Optocouplers (input LED: forward_voltage/forward_current/
     // reverse_voltage; output: collector_emitter_voltage/collector_current)
-    num("isolation_voltage", Q::Voltage, &[C::Optocoupler, C::Relay]),
+    // Also a digital isolator's and an isolated DC/DC converter's
+    // (VISO, the withstand rating as printed: `at: { t: 60 s }`).
+    num(
+        "isolation_voltage",
+        Q::Voltage,
+        &[
+            C::Optocoupler,
+            C::Relay,
+            C::DigitalIsolator,
+            C::SwitchingRegulator,
+        ],
+    ),
     // Common-mode transient immunity (CMR / CMTI, kV/µs).
     within(
         shown_in(num("cmr", Q::SlewRate, OPTO_ISOLATORS), "kV/µs"),
@@ -908,7 +953,13 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         num(
             "on_resistance",
             Q::Resistance,
-            &[C::Optocoupler, C::Relay, C::AnalogSwitch],
+            &[
+                C::Optocoupler,
+                C::Relay,
+                C::AnalogSwitch,
+                C::PowerSwitch,
+                C::Efuse,
+            ],
         ),
         0.0,
         1e6,
@@ -971,8 +1022,8 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     enumerated(
         "channel_count",
         &[
-            "1", "2", "3", "4", "5", "6", "8", "9", "10", "12", "16", "18", "24", "32", "36", "48",
-            "64", "144",
+            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "16", "18", "24", "32", "36",
+            "48", "64", "144",
         ],
         CHANNELS,
     ),
@@ -1109,6 +1160,60 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         &["constant_current", "switching", "matrix", "pwm"],
         &[C::LedDriver],
     ),
+    // Display drivers: the panel technology they drive and their
+    // segment (column) and common (row) output counts (SSD1306: 128 x
+    // 64; an RGB OLED driver's segments count each colour).
+    enumerated(
+        "display_type",
+        &["oled", "lcd", "tft_lcd", "led", "e_paper", "vfd"],
+        &[C::DisplayDriver],
+    ),
+    enumerated("segment_count", SEGMENT_COUNTS, &[C::DisplayDriver]),
+    enumerated("common_count", COMMON_COUNTS, &[C::DisplayDriver]),
+    // eFuses and load switches: the current limit (an adjustable one's
+    // settable range as min/max; a fixed one's typ/min/max as printed)
+    // and an eFuse's overvoltage cut-off / clamp.
+    within(
+        span(num("current_limit", Q::Current, POWER_PATHS)),
+        0.0,
+        1e3,
+    ),
+    within(
+        num("overvoltage_threshold", Q::Voltage, &[C::Efuse]),
+        0.0,
+        1e3,
+    ),
+    // Digital isolators: channels in the reverse direction (of
+    // `channel_count` in total; ISO7721 is 2 with 1 reverse), the
+    // output state with the input side unpowered.
+    enumerated(
+        "reverse_channel_count",
+        &["0", "1", "2", "3", "4", "5", "6", "8"],
+        &[C::DigitalIsolator],
+    ),
+    enumerated("default_output", &["high", "low"], &[C::DigitalIsolator]),
+    // USB Type-C / PD controllers: the power role(s) the port takes and
+    // the Power Delivery revision (`none`: Type-C CC logic only).
+    enumerated(
+        "usb_power_role",
+        &["source", "sink", "dual_role"],
+        &[C::UsbPdController],
+    ),
+    enumerated(
+        "usb_pd_revision",
+        &["none", "2.0", "3.0", "3.1", "3.2"],
+        &[C::UsbPdController],
+    ),
+    // Capacitive touch controllers.
+    enumerated(
+        "touch_sensing_method",
+        &[
+            "self_capacitance",
+            "mutual_capacitance",
+            "self_and_mutual_capacitance",
+        ],
+        &[C::TouchSensor],
+    ),
     // Audio (amplifiers, codecs, microphones)
     enumerated(
         "amplifier_class",
@@ -1117,8 +1222,13 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     // Per channel, at the load and distortion it is printed for
     // (`at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`).
+    // Also an isolated DC/DC module's rated output power.
     within(
-        num("output_power", Q::Power, &[C::AudioAmplifier]),
+        num(
+            "output_power",
+            Q::Power,
+            &[C::AudioAmplifier, C::SwitchingRegulator],
+        ),
         0.0,
         1e4,
     ),
@@ -2598,6 +2708,38 @@ mod tests {
         }
         assert!(!plausible_for(spec("output_current"), C::Sensor));
         assert!(!plausible_for(spec("impedance"), C::Inductor));
+        // Round 5: touch, display, USB-C/PD, isolators, eFuses.
+        for (key, c) in [
+            ("channel_count", C::TouchSensor),
+            ("data_interface", C::TouchSensor),
+            ("output_structure", C::TouchSensor),
+            ("display_type", C::DisplayDriver),
+            ("segment_count", C::DisplayDriver),
+            ("data_interface", C::DisplayDriver),
+            ("output_current", C::DisplayDriver),
+            ("usb_power_role", C::UsbPdController),
+            ("data_interface", C::UsbPdController),
+            ("supply_voltage", C::UsbPdController),
+            ("isolation_voltage", C::DigitalIsolator),
+            ("cmr", C::DigitalIsolator),
+            ("data_rate", C::DigitalIsolator),
+            ("propagation_delay", C::DigitalIsolator),
+            ("channel_count", C::DigitalIsolator),
+            ("isolation_voltage", C::SwitchingRegulator),
+            ("output_power", C::SwitchingRegulator),
+            ("current_limit", C::Efuse),
+            ("current_limit", C::PowerSwitch),
+            ("on_resistance", C::Efuse),
+            ("input_voltage_max", C::Efuse),
+        ] {
+            assert!(plausible_for(spec(key), c), "{key} for {c:?}");
+        }
+        assert!(!plausible_for(spec("data_interface"), C::DigitalIsolator));
+        assert!(spec("current_limit").span);
+        assert_eq!(
+            lab(val(None, Some(0.5), Some(5.4), "A"), "current_limit"),
+            "500 mA–5.4 A"
+        );
         assert!(spec("motor_supply_voltage").span);
         assert!(!spec("sensitivity").in_range(-200.0));
     }

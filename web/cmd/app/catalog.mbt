@@ -47,7 +47,9 @@ let enum_param_keys : Array[String] = [
   "amplifier_class", "buzzer_type", "buzzer_drive", "contact_form", "relay_type",
   "taper", "resistive_element", "pulses_per_revolution", "detents", "push_switch",
   "light_sensor_type", "target_gas", "sensing_principle", "magnetic_sensor_type",
-  "radio_protocol", "antenna_type", "reference",
+  "radio_protocol", "antenna_type", "reference", "display_type", "segment_count",
+  "common_count", "reverse_channel_count", "default_output", "usb_power_role",
+  "usb_pd_revision", "touch_sensing_method",
 ]
 
 ///|
@@ -156,6 +158,27 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
         "radio_protocol", "antenna_type", "tx_power", "supply_voltage", "data_interface",
       ]
     "antenna" => ["frequency_band", "peak_gain", "antenna_type"]
+    "touch_sensor" =>
+      [
+        "touch_sensing_method", "channel_count", "data_interface", "supply_voltage",
+      ]
+    "display_driver" =>
+      [
+        "display_type", "segment_count", "common_count", "data_interface", "supply_voltage",
+      ]
+    "usb_pd_controller" =>
+      [
+        "usb_power_role", "usb_pd_revision", "data_interface", "supply_voltage",
+      ]
+    "digital_isolator" =>
+      [
+        "channel_count", "reverse_channel_count", "isolation_voltage", "data_rate",
+        "propagation_delay", "supply_voltage",
+      ]
+    "efuse" =>
+      [
+        "input_voltage_max", "current_limit", "on_resistance", "overvoltage_threshold",
+      ]
     "analog_switch" =>
       ["channel_count", "on_resistance", "supply_voltage", "data_interface"]
     "adc" | "dac" =>
@@ -744,7 +767,8 @@ fn category_glyph(c : @api.ComponentCategory) -> String {
     | SwitchingRegulator
     | BatteryCharger
     | VoltageReference
-    | PowerSwitch => "PWR"
+    | PowerSwitch
+    | Efuse => "PWR"
     Memory | Flash | Eeprom | Sram => "MEM"
     Sensor | PressureSensor | Imu | TemperatureSensor => "SNS"
     Analog
@@ -761,16 +785,19 @@ fn category_glyph(c : @api.ComponentCategory) -> String {
     | CanTransceiver
     | Rs485Transceiver
     | Rs232Transceiver
-    | LevelShifter => "I/F"
+    | LevelShifter
+    | UsbPdController
+    | DigitalIsolator => "I/F"
     Logic => "74"
     Timing | Oscillator | Timer | Rtc => "TMR"
-    Driver | GateDriver | DarlingtonArray | MotorDriver | LedDriver => "DRV"
+    Driver | GateDriver | DarlingtonArray | MotorDriver | LedDriver | DisplayDriver =>
+      "DRV"
     Relay => "K"
     RotaryEncoder => "ENC"
     Potentiometer => "RV"
     FerriteBead => "FB"
     CommonModeChoke => "FL"
-    LightSensor | GasSensor | MagneticSensor => "SNS"
+    LightSensor | GasSensor | MagneticSensor | TouchSensor => "SNS"
     Audio | AudioAmplifier | AudioCodec => "AUD"
     Microphone => "MIC"
     Buzzer => "BZ"

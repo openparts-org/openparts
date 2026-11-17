@@ -44,6 +44,9 @@ pub enum ComponentCategory {
     VoltageReference,
     /// Load switches and power multiplexers.
     PowerSwitch,
+    /// eFuses and hot-swap controllers: a protected power path with
+    /// current limiting and over-/undervoltage protection.
+    Efuse,
     // Memory
     Memory,
     Flash,
@@ -55,6 +58,8 @@ pub enum ComponentCategory {
     /// Accelerometers, gyroscopes and IMUs.
     Imu,
     TemperatureSensor,
+    /// Capacitive touch and proximity controllers.
+    TouchSensor,
     // Analog
     Analog,
     OpAmp,
@@ -75,6 +80,12 @@ pub enum ComponentCategory {
     Rs232Transceiver,
     /// Voltage-level translators.
     LevelShifter,
+    /// USB Type-C port and USB Power Delivery controllers (CC logic,
+    /// PD PHYs, PD source/sink controllers).
+    UsbPdController,
+    /// Digital isolators (capacitive, magnetic), including isolators
+    /// with an integrated isolated power supply.
+    DigitalIsolator,
     /// Gates, buffers, flip-flops, shift registers, decoders.
     Logic,
     // Timing
@@ -101,6 +112,9 @@ pub enum ComponentCategory {
     /// LED drivers: constant-current sinks, LED matrix and PWM drivers,
     /// switching LED drivers.
     LedDriver,
+    /// Display drivers and controllers: OLED/LCD panel drivers, LED
+    /// segment and dot-matrix display drivers.
+    DisplayDriver,
     // Resistors
     /// Potentiometers and trimmers (a resistor with a wiper).
     Potentiometer,
@@ -165,6 +179,7 @@ impl ComponentCategory {
         C::BatteryCharger,
         C::VoltageReference,
         C::PowerSwitch,
+        C::Efuse,
         C::Memory,
         C::Flash,
         C::Eeprom,
@@ -176,6 +191,7 @@ impl ComponentCategory {
         C::LightSensor,
         C::GasSensor,
         C::MagneticSensor,
+        C::TouchSensor,
         C::Analog,
         C::OpAmp,
         C::Comparator,
@@ -191,6 +207,8 @@ impl ComponentCategory {
         C::Rs485Transceiver,
         C::Rs232Transceiver,
         C::LevelShifter,
+        C::UsbPdController,
+        C::DigitalIsolator,
         C::Logic,
         C::Timing,
         C::Oscillator,
@@ -201,6 +219,7 @@ impl ComponentCategory {
         C::DarlingtonArray,
         C::MotorDriver,
         C::LedDriver,
+        C::DisplayDriver,
         C::Audio,
         C::AudioAmplifier,
         C::AudioCodec,
@@ -222,14 +241,16 @@ impl ComponentCategory {
             | C::SwitchingRegulator
             | C::BatteryCharger
             | C::VoltageReference
-            | C::PowerSwitch => C::Power,
+            | C::PowerSwitch
+            | C::Efuse => C::Power,
             C::Flash | C::Eeprom | C::Sram => C::Memory,
             C::PressureSensor
             | C::Imu
             | C::TemperatureSensor
             | C::LightSensor
             | C::GasSensor
-            | C::MagneticSensor => C::Sensor,
+            | C::MagneticSensor
+            | C::TouchSensor => C::Sensor,
             C::OpAmp
             | C::Comparator
             | C::CurrentSenseAmplifier
@@ -242,9 +263,15 @@ impl ComponentCategory {
             | C::CanTransceiver
             | C::Rs485Transceiver
             | C::Rs232Transceiver
-            | C::LevelShifter => C::Interface,
+            | C::LevelShifter
+            | C::UsbPdController
+            | C::DigitalIsolator => C::Interface,
             C::Oscillator | C::Timer | C::Rtc => C::Timing,
-            C::GateDriver | C::DarlingtonArray | C::MotorDriver | C::LedDriver => C::Driver,
+            C::GateDriver
+            | C::DarlingtonArray
+            | C::MotorDriver
+            | C::LedDriver
+            | C::DisplayDriver => C::Driver,
             C::AudioAmplifier | C::AudioCodec | C::Microphone | C::Buzzer => C::Audio,
             C::WirelessModule | C::Antenna => C::Rf,
             _ => return None,
@@ -341,6 +368,11 @@ impl ComponentCategory {
             C::Rf => "rf",
             C::WirelessModule => "wireless_module",
             C::Antenna => "antenna",
+            C::Efuse => "efuse",
+            C::TouchSensor => "touch_sensor",
+            C::UsbPdController => "usb_pd_controller",
+            C::DigitalIsolator => "digital_isolator",
+            C::DisplayDriver => "display_driver",
         }
     }
 
@@ -367,7 +399,7 @@ mod tests {
             assert_eq!(C::parse(c.name()), Some(*c));
         }
         // Every variant is in ALL (the match in `name` lists them all).
-        assert_eq!(seen.len(), 69);
+        assert_eq!(seen.len(), 74);
     }
 
     #[test]
@@ -384,6 +416,11 @@ mod tests {
             C::Rf.children().collect::<Vec<_>>(),
             [C::WirelessModule, C::Antenna]
         );
+        assert_eq!(C::Efuse.root(), C::Power);
+        assert!(C::TouchSensor.is_within(C::Sensor));
+        assert!(C::DisplayDriver.is_within(C::Driver));
+        assert!(C::DigitalIsolator.is_within(C::Interface));
+        assert_eq!(C::UsbPdController.root(), C::Interface);
         assert_eq!(
             C::Memory.children().collect::<Vec<_>>(),
             [C::Flash, C::Eeprom, C::Sram]
