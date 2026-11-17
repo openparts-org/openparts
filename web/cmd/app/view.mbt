@@ -331,6 +331,9 @@ fn format_parameter(
     }
   }
   let value = match (v.value, v.min, v.typ, v.max) {
+    // A multi-valued key's list (`values: [i2c, spi]`).
+    (None, None, None, None) if v.values is Some(ws) && !ws.is_empty() =>
+      ws.map(w => param_value_label(lang, key, w)).join(" / ")
     (Some(t), _, _, _) => param_value_label(lang, key, t)
     (None, Some(lo), None, Some(hi)) if lo == -hi => "±" + q(hi)
     (None, lo, Some(t), hi) => {

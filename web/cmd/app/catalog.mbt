@@ -47,7 +47,7 @@ let enum_param_keys : Array[String] = [
   "amplifier_class", "buzzer_type", "buzzer_drive", "contact_form", "relay_type",
   "taper", "resistive_element", "pulses_per_revolution", "detents", "push_switch",
   "light_sensor_type", "target_gas", "sensing_principle", "magnetic_sensor_type",
-  "radio_protocol", "antenna_type",
+  "radio_protocol", "antenna_type", "reference",
 ]
 
 ///|
@@ -134,7 +134,8 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
       ]
     "magnetic_sensor" =>
       [
-        "magnetic_sensor_type", "operate_point", "magnetic_range", "output_structure",
+        "magnetic_sensor_type", "operate_point", "magnetic_range", "magnetic_sensitivity",
+        "output_structure",
       ]
     "audio_amplifier" =>
       [
@@ -155,6 +156,18 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
         "radio_protocol", "antenna_type", "tx_power", "supply_voltage", "data_interface",
       ]
     "antenna" => ["frequency_band", "peak_gain", "antenna_type"]
+    "analog_switch" =>
+      ["channel_count", "on_resistance", "supply_voltage", "data_interface"]
+    "adc" | "dac" =>
+      [
+        "resolution", "sample_rate", "channel_count", "data_interface", "reference",
+        "supply_voltage",
+      ]
+    "rtc" =>
+      [
+        "data_interface", "timekeeping_accuracy", "backup_current", "supply_voltage",
+      ]
+    "timer" => ["max_frequency", "supply_voltage", "supply_current"]
     _ => param_columns_of_root(if root.is_empty() { category } else { root })
   }
 }
@@ -180,7 +193,7 @@ fn param_columns_of_root(category : String) -> Array[String] {
     "optocoupler" =>
       [
         "current_transfer_ratio", "isolation_voltage", "collector_emitter_voltage",
-        "forward_voltage",
+        "forward_voltage", "trigger_current", "propagation_delay",
       ]
     "led" =>
       [
@@ -197,11 +210,15 @@ fn param_columns_of_root(category : String) -> Array[String] {
     "timing" => ["frequency", "supply_voltage", "supply_current"]
     "transistor" =>
       ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
-    "fuse" => ["rated_current", "rated_voltage"]
+    "fuse" =>
+      [
+        "rated_current", "rated_voltage", "hold_current", "trip_current", "max_voltage",
+      ]
     "driver" => ["channel_count", "supply_voltage", "output_current"]
     "relay" =>
       [
         "coil_voltage", "contact_form", "contact_current", "contact_voltage", "coil_resistance",
+        "must_operate_voltage", "on_resistance",
       ]
     "audio" => ["channel_count", "supply_voltage", "snr"]
     "rf" => ["radio_protocol", "frequency_band", "tx_power", "supply_voltage"]

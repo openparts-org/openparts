@@ -1,0 +1,5 @@
+# An LGA terminal off the perimeter rows (a centre or grid pad): a box of
+# its land's size, flush in the underside. Vars: name, w, l, x, y.
+- solid.box:
+    {length: "{{w}}", width: "{{l}}", height: term_t, center: ["{{x}}", "{{y}}", term_t / 2],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

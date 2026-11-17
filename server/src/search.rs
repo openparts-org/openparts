@@ -328,6 +328,10 @@ fn entry(ds: &Dataset, p: &Part) -> Entry {
 /// as capacitors are labelled both ways.
 fn parameter_terms(n: &Normalized, spec: &ParameterSpec) -> Vec<String> {
     let mut out = vec![n.label(spec)];
+    // Each value of a multi-valued key on its own.
+    if let Normalized::Set(words) = n {
+        out.extend(words.iter().map(|w| w.to_string()));
+    }
     if let (Some(v), None) = (n.stated(spec), spec.display_unit) {
         if !spec.deviation {
             let label = format_value(v, spec);
@@ -431,6 +435,15 @@ fn category_name(c: ComponentCategory) -> &'static str {
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
+    ("リセッタブルヒューズ", "fuse"),
+    ("ポリスイッチ", "fuse"),
+    ("フォトリレー", "relay"),
+    ("フォトトライアック", "optocoupler"),
+    ("トライアックドライバ", "optocoupler"),
+    ("ソリッドステートリレー", "relay"),
+    ("チップ抵抗アレイ", "resistor chip_array"),
+    ("抵抗アレイ", "resistor chip_array"),
+    ("集合抵抗", "resistor chip_array"),
     ("ライトアングル", "right_angle"),
     ("マイクロsdカード", "micro_sd"),
     ("マイクロsd", "micro_sd"),
@@ -667,6 +680,13 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("minimelf", "melf"),
     ("micromelf", "melf"),
     ("sod80", "melf"),
+    ("resistorarray", "chip_array"),
+    ("resistornetwork", "chip_array"),
+    ("photorelay", "relay"),
+    ("ssr", "relay"),
+    ("triacdriver", "optocoupler"),
+    ("pptc", "fuse"),
+    ("polyfuse", "fuse"),
     ("ec11", "rotary_encoder"),
     ("pot", "potentiometer"),
     ("trimpot", "trimmer"),

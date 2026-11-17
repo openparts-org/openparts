@@ -595,6 +595,7 @@ impl ParamFilter {
         let near = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs());
         let in_values = self.values.is_empty()
             || self.values.contains(&f.key)
+            || f.also.iter().any(|(k, _)| self.values.contains(k))
             || f.stated
                 .is_some_and(|v| self.numbers.iter().any(|&n| near(n, v)));
         let ranged = self.min.is_some() || self.max.is_some();
@@ -630,6 +631,9 @@ struct ParamFact {
     /// An operating-range key's (`ParameterSpec::span`) lower and upper
     /// end in SI (a lone `typ` is both).
     span: Option<(Option<f64>, Option<f64>)>,
+    /// A multi-valued key's further values (option key, order): the
+    /// part is an option under each (`key` is the first).
+    also: Vec<(String, f64)>,
 }
 
 /// One Part's filterable facts.
@@ -717,13 +721,38 @@ impl CatalogIndex {
                     }
                     _ => stated.unwrap_or(f64::MAX),
                 };
-                let fact_key = label.replace(' ', "");
-                index
-                    .param_labels
-                    .entry(spec.key)
-                    .or_default()
-                    .entry(fact_key.clone())
-                    .or_insert_with(|| label.clone());
+                // A multi-valued key is an option under each of its
+                // values (a combined `i2c_spi` under i2c and spi).
+                let word_order = |w: &str| match spec.shape {
+                    ParameterShape::Enumerated(words) => {
+                        words.iter().position(|x| *x == w).unwrap_or(0) as f64
+                    }
+                    _ => 0.0,
+                };
+                let members = if spec.multi {
+                    n.members(spec.key)
+                } else {
+                    Vec::new()
+                };
+                let (fact_key, order, also) = match members.split_first() {
+                    Some((first, rest)) => (
+                        first.to_string(),
+                        word_order(first),
+                        rest.iter()
+                            .map(|w| (w.to_string(), word_order(w)))
+                            .collect(),
+                    ),
+                    None => (label.replace(' ', ""), order, Vec::new()),
+                };
+                let labels = index.param_labels.entry(spec.key).or_default();
+                if members.is_empty() {
+                    labels
+                        .entry(fact_key.clone())
+                        .or_insert_with(|| label.clone());
+                }
+                for w in &members {
+                    labels.entry(w.to_string()).or_insert_with(|| w.to_string());
+                }
                 item_params.insert(
                     spec.key.to_string(),
                     CatalogParameter {
@@ -744,6 +773,7 @@ impl CatalogIndex {
                         stated,
                         order,
                         span,
+                        also,
                     },
                 );
             }
@@ -1051,6 +1081,9 @@ impl CatalogIndex {
                         continue;
                     };
                     counts.entry(fact.key.as_str()).or_insert((fact.order, 0)).1 += 1;
+                    for (k, order) in &fact.also {
+                        counts.entry(k.as_str()).or_insert((*order, 0)).1 += 1;
+                    }
                     // An operating range spans its ends, not its middle.
                     let (lo, hi) = fact.span.map_or((fact.stated, fact.stated), |(lo, hi)| {
                         (lo.or(fact.stated), hi.or(fact.stated))
@@ -1073,6 +1106,7 @@ impl CatalogIndex {
                             .then_some(*order),
                             order: *order,
                             span: None,
+                            also: Vec::new(),
                         };
                         let selected = filter.is_some_and(|f| {
                             !f.values.is_empty()
@@ -1425,6 +1459,7 @@ fn family_label(f: PackageFamily) -> String {
         F::MiniUsbB => "Mini-USB B".into(),
         F::UsbB => "USB-B".into(),
         F::Melf => "MELF".into(),
+        F::ChipArray => "Chip array".into(),
         F::Relay => "Relay".into(),
         F::Buzzer => "Buzzer".into(),
         F::Trimmer => "Trimmer".into(),
@@ -1540,6 +1575,7 @@ mod tests {
             stated: Some(v),
             order: v,
             span: None,
+            also: Vec::new(),
         };
         assert!(c.matches(Some(&fact(1e-7))));
         assert!(!c.matches(Some(&fact(2.2e-7))));
@@ -1564,6 +1600,26 @@ mod tests {
         assert_eq!(q.params["isolation_voltage"].min, Some(3750.0));
     }
 
+    /// A multi-valued key's part is found under each of its values.
+    #[test]
+    fn a_multi_valued_key_matches_any_of_its_values() {
+        let q = parse(&[("data_interface", "spi")]);
+        let f = &q.params["data_interface"];
+        let both = ParamFact {
+            key: "i2c".into(),
+            stated: None,
+            order: 6.0,
+            span: None,
+            also: vec![("spi".into(), 7.0)],
+        };
+        assert!(f.matches(Some(&both)));
+        let i2c = ParamFact {
+            also: Vec::new(),
+            ..both.clone()
+        };
+        assert!(!f.matches(Some(&i2c)));
+    }
+
     /// An operating range (supply voltage, operating temperature) is
     /// filtered by containment: `supply_voltage_min=3.3&max=3.3` finds
     /// a 1.8-5.5 V part, not a 4.5-5.5 V one.
@@ -1576,6 +1632,7 @@ mod tests {
             stated: Some((lo + hi) / 2.0),
             order: (lo + hi) / 2.0,
             span: Some((Some(lo), Some(hi))),
+            also: Vec::new(),
         };
         assert!(f.matches(Some(&part(1.8, 5.5))));
         assert!(!f.matches(Some(&part(4.5, 5.5))));

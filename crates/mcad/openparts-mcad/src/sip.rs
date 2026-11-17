@@ -120,6 +120,7 @@ mod tests {
             aux_pads: vec![],
             pad_order: vec![],
             actuation: None,
+            terminal_shape: None,
             connector: None,
             edge: None,
             keepouts: vec![],

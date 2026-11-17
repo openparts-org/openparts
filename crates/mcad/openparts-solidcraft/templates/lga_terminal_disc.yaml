@@ -1,0 +1,4 @@
+# A round LGA terminal off the perimeter rows. Vars: name, d, x, y.
+- solid.cylinder:
+    {diameter: "{{d}}", height: term_t, base: ["{{x}}", "{{y}}", 0 mm],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}

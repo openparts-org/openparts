@@ -111,6 +111,10 @@ fn land_shape(p: &PackagePad) -> Result<LandShape, String> {
         p.points.is_empty() || p.shape == PadShapeIn::Polygon,
     )?;
     only("cutout", p.cutout.is_none() || p.shape == PadShapeIn::Rect)?;
+    only(
+        "inner_diameter",
+        p.inner_diameter.is_none() || p.shape == PadShapeIn::Annular,
+    )?;
     let shape = match p.shape {
         PadShapeIn::Rect => match p.cutout {
             None => LandShape::Rect,
@@ -131,6 +135,23 @@ fn land_shape(p: &PackagePad) -> Result<LandShape, String> {
                 size: c,
                 corners: p.chamfered_corners(),
             }
+        }
+        PadShapeIn::Annular => {
+            if (w - l).abs() > 1e-9 {
+                return Err("an annular pad needs width = length (the outer diameter)".into());
+            }
+            let d = p
+                .inner_diameter
+                .ok_or("an annular pad needs inner_diameter")?;
+            if d <= 0.0 || d >= w - 1e-9 {
+                return Err(
+                    "inner_diameter must be positive and less than the outer diameter".into(),
+                );
+            }
+            if p.drill.is_some() {
+                return Err("an annular pad is an SMD land: no drill (state the hole as its own non-plated pad)".into());
+            }
+            LandShape::Annulus { inner_diameter: d }
         }
         PadShapeIn::Polygon => {
             if p.points.len() < 3 {
@@ -331,6 +352,29 @@ mod tests {
         assert!(generate(&p).is_err());
     }
 
+    /// Toshiba SO6 (11-4L1S): an SOIC body with six lead positions and
+    /// pin 2's empty; a 4-lead SO6 numbers 1, 3, 4, 6.
+    #[test]
+    fn an_empty_pad_order_entry_leaves_its_position_without_a_lead() {
+        let mut p = pkg("family: soic\nlead_count: 6\n\
+             pitch: {nominal: 1.27, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 3.7, unit: mm}\n\
+             \x20 body_length: {nominal: 4.4, unit: mm}\n\
+             \x20 overall_width: {nominal: 7.0, unit: mm}\n");
+        p.pad_order = ["1", "", "3", "4", "5", "6"].map(String::from).to_vec();
+        let g = generate(&p).unwrap();
+        let numbers: Vec<&str> = g.leads.iter().map(|l| l.number.as_str()).collect();
+        assert_eq!(numbers, ["1", "3", "4", "5", "6"]);
+        // Pin 3 stays at the third position (bottom left), not moved up.
+        let pin3 = &g.leads[1];
+        assert!((pin3.position.y + 1.27).abs() < 1e-9 && pin3.position.x < 0.0);
+        assert_eq!(g.lands.len(), 5, "IPC lands for the leads that exist");
+        p.pad_order = ["1", "", "3", "4", "", "6"].map(String::from).to_vec();
+        assert_eq!(generate(&p).unwrap().leads.len(), 4);
+        p.pad_order = vec![String::new(); 6];
+        assert!(generate(&p).is_err());
+    }
+
     /// An MMCX jack's land pattern (Samtec MMCX-J-P-X-ST-SM1): a round
     /// centre pad, four square ground pads notched by a circle around it.
     const MMCX: &str = "family: rf_coax\nlead_count: 5\npitch: {unit: mm}\n\
@@ -379,6 +423,28 @@ mod tests {
         assert!((g.leads[1].size.x - 1.35).abs() < 1e-9);
     }
 
+    /// A bottom-port MEMS microphone's ground ring around the sound
+    /// port (TDK ICS-43434): an annular land, the port a non-plated hole.
+    #[test]
+    fn an_annular_land_is_a_ring_round_its_centre() {
+        use crate::LandShape;
+        let p = pkg(&format!(
+            "{SMD_SWITCH}pads:\n\
+             \x20 - {{number: '5', x: 0.5, y: 0.2, width: 1.5, length: 1.5, shape: annular, inner_diameter: 0.8}}\n\
+             \x20 - {{number: '', x: 0.5, y: 0.2, width: 0.4, length: 0.4, drill: 0.4, plated: false}}\n"
+        ));
+        let g = generate(&p).unwrap();
+        assert_eq!(
+            g.lands[0].shape,
+            LandShape::Annulus {
+                inner_diameter: 0.8
+            }
+        );
+        assert!((g.lands[0].size.x - 1.5).abs() < 1e-9);
+        assert!((g.lands[0].position.x - 0.5).abs() < 1e-9);
+        assert_eq!(g.lands[1].mounting, Mounting::NonPlated);
+    }
+
     #[test]
     fn chamfered_and_polygon_lands_and_their_errors() {
         use crate::LandShape;
@@ -421,6 +487,13 @@ mod tests {
             "{number: '1', x: 0, y: 0, width: 1, length: 1, cutout: {x: 0, y: 0, diameter: 0.5}}",
             "{number: '1', x: 0, y: 0, width: 1, length: 1, cutout: {x: 5, y: 0, diameter: 0.5}}",
             "{number: '1', x: 0, y: 0, width: 2, length: 0.4, cutout: {x: 0.6, y: 0, diameter: 0.6}}",
+            // Annular: unequal sides, no or too large a hole, a hole on
+            // another shape, a drill.
+            "{number: '1', x: 0, y: 0, width: 1.2, length: 1.0, shape: annular, inner_diameter: 0.5}",
+            "{number: '1', x: 0, y: 0, width: 1.2, length: 1.2, shape: annular}",
+            "{number: '1', x: 0, y: 0, width: 1.2, length: 1.2, shape: annular, inner_diameter: 1.2}",
+            "{number: '1', x: 0, y: 0, width: 1.2, length: 1.2, shape: circle, inner_diameter: 0.5}",
+            "{number: '1', x: 0, y: 0, width: 1.2, length: 1.2, shape: annular, inner_diameter: 0.5, drill: 0.3}",
         ] {
             assert!(generate(&with(bad)).is_err(), "{bad}");
         }

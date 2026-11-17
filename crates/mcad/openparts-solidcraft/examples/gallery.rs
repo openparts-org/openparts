@@ -133,6 +133,7 @@ fn package(
         aux_pads: vec![],
         pad_order: vec![],
         actuation: None,
+        terminal_shape: None,
         connector: None,
         edge: None,
         keepouts: vec![],
@@ -199,5 +200,78 @@ fn synthetic() -> Vec<(Package, Option<ComponentCategory>, String)> {
             Some(ComponentCategory::Microcontroller),
             "SYNTH-BGA64".into(),
         ),
+        (
+            yaml(SYNTH_CHIP_ARRAY),
+            Some(ComponentCategory::Resistor),
+            "SYNTH-YC124".into(),
+        ),
+        (
+            {
+                let mut p = yaml(SYNTH_CHIP_ARRAY);
+                p.terminal_shape = Some(openparts_core::TerminalShape::Concave);
+                p
+            },
+            Some(ComponentCategory::Resistor),
+            "SYNTH-YC124-CONCAVE".into(),
+        ),
+        (
+            yaml(SYNTH_PAD_UP),
+            Some(ComponentCategory::AudioAmplifier),
+            "SYNTH-HTSSOP-DAD".into(),
+        ),
+        (
+            yaml(SYNTH_SO6),
+            Some(ComponentCategory::Optocoupler),
+            "SYNTH-SO6".into(),
+        ),
+        (
+            yaml(SYNTH_MIC),
+            Some(ComponentCategory::Microphone),
+            "SYNTH-LGA-MIC".into(),
+        ),
     ]
 }
+
+fn yaml(text: &str) -> Package {
+    serde_yaml::from_str(text).unwrap()
+}
+
+/// The schema-gap capabilities (Canonical Data Specification 20.7,
+/// 20.15, pad-up exposed pads, empty `pad_order` positions, LGA pads
+/// beyond the perimeter).
+const SYNTH_CHIP_ARRAY: &str = "schema_version: '0.1'\nkind: package\nid: synthetic/YC124\n\
+    family: chip_array\nlead_count: 8\nterminal_shape: convex\npitch: {nominal: 0.5, unit: mm}\n\
+    dimensions: {body_width: {nominal: 1.0, unit: mm}, body_length: {nominal: 2.0, unit: mm},\n\
+    \x20 body_height: {nominal: 0.35, unit: mm}, lead_width: {nominal: 0.3, unit: mm}, lead_length: {nominal: 0.2, unit: mm}}\n\
+    pads:\n\
+    - {number: '1', x: -0.5, y: 0.75, width: 0.5, length: 0.3}\n\
+    - {number: '2', x: -0.5, y: 0.25, width: 0.5, length: 0.3}\n\
+    - {number: '3', x: -0.5, y: -0.25, width: 0.5, length: 0.3}\n\
+    - {number: '4', x: -0.5, y: -0.75, width: 0.5, length: 0.3}\n\
+    - {number: '5', x: 0.5, y: -0.75, width: 0.5, length: 0.3}\n\
+    - {number: '6', x: 0.5, y: -0.25, width: 0.5, length: 0.3}\n\
+    - {number: '7', x: 0.5, y: 0.25, width: 0.5, length: 0.3}\n\
+    - {number: '8', x: 0.5, y: 0.75, width: 0.5, length: 0.3}\n";
+
+const SYNTH_PAD_UP: &str = "schema_version: '0.1'\nkind: package\nid: synthetic/HTSSOP-DAD\n\
+    family: tssop\nlead_count: 32\npitch: {nominal: 0.65, unit: mm}\n\
+    dimensions: {body_width: {nominal: 6.1, unit: mm}, body_length: {nominal: 11.0, unit: mm},\n\
+    \x20 body_height: {nominal: 1.0, unit: mm}, overall_width: {nominal: 8.1, unit: mm},\n\
+    \x20 exposed_pad: {width: {nominal: 3.6, unit: mm}, length: {nominal: 7.5, unit: mm}, face: top}}\n";
+
+const SYNTH_SO6: &str = "schema_version: '0.1'\nkind: package\nid: synthetic/SO6\n\
+    family: soic\nlead_count: 6\npitch: {nominal: 1.27, unit: mm}\npad_order: ['1', '', '3', '4', '5', '6']\n\
+    dimensions: {body_width: {nominal: 3.7, unit: mm}, body_length: {nominal: 4.4, unit: mm},\n\
+    \x20 body_height: {nominal: 2.1, unit: mm}, overall_width: {nominal: 7.0, unit: mm}}\n";
+
+const SYNTH_MIC: &str = "schema_version: '0.1'\nkind: package\nid: synthetic/LGA-MIC\n\
+    family: lga\nlead_count: 5\nlead_layout: [2, 0, 2, 0]\npitch: {nominal: 1.0, unit: mm}\n\
+    dimensions: {body_width: {nominal: 3.5, unit: mm}, body_length: {nominal: 2.65, unit: mm},\n\
+    \x20 body_height: {nominal: 0.98, unit: mm}, lead_width: {nominal: 0.5, unit: mm}, lead_length: {nominal: 0.6, unit: mm}}\n\
+    pads:\n\
+    - {number: '1', x: -1.3, y: 0.5, width: 0.6, length: 0.5}\n\
+    - {number: '2', x: -1.3, y: -0.5, width: 0.6, length: 0.5}\n\
+    - {number: '3', x: 1.3, y: -0.5, width: 0.6, length: 0.5}\n\
+    - {number: '4', x: 1.3, y: 0.5, width: 0.6, length: 0.5}\n\
+    - {number: '5', x: 0, y: 0, width: 1.3, length: 1.3, shape: annular, inner_diameter: 0.7}\n\
+    - {number: '', x: 0, y: 0, width: 0.5, length: 0.5, drill: 0.5, plated: false}\n";

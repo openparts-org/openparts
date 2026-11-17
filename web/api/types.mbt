@@ -1836,6 +1836,7 @@ pub impl @json.FromJson for ExistenceStatus with fn from_json(json, path) {
 /// bonded to it. `None` means the package has no exposed pad.
 #derive(Eq)
 pub(all) struct ExposedPadDimensions {
+  face : ExposedPadFace?
   land_length : Dimension?
   land_width : Dimension?
   length : Dimension
@@ -1850,10 +1851,42 @@ pub impl @json.FromJson for ExposedPadDimensions with fn from_json(json, path) {
     )
   }
   {
+    face: opt_field(obj, "face", path),
     land_length: opt_field(obj, "land_length", path),
     land_width: opt_field(obj, "land_width", path),
     length: field(obj, "length", path),
     width: field(obj, "width", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum ExposedPadFace {
+  Bottom
+  Top
+}
+
+///|
+/// The wire (JSON) string.
+pub fn ExposedPadFace::wire(self : ExposedPadFace) -> String {
+  match self {
+    Bottom => "bottom"
+    Top => "top"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn ExposedPadFace::all() -> Array[ExposedPadFace] {
+  [Bottom, Top]
+}
+
+///|
+pub impl @json.FromJson for ExposedPadFace with fn from_json(json, path) {
+  match json {
+    String("bottom") => Bottom
+    String("top") => Top
+    _ => raise @json.JsonDecodeError((path, "expected a ExposedPadFace"))
   }
 }
 
@@ -2345,6 +2378,7 @@ pub(all) enum LandShape {
   Circle
   Chamfered
   Polygon
+  Annular
 }
 
 ///|
@@ -2355,13 +2389,14 @@ pub fn LandShape::wire(self : LandShape) -> String {
     Circle => "circle"
     Chamfered => "chamfered"
     Polygon => "polygon"
+    Annular => "annular"
   }
 }
 
 ///|
 /// Every value, in declaration order.
 pub fn LandShape::all() -> Array[LandShape] {
-  [Rect, Circle, Chamfered, Polygon]
+  [Rect, Circle, Chamfered, Polygon, Annular]
 }
 
 ///|
@@ -2371,6 +2406,7 @@ pub impl @json.FromJson for LandShape with fn from_json(json, path) {
     String("circle") => Circle
     String("chamfered") => Chamfered
     String("polygon") => Polygon
+    String("annular") => Annular
     _ => raise @json.JsonDecodeError((path, "expected a LandShape"))
   }
 }
@@ -2642,6 +2678,7 @@ pub(all) struct Package {
   shield : PackageRect?
   smt : PackageSmt?
   tab : PackageTab?
+  terminal_shape : TerminalShape?
 }
 
 ///|
@@ -2674,6 +2711,7 @@ pub impl @json.FromJson for Package with fn from_json(json, path) {
     shield: opt_field(obj, "shield", path),
     smt: opt_field(obj, "smt", path),
     tab: opt_field(obj, "tab", path),
+    terminal_shape: opt_field(obj, "terminal_shape", path),
   }
 }
 
@@ -2885,6 +2923,7 @@ pub(all) enum PackageFamily {
   Do214
   To220
   Chip
+  ChipArray
   Radial
   Axial
   To92
@@ -2938,6 +2977,7 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     Do214 => "do214"
     To220 => "to220"
     Chip => "chip"
+    ChipArray => "chip_array"
     Radial => "radial"
     Axial => "axial"
     To92 => "to92"
@@ -2992,6 +3032,7 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     Do214,
     To220,
     Chip,
+    ChipArray,
     Radial,
     Axial,
     To92,
@@ -3045,6 +3086,7 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("do214") => Do214
     String("to220") => To220
     String("chip") => Chip
+    String("chip_array") => ChipArray
     String("radial") => Radial
     String("axial") => Axial
     String("to92") => To92
@@ -3137,9 +3179,11 @@ pub impl @json.FromJson for PackageKeepout with fn from_json(json, path) {
 /// A land is a rectangle unless `shape` says otherwise (section 20.7):
 /// `circle` (`width` = `length`, the diameter), `chamfered` (corners cut
 /// by `chamfer`, the corners listed in `corners`, all four when empty) or
-/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out). A
-/// `cutout` circle clears copper from a rectangular land (an RF
-/// connector's ground pads notched around its centre contact).
+/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out) or
+/// `annular` (a ring: `width` = `length` the outer diameter,
+/// `inner_diameter` the hole; `x`/`y` its centre). A `cutout` circle
+/// clears copper from a rectangular land (an RF connector's ground pads
+/// notched around its centre contact).
 #derive(Eq)
 pub(all) struct PackagePad {
   chamfer : Double?
@@ -3147,6 +3191,7 @@ pub(all) struct PackagePad {
   cutout : PadCutout?
   drill : Double?
   drill_length : Double?
+  inner_diameter : Double?
   length : Double?
   number : String
   plated : Bool?
@@ -3170,6 +3215,7 @@ pub impl @json.FromJson for PackagePad with fn from_json(json, path) {
     cutout: opt_field(obj, "cutout", path),
     drill: opt_field(obj, "drill", path),
     drill_length: opt_field(obj, "drill_length", path),
+    inner_diameter: opt_field(obj, "inner_diameter", path),
     length: opt_field(obj, "length", path),
     number: field(obj, "number", path),
     plated: opt_field(obj, "plated", path),
@@ -3675,6 +3721,7 @@ pub(all) struct ParameterValue {
   typ : Double?
   unit : String?
   value : String?
+  values : Array[String]?
 }
 
 ///|
@@ -3689,6 +3736,7 @@ pub impl @json.FromJson for ParameterValue with fn from_json(json, path) {
     typ: opt_field(obj, "typ", path),
     unit: opt_field(obj, "unit", path),
     value: opt_field(obj, "value", path),
+    values: opt_field(obj, "values", path),
   }
 }
 
@@ -4352,6 +4400,37 @@ pub impl @json.FromJson for Source with fn from_json(json, path) {
     schema_version: field(obj, "schema_version", path),
     sha256: opt_field(obj, "sha256", path),
     url: field(obj, "url", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum TerminalShape {
+  Convex
+  Concave
+}
+
+///|
+/// The wire (JSON) string.
+pub fn TerminalShape::wire(self : TerminalShape) -> String {
+  match self {
+    Convex => "convex"
+    Concave => "concave"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn TerminalShape::all() -> Array[TerminalShape] {
+  [Convex, Concave]
+}
+
+///|
+pub impl @json.FromJson for TerminalShape with fn from_json(json, path) {
+  match json {
+    String("convex") => Convex
+    String("concave") => Concave
+    _ => raise @json.JsonDecodeError((path, "expected a TerminalShape"))
   }
 }
 

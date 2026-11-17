@@ -176,6 +176,7 @@ fn make(
                 LandShape::Circle => Some(PadShape::Circle),
                 LandShape::Chamfered { .. } => Some(PadShape::Chamfered),
                 LandShape::Polygon(_) => Some(PadShape::Polygon),
+                LandShape::Annulus { .. } => Some(PadShape::Annular),
             };
             let (kind, shape) = match lead.mounting {
                 Mounting::Smd => (PadKind::Smd, stated.unwrap_or(PadShape::Rect)),
@@ -241,6 +242,10 @@ fn make(
                         size: r4(*size),
                         corners: corners.iter().map(|c| turn_corner(q, *c)).collect(),
                     }),
+                    _ => None,
+                },
+                inner_diameter: match &lead.shape {
+                    LandShape::Annulus { inner_diameter } => Some(r4(*inner_diameter)),
                     _ => None,
                 },
                 kind,
@@ -964,7 +969,7 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
             "SOT / power tab",
             "leads down the left side, pin 1 at the top; the opposite side's lead or tab on the right",
         ),
-        F::Soic | F::Tssop | F::Ssop | F::Msop | F::Son | F::Dfn | F::Dip => (
+        F::Soic | F::Tssop | F::Ssop | F::Msop | F::Son | F::Dfn | F::Dip | F::ChipArray => (
             "dual row",
             "rows along Y, pin 1 at the top of the left row, numbering counter-clockwise",
         ),

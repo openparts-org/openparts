@@ -92,6 +92,12 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("rated_current", AtLeast),
     rule("saturation_current", AtLeast),
     rule("dcr", AtMost),
+    // Resettable fuses: the hold current says what the fuse is (a
+    // higher one protects less), a lower trip current protects sooner.
+    identity(within(rule("hold_current", Equal), 0.005)),
+    rule("trip_current", AtMost),
+    rule("max_current", AtLeast),
+    rule("max_voltage", AtLeast),
     // Crystals and oscillators
     identity(rule("frequency", Equal)),
     rule("load_capacitance", Equal),
@@ -129,6 +135,11 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("collector_current", AtLeast),
     // Optocouplers
     rule("isolation_voltage", AtLeast),
+    rule("cmr", AtLeast),
+    rule("trigger_current", AtMost),
+    rule("off_state_voltage", AtLeast),
+    rule("on_resistance", AtMost),
+    rule("on_resistance_flatness", AtMost),
     rule("current_transfer_ratio", AtLeast),
     // Regulators
     identity(rule("output_type", Equal)),
@@ -144,6 +155,10 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     // Integrated circuits in general
     rule("supply_voltage", Covers),
     rule("supply_current", AtMost),
+    rule("analog_supply_voltage", Covers),
+    rule("digital_supply_voltage", Covers),
+    rule("analog_supply_current", AtMost),
+    rule("digital_supply_current", AtMost),
     rule("operating_temperature", Covers),
     rule("esd_hbm", AtLeast),
     // Amplifiers and comparators
@@ -167,6 +182,7 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     // Converters
     rule("resolution", Ranked),
     rule("sample_rate", AtLeast),
+    rule("reference", Equal),
     // Motor drivers
     identity(rule("motor_type", Equal)),
     rule("motor_supply_voltage", Covers),
@@ -190,6 +206,11 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("coil_resistance", Informational),
     rule("contact_current", AtLeast),
     rule("contact_voltage", AtLeast),
+    // A candidate that picks up at a lower coil voltage still operates
+    // on the original's drive; the drop-out level is reported only.
+    rule("must_operate_voltage", AtMost),
+    rule("must_release_voltage", Informational),
+    rule("input_impedance", Informational),
     identity(rule("contact_form", Equal)),
     rule("relay_type", Equal),
     // Potentiometers and encoders
@@ -211,6 +232,11 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("operate_point", Informational),
     rule("release_point", Informational),
     rule("magnetic_range", Covers),
+    rule("magnetic_sensitivity", Informational),
+    rule("bandwidth", AtLeast),
+    rule("timekeeping_accuracy", AtMost),
+    rule("backup_current", AtMost),
+    rule("max_frequency", AtLeast),
     // RF
     identity(rule("radio_protocol", Equal)),
     rule("frequency_band", Covers),
@@ -287,6 +313,10 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
         C::CanTransceiver | C::Rs485Transceiver => &["data_rate", "supply_voltage"],
         C::Led => &["color", "forward_voltage"],
         C::Fuse => &["rated_current", "rated_voltage"],
+        C::AnalogSwitch => &["on_resistance", "channel_count", "supply_voltage"],
+        C::Adc | C::Dac => &["resolution", "sample_rate", "data_interface"],
+        C::Rtc => &["data_interface", "timekeeping_accuracy", "backup_current"],
+        C::Timer => &["max_frequency", "supply_voltage"],
         C::Optocoupler => &["current_transfer_ratio", "isolation_voltage"],
         C::MotorDriver => &["motor_type", "motor_supply_voltage", "output_current"],
         C::LedDriver => &["led_driver_type", "channel_count", "output_current"],
@@ -308,6 +338,19 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
         c if c.is_within(C::Power) => &["output_type", "output_voltage", "output_current"],
         _ => &[],
     }
+}
+
+/// [`expected_parameters`] for a part whose data states `has`: a
+/// resettable fuse (it states `hold_current`) is expected to state its
+/// PPTC ratings instead of a fuse's rated current and voltage.
+pub fn expected_parameters_of(
+    category: ComponentCategory,
+    has: impl Fn(&str) -> bool,
+) -> &'static [&'static str] {
+    if category == ComponentCategory::Fuse && has("hold_current") {
+        return &["hold_current", "trip_current", "max_voltage"];
+    }
+    expected_parameters(category)
 }
 
 /// One value of a key, normalised, with its measurement conditions.
@@ -530,6 +573,19 @@ fn check_one(
     cand: &Normalized,
     spec: &ParameterSpec,
 ) -> CheckStatus {
+    // A multi-valued key (data_interface, reference): the candidate must
+    // offer every value the original does.
+    if spec.multi && !matches!(orig, Normalized::Numeric { .. }) {
+        let (have, want) = (cand.members(rule.key), orig.members(rule.key));
+        if have.is_empty() {
+            return CheckStatus::Unverified;
+        }
+        return match rule.kind {
+            Informational => CheckStatus::Info,
+            _ if want.iter().all(|w| have.contains(w)) => CheckStatus::Pass,
+            _ => CheckStatus::Fail,
+        };
+    }
     if let (Normalized::Text(a), Normalized::Text(b)) = (orig, cand) {
         return match rule.kind {
             Equal => {
@@ -770,6 +826,65 @@ mod tests {
 
     fn status(c: &Comparison, key: &str) -> CheckStatus {
         c.checks.iter().find(|x| x.key == key).unwrap().status
+    }
+
+    fn words(ws: &[&str]) -> ParameterValue {
+        ParameterValue {
+            values: ws.iter().map(|w| w.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn multi_valued_keys_need_every_original_value() {
+        let cmp = |o: ParameterValue, c: ParameterValue| {
+            let r = compare(
+                &params(&[("data_interface", o)]),
+                &params(&[("data_interface", c)]),
+                None,
+            );
+            status(&r, "data_interface")
+        };
+        // A part with both serves one that needs either; not the other way.
+        assert_eq!(cmp(word("i2c"), words(&["i2c", "spi"])), CheckStatus::Pass);
+        assert_eq!(cmp(words(&["i2c", "spi"]), word("i2c")), CheckStatus::Fail);
+        // The combined `i2c_spi` is the same pair.
+        assert_eq!(
+            cmp(words(&["spi", "i2c"]), word("i2c_spi")),
+            CheckStatus::Pass
+        );
+        assert_eq!(
+            cmp(word("i2c_spi"), words(&["i2c", "spi", "uart"])),
+            CheckStatus::Pass
+        );
+        assert_eq!(cmp(word("uart"), word("i2c")), CheckStatus::Fail);
+    }
+
+    #[test]
+    fn resettable_fuses_compare_on_hold_current() {
+        let fuse = |hold: f64, trip: f64, vmax: f64| {
+            params(&[
+                ("hold_current", num(hold, "A")),
+                ("trip_current", num(trip, "A")),
+                ("max_voltage", num(vmax, "V")),
+            ])
+        };
+        let r = compare(
+            &fuse(0.5, 1.0, 13.2),
+            &fuse(0.5, 0.9, 30.0),
+            Some(ComponentCategory::Fuse),
+        );
+        assert_eq!(status(&r, "hold_current"), CheckStatus::Pass);
+        assert_eq!(status(&r, "trip_current"), CheckStatus::Better);
+        assert_eq!(status(&r, "max_voltage"), CheckStatus::Better);
+        let r = compare(&fuse(0.5, 1.0, 13.2), &fuse(0.75, 1.5, 13.2), None);
+        assert_eq!(r.verdict, Verdict::Worse);
+        assert!(r.identity_mismatch);
+        let has = |k: &str| k == "hold_current";
+        assert_eq!(
+            expected_parameters_of(ComponentCategory::Fuse, has),
+            ["hold_current", "trip_current", "max_voltage"]
+        );
     }
 
     #[test]

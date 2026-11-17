@@ -489,6 +489,7 @@ mod tests {
             aux_pads: vec!["D1".into(), "D2".into(), "D3".into()],
             pad_order: vec![],
             actuation: None,
+            terminal_shape: None,
             connector: None,
             edge: None,
             keepouts: vec![],

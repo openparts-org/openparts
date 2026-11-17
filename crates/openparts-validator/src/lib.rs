@@ -102,7 +102,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "parameter.invalid",
-        meaning: "a parameter value has the wrong shape for its key (`value` on a numeric key, `min`/`typ`/`max`/`unit` on an enumerated one, or nothing), or an enumerated value outside the key's vocabulary",
+        meaning: "a parameter value has the wrong shape for its key (`value` on a numeric key, `min`/`typ`/`max`/`unit` on an enumerated one, or nothing; a `values` list on a key that is not multi-valued, with `value` too, or repeating a value), or an enumerated value outside the key's vocabulary",
     },
     Rule {
         id: "parameter.out_of_range",
@@ -150,7 +150,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "pad_shape.invalid",
-        meaning: "a stated pad's land shape can't be drawn: `chamfer`/`corners` without `shape: chamfered` (or a chamfer that isn't positive and at most half the shorter side), `points` without `shape: polygon` (or fewer than three, no area, a stated width/length, or the pad's x/y outside the outline), a `circle` whose width and length differ, or a `cutout` on a non-rectangular pad, covering the pad's centre or the whole pad, missing it, or cutting more than one notch",
+        meaning: "a stated pad's land shape can't be drawn: `chamfer`/`corners` without `shape: chamfered` (or a chamfer that isn't positive and at most half the shorter side), `points` without `shape: polygon` (or fewer than three, no area, a stated width/length, or the pad's x/y outside the outline), a `circle` whose width and length differ, a `cutout` on a non-rectangular pad, covering the pad's centre or the whole pad, missing it, or cutting more than one notch, or an `annular` pad whose width and length differ, without `inner_diameter` (or one not inside the ring), with a drill, or `inner_diameter` on another shape",
     },
     Rule {
         id: "pad_side.invalid",
@@ -171,6 +171,18 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "electromechanical.invalid",
         meaning: "a `relay`, `buzzer`, `trimmer` or `rotary_encoder` package has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_length` or `body_height`, an SMD pad without a size or a land-less slot without `slot_axis`, `connector` facts, or an `overall_height` (rotor or shaft top) below the housing top",
+    },
+    Rule {
+        id: "chip_array.invalid",
+        meaning: "a `chip_array` package has an odd `lead_count` or fewer than 4, no `pads`, pads other than one sized SMD land per terminal numbered 1..`lead_count`, no `pitch` or no `dimensions.body_width`/`body_length`; or another family states `terminal_shape`",
+    },
+    Rule {
+        id: "exposed_pad.invalid",
+        meaning: "a top-face (pad-up, `dimensions.exposed_pad.face: top`) exposed pad on a family other than `soic`/`tssop`/`ssop`/`msop`, or with a board land (`land_width`/`land_length`)",
+    },
+    Rule {
+        id: "lga.invalid",
+        meaning: "an `lga` whose `lead_layout` counts fewer terminals than `lead_count` doesn't give exactly the rest as `pads` entries with other SMD pad numbers (a centre or grid pad, a ground ring)",
     },
     Rule {
         id: "keepout.invalid",
@@ -206,7 +218,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "pad_order.invalid",
-        meaning: "a package's `pad_order` does not hold exactly `lead_count` distinct numbers",
+        meaning: "a package's `pad_order` does not hold exactly `lead_count` entries, repeats a pad number, or is all empty (an empty entry is a lead position without a lead)",
     },
     Rule {
         id: "pin.no_pad",
@@ -405,6 +417,9 @@ pub fn validate_part(
     out.extend(connector::check_smd_led(&package_entity, package));
     out.extend(connector::check_smd_electrolytic(&package_entity, package));
     out.extend(connector::check_melf(&package_entity, package));
+    out.extend(connector::check_chip_array(&package_entity, package));
+    out.extend(connector::check_exposed_pad_face(&package_entity, package));
+    out.extend(connector::check_lga(&package_entity, package));
     out.extend(connector::check_electromechanical(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
@@ -574,6 +589,7 @@ mod tests {
             aux_pads: vec![],
             pad_order: vec![],
             actuation: None,
+            terminal_shape: None,
             connector: None,
             edge: None,
             keepouts: vec![],
@@ -1128,6 +1144,19 @@ mod tests {
         );
         part.parameters
             .insert("resistance".into(), num(Some(10.0), None, None, "kΩ"));
+        // Only a multi-valued key (data_interface, reference) takes a list.
+        let mut list = base_part();
+        list.parameters.insert(
+            "dielectric".into(),
+            ParameterValue {
+                values: vec!["X7R".into(), "X5R".into()],
+                ..Default::default()
+            }
+            .into(),
+        );
+        let ld = validate_part(&list, &device, &base_package(), &BTreeSet::new());
+        assert!(ld.iter().any(|d| d.rule_id == "parameter.invalid"
+            && d.field_path.as_deref() == Some("/parameters/dielectric")));
         cite(&mut part, "/parameters/capacitance");
         let diags = validate_part(&part, &device, &base_package(), &BTreeSet::new());
         let paths = |rule: &str| -> Vec<String> {
@@ -1486,6 +1515,111 @@ mod tests {
         for (category, keys) in cases {
             assert!(run(*category, keys).is_empty(), "{category:?}");
         }
+        // The schema-gap keys: PPTC fuses, analog switches, converters,
+        // split supplies, linear Hall sensors, RTCs, isolators, triac
+        // drivers / photorelays, relays, timers.
+        let words = |ws: &[&str]| ParameterValue {
+            values: ws.iter().map(|w| w.to_string()).collect(),
+            ..Default::default()
+        };
+        let at = |mut v: ParameterValue, sym: &str, n: f64, unit: &str| {
+            v.at.insert(
+                sym.into(),
+                openparts_core::Condition {
+                    value: Some(n),
+                    unit: unit.into(),
+                    ..Default::default()
+                },
+            );
+            v
+        };
+        let gaps: &[(C, Vec<(&str, ParameterValue)>)] = &[
+            (
+                C::Fuse,
+                vec![
+                    ("hold_current", at(num(0.5, "A"), "TA", 23.0, "°C")),
+                    ("trip_current", num(1.0, "A")),
+                    ("max_current", num(100.0, "A")),
+                    ("max_voltage", num(13.2, "V")),
+                ],
+            ),
+            (
+                C::AnalogSwitch,
+                vec![
+                    ("on_resistance", num(0.8, "Ω")),
+                    ("on_resistance_flatness", num(0.15, "Ω")),
+                ],
+            ),
+            (
+                C::Dac,
+                vec![
+                    ("resolution", word("12")),
+                    ("sample_rate", num(1.0, "MSPS")),
+                    ("data_interface", words(&["i2c", "spi"])),
+                    ("reference", words(&["internal", "external"])),
+                    ("analog_supply_voltage", num(5.0, "V")),
+                    ("digital_supply_voltage", num(1.8, "V")),
+                    ("analog_supply_current", num(1.2, "mA")),
+                    ("digital_supply_current", num(30.0, "µA")),
+                ],
+            ),
+            (C::Adc, vec![("data_interface", word("parallel"))]),
+            (
+                C::MagneticSensor,
+                vec![
+                    ("magnetic_sensitivity", num(2.5, "mV/G")),
+                    ("bandwidth", num(20.0, "kHz")),
+                ],
+            ),
+            (
+                C::Rtc,
+                vec![
+                    (
+                        "timekeeping_accuracy",
+                        at(num(3.5, "ppm"), "TA", 25.0, "°C"),
+                    ),
+                    ("backup_current", at(num(0.45, "µA"), "VBAT", 3.0, "V")),
+                    ("supply_current", at(num(70.0, "µA"), "FCLK", 400.0, "kHz")),
+                ],
+            ),
+            (
+                C::Optocoupler,
+                vec![
+                    ("supply_voltage", num(5.0, "V")),
+                    ("propagation_delay", num(60.0, "ns")),
+                    ("output_current_peak", num(2.5, "A")),
+                    ("cmr", num(35.0, "kV/µs")),
+                    ("trigger_current", num(10.0, "mA")),
+                    ("off_state_voltage", num(600.0, "V")),
+                ],
+            ),
+            (
+                C::Relay,
+                vec![
+                    ("must_operate_voltage", num(3.75, "V")),
+                    ("must_release_voltage", num(0.5, "V")),
+                    ("input_impedance", num(1.0, "kΩ")),
+                    ("on_resistance", num(2.0, "Ω")),
+                    ("trigger_current", num(3.0, "mA")),
+                ],
+            ),
+            (C::Timer, vec![("max_frequency", num(500.0, "kHz"))]),
+            (
+                C::LightSensor,
+                vec![("light_sensor_type", word("ambient_color_proximity_gesture"))],
+            ),
+        ];
+        for (category, keys) in gaps {
+            assert!(run(*category, keys).is_empty(), "{category:?}");
+        }
+        // A % slip on an RTC's ppm accuracy.
+        assert_eq!(
+            run(C::Rtc, &[("timekeeping_accuracy", num(2.0, "%"))]),
+            [(
+                "parameter.implausible_value".to_string(),
+                "/parameters/timekeeping_accuracy".to_string()
+            )]
+        );
         // A light sensor has no TX power.
         assert_eq!(
             run(C::LightSensor, &[("tx_power", num(0.0, "dBm"))]),

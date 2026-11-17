@@ -653,12 +653,12 @@ async fn catalog_facet_counts_apply_the_other_filters() {
         assert_eq!(picked["total"], v["count"], "size {value}");
     }
     // Two values of one facet are OR'd; repeated and comma forms agree.
-    let either = catalog("category=capacitor,resistor&limit=0").await;
-    let repeated = catalog("category=capacitor&category=resistor&limit=0").await;
+    let either = catalog("category=capacitor,crystal&limit=0").await;
+    let repeated = catalog("category=capacitor&category=crystal&limit=0").await;
     assert_eq!(either["total"], repeated["total"]);
     assert_eq!(
         either["total"].as_u64().unwrap(),
-        count_of(&all, "category", "capacitor") + count_of(&all, "category", "resistor")
+        count_of(&all, "category", "capacitor") + count_of(&all, "category", "crystal")
     );
 }
 

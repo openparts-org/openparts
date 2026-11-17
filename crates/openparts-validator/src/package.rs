@@ -62,6 +62,9 @@ pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<D
     if package.actuation.is_some() {
         present.push("/actuation");
     }
+    if package.terminal_shape.is_some() {
+        present.push("/terminal_shape");
+    }
     if !package.pads.is_empty() {
         present.push("/pads");
     }
@@ -481,8 +484,13 @@ pub(crate) fn check_package_pad_order(entity: &str, package: &Package) -> Vec<Di
     if order.is_empty() {
         return vec![];
     }
-    let distinct: std::collections::BTreeSet<&String> = order.iter().collect();
-    if order.len() == package.lead_count as usize && distinct.len() == order.len() {
+    // An empty entry is a lead position without a lead.
+    let numbers: Vec<&String> = order.iter().filter(|n| !n.trim().is_empty()).collect();
+    let distinct: std::collections::BTreeSet<&String> = numbers.iter().copied().collect();
+    if order.len() == package.lead_count as usize
+        && distinct.len() == numbers.len()
+        && !numbers.is_empty()
+    {
         return vec![];
     }
     vec![Diagnostic::error(
@@ -490,9 +498,10 @@ pub(crate) fn check_package_pad_order(entity: &str, package: &Package) -> Vec<Di
         entity,
         Some("/pad_order"),
         format!(
-            "pad_order must list {} distinct pad numbers (got {}, {} distinct)",
+            "pad_order must have {} entries (lead positions), the pad numbers distinct and at least one (got {}, {} numbers, {} distinct)",
             package.lead_count,
             order.len(),
+            numbers.len(),
             distinct.len()
         ),
     )]
@@ -804,6 +813,22 @@ mod tact_switch_tests {
             .into_iter()
             .map(|d| format!("{} {}", d.rule_id, d.field_path.unwrap_or_default()))
             .collect()
+    }
+
+    #[test]
+    fn pad_order_may_leave_lead_positions_empty() {
+        let order = |o: &str| {
+            let p = switch("soic", 6, &format!("pad_order: {o}\n"), "");
+            check_package_pad_order("p", &p).len()
+        };
+        assert_eq!(order("['1', '', '3', '4', '', '6']"), 0);
+        assert_eq!(
+            order("['1', '', '3', '4', '', '4']"),
+            1,
+            "a repeated number"
+        );
+        assert_eq!(order("['', '', '', '', '', '']"), 1, "no lead at all");
+        assert_eq!(order("['1', '3', '4', '6']"), 1, "one entry per position");
     }
 
     #[test]

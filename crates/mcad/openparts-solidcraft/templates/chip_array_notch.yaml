@@ -1,0 +1,7 @@
+# A concave terminal's half-round notch in the substrate edge, cut from
+# the terminal and the substrate. Vars: name, x (the edge), y, d.
+- solid.cylinder:
+    {diameter: "{{d}}", height: body_h + 4 * term_t, base: ["{{x}}", "{{y}}", -2 * term_t],
+     operation: new, body_name: "{{name}}Notch", name: "{{name}}Notch"}
+- solid.combine: {target: "{{name}}", tools: ["{{name}}Notch"], operation: cut, keep_tools: true}
+- solid.combine: {target: Core, tools: ["{{name}}Notch"], operation: cut, keep_tools: false}

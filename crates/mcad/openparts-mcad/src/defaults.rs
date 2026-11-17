@@ -376,6 +376,18 @@ pub(crate) mod chip {
     pub const BODY_HEIGHT: f64 = 0.45;
 }
 
+/// `chip_array` generator defaults (3D only: the footprint is the stated
+/// land pattern), used where the package states no dimension.
+pub(crate) mod chip_array {
+    /// Body thickness of a thick-film array (Yageo YC124: 0.35 typ).
+    pub const BODY_HEIGHT: f64 = 0.35;
+    /// Terminal length in from the body edge, as a share of the body
+    /// across the rows (YC124: 0.2 of 1.0 on each side).
+    pub const TERMINAL_RATIO: f64 = 0.25;
+    /// Terminal width, as a share of the pitch.
+    pub const TERMINAL_WIDTH_RATIO: f64 = 0.6;
+}
+
 /// `melf` generator defaults (3D only: the footprint is the stated
 /// land pattern).
 pub(crate) mod melf {

@@ -43,6 +43,11 @@ pub struct ParameterValue {
     /// The value of an enumerated key, e.g. `X7R`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// A multi-valued enumerated key's values (`data_interface: [i2c,
+    /// spi]`, modes the part can be set to), instead of `value`. Only
+    /// keys the vocabulary marks multi-valued take it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
     /// Measurement conditions (section 11.2), e.g. `VGS: 10 V`.
     #[serde(
         default,
@@ -194,6 +199,9 @@ pub enum Quantity {
     Illuminance,
     /// Magnetic flux density, in tesla (`G`: gauss = 100 µT).
     MagneticFluxDensity,
+    /// A linear magnetic sensor's output per flux density, in V/T
+    /// (= mV/mT, as datasheets print it).
+    MagneticSensitivity,
 }
 
 impl Quantity {
@@ -225,6 +233,7 @@ impl Quantity {
         Quantity::AntennaGain,
         Quantity::Illuminance,
         Quantity::MagneticFluxDensity,
+        Quantity::MagneticSensitivity,
     ];
 
     /// The SI (base) unit symbol normalised values are in.
@@ -256,6 +265,7 @@ impl Quantity {
             Quantity::AntennaGain => "dBi",
             Quantity::Illuminance => "lx",
             Quantity::MagneticFluxDensity => "T",
+            Quantity::MagneticSensitivity => "V/T",
         }
     }
 
@@ -368,6 +378,9 @@ impl Quantity {
                 ("V/us", 1e6),
                 ("V/µs", 1e6),
                 ("V/μs", 1e6),
+                ("kV/us", 1e9),
+                ("kV/µs", 1e9),
+                ("kV/μs", 1e9),
             ],
             Quantity::Angle => &[("°", 1.0), ("deg", 1.0)],
             Quantity::Temperature => &[("°C", 1.0)],
@@ -398,6 +411,14 @@ impl Quantity {
                 ("mG", 1e-7),
                 ("G", 1e-4),
                 ("Gs", 1e-4),
+            ],
+            Quantity::MagneticSensitivity => &[
+                ("V/T", 1.0),
+                ("mV/mT", 1.0),
+                ("mV/T", 1e-3),
+                ("V/mT", 1e3),
+                ("mV/G", 10.0),
+                ("mV/Gs", 10.0),
             ],
         }
     }
@@ -459,6 +480,7 @@ impl Quantity {
             Quantity::AntennaGain => (&[("", 1.0)], "dBi"),
             Quantity::Illuminance => (&SMALL[3..6], "lx"),
             Quantity::MagneticFluxDensity => (&SMALL[1..5], "T"),
+            Quantity::MagneticSensitivity => (&[("", 1.0)], "mV/mT"),
         }
     }
 }
@@ -498,6 +520,9 @@ pub struct ParameterSpec {
     /// an operating temperature): a catalog range filter asks whether
     /// it contains the asked span, and alternatives must cover it.
     pub span: bool,
+    /// An enumerated key that may list several values (`values: [i2c,
+    /// spi]`: modes the part can be set to); `value` stays valid.
+    pub multi: bool,
 }
 
 impl ParameterSpec {
@@ -525,6 +550,7 @@ const fn num(key: &'static str, q: Quantity, categories: &'static [C]) -> Parame
         deviation: false,
         range: None,
         span: false,
+        multi: false,
     }
 }
 
@@ -550,6 +576,12 @@ const fn within(mut spec: ParameterSpec, lo: f64, hi: f64) -> ParameterSpec {
     spec
 }
 
+/// A multi-valued enumerated key (see [`ParameterSpec::multi`]).
+const fn multi(mut spec: ParameterSpec) -> ParameterSpec {
+    spec.multi = true;
+    spec
+}
+
 const fn enumerated(
     key: &'static str,
     values: &'static [&'static str],
@@ -563,6 +595,7 @@ const fn enumerated(
         deviation: false,
         range: None,
         span: false,
+        multi: false,
     }
 }
 
@@ -593,6 +626,7 @@ const ICS_AND_LED: &[C] = &[
 /// (their input is `input_voltage_max`).
 const SUPPLIED: &[C] = &[
     C::Led,
+    C::Optocoupler,
     C::Microcontroller,
     C::Memory,
     C::Sensor,
@@ -606,8 +640,14 @@ const SUPPLIED: &[C] = &[
 ];
 /// Amplifier inputs: op-amps, comparators, current-sense amplifiers.
 const AMPS: &[C] = &[C::OpAmp, C::Comparator, C::CurrentSenseAmplifier];
-/// Digital outputs with a timing: comparators, logic, interface ICs.
-const DIGITAL: &[C] = &[C::Comparator, C::Logic, C::Interface];
+/// Digital outputs with a timing: comparators, logic, interface ICs
+/// and logic-output / gate-driver optocouplers.
+const DIGITAL: &[C] = &[C::Comparator, C::Logic, C::Interface, C::Optocoupler];
+/// Isolators: optocouplers and digital isolators (interface ICs).
+const OPTO_ISOLATORS: &[C] = &[C::Optocoupler, C::Interface];
+/// Optically driven switches: triac drivers, photorelays (optocouplers
+/// or relays) and solid-state relays.
+const OPTO_OUTPUTS: &[C] = &[C::Optocoupler, C::Relay];
 /// Digital outputs: [`DIGITAL`] and Hall switches.
 const DIGITAL_OUT: &[C] = &[C::Comparator, C::Logic, C::Interface, C::MagneticSensor];
 /// Parts made of identical channels (amplifiers, gates, transceivers,
@@ -685,6 +725,12 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     num("saturation_current", Q::Current, &[C::Inductor]),
     num("dcr", Q::Resistance, &[C::Inductor]),
+    // Resettable (PPTC) fuses: hold and trip current at the stated
+    // temperature (`at: { TA: 23 °C }`), the fault ratings Imax / Vmax.
+    within(num("hold_current", Q::Current, &[C::Fuse]), 0.0, 1e3),
+    within(num("trip_current", Q::Current, &[C::Fuse]), 0.0, 1e3),
+    within(num("max_current", Q::Current, &[C::Fuse]), 0.0, 1e5),
+    within(num("max_voltage", Q::Voltage, &[C::Fuse]), 0.0, 1e4),
     // Crystals and oscillators
     num(
         "frequency",
@@ -781,9 +827,10 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("luminous_intensity_green", Q::LuminousIntensity, &[C::Led]),
     num("luminous_intensity_blue", Q::LuminousIntensity, &[C::Led]),
     // Also the signal interface of sensors, converters, drivers, audio
-    // parts and radio modules (its primary one; `i2c_spi` for a part
-    // with both).
-    enumerated(
+    // parts and radio modules. Multi-valued: a part with several
+    // selectable interfaces lists them (`values: [i2c, spi]`; the older
+    // `i2c_spi` compares as both).
+    multi(enumerated(
         "data_interface",
         &[
             "single_wire",
@@ -801,9 +848,12 @@ pub const PARAMETERS: &[ParameterSpec] = &[
             "pwm",
             "phase_enable",
             "step_dir",
+            "parallel",
+            "lvds",
+            "jesd204",
         ],
         INTERFACED,
-    ),
+    )),
     // Transistors
     enumerated(
         "polarity",
@@ -820,6 +870,32 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     // Optocouplers (input LED: forward_voltage/forward_current/
     // reverse_voltage; output: collector_emitter_voltage/collector_current)
     num("isolation_voltage", Q::Voltage, &[C::Optocoupler, C::Relay]),
+    // Common-mode transient immunity (CMR / CMTI, kV/µs).
+    within(
+        shown_in(num("cmr", Q::SlewRate, OPTO_ISOLATORS), "kV/µs"),
+        0.0,
+        1e12,
+    ),
+    // Triac drivers, photorelays and SSRs: the LED current that turns
+    // the output on (IFT / IFON, the max as printed), the off-state
+    // output voltage (VDRM / VOFF) and a MOSFET output's on-resistance
+    // (also an analog switch's RON).
+    within(num("trigger_current", Q::Current, OPTO_OUTPUTS), 0.0, 1.0),
+    within(num("off_state_voltage", Q::Voltage, OPTO_OUTPUTS), 0.0, 1e4),
+    within(
+        num(
+            "on_resistance",
+            Q::Resistance,
+            &[C::Optocoupler, C::Relay, C::AnalogSwitch],
+        ),
+        0.0,
+        1e6,
+    ),
+    within(
+        num("on_resistance_flatness", Q::Resistance, &[C::AnalogSwitch]),
+        0.0,
+        1e4,
+    ),
     shown_in(
         num("current_transfer_ratio", Q::Ratio, &[C::Optocoupler]),
         "%",
@@ -840,6 +916,28 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     // an amplifier's is the total span V+ - V- (±18 V is 36 V).
     within(span(num("supply_voltage", Q::Voltage, SUPPLIED)), -1e3, 1e3),
     within(num("supply_current", Q::Current, ICS_AND_LED), 0.0, 10.0),
+    // Parts with separate analog and digital supply pins (AVDD / DVDD):
+    // each rail's range and current.
+    within(
+        span(num("analog_supply_voltage", Q::Voltage, SUPPLIED)),
+        -1e3,
+        1e3,
+    ),
+    within(
+        span(num("digital_supply_voltage", Q::Voltage, SUPPLIED)),
+        -1e3,
+        1e3,
+    ),
+    within(
+        num("analog_supply_current", Q::Current, ICS_AND_LED),
+        0.0,
+        10.0,
+    ),
+    within(
+        num("digital_supply_current", Q::Current, ICS_AND_LED),
+        0.0,
+        10.0,
+    ),
     within(
         span(num("operating_temperature", Q::Temperature, C::ALL)),
         -100.0,
@@ -949,6 +1047,12 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         CONVERTERS,
     ),
     within(num("sample_rate", Q::Frequency, CONVERTERS), 0.0, 1e11),
+    // Where the conversion reference comes from; both when selectable.
+    multi(enumerated(
+        "reference",
+        &["internal", "external"],
+        &[C::Adc, C::Dac],
+    )),
     // Motor drivers (the bridge supply VM; a separate logic supply is
     // `supply_voltage`)
     enumerated(
@@ -962,7 +1066,11 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         1e3,
     ),
     within(
-        num("output_current_peak", Q::Current, &[C::Driver]),
+        num(
+            "output_current_peak",
+            Q::Current,
+            &[C::Driver, C::Optocoupler],
+        ),
         0.0,
         1e3,
     ),
@@ -1036,6 +1144,19 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     within(num("coil_resistance", Q::Resistance, COILS), 0.0, 1e6),
     within(num("contact_current", Q::Current, &[C::Relay]), 0.0, 1e3),
     within(num("contact_voltage", Q::Voltage, &[C::Relay]), 0.0, 1e5),
+    // Pick-up (max) and drop-out (min) coil voltage.
+    within(
+        num("must_operate_voltage", Q::Voltage, &[C::Relay]),
+        0.0,
+        1e3,
+    ),
+    within(
+        num("must_release_voltage", Q::Voltage, &[C::Relay]),
+        0.0,
+        1e3,
+    ),
+    // A solid-state relay's input (control side) impedance.
+    within(num("input_impedance", Q::Resistance, &[C::Relay]), 0.0, 1e8),
     // IEC style: `1a` SPST-NO, `1b` SPST-NC, `1c` SPDT, `2c` DPDT.
     enumerated(
         "contact_form",
@@ -1103,6 +1224,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
             "ambient",
             "proximity",
             "ambient_proximity",
+            "ambient_color_proximity_gesture",
             "color",
             "uv",
             "infrared",
@@ -1205,6 +1327,39 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         -10.0,
         10.0,
     ),
+    // A linear sensor's output per flux density (mV/mT; a microphone's
+    // `sensitivity` is another quantity) and its -3 dB bandwidth.
+    within(
+        num(
+            "magnetic_sensitivity",
+            Q::MagneticSensitivity,
+            &[C::MagneticSensor],
+        ),
+        0.0,
+        1e5,
+    ),
+    within(
+        num("bandwidth", Q::Frequency, &[C::MagneticSensor]),
+        0.0,
+        1e10,
+    ),
+    // Timing: an RTC's timekeeping accuracy (ppm, the temperature range
+    // in `at`), its backup-supply current (`at: { VBAT: 3 V }`); a
+    // timer's or counter's maximum frequency.
+    within(
+        deviation(shown_in(
+            num("timekeeping_accuracy", Q::Ratio, &[C::Rtc]),
+            "ppm",
+        )),
+        0.0,
+        PPM_1000,
+    ),
+    within(num("backup_current", Q::Current, &[C::Rtc]), 0.0, 1e-2),
+    within(
+        num("max_frequency", Q::Frequency, &[C::Timer, C::Logic]),
+        0.0,
+        1e11,
+    ),
     // RF: radio modules, transceivers, antennas. Several radios on one
     // module take the combined value (`wifi_ble`).
     enumerated(
@@ -1303,14 +1458,20 @@ pub enum Normalized {
     },
     /// The vocabulary's spelling.
     Text(&'static str),
+    /// A multi-valued key's values (vocabulary spellings, as listed).
+    Set(Vec<&'static str>),
 }
+
+/// Combined values of a multi-valued key that stand for several of its
+/// values (stated before the key took lists): `i2c_spi` is `[i2c, spi]`.
+const COMBINED: &[(&str, &str, &[&str])] = &[("data_interface", "i2c_spi", &["i2c", "spi"])];
 
 impl ParameterValue {
     /// The value in SI units (numeric keys) or its vocabulary spelling.
     pub fn normalize(&self, spec: &ParameterSpec) -> Result<Normalized, ParameterError> {
         match spec.shape {
             Numeric(q) => {
-                if self.value.is_some() {
+                if self.value.is_some() || !self.values.is_empty() {
                     return Err(ParameterError::WrongShape(
                         "a numeric parameter takes typ/min/max + unit, not value",
                     ));
@@ -1354,20 +1515,72 @@ impl ParameterValue {
                         "an enumerated parameter takes value, not typ/min/max/unit",
                     ));
                 }
+                let word = |v: &str| {
+                    values
+                        .iter()
+                        .copied()
+                        .find(|x| *x == v)
+                        .ok_or_else(|| ParameterError::UnknownValue(v.to_string()))
+                };
+                if !self.values.is_empty() {
+                    if !spec.multi {
+                        return Err(ParameterError::WrongShape(
+                            "only a multi-valued parameter takes values: use value",
+                        ));
+                    }
+                    if self.value.is_some() {
+                        return Err(ParameterError::WrongShape("give value or values, not both"));
+                    }
+                    let mut out: Vec<&'static str> = Vec::new();
+                    for v in &self.values {
+                        let w = word(v)?;
+                        if out.contains(&w) {
+                            return Err(ParameterError::WrongShape(
+                                "a value is listed twice in values",
+                            ));
+                        }
+                        out.push(w);
+                    }
+                    return Ok(if out.len() == 1 {
+                        Normalized::Text(out[0])
+                    } else {
+                        Normalized::Set(out)
+                    });
+                }
                 let v = self.value.as_deref().ok_or(ParameterError::WrongShape(
                     "an enumerated parameter needs value",
                 ))?;
-                values
-                    .iter()
-                    .find(|x| **x == v)
-                    .map(|x| Normalized::Text(x))
-                    .ok_or_else(|| ParameterError::UnknownValue(v.to_string()))
+                word(v).map(Normalized::Text)
             }
         }
     }
 }
 
 impl Normalized {
+    /// An enumerated value's words, a combined one (`i2c_spi`) taken
+    /// apart: what a multi-valued comparison or filter matches on.
+    /// Empty for a numeric value.
+    pub fn members(&self, key: &str) -> Vec<&'static str> {
+        let words: &[&'static str] = match self {
+            Normalized::Numeric { .. } => return Vec::new(),
+            Normalized::Text(t) => std::slice::from_ref(t),
+            Normalized::Set(ws) => ws,
+        };
+        let mut out = Vec::new();
+        for w in words {
+            let parts = COMBINED
+                .iter()
+                .find(|(k, v, _)| *k == key && v == w)
+                .map_or(std::slice::from_ref(w), |c| c.2);
+            for p in parts {
+                if !out.contains(p) {
+                    out.push(*p);
+                }
+            }
+        }
+        out
+    }
+
     /// The one number a numeric value is compared, sorted and filtered
     /// by (SI): a deviation key's larger magnitude; otherwise
     /// `typ`, else the middle of `min`/`max`, else its one limit.
@@ -1406,6 +1619,7 @@ impl Normalized {
     fn label_digits(&self, spec: &ParameterSpec, digits: i32) -> String {
         let (typ, min, max) = match *self {
             Normalized::Text(t) => return t.to_string(),
+            Normalized::Set(ref ws) => return ws.join(" / "),
             Normalized::Numeric { typ, min, max } => (typ, min, max),
         };
         let f = |v: f64| format_value_digits(v, spec, digits);
@@ -1684,6 +1898,7 @@ mod tests {
             max,
             unit: Some(unit.into()),
             value: None,
+            values: Vec::new(),
             at: Default::default(),
         }
     }
@@ -1781,6 +1996,95 @@ mod tests {
         assert!(matches!(
             x7r.normalize(c),
             Err(ParameterError::WrongShape(_))
+        ));
+    }
+
+    #[test]
+    fn multi_valued_keys_take_a_list() {
+        let di = spec("data_interface");
+        assert!(di.multi && spec("reference").multi && !spec("dielectric").multi);
+        let both = ParameterValue {
+            values: vec!["i2c".into(), "spi".into()],
+            ..Default::default()
+        };
+        let n = both.normalize(di).unwrap();
+        assert_eq!(n, Normalized::Set(vec!["i2c", "spi"]));
+        assert_eq!(n.label(di), "i2c / spi");
+        assert_eq!(n.members("data_interface"), ["i2c", "spi"]);
+        // The older combined value is the same pair.
+        let combined = ParameterValue {
+            value: Some("i2c_spi".into()),
+            ..Default::default()
+        };
+        let c = combined.normalize(di).unwrap();
+        assert_eq!(c, Normalized::Text("i2c_spi"));
+        assert_eq!(c.members("data_interface"), ["i2c", "spi"]);
+        // One listed value is a plain value.
+        let one = ParameterValue {
+            values: vec!["spi".into()],
+            ..Default::default()
+        };
+        assert_eq!(one.normalize(di), Ok(Normalized::Text("spi")));
+        let wrong = |v: ParameterValue, s: &ParameterSpec| {
+            matches!(v.normalize(s), Err(ParameterError::WrongShape(_)))
+        };
+        // A list on a single-valued key, value and values together, a
+        // repeated value, a list on a numeric key.
+        let list = |ws: &[&str]| ParameterValue {
+            values: ws.iter().map(|w| w.to_string()).collect(),
+            ..Default::default()
+        };
+        assert!(wrong(list(&["X7R", "X5R"]), spec("dielectric")));
+        let mut mixed = list(&["i2c", "spi"]);
+        mixed.value = Some("uart".into());
+        assert!(wrong(mixed, di));
+        assert!(wrong(list(&["i2c", "i2c"]), di));
+        assert!(wrong(list(&["i2c"]), spec("capacitance")));
+        assert!(matches!(
+            list(&["i2c", "can_bus"]).normalize(di),
+            Err(ParameterError::UnknownValue(_))
+        ));
+    }
+
+    #[test]
+    fn schema_gap_keys_normalise() {
+        // A linear Hall sensor's 2.5 mV/G is 25 mV/mT (V/T in SI).
+        let ms = spec("magnetic_sensitivity");
+        let v = val(Some(2.5), None, None, "mV/G").normalize(ms).unwrap();
+        assert_eq!(v.stated(ms), Some(25.0));
+        assert_eq!(v.label(ms), "25 mV/mT");
+        // CMR in kV/µs.
+        let cmr = spec("cmr");
+        let v = val(None, Some(50.0), None, "kV/µs").normalize(cmr).unwrap();
+        assert_eq!(v.label(cmr), "≥ 50 kV/µs");
+        assert!(cmr.in_range(5e10));
+        // RTC accuracy in ppm; a % slip is implausible.
+        let acc = spec("timekeeping_accuracy");
+        assert!(acc.in_range(3.5e-6) && !acc.in_range(0.02));
+        let fuse = ComponentCategory::Fuse;
+        for key in ["hold_current", "trip_current", "max_current", "max_voltage"] {
+            assert!(plausible_for(spec(key), fuse), "{key}");
+        }
+        for (key, c) in [
+            ("on_resistance", ComponentCategory::AnalogSwitch),
+            ("on_resistance", ComponentCategory::Relay),
+            ("supply_voltage", ComponentCategory::Optocoupler),
+            ("propagation_delay", ComponentCategory::Optocoupler),
+            ("output_current_peak", ComponentCategory::Optocoupler),
+            ("trigger_current", ComponentCategory::Optocoupler),
+            ("off_state_voltage", ComponentCategory::Relay),
+            ("reference", ComponentCategory::Dac),
+            ("data_interface", ComponentCategory::Adc),
+            ("analog_supply_voltage", ComponentCategory::AudioCodec),
+            ("backup_current", ComponentCategory::Rtc),
+            ("max_frequency", ComponentCategory::Timer),
+            ("bandwidth", ComponentCategory::MagneticSensor),
+        ] {
+            assert!(plausible_for(spec(key), c), "{key} on {c:?}");
+        }
+        assert!(!plausible_for(
+            spec("hold_current"),
+            ComponentCategory::Resistor
         ));
     }
 

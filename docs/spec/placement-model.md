@@ -127,7 +127,7 @@ kept. A test checks every package of the dataset.
 | `chip`, `sod`, `sod_flat`, `do214`, `axial`, `radial`, `smd_electrolytic`, `melf` | Body along X; pin 1 (cathode, +, pad 1) on the left. |
 | `to92`, `to220`, `sip` | Leads in a row along X; pin 1 on the left. |
 | `sot`, `sot223`, `dpak`, `d2pak` | Leads down the left side, pin 1 at the top; the opposite lead or the tab on the right. SOT-23: pins 1 and 2 on the left, 3 on the right. The generator draws SOT leads along the bottom, so SOT packages turn −90°. |
-| `soic`, `tssop`, `ssop`, `msop`, `son`, `dfn`, `dip` | Rows along Y; pin 1 at the top of the left row; numbering counter-clockwise. |
+| `soic`, `tssop`, `ssop`, `msop`, `son`, `dfn`, `dip`, `chip_array` | Rows along Y; pin 1 at the top of the left row; numbering counter-clockwise. |
 | `lqfp`, `qfn`, `lga` | Pin 1 at the top of the left side, or at the upper-left corner; numbering counter-clockwise. A crystal whose source numbers pin 1 lower left (ABM8) turns −90°. |
 | `bga` | Ball A1 upper left; rows A… downward, columns 1… to the right. |
 | `module` | Pin 1 upper left (Raspberry Pi Pico: USB end up, antenna end down). |

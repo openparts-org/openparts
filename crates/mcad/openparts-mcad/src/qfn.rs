@@ -29,7 +29,9 @@ use openparts_core::{Package, PackageFamily as F};
 /// per-side terminal counts from `lead_layout: [left, bottom, right,
 /// top]` (zeros allowed), numbered in the same counter-clockwise order,
 /// each side centred at `pitch`; `dimensions.lead_inset` sets the
-/// terminals in from the body edge.
+/// terminals in from the body edge. When the layout counts fewer than
+/// `lead_count`, the rest are `pads` entries off the perimeter (a centre
+/// or grid pad; [`crate::generate`] adds them).
 pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> {
     let kind = match package.family {
         F::Qfn => Kind::Qfn,
@@ -50,8 +52,11 @@ pub fn generate_qfn(package: &Package) -> Result<MechanicalGeometry, McadError> 
                 .ok_or(McadError::MissingLeadLayout {
                     family: package.family,
                 })?;
+            // Terminals beyond the perimeter rows (a centre pad, a
+            // grid) are `pads` entries, added by `crate::lga_extra_terminals`.
+            let extra_ok = |sum: u32| sum == n || (sum < n && !package.pads.is_empty());
             match layout.as_slice() {
-                [l, b, r, t] if l + b + r + t == n && n > 0 => [*l, *b, *r, *t],
+                [l, b, r, t] if extra_ok(l + b + r + t) && l + b + r + t > 0 => [*l, *b, *r, *t],
                 _ => {
                     return Err(McadError::InvalidLeadLayout {
                         layout: layout.clone(),
@@ -243,6 +248,7 @@ mod tests {
                 exposed_pad: Some(ExposedPadDimensions {
                     land_width: None,
                     land_length: None,
+                    face: Default::default(),
                     width: Dimension {
                         typ: Some(1.5),
                         min: None,
@@ -263,6 +269,7 @@ mod tests {
             aux_pads: vec![],
             pad_order: vec![],
             actuation: None,
+            terminal_shape: None,
             connector: None,
             edge: None,
             keepouts: vec![],

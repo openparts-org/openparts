@@ -1,0 +1,13 @@
+# Chip resistor array: an alumina substrate with a black overcoat over
+# the resistive elements between the two terminal rows.
+# Vars: term_len (terminal length in from each side), overcoat_t, term_t.
+- params:
+    term_len: ["{{term_len}}", terminal length in from each long side (geometry)]
+    overcoat_t: ["{{overcoat_t}}", overcoat over the resistive elements]
+    term_t: ["{{term_t}}", terminal plating thickness]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h - overcoat_t,
+     center: [0 mm, 0 mm, (body_h - overcoat_t) / 2], operation: new, body_name: Core, name: Core}
+- solid.box:
+    {length: body_w - 2 * term_len - 0.04 mm, width: body_l * 0.92, height: overcoat_t,
+     center: [0 mm, 0 mm, body_h - overcoat_t / 2], operation: new, body_name: Overcoat, name: Overcoat}

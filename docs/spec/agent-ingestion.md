@@ -498,8 +498,8 @@ MPN, so it goes on the Part).
 | diode | `forward_voltage`, `reverse_voltage`, `forward_current`; zener `zener_voltage`, `zener_test_current` |
 | LED | `color`, `wavelength` (dominant), `peak_wavelength`, `luminous_intensity`, `viewing_angle`, `forward_voltage`, `forward_current`; RGB: `wavelength_red`/`_green`/`_blue`, `luminous_intensity_red`/`_green`/`_blue`; with an integrated driver (addressable): `supply_voltage`, `data_interface`, `data_rate` |
 | transistor | `polarity`; MOSFET `drain_source_voltage`, `drain_current`, `rds_on`, `gate_threshold_voltage`; BJT `collector_emitter_voltage`, `collector_current` |
-| optocoupler | input LED `forward_voltage`, `forward_current`, `reverse_voltage`; output `collector_emitter_voltage`, `collector_current`; `current_transfer_ratio`, `isolation_voltage` |
-| fuse | `rated_current`, `rated_voltage` |
+| optocoupler | input LED `forward_voltage`, `forward_current`, `reverse_voltage`; output `collector_emitter_voltage`, `collector_current`; `current_transfer_ratio`, `isolation_voltage`; logic / gate-driver outputs: `supply_voltage` (output-side VCC), `propagation_delay`, `output_current_peak`, `cmr` (`kV/µs`); triac drivers and photorelays: `trigger_current` (IFT / IFON), `off_state_voltage` (VDRM / VOFF), `on_resistance` (photorelay RON) |
+| fuse | `rated_current`, `rated_voltage`; resettable (PPTC): `hold_current`, `trip_current` (`at: { TA: 23 °C }`), `max_current` (Imax), `max_voltage` (Vmax) instead of `rated_*` |
 | `linear_regulator`, `switching_regulator` (group `power`) | `output_type`, `output_voltage`, `input_voltage_max`, `output_current`; `dropout_voltage` (linear only) |
 | `flash`, `eeprom`, `sram` (group `memory`) | `capacity` (on the Device when all its Parts share it) |
 | `tact_switch` (group `switch`) | `actuation_force`, `travel`, `rated_voltage`, `rated_current` |
@@ -507,21 +507,24 @@ MPN, so it goes on the Part).
 | `comparator` (group `analog`) | `channel_count`, `propagation_delay`, `output_structure`, `input_offset_voltage`, `input_bias_current`, `supply_voltage`, `supply_current_per_channel` / `supply_current`, `rail_to_rail_input`, `operating_temperature` |
 | `logic` | `logic_function`, `channel_count`, `supply_voltage`, `propagation_delay`, `output_current_high`, `output_current_low`, `output_structure`, `operating_temperature` |
 | `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter`, I2C buffers (group `interface`) | `data_rate`, `supply_voltage`, `supply_current`, `bus_fault_voltage`, `esd_hbm`, `channel_count` (level shifters, buffers), `propagation_delay`, `operating_temperature` |
-| `adc`, `dac` (group `analog`) | `resolution`, `sample_rate`, `channel_count`, `data_interface`, `supply_voltage`, `supply_current` |
+| `adc`, `dac` (group `analog`) | `resolution`, `sample_rate` (a DAC's update rate; `SPS`/`kSPS`/`MSPS`), `channel_count`, `data_interface` (`i2c`, `spi`, `parallel`...; several as `values: [i2c, spi]`), `reference` (`internal`, `external`, both as `values`), `supply_voltage`, `supply_current`; separate rails: `analog_supply_voltage`, `digital_supply_voltage`, `analog_supply_current`, `digital_supply_current` |
+| `analog_switch` (group `analog`) | `on_resistance` (RON, `at: { VDD: 5 V }`), `on_resistance_flatness`, `channel_count`, `supply_voltage`, `supply_current`, `data_interface` (a serially controlled switch) |
+| `rtc` (group `timing`) | `timekeeping_accuracy` (`ppm`, `at: { TA: 0..40 °C }`), `backup_current` (`at: { VBAT: 3 V }`), `supply_voltage`, `supply_current` (`at: { FCLK: 400 kHz }` when stated per bus clock), `data_interface` |
+| `timer` (group `timing`) | `max_frequency`, `supply_voltage`, `supply_current` |
 | `motor_driver` (group `driver`) | `motor_type`, `motor_supply_voltage` (VM, the bridge supply), `supply_voltage` (only a separate logic supply), `output_current` (continuous per bridge/output), `output_current_peak`, `channel_count` (H-bridges / half-bridges), `rds_on` (HS + LS), `microstepping`, `data_interface` (`pwm`, `phase_enable`, `step_dir`, `spi`...), `operating_temperature` |
 | `led_driver` (group `driver`) | `led_driver_type`, `channel_count`, `output_current` (per channel max), `output_current_peak`, `supply_voltage`, `data_interface`, `operating_temperature` |
 | `audio_amplifier` (group `audio`) | `amplifier_class`, `channel_count`, `output_power` (per channel, `at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`), `thd_n`, `snr`, `supply_voltage`, `supply_current` |
 | `audio_codec` (group `audio`) | `resolution`, `sample_rate`, `snr`, `thd_n`, `channel_count`, `data_interface` (`i2s`, `tdm`), `supply_voltage` |
 | `microphone` (group `audio`) | `data_interface` (`analog`, `pdm`, `i2s`), `sensitivity` (analog, `dBV`) or `sensitivity_digital` (digital, `dBFS`), `snr`, `acoustic_overload_point` (`dBSPL`), `supply_voltage`, `supply_current` |
 | `buzzer` (group `audio`) | `buzzer_type` (`magnetic`, `piezo`), `buzzer_drive` (`internal`: built-in oscillator; `external`: driven with the tone), `rated_voltage`, `supply_voltage` (operating range), `rated_current`, `frequency`, `sound_pressure` (`at: { d: 10 cm, VIN: 5 V }`), `coil_resistance` |
-| `light_sensor`, `gas_sensor`, `magnetic_sensor` (group `sensor`) | light: `light_sensor_type`, `illuminance_range`, `peak_wavelength`; gas: `target_gas`, `sensing_principle`, `concentration_range`; magnetic: `magnetic_sensor_type`, `operate_point`, `release_point`, `magnetic_range`, `output_structure`; all: `data_interface`, `supply_voltage`, `supply_current` |
-| relay | `coil_voltage`, `coil_resistance`, `contact_form`, `contact_current`, `contact_voltage`, `relay_type`, `isolation_voltage` |
+| `light_sensor`, `gas_sensor`, `magnetic_sensor` (group `sensor`) | light: `light_sensor_type`, `illuminance_range`, `peak_wavelength`; gas: `target_gas`, `sensing_principle`, `concentration_range`; magnetic: `magnetic_sensor_type`, `operate_point`, `release_point`, `magnetic_range`, `output_structure`, `magnetic_sensitivity` (`mV/mT`; never `sensitivity`, the microphone key), `bandwidth`; all: `data_interface`, `supply_voltage`, `supply_current` |
+| relay | `coil_voltage`, `coil_resistance`, `contact_form`, `contact_current`, `contact_voltage`, `relay_type`, `isolation_voltage`, `must_operate_voltage`, `must_release_voltage`; solid-state and photorelays: `trigger_current` (input current to turn on), `input_impedance`, `off_state_voltage`, `on_resistance` |
 | `potentiometer` (group `resistor`) | `resistance`, `tolerance`, `power_rating`, `taper`, `rotation_angle`, `resistive_element` |
 | `rotary_encoder` (group `switch`) | `pulses_per_revolution`, `detents`, `push_switch`, `rotation_angle`, `rated_voltage`, `rated_current` |
 | `ferrite_bead`, `common_mode_choke` (group `inductor`) | `impedance` (`at: { f: 100 MHz }`), `tolerance`, `rated_current`, `dcr`, `inductance` (chokes), `rated_voltage` (chokes) |
 | `wireless_module` (group `rf`) | `radio_protocol`, `frequency_band`, `tx_power`, `rx_sensitivity`, `antenna_type`, `data_interface` (host interface), `supply_voltage`, `supply_current` |
 | `antenna` (group `rf`) | `frequency_band`, `peak_gain`, `antenna_type` |
-| any IC | `supply_voltage`, `supply_current`, `operating_temperature`, `esd_hbm` |
+| any IC | `supply_voltage`, `supply_current`, `operating_temperature`, `esd_hbm`; separate analog/digital supply pins: `analog_supply_voltage`, `digital_supply_voltage`, `analog_supply_current`, `digital_supply_current` (not `supply_voltage`) |
 
 No other keys exist. Don't invent one; propose it in the PR text
 instead.
@@ -640,6 +643,24 @@ report or a fix.
 `... (AI candidates, needs review)`. The report lists per part the keys
 added, the sources and pages read, the keys deliberately left out and
 why, and every datasheet that could not be fetched.
+
+**Package shapes the parameter keys pair with** (Canonical Data
+Specification section 20; the add-part skill's family table has the
+details). Record what the drawing shows instead of skipping the part:
+
+- a ground ring around a bottom-port microphone's sound port: a pad with
+  `shape: annular` + `inner_diameter` (20.7), the port hole a
+  `plated: false` pad;
+- a pad-up thermal pad on top of an HTSSOP (TI DAD):
+  `dimensions.exposed_pad.face: top` (20.1), no board land, no `EP` pin;
+- a missing lead position (Toshiba SO6: pin 2 absent): an empty
+  `pad_order` entry, `lead_count` counting the positions (20.1);
+- an LGA's centre or grid pads beyond the per-side rows (ENS160, a
+  microphone's ring): `lead_count` counts them, `lead_layout` only the
+  perimeter, `pads` lists all (20.4);
+- chip resistor arrays (Yageo YC124/YC164, Panasonic EXB): family
+  `chip_array`, `terminal_shape: convex | concave`, `pads` from the
+  recommended land pattern (20.15).
 
 ## 19.2 Reference Circuit Ingestion
 

@@ -1,0 +1,7 @@
+# One chip-array terminal wrapped over the substrate edge (top, edge and
+# underside), `proud` beyond the edge (convex; 0 for concave).
+# Vars: name, x (terminal centre, the proud part included), y, w (width
+# along the row), len (in from the edge, with proud).
+- solid.box:
+    {length: "{{len}}", width: "{{w}}", height: body_h + 2 * term_t,
+     center: ["{{x}}", "{{y}}", body_h / 2], operation: new, body_name: "{{name}}", name: "{{name}}"}

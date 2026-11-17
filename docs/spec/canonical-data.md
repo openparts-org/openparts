@@ -343,7 +343,8 @@ Device value into each Part.
   (section 9). Only what the source states is recorded; a `typ` is never
   computed from `min`/`max` (section 7). `min <= typ <= max`.
 - *enumerated*: `value`, one of the key's listed spellings
-  (case-sensitive).
+  (case-sensitive). A *multi-valued* key (`data_interface`,
+  `reference`) may instead list several in `values` (below).
 
 Each numeric key has a fixed physical quantity; its value normalises to
 that quantity's SI base unit. Accepted units (case-sensitive: `m` is
@@ -365,7 +366,7 @@ milli-, `M` mega-):
 | information | bit | `bit` `Kbit` `kbit` `Mbit` `Gbit` (binary: 2^10, 2^20, 2^30, as memory datasheets use them) |
 | luminous intensity | cd | `µcd` `ucd` `mcd` `cd` |
 | data rate | bit/s | `bit/s` `bps` `kbit/s` `kbps` `Kbps` `Mbit/s` `Mbps` (decimal: 10^3, 10^6, as interface datasheets use them) |
-| slew rate | V/s | `V/s` `V/ms` `V/us` `V/µs` |
+| slew rate | V/s | `V/s` `V/ms` `V/us` `V/µs` `kV/us` `kV/µs` (also a common-mode transient immunity) |
 | angle | ° (not SI) | `°` `deg` |
 | temperature | °C (not SI) | `°C` |
 | time | s | `ps` `ns` `us` `µs` `ms` `s` |
@@ -377,6 +378,7 @@ milli-, `M` mega-):
 | antenna gain | dBi | `dBi` |
 | illuminance | lx | `mlx` `lx` `klx` |
 | magnetic flux density | T | `nT` `uT` `µT` `mT` `T` `mG` `G` `Gs` (gauss = 100 µT) |
+| magnetic sensitivity | V/T (= mV/mT) | `mV/mT` `V/T` `mV/T` `V/mT` `mV/G` `mV/Gs` (mV/G = 10 mV/mT) |
 
 Vocabulary (key: quantity or values; categories it is plausible for):
 
@@ -392,9 +394,13 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `power_rating` | power | resistor, diode, LED |
 | `temperature_coefficient` | temperature coefficient, deviation | resistor |
 | `inductance` | inductance | inductor |
-| `rated_current` | current | inductor, fuse, `buzzer` (its current draw) |
+| `rated_current` | current (a fuse's rated current; a resettable PPTC fuse states `hold_current` / `trip_current` and `max_voltage` instead of `rated_*`) | inductor, fuse, `buzzer` (its current draw) |
 | `saturation_current` | current | inductor |
 | `dcr` | resistance | inductor |
+| `hold_current` | current (a resettable PPTC fuse's Ihold, the temperature in `at: { TA: 23 °C }`) | fuse |
+| `trip_current` | current (a PPTC fuse's Itrip) | fuse |
+| `max_current` | current (Imax, the maximum fault / interrupt current) | fuse |
+| `max_voltage` | voltage (Vmax, the maximum voltage the fuse interrupts) | fuse |
 | `frequency` | frequency (nominal; a buzzer's resonant or oscillation frequency) | crystal, oscillator, `buzzer` |
 | `load_capacitance` | capacitance (CL the frequency is specified at) | crystal |
 | `frequency_tolerance` | ratio, deviation (at 25 °C, in `ppm`) | crystal, oscillator |
@@ -415,7 +421,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `viewing_angle` | angle (full angle at half intensity, 2θ½, in `°`) | LED |
 | `wavelength_red`, `wavelength_green`, `wavelength_blue` | length (an RGB LED's dominant wavelength per emitter, as `wavelength`) | LED |
 | `luminous_intensity_red`, `luminous_intensity_green`, `luminous_intensity_blue` | luminous intensity (an RGB LED's Iv per emitter) | LED |
-| `data_interface` | `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class), `analog` `pdm` `i2s` `tdm` `i2c` `spi` `i2c_spi` (both) `uart` `usb` `sdio` `pwm` `phase_enable` `step_dir` (the part's primary signal or control interface) | LED, `sensor`, `analog`, `driver`, `audio`, `rf` |
+| `data_interface` | multi-valued: `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class), `analog` `pdm` `i2s` `tdm` `i2c` `spi` `i2c_spi` (both; prefer `values: [i2c, spi]`) `uart` `usb` `sdio` `pwm` `phase_enable` `step_dir` `parallel` `lvds` `jesd204` (the part's signal or control interface; several selectable ones as `values`) | LED, `sensor`, `analog` (ADCs, DACs included), `driver`, `audio`, `rf` |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
 | `drain_source_voltage` | voltage (Vds max) | transistor |
 | `drain_current` | current (Id continuous) | transistor |
@@ -425,6 +431,11 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
 | `isolation_voltage` | voltage (input-output isolation, BVs; a relay's coil-contact dielectric strength; the rms/duration condition goes into the locator, or `at: { t: 60 s }`) | optocoupler, relay |
 | `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
+| `cmr` | slew rate (common-mode transient immunity CMR / CMTI, shown in `kV/µs`; the min as printed, `min: 35 kV/µs`) | optocoupler, `interface` (digital isolators) |
+| `trigger_current` | current (the input LED current that turns the output on: a triac driver's IFT, a photorelay's or SSR's IFON / must-operate input current; the max as printed) | optocoupler, relay |
+| `off_state_voltage` | voltage (the output's off-state rating: a triac driver's VDRM, a photorelay's VOFF) | optocoupler, relay |
+| `on_resistance` | resistance (a photorelay's / MOSFET SSR's output RON; an analog switch's RON, the supply in `at: { VDD: 5 V }`) | optocoupler, relay, `analog_switch` |
+| `on_resistance_flatness` | resistance (RFLAT(ON), the RON change over the signal range) | `analog_switch` |
 | `output_type` | `fixed` `adjustable` | `power` |
 | `output_voltage` | voltage | `power` |
 | `input_voltage_max` | voltage | `power` |
@@ -433,8 +444,10 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `capacity` | information | `memory` |
 | `actuation_force` | force | `switch` |
 | `travel` | length | `switch` |
-| `supply_voltage` | voltage, operating range (the recommended supply range as `min`/`max`; an amplifier's is the total span V+ - V-: "±1.35 V to ±18 V" is `{ min: 2.7 V, max: 36 V }` when the source also prints the single-supply span, else leave it out) | LED (with an integrated driver), ICs except `power` (a regulator's input is `input_voltage_max`) |
+| `supply_voltage` | voltage, operating range (the recommended supply range as `min`/`max`; an amplifier's is the total span V+ - V-: "±1.35 V to ±18 V" is `{ min: 2.7 V, max: 36 V }` when the source also prints the single-supply span, else leave it out; an optocoupler's: its output-side VCC) | LED (with an integrated driver), optocoupler, ICs except `power` (a regulator's input is `input_voltage_max`) |
 | `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD) | ICs, LED |
+| `analog_supply_voltage`, `digital_supply_voltage` | voltage, operating range (a part with separate analog and digital supply pins: AVDD, DVDD; see below) | as `supply_voltage` |
+| `analog_supply_current`, `digital_supply_current` | current (the current of each rail, IAVDD / IDVDD) | as `supply_current` |
 | `operating_temperature` | temperature, operating range (`{ min: -40 °C, max: 85 °C }`, the operating -- not storage -- range) | any |
 | `esd_hbm` | voltage (human-body-model rating that holds for all pins, `typ: 2 kV` for "±2000 V"; a higher bus-pin-only rating is not this key) | ICs, LED |
 | `channel_count` | `1` `2` `3` `4` `5` `6` `8` `9` `10` `12` `16` `18` `24` `32` `36` `48` `64` `144` (identical channels: amplifiers, gates, transceiver channels, motor bridges, LED outputs, audio channels) | `analog`, `interface`, `logic`, `driver`, `audio` |
@@ -444,17 +457,18 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `input_bias_current` | current, a magnitude (IB) | `op_amp`, `comparator`, `current_sense_amplifier` |
 | `supply_current_per_channel` | current (IQ per amplifier / comparator, as the source states it per channel) | `op_amp`, `comparator` |
 | `rail_to_rail_input`, `rail_to_rail_output` | `yes` `no` (only when the source says so: "rail-to-rail input", a common-mode range to both rails) | `op_amp`, `comparator` |
-| `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface` |
+| `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface`, optocoupler |
 | `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface`, `magnetic_sensor` |
 | `logic_function` | `buffer` `inverter` `and` `nand` `or` `nor` `xor` `xnor` `bus_transceiver` `flip_flop` `latch` `shift_register` `counter` `decoder` `multiplexer` | `logic` |
 | `output_current_high`, `output_current_low` | current, a magnitude (IOH "-24 mA" is `24 mA`; IOL; the supply in `at: { VCC: ... }`) | `logic`, `interface` |
 | `data_rate` | data rate (the signalling rate the source guarantees; an addressable LED's serial input) | LED, `interface` |
 | `bus_fault_voltage` | voltage, operating range (the bus pins' fault-protection / abs-max range as printed: `{ min: -58 V, max: 58 V }`) | `interface` |
 | `resolution` | `8` `10` `12` `14` `16` `18` `20` `22` `24` `32` (bits) | `adc`, `dac`, `audio_codec` |
-| `sample_rate` | frequency (max sample/update rate; `SPS` units allowed) | `adc`, `dac`, `audio_codec` |
+| `sample_rate` | frequency (max sample rate; a DAC's update rate; `SPS` `kSPS` `MSPS` allowed) | `adc`, `dac`, `audio_codec` |
+| `reference` | multi-valued: `internal` `external` (where the conversion reference comes from; `values: [internal, external]` when selectable) | `adc`, `dac` |
 | `motor_type` | `brushed_dc` `stepper` `brushed_dc_or_stepper` (dual H-bridges sold for either) `bldc` | `motor_driver` |
 | `motor_supply_voltage` | voltage, operating range (VM, the bridge supply; a separate logic supply is `supply_voltage`) | `motor_driver` |
-| `output_current_peak` | current (peak / short-duration output current per output) | `driver` |
+| `output_current_peak` | current (peak / short-duration output current per output; a gate-driver optocoupler's IOPH/IOPL) | `driver`, optocoupler |
 | `microstepping` | `1` `2` `4` `8` `16` `32` `64` `128` `256` (the finest step, 1/N) | `motor_driver` |
 | `led_driver_type` | `constant_current` (linear current sinks/sources) `switching` (boost/buck LED driver) `matrix` (scanned LED matrix) `pwm` (PWM outputs without current regulation) | `led_driver` |
 | `amplifier_class` | `a` `ab` `d` `g` `h` | `audio_amplifier` |
@@ -473,6 +487,9 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `contact_voltage` | voltage (max switching voltage) | relay |
 | `contact_form` | `1a` (SPST-NO) `1b` (SPST-NC) `1c` (SPDT) `2a` `2b` `2c` (DPDT) `4c` | relay |
 | `relay_type` | `electromechanical` `latching` `reed` `solid_state` | relay |
+| `must_operate_voltage` | voltage (pick-up voltage, the max as printed: "75 % of rated max") | relay |
+| `must_release_voltage` | voltage (drop-out voltage, the min as printed) | relay |
+| `input_impedance` | resistance (a solid-state relay's input impedance; an input *current* is `trigger_current`) | relay |
 | `taper` | `linear` (B) `logarithmic` (A) `reverse_logarithmic` (C) | `potentiometer` |
 | `rotation_angle` | angle (effective rotation; multi-turn: turns × 360°) | `potentiometer`, `rotary_encoder` |
 | `resistive_element` | `carbon` `cermet` `conductive_plastic` `wirewound` `metal_film` | `potentiometer` |
@@ -480,7 +497,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `detents` | `0` (smooth) `4` `8` `9` `10` `11` `12` `15` `16` `18` `20` `24` `30` `32` `36` | `rotary_encoder` |
 | `push_switch` | `yes` `no` | `rotary_encoder` |
 | `impedance` | resistance (at the printed frequency, `at: { f: 100 MHz }`; a choke's common-mode impedance) | `ferrite_bead`, `common_mode_choke` |
-| `light_sensor_type` | `ambient` `proximity` `ambient_proximity` `color` `uv` `infrared` | `light_sensor` |
+| `light_sensor_type` | `ambient` `proximity` `ambient_proximity` `ambient_color_proximity_gesture` (ALS + RGB + proximity + gesture: APDS-9960-class) `color` `uv` `infrared` | `light_sensor` |
 | `illuminance_range` | illuminance, operating range (the measurable range) | `light_sensor` |
 | `target_gas` | `voc` `nox` `co2` `co` `h2` `ch4` `lpg` `alcohol` `nh3` `no2` `o2` `o3` `h2s` `combustible` `multiple` | `gas_sensor` |
 | `sensing_principle` | `metal_oxide` `ndir` `photoacoustic` `electrochemical` `catalytic` `thermal_conductivity` | `gas_sensor` |
@@ -488,6 +505,11 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `magnetic_sensor_type` | `unipolar_switch` `omnipolar_switch` `bipolar_latch` `linear` `3d` `angle` | `magnetic_sensor` |
 | `operate_point`, `release_point` | magnetic flux density (BOP / BRP; signed for a latch, shown in `mT`) | `magnetic_sensor` |
 | `magnetic_range` | magnetic flux density, operating range (a linear/3D sensor's full scale: ±40 mT is `{ min: -40 mT, max: 40 mT }`) | `magnetic_sensor` |
+| `magnetic_sensitivity` | magnetic sensitivity (a linear Hall sensor's analog output, `mV/mT`; not the microphone `sensitivity`, which is a level in dBV; a digital magnetometer's LSB/mT has no key) | `magnetic_sensor` |
+| `bandwidth` | frequency (a linear sensor's -3 dB output bandwidth) | `magnetic_sensor` |
+| `timekeeping_accuracy` | ratio, deviation (an RTC's frequency / timekeeping accuracy in `ppm`; the temperature range in `at: { TA: 0..40 °C }`) | `rtc` |
+| `backup_current` | current (the backup-supply current IBAT, `at: { VBAT: 3 V }`) | `rtc` |
+| `max_frequency` | frequency (a timer's / counter's / flip-flop's maximum operating frequency) | `timer`, `logic` |
 | `radio_protocol` | `wifi` `wifi_ble` `wifi_bluetooth` (Classic + LE) `wifi_ble_802154` `ble` `bluetooth` (Classic + LE) `ble_802154` `ieee802154` (Zigbee/Thread) `lora` `sub_ghz` `cellular` `gnss` `uwb` `nfc` (several radios: the combined value) | `rf` |
 | `frequency_band` | frequency, operating range (2.4-2.4835 GHz) | `rf` |
 | `tx_power` | RF power level (max output, `dBm`) | `rf` |
@@ -502,12 +524,38 @@ A group in the last column covers its subcategories (section 14.1);
 and `rf` (`supply_voltage` also fits an active buzzer's or a module's
 operating range).
 
-An *operating-range* key (`supply_voltage`, `operating_temperature`,
+An *operating-range* key (`supply_voltage`, `analog_supply_voltage`,
+`digital_supply_voltage`, `operating_temperature`,
 `bus_fault_voltage`, `motor_supply_voltage`, `illuminance_range`,
 `concentration_range`, `magnetic_range`, `frequency_band`) records the range's ends as `min`/`max`. The
 catalog's range filter asks whether the range contains the asked span
 (`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
 3.3 V), and an alternative must cover the original's range.
+
+A *multi-valued* key (`data_interface`, `reference`) lists the values
+the part can be set to in `values` instead of `value`:
+
+```yaml
+data_interface: { values: [i2c, spi], src: p1 "Features: I2C or SPI interface" }
+reference:      { values: [internal, external], src: p1 "Features" }
+```
+
+`value` stays valid for one; a list repeats no value and goes on no
+other key (`parameter.invalid`). Alternatives and catalog filters treat
+the list as a set: a candidate must offer every value the original
+lists, and the part is found under each of them (`i2c_spi` counts as
+`i2c` and `spi`).
+
+**Separate supplies.** A part with separate analog and digital supply
+pins (AVDD / DVDD: converters, codecs, some sensors) records each rail
+in `analog_supply_voltage` / `digital_supply_voltage` (ranges) and
+`analog_supply_current` / `digital_supply_current`; `supply_voltage`
+stays for a part with one supply (or the single range a source gives
+for all rails). Keys, not a condition on `supply_voltage`: a condition
+is a measured quantity (section 11.2), not a pin name, and two rails
+are two operating ranges an alternative must cover each, so they
+compare and filter as keys of their own (as `motor_supply_voltage` for
+a motor driver's bridge supply).
 
 A *magnitude* key (`input_offset_voltage`, `input_bias_current`,
 `output_current_high`/`_low`) drops the printed sign or ±: the
@@ -583,12 +631,12 @@ from the quantity's table in section 11.1):
 
 | Quantity | Symbols |
 |---|---|
-| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) `VM` (motor supply) |
+| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) `VM` (motor supply) `VBAT` (backup battery: an RTC's backup current) |
 | current | `ID` `IC` `IB` `IF` `IR` `IZT` `IPP` `IOUT` `IL` |
 | capacitance | `CL` (load capacitance) |
 | resistance | `RL` (load resistance) |
 | temperature (`°C`) | `TA` (ambient) `TJ` (junction) `TC` (case) `TL` (lead) `TS` (solder point) `TT` (terminal) |
-| frequency | `f` |
+| frequency | `f`, `FCLK` (the clock frequency a supply current is stated at: an RTC's I2C clock, a core clock) |
 | time (`ns` `µs` `ms` `s`) | `t` |
 | ratio (`%`) | `THD` (the distortion an audio amplifier's output power is stated at) |
 | length (`mm` `cm` `m`) | `d` (measuring distance: a buzzer's sound pressure at 10 cm) |
@@ -972,7 +1020,7 @@ dimensions:
 | `body_width` | Body幅（X） | E1（QFP/SOIC）、D（SOT-23の長辺） | 必須 |
 | `body_length` | Body長（Y） | D1（QFP）、D（SOIC） | 必須 |
 | `body_height` | Moldの厚み | A2（leadless packageでA2が無い場合はA） | 省略可 |
-| `exposed_pad` | 裏面Exposed Padの`width`/`length`（任意で推奨Land `land_width`/`land_length`、20.5参照） | E2 / D2 | 省略可 |
+| `exposed_pad` | 裏面Exposed Padの`width`/`length`（任意で推奨Land `land_width`/`land_length`、20.5参照）。Padが上面に出るPad-up Package（TI HTSSOP DAD）は`face: top`（下記） | E2 / D2 | 省略可 |
 | `overall_width` | X方向のLead先端間距離（Leadを含む全幅） | E（QFP/SOIC）、HE（SOT） | 省略可 |
 | `overall_length` | Y方向のLead先端間距離 | D（QFP）、HE（SOT-23ではY方向） | 省略可 |
 | `overall_height` | Seating planeからPackage上面まで | A | 省略可 |
@@ -1022,6 +1070,21 @@ dimensions:
   lead_thickness: { min: 0.09 mm, max: 0.20 mm, src: p12 "Package outline, c" }   # typ無記載
 ```
 
+**Pad-up exposed pad.** 放熱Padが基板側ではなくPackage上面に露出し、上からHeatsinkを
+当てるPackage（TI HTSSOP "DAD"、PowerPAD pad-up）は`exposed_pad`に`face: top`を記録する。
+FootprintにはLandを作らず（`EP` Padも無い）、3D ModelはBody上面中央に`width` x `length`の
+金属面を描く。`land_width`/`land_length`は書かない。`soic`/`tssop`/`ssop`/`msop`のみ
+（Validator rule `exposed_pad.invalid`）。Deviceに放熱Pad用のPinは作らない。
+
+```yaml
+dimensions:
+  exposed_pad:
+    src:    p40 "DAD package outline, exposed thermal pad (top side)"
+    width:  { typ: 3.6 mm }
+    length: { typ: 7.5 mm }
+    face:   top
+```
+
 SOT-223やTO-252のようにTabを持つPackageは、Tabの番号をPackage直下の`tab`に記録する。
 番号はVendorによって異なる（"4"、"TAB"、あるいはpin 2と同一）ため推測せず、一次資料の
 Pin表や外形図の記載に従う。TO-252の中央Leadのように、Body端で切断されて基板に届かない
@@ -1055,6 +1118,15 @@ aux_pads: [D1, D2, D3]   # 上面視で左から、pitch間隔
 ### pad_order と pads
 
 `pad_order`は、Familyの位置順（例: タクトスイッチの左上・左下・右下・右上）に対して、Sourceが振っているPad番号を並べたもの。Vendorごとに角の番号付けが違う部品で使う。要素数は`lead_count`と同じ。
+
+空文字列の要素（`""`）は、その位置にLeadが無いことを表す（Lead位置の欠け）。Toshiba SO6（11-4L1S）のように、標準Bodyの格子のうち一部の位置にLeadが無いPackageは、`lead_count`を位置の数（格子全体）とし、欠けた位置を空にする。残るLeadはSourceの番号を並べる（位置番号のままなら同じ番号）。FootprintのPadも3D ModelのLeadも欠けた位置には作らない。番号は重複不可、少なくとも1つ必要（Validator rule `pad_order.invalid`）。主にDual-row Family（`soic`/`tssop`/`ssop`/`msop`/`dip`）で使う。
+
+```yaml
+family: soic
+lead_count: 6                         # 2 x 3 positions at 1.27 mm
+pad_order: ["1", "", "3", "4", "5", "6"]   # pin 2's position is empty (5 leads)
+# 4 leads numbered 1, 3, 4, 6:  ["1", "", "3", "4", "", "6"]
+```
 
 `pad_order`と`pads`はすべてのFamilyで使える。`pads`は推奨ランドパターンを1 Padずつ明示的に記録する（`usb_c`では必須、他のFamilyではFootprintのPadをLead外形の代わりにこれで作る）。各要素は`number`、`x`、`y`、`width`（X方向）、`length`（Y方向）と、メッキ穴なら`drill`、長穴なら`drill_length`（長穴の全長、Padの長辺方向）、メッキなし穴（位置決めピン）なら`plated: false`（`number`は空でよい）。座標系はFamilyが定義する。Sourceの図から座標を算出した場合は、Provenanceのlocatorに計算を書く。
 
@@ -1245,6 +1317,31 @@ pad, `pad_grids` without `pad_rows` or `pads`, a `shield` without
 `dimensions.overall_height`. `provenance.missing` for `/pad_rows`,
 `/pad_grids`, `/shield`.
 
+**LGA pads beyond the perimeter.** An `lga` (section 20, per-side
+`lead_layout: [left, bottom, right, top]`) with pads the perimeter rows
+don't hold -- a centre pad, a grid, a ground ring (ScioSense ENS160's
+centre pad 9; a bottom-port microphone's ring) -- counts every pad in
+`lead_count`, only the perimeter terminals in `lead_layout`, and lists
+the land pattern in `pads`, the extra pads with the source's numbers.
+The footprint is `pads`; the 3D model draws the perimeter terminals from
+the lead dimensions and each extra pad as a terminal of its land's size
+and shape (a ring as a ring). `exposed_pad` stays for a pad the source
+calls the exposed pad (`EP`). Rule `lga.invalid`: the extra pads
+are not exactly `lead_count` minus the layout's sum of SMD pad numbers
+other than the perimeter's.
+
+```yaml
+family: lga
+lead_count: 9                 # 8 perimeter pads + centre pad 9
+lead_layout: [3, 1, 3, 1]
+pads:
+  value:
+    - { number: "1", x: -1.05, y: 1.05, width: 0.8, length: 0.8 }
+    # ... 2 to 8 ...
+    - { number: "9", x: 0, y: 0, width: 0.8, length: 0.8 }
+  src: p40 "Figure 18 land pattern"
+```
+
 ## 20.5 Surface-Mount Wire-to-Board Headers
 
 `shrouded_header` (top entry) and `right_angle_header` (side entry) with
@@ -1387,6 +1484,17 @@ another outline. `shape` (any family) says which:
 | `circle` | `width` = `length` (the diameter) | a round land |
 | `chamfered` | `width`, `length`, `chamfer`, `corners` | the rectangle with 45° cuts of `chamfer` mm along both edges at each listed corner (`top_left`, `top_right`, `bottom_right`, `bottom_left`, top view; all four when `corners` is left out) |
 | `polygon` | `points` (no `width`/`length`) | the outline `[[x, y], ...]` relative to the pad's `x`/`y`, which must lie inside it |
+| `annular` | `width` = `length` (the outer diameter), `inner_diameter` | a ring centred on `x`/`y`, no copper inside `inner_diameter` |
+
+An `annular` pad is an SMD land around a copper-free centre: a
+bottom-port MEMS microphone's ground ring around the sound port (TDK
+ICS-43434, T5838). The port hole through the board, when the source
+draws one, is its own `plated: false` pad at the same centre. KiCad
+writes it as a `custom` pad: the anchor (a small circle on the ring, at
+its top) and the ring as a stroked circle primitive, so the centre stays
+free; LibrePCB and the footprint drawing draw the ring as one outline
+(the outer circle and the inner one joined by a zero-width slit); the
+3D model of an `lga` draws it as a ring terminal.
 
 `cutout: { x, y, diameter }` is a circle, centred in the package frame,
 that the source clears from a rectangular land: an RF connector's ground
@@ -1401,6 +1509,7 @@ pads:
     - { number: "1", x: 0, y: 0, width: 1.2, length: 1.2, shape: circle }
     - { number: "2", x: 1.3, y: 1.3, width: 1.35, length: 1.35, cutout: { x: 0, y: 0, diameter: 2.5 } }
     - { number: "3", x: 2, y: 0, width: 1, length: 0.8, shape: chamfered, chamfer: 0.2, corners: [top_left] }
+    - { number: "4", x: 0, y: -2, width: 1.5, length: 1.5, shape: annular, inner_diameter: 0.8 }
 ```
 
 A chamfer or polygon read off a drawing is computed like any coordinate:
@@ -1413,7 +1522,9 @@ the footprint drawing. Rule `pad_shape.invalid`: a field of another shape
 `cutout` on another shape), a circle whose sides differ, a chamfer over
 half the shorter side, a polygon of fewer than three points, without
 area, with a stated size or around a point that isn't the pad's, a
-cutout that misses the pad, covers its centre or cuts more than one notch.
+cutout that misses the pad, covers its centre or cuts more than one notch,
+an annular pad whose sides differ, without `inner_diameter` or with one
+not inside the ring, with a drill, or `inner_diameter` on another shape.
 
 ## 20.8 SMD LEDs
 
@@ -1713,6 +1824,55 @@ pads:
     - { number: "2", x: -5.08, y: 2.54, drill: 1.0 }
     # ...
   src: p2 "PCB layout"
+```
+
+## 20.15 Chip Arrays
+
+`chip_array` (alias `resistor_array`) is a chip resistor array or
+network (Yageo YC124/YC164, Panasonic EXB): one ceramic chip with 2, 4
+or 8 elements, each joining a terminal on one long side to the one
+across from it. Frame and numbering as `soic`: the two terminal rows run
+along Y, `body_width` (W) across them (X), `body_length` (L) along them;
+pin 1 at the top of the left row, down the left row, up the right one,
+so element i joins pin i and pin `lead_count` + 1 - i. `lead_count` is
+the number of terminals (twice the elements).
+
+| Field | Meaning |
+|---|---|
+| `pitch` | terminal pitch along a row (P) |
+| `body_width`, `body_length`, `body_height` | W, L, the thickness (T / H) |
+| `lead_width` | a terminal's width along the row |
+| `lead_length` | how far a terminal reaches in from the body edge on the top / underside |
+| `terminal_shape` | `convex` (terminals wrapped over a straight edge, proud of it) or `concave` (plated into half-round notches in the edge), as the source states it; absent: drawn convex |
+| `pads` | the source's recommended land pattern, one SMD land per terminal numbered 1..`lead_count` (required: the footprint) |
+
+The 3D model draws an alumina substrate under a black overcoat between
+the rows and a wrap-around terminal per lead, notched for `concave`.
+Placement: the dual-row convention (pin 1 upper left). Rule
+`chip_array.invalid`: an odd `lead_count` or fewer than 4, no `pads`,
+pads other than one sized SMD land per terminal numbered
+1..`lead_count`, no `pitch`, `body_width` or `body_length`; or
+`terminal_shape` on another family.
+
+```yaml
+schema_version: "0.2"
+kind: package
+id: manufacturers/yageo/CHIPARRAY8-2x1-P0.5-YC124
+family: chip_array
+lead_count: { value: 8, src: p3 "Dimensions, 4 elements" }
+terminal_shape: { value: convex, src: p1 "Convex terminations" }
+source: yageo/YC124-DS
+pitch: { typ: 0.5 mm, src: p3 "Dimensions, P" }
+geometry: { type: parametric, generator: chip_array }
+dimensions:
+  body_width:  { typ: 1.0 mm, src: p3 "Dimensions, W" }
+  body_length: { typ: 2.0 mm, src: p3 "Dimensions, L" }
+  body_height: { typ: 0.35 mm, src: p3 "Dimensions, T" }
+pads:
+  value:
+    - { number: "1", x: -0.5, y: 0.75, width: 0.5, length: 0.3 }
+    # ... 2 to 8, down the left row and up the right ...
+  src: p4 "Recommended footprint"
 ```
 
 ---

@@ -644,12 +644,22 @@ pub impl @json.FromJson for ExistenceStatus
 
 #derive(Eq)
 pub(all) struct ExposedPadDimensions {
+  face : ExposedPadFace?
   land_length : Dimension?
   land_width : Dimension?
   length : Dimension
   width : Dimension
 }
 pub impl @json.FromJson for ExposedPadDimensions
+
+#derive(Eq, @debug.Debug)
+pub(all) enum ExposedPadFace {
+  Bottom
+  Top
+}
+pub fn ExposedPadFace::all() -> Array[Self]
+pub fn ExposedPadFace::wire(Self) -> String
+pub impl @json.FromJson for ExposedPadFace
 
 #derive(Eq)
 pub(all) struct FacetValue {
@@ -800,6 +810,7 @@ pub(all) enum LandShape {
   Circle
   Chamfered
   Polygon
+  Annular
 }
 pub fn LandShape::all() -> Array[Self]
 pub fn LandShape::wire(Self) -> String
@@ -904,6 +915,7 @@ pub(all) struct Package {
   shield : PackageRect?
   smt : PackageSmt?
   tab : PackageTab?
+  terminal_shape : TerminalShape?
 }
 pub impl @json.FromJson for Package
 
@@ -1000,6 +1012,7 @@ pub(all) enum PackageFamily {
   Do214
   To220
   Chip
+  ChipArray
   Radial
   Axial
   To92
@@ -1058,6 +1071,7 @@ pub(all) struct PackagePad {
   cutout : PadCutout?
   drill : Double?
   drill_length : Double?
+  inner_diameter : Double?
   length : Double?
   number : String
   plated : Bool?
@@ -1238,6 +1252,7 @@ pub(all) struct ParameterValue {
   typ : Double?
   unit : String?
   value : String?
+  values : Array[String]?
 }
 pub impl @json.FromJson for ParameterValue
 
@@ -1479,6 +1494,15 @@ pub(all) struct Source {
   url : String
 }
 pub impl @json.FromJson for Source
+
+#derive(Eq, @debug.Debug)
+pub(all) enum TerminalShape {
+  Convex
+  Concave
+}
+pub fn TerminalShape::all() -> Array[Self]
+pub fn TerminalShape::wire(Self) -> String
+pub impl @json.FromJson for TerminalShape
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Verdict {

@@ -113,10 +113,16 @@ fn render_pad(pad: &Pad) -> String {
         PadShape::Circle => "circle",
         PadShape::Oval => "oval",
         PadShape::Chamfered { .. } => "roundrect",
-        PadShape::Polygon(_) => "custom",
+        PadShape::Polygon(_) | PadShape::Annulus { .. } => "custom",
     };
     // IR is Y-up, KiCad footprints are Y-down (see `render_footprint`).
-    let y = flip_y(pad.position.y);
+    // A ring's anchor sits on the ring at its +Y (top) point: KiCad
+    // fills a custom pad's anchor, so it can't be the centre hole.
+    let ring_offset = match pad.shape {
+        PadShape::Annulus { inner } => (pad.size.0 + inner) / 4.0,
+        _ => 0.0,
+    };
+    let y = flip_y(pad.position.y + ring_offset);
     let (size, extra) = shape_fields(pad);
     match pad.mounting {
         // A bottom-side land (an edge-mount connector's lower legs) is on
@@ -196,6 +202,20 @@ fn shape_fields(pad: &Pad) -> ((f64, f64), String) {
                 (anchor, anchor),
                 format!(
                     " (options (clearance outline) (anchor circle)) (primitives (gr_poly (pts{pts}) (width 0) (fill yes)))"
+                ),
+            )
+        }
+        PadShape::Annulus { inner } => {
+            // The ring as a stroked circle round the centre, which lies
+            // `r` below the anchor (KiCad's Y down): stroke width = the
+            // ring's width, radius = its mid-line.
+            let (outer, inner) = (pad.size.0.min(pad.size.1), *inner);
+            let width = (outer - inner) / 2.0;
+            let r = (outer + inner) / 4.0;
+            (
+                (width, width),
+                format!(
+                    " (options (clearance outline) (anchor circle)) (primitives (gr_circle (center 0 {r:.4}) (end {r:.4} {r:.4}) (width {width:.4}) (fill none)))"
                 ),
             )
         }
@@ -747,5 +767,46 @@ mod tests {
         assert!(text.contains("(pad \"2\" smd custom (at 1.000 -1.000) (size 0.250 0.250)"));
         assert!(text.contains("(primitives (gr_poly (pts (xy -0.5000 0.5000) (xy 0.5000 0.5000) (xy 0.0000 -0.5000)) (width 0) (fill yes)))"));
         assert_eq!(parse_footprint_pads(&text).len(), 3);
+    }
+
+    /// A ring pad (a MEMS microphone's ground ring) is a custom pad
+    /// whose anchor sits on the ring, the ring a stroked circle round the
+    /// centre: no copper in the middle.
+    #[test]
+    fn an_annular_pad_is_a_stroked_circle_anchored_on_the_ring() {
+        let footprint = PcbFootprint {
+            name: "TEST".into(),
+            placement_hash: None,
+            pads: vec![Pad {
+                number: "5".into(),
+                position: Point2 { x: 1.0, y: 0.5 },
+                size: (1.5, 1.5),
+                shape: PadShape::Annulus { inner: 0.8 },
+                mounting: Mounting::Smd,
+                drill: None,
+                slot: None,
+                side: openparts_pcbcad::PadSide::Top,
+            }],
+            graphics: vec![],
+            courtyard: None,
+            model: None,
+        };
+        let text = render_footprint(&footprint);
+        // Mid-line radius (1.5 + 0.8) / 4 = 0.575, ring width 0.35; the
+        // anchor at the ring's top (y 0.5 + 0.575, KiCad -1.075).
+        assert!(
+            text.contains("(pad \"5\" smd custom (at 1.000 -1.075) (size 0.350 0.350)"),
+            "{text}"
+        );
+        assert!(text.contains(
+            "(primitives (gr_circle (center 0 0.5750) (end 0.5750 0.5750) (width 0.3500) (fill none)))"
+        ));
+        // The generic outline (LibrePCB, SVG) is a keyhole: every point on
+        // one of the two circles.
+        let outline = footprint.pads[0].shape.outline((1.5, 1.5)).unwrap();
+        for q in &outline {
+            let r = q.x.hypot(q.y);
+            assert!((r - 0.75).abs() < 1e-9 || (r - 0.4).abs() < 1e-9, "{r}");
+        }
     }
 }

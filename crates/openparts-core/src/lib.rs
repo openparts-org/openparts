@@ -57,10 +57,10 @@ pub use kind::Kind;
 pub use lifecycle::{Lifecycle, LifecycleStatus};
 pub use manufacturer::{Manufacturer, Website};
 pub use package::{
-    Actuation, EdgeRequirement, ExposedPadDimensions, GeometryType, KeepoutPurpose,
+    Actuation, EdgeRequirement, ExposedPadDimensions, ExposedPadFace, GeometryType, KeepoutPurpose,
     KeepoutRestriction, LandShape, Package, PackageConstruction, PackageDimensions, PackageEdge,
     PackageGeometrySpec, PackageKeepout, PackagePad, PackagePadGrid, PackagePadRow, PackageRect,
-    PackageSide, PackageSmt, PackageTab, PadCorner, PadCutout, PadSide, SlotAxis,
+    PackageSide, PackageSmt, PackageTab, PadCorner, PadCutout, PadSide, SlotAxis, TerminalShape,
 };
 pub use parameter::{
     effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,

@@ -159,13 +159,26 @@ impl Side {
 }
 
 /// The leads along one body edge, in ascending order along the edge.
+/// A side whose leads are not evenly spaced (a lead position left
+/// empty) is split into evenly spaced runs, `run` 0, 1, ...
 #[derive(Debug, Clone)]
 pub struct Row<'a> {
     pub side: Side,
     pub leads: Vec<&'a Lead>,
+    pub run: u32,
 }
 
 impl Row<'_> {
+    /// The row's name in the script: the side's tag, plus the run's
+    /// number from the second run on (`L`, `L2`).
+    pub fn tag(&self) -> String {
+        if self.run == 0 {
+            self.side.tag().to_string()
+        } else {
+            format!("{}{}", self.side.tag(), self.run + 1)
+        }
+    }
+
     pub fn along(&self, lead: &Lead) -> f64 {
         if self.side.across_x() {
             lead.position.y
@@ -208,9 +221,14 @@ impl Row<'_> {
     }
 }
 
-/// Groups the perimeter leads (everything but an exposed pad) by the body
-/// edge they belong to.
+/// Groups the perimeter leads (everything but an exposed pad and an LGA's
+/// extra terminals) by the body edge they belong to, each edge in evenly
+/// spaced runs.
 pub fn perimeter_rows(geometry: &MechanicalGeometry) -> Vec<Row<'_>> {
+    let extra: &[String] = match &geometry.details {
+        openparts_mcad::Details::ExtraTerminals(names) => names,
+        _ => &[],
+    };
     let b = &geometry.body;
     let (hw, hl) = (b.size.x / 2.0, b.size.y / 2.0);
     let side_of = |l: &Lead| {
@@ -233,7 +251,7 @@ pub fn perimeter_rows(geometry: &MechanicalGeometry) -> Vec<Row<'_>> {
             let mut leads: Vec<&Lead> = geometry
                 .leads
                 .iter()
-                .filter(|l| l.number != "EP" && side_of(l) == side)
+                .filter(|l| l.number != "EP" && !extra.contains(&l.number) && side_of(l) == side)
                 .collect();
             if leads.is_empty() {
                 return None;
@@ -241,9 +259,43 @@ pub fn perimeter_rows(geometry: &MechanicalGeometry) -> Vec<Row<'_>> {
             let row = Row {
                 side,
                 leads: vec![],
+                run: 0,
             };
             leads.sort_by(|a, b| row.along(a).total_cmp(&row.along(b)));
-            Some(Row { side, leads })
+            Some(split_runs(side, leads))
+        })
+        .flatten()
+        .collect()
+}
+
+/// `leads` (sorted along `side`) as runs of even spacing, greedily: a
+/// run takes its first gap and ends where the next gap differs.
+fn split_runs(side: Side, leads: Vec<&Lead>) -> Vec<Row<'_>> {
+    let probe = Row {
+        side,
+        leads: vec![],
+        run: 0,
+    };
+    let mut runs: Vec<Vec<&Lead>> = Vec::new();
+    for lead in leads {
+        let fits = runs.last().is_some_and(|r| match r.as_slice() {
+            [.., a, b] => {
+                let d = probe.along(b) - probe.along(a);
+                (probe.along(lead) - probe.along(b) - d).abs() < TOL
+            }
+            _ => true,
+        });
+        match runs.last_mut() {
+            Some(r) if fits => r.push(lead),
+            _ => runs.push(vec![lead]),
+        }
+    }
+    runs.into_iter()
+        .enumerate()
+        .map(|(i, leads)| Row {
+            side,
+            leads,
+            run: i as u32,
         })
         .collect()
 }
@@ -275,9 +327,21 @@ pub fn row_layouts(s: &mut Script, rows: &[Row<'_>], pitch: Option<f64>) -> Vec<
             } else if shared {
                 s.count("leads_per_side", n, "leads on each edge");
                 "leads_per_side".to_string()
-            } else {
+            } else if row.run == 0 {
                 let name = format!("leads_{}", row.side.word());
                 s.count(&name, n, &format!("leads on the {} edge", row.side.word()));
+                name
+            } else {
+                let name = format!("leads_{}{}", row.side.word(), row.run + 1);
+                s.count(
+                    &name,
+                    n,
+                    &format!(
+                        "leads in run {} of the {} edge",
+                        row.run + 1,
+                        row.side.word()
+                    ),
+                );
                 name
             };
             let spacing = match (row.spacing(), pitch) {
@@ -327,8 +391,13 @@ pub fn lead_rows_with(
 ) -> Result<Vec<String>, TemplateError> {
     let mut bodies = Vec::new();
     for (row, layout) in rows.iter().zip(layouts) {
-        s.fragment(seed_fragment, &row.side.row_vars(&layout.first).with(extra))?;
-        let seed = format!("{prefix}{}", row.side.tag());
+        let at = row
+            .side
+            .row_vars(&layout.first)
+            .with(&vars!(tag = row.tag()))
+            .with(extra);
+        s.fragment(seed_fragment, &at)?;
+        let seed = format!("{prefix}{}", row.tag());
         if layout.n > 1 {
             s.fragment(
                 fragment!("pattern_row"),

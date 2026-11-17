@@ -45,7 +45,11 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                 .filter(|l| !is_aux(&l.number) && l.position.x * sign > 0.0)
                 .collect();
             leads.sort_by(|a, b| a.position.y.total_cmp(&b.position.y));
-            (!leads.is_empty()).then_some(Row { side, leads })
+            (!leads.is_empty()).then_some(Row {
+                side,
+                leads,
+                run: 0,
+            })
         })
         .collect();
     if rows.len() != 2 {

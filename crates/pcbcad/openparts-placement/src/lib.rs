@@ -125,6 +125,9 @@ pub enum PadShape {
     /// A rectangle with 45° corner cuts (`chamfer`).
     Chamfered,
     Polygon,
+    /// A ring: a round land (`size`, the outer diameter) around a
+    /// copper-free hole (`inner_diameter`) at `position`.
+    Annular,
 }
 
 /// A corner of a pad in the model frame (X right, Y up).
@@ -266,6 +269,9 @@ pub struct Pad {
     /// `chamfered`: the corner cuts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chamfer: Option<PadChamfer>,
+    /// `annular`: the copper-free hole's diameter (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inner_diameter: Option<f64>,
     pub kind: PadKind,
     pub layers: PadLayers,
     /// Hole diameter; a slot's width.

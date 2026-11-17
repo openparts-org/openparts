@@ -23,6 +23,30 @@ pub struct ExposedPadDimensions {
     /// The recommended land along Y (see `land_width`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub land_length: Option<Dimension>,
+    /// The package face the pad is exposed on: `bottom` (the default,
+    /// soldered to a footprint land) or `top` (a "pad-up" package such as
+    /// TI's HTSSOP DAD: heat leaves through a heatsink on top, so the
+    /// footprint has no land for it).
+    #[serde(default, skip_serializing_if = "ExposedPadFace::is_bottom")]
+    pub face: ExposedPadFace,
+}
+
+/// Which package face an exposed pad is on (`ExposedPadDimensions::face`).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExposedPadFace {
+    /// The underside, facing the board (the default).
+    #[default]
+    Bottom,
+    /// The top face, away from the board (pad-up).
+    Top,
+}
+
+impl ExposedPadFace {
+    pub fn is_bottom(&self) -> bool {
+        *self == ExposedPadFace::Bottom
+    }
 }
 
 /// Canonical Data Specification section 20.
@@ -303,6 +327,19 @@ pub enum Actuation {
     Side,
 }
 
+/// A chip array's terminal form (`Package::terminal_shape`).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalShape {
+    /// Terminals wrapped over the substrate's straight edge, standing
+    /// slightly proud of it (Yageo YC "convex", Panasonic EXB-V).
+    Convex,
+    /// Terminals plated into half-round notches cut in the substrate's
+    /// edge (Yageo YC "concave", Panasonic EXB-N/-2HV).
+    Concave,
+}
+
 /// The wide tab of a power package (SOT-223, TO-252/DPAK) -- soldered
 /// to the board and electrically one of the device's terminals. How the
 /// datasheet numbers it varies by vendor ("4", "TAB", or simply tied to
@@ -336,9 +373,11 @@ pub struct PackageTab {
 /// A land is a rectangle unless `shape` says otherwise (section 20.7):
 /// `circle` (`width` = `length`, the diameter), `chamfered` (corners cut
 /// by `chamfer`, the corners listed in `corners`, all four when empty) or
-/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out). A
-/// `cutout` circle clears copper from a rectangular land (an RF
-/// connector's ground pads notched around its centre contact).
+/// `polygon` (`points` relative to `x`/`y`; `width`/`length` left out) or
+/// `annular` (a ring: `width` = `length` the outer diameter,
+/// `inner_diameter` the hole; `x`/`y` its centre). A `cutout` circle
+/// clears copper from a rectangular land (an RF connector's ground pads
+/// notched around its centre contact).
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -380,6 +419,10 @@ pub struct PackagePad {
     /// A circle the source clears from a rectangular land.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutout: Option<PadCutout>,
+    /// `annular`: the diameter of the copper-free hole in the middle of
+    /// the ring (mm); `width` = `length` is the ring's outer diameter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inner_diameter: Option<f64>,
     /// The board side an SMD land is on (Canonical Data Specification
     /// 20.6): `top` (the default, the part's own side) or `bottom` (an
     /// edge-mount connector's legs soldered under the board). Seen from
@@ -421,6 +464,10 @@ pub enum LandShape {
     Chamfered,
     /// An arbitrary outline (`points`).
     Polygon,
+    /// A ring: a round land (`width` = `length`, the outer diameter)
+    /// with a round copper-free hole (`inner_diameter`) at its centre --
+    /// a bottom-port MEMS microphone's ground ring around the sound port.
+    Annular,
 }
 
 impl LandShape {
@@ -795,6 +842,11 @@ pub struct Package {
     /// states it (`side`: a side-operated switch); absent: from the top.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuation: Option<Actuation>,
+    /// `chip_array`: the terminals' form, as the source states it
+    /// (`convex` or `concave`); absent: not stated (the 3D model draws
+    /// convex terminals).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_shape: Option<TerminalShape>,
     /// Explicit land pattern (`usb_c`): every pad as the source's
     /// recommended PCB layout gives it, in the family's frame.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

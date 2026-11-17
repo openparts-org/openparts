@@ -7,6 +7,7 @@
 mod axial;
 mod bga;
 mod chip;
+mod chip_array;
 mod connector;
 mod defaults;
 mod diode;
@@ -64,6 +65,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         F::Do214 => diode::generate_do214(package),
         F::To220 => to220::generate_to220(package),
         F::Chip => chip::generate_chip(package),
+        F::ChipArray => chip_array::generate_chip_array(package),
         F::Radial => radial::generate_radial(package),
         F::Axial => axial::generate_axial(package),
         F::To92 => to92::generate_to92(package),
@@ -93,6 +95,7 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         F::Melf => melf::generate_melf(package),
     }?;
     renumber(&mut geometry, package)?;
+    lga_extra_terminals(&mut geometry, package)?;
     // `usb_c`, the connector and electromechanical families, THT tact
     // switches and modules
     // draw their leads from the pads.
@@ -118,6 +121,24 @@ fn exposed_pad_land(geometry: &mut MechanicalGeometry, package: &Package) -> Res
     let Some(ep) = &package.dimensions.exposed_pad else {
         return Ok(());
     };
+    if ep.face == openparts_core::ExposedPadFace::Top {
+        let leaded = matches!(
+            package.family,
+            PackageFamily::Soic | PackageFamily::Tssop | PackageFamily::Ssop | PackageFamily::Msop
+        );
+        if !leaded {
+            return Err(McadError::InconsistentDimensions(format!(
+                "a top-face (pad-up) exposed pad is drawn only on soic/tssop/ssop/msop, not {}",
+                package.family
+            )));
+        }
+        if ep.land_width.is_some() || ep.land_length.is_some() {
+            return Err(McadError::InconsistentDimensions(
+                "a top-face (pad-up) exposed pad has no board land: drop exposed_pad.land_*".into(),
+            ));
+        }
+        return Ok(());
+    }
     let w = ep.land_width.as_ref().and_then(defaults::required);
     let l = ep.land_length.as_ref().and_then(defaults::required);
     if w.is_none() && l.is_none() {
@@ -143,8 +164,64 @@ fn exposed_pad_land(geometry: &mut MechanicalGeometry, package: &Package) -> Res
     Ok(())
 }
 
+/// `lga` with fewer perimeter terminals (`lead_layout`) than
+/// `lead_count`: the others are the `pads` entries whose numbers no
+/// perimeter terminal has (a centre pad, a grid of pads), drawn as
+/// terminals of their land's size and shape; `Details::ExtraTerminals`
+/// names them for the 3D model.
+fn lga_extra_terminals(
+    geometry: &mut MechanicalGeometry,
+    package: &Package,
+) -> Result<(), McadError> {
+    if package.family != PackageFamily::Lga {
+        return Ok(());
+    }
+    let perimeter = geometry.leads.iter().filter(|l| l.number != "EP").count() as u32;
+    let missing = package.lead_count.saturating_sub(perimeter);
+    if missing == 0 {
+        return Ok(());
+    }
+    let thickness = match geometry.lead_form {
+        Some(LeadForm::Flush { thickness }) => thickness,
+        _ => defaults::LGA.thickness,
+    };
+    let lands = land::from_pads(package)?;
+    let mut names: Vec<String> = Vec::new();
+    for land in lands {
+        if land.mounting != Mounting::Smd
+            || geometry.leads.iter().any(|l| l.number == land.number)
+            || names.contains(&land.number)
+        {
+            continue;
+        }
+        names.push(land.number.clone());
+        geometry.leads.push(Lead {
+            position: Point3 {
+                z: thickness / 2.0,
+                ..land.position
+            },
+            size: Size3 {
+                z: thickness,
+                ..land.size
+            },
+            ..land
+        });
+    }
+    if names.len() as u32 != missing {
+        return Err(McadError::InconsistentDimensions(format!(
+            "lead_count {} needs {missing} pad(s) beyond the {perimeter} of lead_layout, `pads` gives {} other number(s)",
+            package.lead_count,
+            names.len()
+        )));
+    }
+    geometry.details = Details::ExtraTerminals(names);
+    Ok(())
+}
+
 /// Applies `package.pad_order`: the leads numbered "1"..="lead_count" by
-/// the family's position convention take the source's numbers instead.
+/// the family's position convention take the source's numbers instead;
+/// an empty entry leaves its position without a lead (Toshiba SO6: an
+/// SOIC body with pin 2's position empty).
 fn renumber(geometry: &mut MechanicalGeometry, package: &Package) -> Result<(), McadError> {
     let order = &package.pad_order;
     if order.is_empty() {
@@ -156,6 +233,20 @@ fn renumber(geometry: &mut MechanicalGeometry, package: &Package) -> Result<(), 
             order.len(),
             package.lead_count
         )));
+    }
+    let position = |lead: &Lead| {
+        lead.number
+            .parse::<usize>()
+            .ok()
+            .filter(|i| (1..=order.len()).contains(i))
+    };
+    geometry
+        .leads
+        .retain(|lead| position(lead).is_none_or(|i| !order[i - 1].trim().is_empty()));
+    if geometry.leads.is_empty() {
+        return Err(McadError::InconsistentDimensions(
+            "pad_order leaves no lead".into(),
+        ));
     }
     for lead in &mut geometry.leads {
         if let Ok(i) = lead.number.parse::<usize>() {
@@ -257,6 +348,9 @@ pub enum LandShape {
     /// An outline relative to the lead's position (mm),
     /// counter-clockwise, the last point not repeated.
     Polygon(Vec<[f64; 2]>),
+    /// A ring centred on the lead's position: `size` x = y is the outer
+    /// diameter, `inner_diameter` the copper-free hole.
+    Annulus { inner_diameter: f64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -342,6 +436,20 @@ pub enum Details {
     /// TO-252/TO-263: lead positions cut short at the body, as (lead
     /// number, Y position).
     TrimmedLeads(Vec<(u32, f64)>),
+    /// `lga`: the leads beyond the perimeter rows (a centre or grid pad
+    /// from `pads`), by number, each drawn on its own at its land.
+    ExtraTerminals(Vec<String>),
+    /// `chip_array`: concave (notched) terminals rather than convex ones.
+    ChipArray {
+        concave: bool,
+    },
+    /// A pad-up package's exposed pad (`exposed_pad.face: top`): metal of
+    /// this size (mm) flush in the centre of the body's top face, not a
+    /// terminal (the footprint has no land for it).
+    TopPad {
+        width: f64,
+        length: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

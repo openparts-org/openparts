@@ -24,7 +24,7 @@
 
 use crate::alternatives::{Alternative, AlternativeClass, AlternativesIndex, PartBrief};
 use crate::parse::{BomFormat, BomLine, DetectedColumn, ParsedBom};
-use crate::rules::{expected_parameters, DIELECTRIC_RANKS};
+use crate::rules::{expected_parameters_of, DIELECTRIC_RANKS};
 use openparts_core::family::CHIP_SIZES;
 use openparts_core::text::normalize_mpn;
 use openparts_core::{
@@ -309,7 +309,9 @@ impl BomIndex {
                 let part = &ds.parts[i];
                 let category = ds.devices.get(&part.device.0).map(|d| d.category);
                 let params = alt.parameters(i);
-                let expected = category.map_or(&[][..], expected_parameters);
+                let expected = category.map_or(&[][..], |c| {
+                    expected_parameters_of(c, |k| params.is_some_and(|p| p.contains_key(k)))
+                });
                 let missing: Vec<String> = expected
                     .iter()
                     .filter(|k| !params.is_some_and(|p| p.contains_key(**k)))

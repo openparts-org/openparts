@@ -4,6 +4,7 @@
 mod axial;
 mod bga;
 mod chip;
+mod chip_array;
 mod connector;
 mod diode;
 mod dip;
@@ -60,6 +61,7 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         F::Melf => melf::build(&mut s, input)?,
         F::Qfn | F::Dfn | F::Son | F::Lga => qfn::build(&mut s, input)?,
         F::Chip => chip::build(&mut s, input)?,
+        F::ChipArray => chip_array::build(&mut s, input)?,
         F::Radial => radial::build(&mut s, input)?,
         F::Axial => axial::build(&mut s, input)?,
         F::To92 => to92::build(&mut s, input)?,

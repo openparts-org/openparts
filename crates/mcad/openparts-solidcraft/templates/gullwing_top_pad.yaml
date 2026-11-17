@@ -1,0 +1,11 @@
+# A pad-up package's exposed thermal pad (TI HTSSOP DAD): the lead-frame
+# slug flush in the centre of the molded body's top face. Vars: ep_w,
+# ep_l, standoff.
+- params:
+    top_ep_w: ["{{ep_w}}", top exposed pad size along X (datasheet)]
+    top_ep_l: ["{{ep_l}}", top exposed pad size along Y (datasheet)]
+    top_ep_t: [0.05 mm, slug depth below the top face]
+- solid.box:
+    {length: top_ep_w, width: top_ep_l, height: top_ep_t,
+     center: [0 mm, 0 mm, "{{standoff}} + body_h - top_ep_t / 2"],
+     operation: new, body_name: TopPad, name: TopPad}

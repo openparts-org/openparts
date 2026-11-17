@@ -1,0 +1,9 @@
+# A ring terminal (a bottom-port microphone's ground ring round the sound
+# port): a disc less its centre. Vars: name, d, d_in, x, y.
+- solid.cylinder:
+    {diameter: "{{d}}", height: term_t, base: ["{{x}}", "{{y}}", 0 mm],
+     operation: new, body_name: "{{name}}", name: "{{name}}"}
+- solid.cylinder:
+    {diameter: "{{d_in}}", height: term_t, base: ["{{x}}", "{{y}}", 0 mm],
+     operation: new, body_name: "{{name}}Hole", name: "{{name}}Hole"}
+- solid.combine: {target: "{{name}}", tools: ["{{name}}Hole"], operation: cut, keep_tools: false}

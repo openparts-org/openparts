@@ -142,7 +142,16 @@ pub enum PadShape {
     /// An outline relative to the pad's position (mm, Y up),
     /// counter-clockwise; `size` is its extent.
     Polygon(Vec<Point2>),
+    /// A ring centred on the pad's position: `size` is the outer
+    /// diameter, `inner` the copper-free hole's diameter.
+    Annulus {
+        inner: f64,
+    },
 }
+
+/// Segments per full circle of a drawn ring (`PadShape::Annulus`
+/// outline): 5° steps, as the notched pads' arcs.
+const RING_SEGMENTS: usize = 72;
 
 pub use openparts_placement::PadCorner;
 
@@ -154,6 +163,23 @@ impl PadShape {
         match self {
             PadShape::Rect | PadShape::Circle | PadShape::Oval => None,
             PadShape::Polygon(points) => Some(points.clone()),
+            // A keyhole: the outer circle counter-clockwise, across to
+            // the inner one along a zero-width slit at angle 0, the inner
+            // circle clockwise and back. Tools that fill by the non-zero
+            // rule leave the hole open.
+            PadShape::Annulus { inner } => {
+                let (ro, ri) = (w.min(h) / 2.0, inner / 2.0);
+                let at = |r: f64, i: usize| {
+                    let a = std::f64::consts::TAU * i as f64 / RING_SEGMENTS as f64;
+                    Point2 {
+                        x: r * a.cos(),
+                        y: r * a.sin(),
+                    }
+                };
+                let mut out: Vec<Point2> = (0..=RING_SEGMENTS).map(|i| at(ro, i)).collect();
+                out.extend((0..=RING_SEGMENTS).rev().map(|i| at(ri, i)));
+                Some(out)
+            }
             PadShape::Chamfered { size, corners } => {
                 let (hw, hh) = (w / 2.0, h / 2.0);
                 let mut out = Vec::new();

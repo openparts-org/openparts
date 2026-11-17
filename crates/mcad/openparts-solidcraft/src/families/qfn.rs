@@ -6,7 +6,7 @@ use crate::common;
 use crate::script::{looks, mm};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
-use openparts_mcad::LeadForm;
+use openparts_mcad::{LandShape, LeadForm};
 
 pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     let g = input.geometry;
@@ -51,6 +51,47 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
             ),
         )?;
         terminals.push("ExposedPad".into());
+    }
+    // An LGA's terminals off the perimeter (a centre pad, a ground ring),
+    // each at its land, in its shape.
+    if let openparts_mcad::Details::ExtraTerminals(names) = &g.details {
+        for (i, lead) in g
+            .leads
+            .iter()
+            .filter(|l| names.contains(&l.number))
+            .enumerate()
+        {
+            let name = format!("Terminal{}", i + 1);
+            let (x, y) = (mm(lead.position.x), mm(lead.position.y));
+            match lead.shape {
+                LandShape::Circle => s.fragment(
+                    fragment!("lga_terminal_disc"),
+                    &vars!(name = name.clone(), d = mm(lead.size.x), x = x, y = y),
+                )?,
+                LandShape::Annulus { inner_diameter } => s.fragment(
+                    fragment!("lga_terminal_ring"),
+                    &vars!(
+                        name = name.clone(),
+                        d = mm(lead.size.x),
+                        d_in = mm(inner_diameter),
+                        x = x,
+                        y = y
+                    ),
+                )?,
+                // Rectangles, and the extent of a chamfered or polygon land.
+                _ => s.fragment(
+                    fragment!("lga_terminal_box"),
+                    &vars!(
+                        name = name.clone(),
+                        w = mm(lead.size.x),
+                        l = mm(lead.size.y),
+                        x = x,
+                        y = y
+                    ),
+                )?,
+            }
+            terminals.push(name);
+        }
     }
     s.fragment(
         fragment!("inlay"),

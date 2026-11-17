@@ -392,6 +392,159 @@ pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Di
     out
 }
 
+/// `chip_array.invalid` (section 20.15): a chip array states an even
+/// `lead_count` of at least four, its land pattern (one plated SMD pad
+/// per terminal, each with a size), its body and pitch; `terminal_shape`
+/// belongs to `chip_array` alone.
+pub(crate) fn check_chip_array(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let mut bad = |path: &str, message: &str| {
+        out.push(Diagnostic::error(
+            "chip_array.invalid",
+            entity,
+            Some(path),
+            message.to_string(),
+        ))
+    };
+    if package.family != F::ChipArray {
+        if package.terminal_shape.is_some() {
+            bad(
+                "/terminal_shape",
+                "terminal_shape belongs to the chip_array family",
+            );
+        }
+        return out;
+    }
+    let n = package.lead_count;
+    if n < 4 || !n.is_multiple_of(2) {
+        bad(
+            "/lead_count",
+            "a chip array has two rows of terminals: an even lead_count of at least 4",
+        );
+    }
+    let plated: Vec<_> = package.pads.iter().filter(|p| p.plated).collect();
+    if plated.is_empty() {
+        bad(
+            "/pads",
+            "a chip array's footprint is the source's land pattern: list it in pads",
+        );
+    } else {
+        let numbers: std::collections::BTreeSet<&str> =
+            plated.iter().map(|p| p.number.as_str()).collect();
+        let expected: std::collections::BTreeSet<String> = (1..=n).map(|i| i.to_string()).collect();
+        if numbers.len() != plated.len()
+            || !numbers.iter().all(|x| expected.contains(*x))
+            || numbers.len() != n as usize
+        {
+            bad(
+                "/pads",
+                "a chip array's pads are one SMD land per terminal, numbered 1..lead_count",
+            );
+        }
+        if plated
+            .iter()
+            .any(|p| p.land_unstated() || p.drill.is_some())
+        {
+            bad("/pads", "every chip-array pad is an SMD land with a size");
+        }
+    }
+    let unstated = |dim: &openparts_core::Dimension| {
+        dim.typ.is_none() && dim.min.is_none() && dim.max.is_none()
+    };
+    if unstated(&package.pitch) {
+        bad("/pitch", "a chip array states its terminal pitch");
+    }
+    if unstated(&package.dimensions.body_width) || unstated(&package.dimensions.body_length) {
+        bad(
+            "/dimensions",
+            "a chip array states body_width (across the rows) and body_length (along them)",
+        );
+    }
+    out
+}
+
+/// `exposed_pad.invalid`: a top-face (pad-up) exposed pad on a family
+/// other than the two-row gull-wing ones (soic, tssop, ssop, msop), or
+/// with a board land (`land_width` / `land_length`).
+pub(crate) fn check_exposed_pad_face(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let Some(ep) = &package.dimensions.exposed_pad else {
+        return vec![];
+    };
+    if ep.face != openparts_core::ExposedPadFace::Top {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    if !matches!(package.family, F::Soic | F::Tssop | F::Ssop | F::Msop) {
+        out.push(Diagnostic::error(
+            "exposed_pad.invalid",
+            entity,
+            Some("/dimensions/exposed_pad/face"),
+            format!(
+                "a top-face (pad-up) exposed pad is drawn on soic/tssop/ssop/msop only, not {}",
+                package.family
+            ),
+        ));
+    }
+    if ep.land_width.is_some() || ep.land_length.is_some() {
+        out.push(Diagnostic::error(
+            "exposed_pad.invalid",
+            entity,
+            Some("/dimensions/exposed_pad"),
+            "a top-face (pad-up) exposed pad has no board land: drop land_width / land_length"
+                .to_string(),
+        ));
+    }
+    out
+}
+
+/// `lga.invalid`: an `lga` whose `lead_layout` counts fewer terminals
+/// than `lead_count` must list the others in `pads` -- exactly
+/// `lead_count` minus the layout's sum of plated SMD pad numbers beyond
+/// the perimeter's (`1..=` the layout's sum, after `pad_order`).
+pub(crate) fn check_lga(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    if package.family != F::Lga {
+        return vec![];
+    }
+    let Some(layout) = &package.lead_layout else {
+        return vec![];
+    };
+    let perimeter: u32 = layout.iter().sum();
+    let n = package.lead_count;
+    if perimeter >= n {
+        return vec![];
+    }
+    let perimeter_numbers: std::collections::BTreeSet<String> = (1..=perimeter as usize)
+        .map(|i| {
+            package
+                .pad_order
+                .get(i - 1)
+                .cloned()
+                .unwrap_or_else(|| i.to_string())
+        })
+        .collect();
+    let extra: std::collections::BTreeSet<&str> = package
+        .pads
+        .iter()
+        .filter(|p| p.plated && p.drill.is_none())
+        .map(|p| p.number.as_str())
+        .filter(|x| !perimeter_numbers.contains(*x))
+        .collect();
+    if extra.len() as u32 == n - perimeter {
+        return vec![];
+    }
+    vec![Diagnostic::error(
+        "lga.invalid",
+        entity,
+        Some("/pads"),
+        format!(
+            "lead_count {n} is {} more than lead_layout's {perimeter} perimeter terminals, \
+             so pads must give that many other SMD pad numbers (it gives {})",
+            n - perimeter,
+            extra.len()
+        ),
+    )]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,6 +569,123 @@ mod tests {
         d.iter()
             .map(|d| format!("{} {}", d.rule_id, d.field_path.clone().unwrap_or_default()))
             .collect()
+    }
+
+    fn yaml(text: &str) -> Package {
+        serde_yaml::from_str(&format!(
+            "schema_version: '0.1'\nkind: package\nid: standards/TEST\n{text}"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_chip_array_states_its_land_pattern_and_terminal_shape_is_its_own() {
+        let pads: String = (1..=8)
+            .map(|i| {
+                let (x, y) = if i <= 4 {
+                    (-0.5, 0.75 - 0.5 * (i - 1) as f64)
+                } else {
+                    (0.5, -0.75 + 0.5 * (i - 5) as f64)
+                };
+                format!("  - {{number: '{i}', x: {x}, y: {y}, width: 0.5, length: 0.3}}\n")
+            })
+            .collect();
+        let array = |lead_count: u32, pads: &str| {
+            yaml(&format!(
+                "family: chip_array\nlead_count: {lead_count}\nterminal_shape: concave\n\
+                 pitch: {{nominal: 0.5, unit: mm}}\ndimensions:\n\
+                 \x20 body_width: {{nominal: 1.0, unit: mm}}\n\
+                 \x20 body_length: {{nominal: 2.0, unit: mm}}\npads:\n{pads}"
+            ))
+        };
+        assert!(check_chip_array("p", &array(8, &pads)).is_empty());
+        assert_eq!(
+            paths(&check_chip_array("p", &array(7, &pads))),
+            ["chip_array.invalid /lead_count", "chip_array.invalid /pads"]
+        );
+        let no_pads = array(8, "  []\n");
+        assert_eq!(
+            paths(&check_chip_array("p", &no_pads)),
+            ["chip_array.invalid /pads"]
+        );
+        // terminal_shape on another family.
+        let mut chip = pkg("melf", "");
+        chip.terminal_shape = Some(openparts_core::TerminalShape::Convex);
+        assert_eq!(
+            paths(&check_chip_array("p", &chip)),
+            ["chip_array.invalid /terminal_shape"]
+        );
+    }
+
+    #[test]
+    fn a_pad_up_exposed_pad_is_on_a_leaded_two_row_package_without_a_land() {
+        let pad_up = |family: &str, land: &str| {
+            yaml(&format!(
+                "family: {family}\nlead_count: 32\npitch: {{nominal: 0.65, unit: mm}}\n\
+                 dimensions:\n\
+                 \x20 body_width: {{nominal: 6.1, unit: mm}}\n\
+                 \x20 body_length: {{nominal: 11.0, unit: mm}}\n\
+                 \x20 exposed_pad: {{width: {{nominal: 3.6, unit: mm}}, length: {{nominal: 7.5, unit: mm}}, face: top{land}}}\n"
+            ))
+        };
+        assert!(check_exposed_pad_face("p", &pad_up("tssop", "")).is_empty());
+        let g = openparts_mcad::generate(&pad_up("tssop", "")).unwrap();
+        assert!(g.leads.iter().all(|l| l.number != "EP"), "no EP terminal");
+        assert_eq!(
+            paths(&check_exposed_pad_face("p", &pad_up("qfn", ""))),
+            ["exposed_pad.invalid /dimensions/exposed_pad/face"]
+        );
+        assert_eq!(
+            paths(&check_exposed_pad_face(
+                "p",
+                &pad_up("tssop", ", land_width: {nominal: 4, unit: mm}")
+            )),
+            ["exposed_pad.invalid /dimensions/exposed_pad"]
+        );
+    }
+
+    #[test]
+    fn an_lga_lists_its_pads_beyond_the_perimeter() {
+        // ENS160-like: 8 perimeter pads, the centre pad 9.
+        let grid: String = [
+            ("1", -1.05, 1.05),
+            ("2", -1.05, 0.0),
+            ("3", -1.05, -1.05),
+            ("4", 0.0, -1.05),
+            ("5", 1.05, -1.05),
+            ("6", 1.05, 0.0),
+            ("7", 1.05, 1.05),
+            ("8", 0.0, 1.05),
+            ("9", 0.0, 0.0),
+        ]
+        .iter()
+        .map(|(n, x, y)| {
+            format!("  - {{number: '{n}', x: {x}, y: {y}, width: 0.8, length: 0.8}}\n")
+        })
+        .collect();
+        let lga = |lead_count: u32, pads: &str| {
+            yaml(&format!(
+                "family: lga\nlead_count: {lead_count}\nlead_layout: [3, 1, 3, 1]\n\
+                 pitch: {{nominal: 1.05, unit: mm}}\ndimensions:\n\
+                 \x20 body_width: {{nominal: 3.0, unit: mm}}\n\
+                 \x20 body_length: {{nominal: 3.0, unit: mm}}\n\
+                 \x20 lead_width: {{nominal: 0.7, unit: mm}}\n\
+                 \x20 lead_length: {{nominal: 0.7, unit: mm}}\n\
+                 \x20 lead_inset: {{nominal: 0.1, unit: mm}}\npads:\n{pads}"
+            ))
+        };
+        let p = lga(9, &grid);
+        assert!(check_lga("p", &p).is_empty());
+        let g = openparts_mcad::generate(&p).unwrap();
+        let centre = g.leads.iter().find(|l| l.number == "9").unwrap();
+        assert!(centre.position.x.abs() < 1e-9 && centre.position.y.abs() < 1e-9);
+        assert_eq!(g.lands.len(), 9);
+        // One more lead than the pads give.
+        assert_eq!(
+            paths(&check_lga("p", &lga(10, &grid))),
+            ["lga.invalid /pads"]
+        );
+        assert!(openparts_mcad::generate(&lga(10, &grid)).is_err());
     }
 
     #[test]

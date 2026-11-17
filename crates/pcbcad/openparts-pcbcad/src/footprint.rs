@@ -51,6 +51,10 @@ pub fn footprint_from_placement(name: &str, model: &PlacementModel) -> PcbFootpr
                 (openparts_placement::PadShape::Polygon, _, Some(points)) => {
                     PadShape::Polygon(points.iter().map(|q| Point2 { x: q.x, y: q.y }).collect())
                 }
+                (openparts_placement::PadShape::Annular, _, _) => match p.inner_diameter {
+                    Some(inner) => PadShape::Annulus { inner },
+                    None => PadShape::Circle,
+                },
                 // The generators draw no rounded pads yet.
                 _ => PadShape::Rect,
             },

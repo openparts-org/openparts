@@ -493,8 +493,10 @@ fn quantity_fields(m: &Mapping, ptr: &str) -> Mapping {
             }
         }
     }
-    if let Some(v) = m.get("value") {
-        out.insert(s("value"), v.clone());
+    for k in ["value", "values"] {
+        if let Some(v) = m.get(k) {
+            out.insert(s(k), v.clone());
+        }
     }
     if let Some(Value::Mapping(at)) = m.get("at") {
         let mut conds: Vec<(String, String)> = at
@@ -558,7 +560,9 @@ fn place(root: &mut Value, ptr: &str, src: Value) -> bool {
             }
             // A table (pins, dimensions) is cited at its top; a record
             // after its fields.
-            let table = m.len() > 1 && m.values().all(|v| v.is_mapping() || v.is_sequence());
+            let table = m.len() > 1
+                && !parameter_entry(ptr)
+                && m.values().all(|v| v.is_mapping() || v.is_sequence());
             if table {
                 let rest = std::mem::take(m);
                 m.insert(s("src"), src);
@@ -831,6 +835,39 @@ parameters:
         assert_eq!(typed(&text), old);
         // fmt is idempotent.
         assert_eq!(format(&text).unwrap(), text);
+    }
+
+    #[test]
+    fn a_multi_valued_parameter_reads_and_writes_its_list() {
+        let text = r#"schema_version: "0.2"
+kind: part
+id: t/M
+manufacturer: t
+mpn: M
+device: t/M
+package: standards/M
+sources: [t/DS]
+source: t/DS
+
+existence: { status: verified, src: p1 "M" }
+lifecycle: { status: unknown }
+
+parameters:
+  data_interface: { values: [i2c, spi], src: p1 "Features" }
+  reference:      { values: [internal, external], at: { VDD: 5 V }, src: p3 "Reference" }
+"#;
+        let part = typed(text);
+        let di = part.parameters["data_interface"].primary();
+        assert_eq!(di.values, ["i2c", "spi"]);
+        assert!(di.value.is_none());
+        assert_eq!(part.parameters["reference"].primary().values.len(), 2);
+        assert_eq!(
+            part.provenance["/parameters/data_interface"][0]
+                .locator
+                .as_deref(),
+            Some("Features")
+        );
+        assert_eq!(format(text).unwrap(), text);
     }
 
     #[test]

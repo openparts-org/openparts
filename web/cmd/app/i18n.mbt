@@ -748,6 +748,8 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (En, "rotary_encoder") => "Rotary encoder"
     (_, "usb_c") => "USB Type-C"
     (_, "melf") => "MELF"
+    (Ja, "chip_array") => "チップ抵抗アレイ"
+    (En, "chip_array") => "Chip array"
     (_, "sot223") => "SOT-223"
     (_, "do214") => "DO-214"
     (_, "to220") => "TO-220"
@@ -901,6 +903,10 @@ let param_names : Array[(String, String, String)] = [
   ("rated_current", "定格電流", "Rated current"),
   ("saturation_current", "飽和電流", "Saturation current"),
   ("dcr", "直流抵抗 (DCR)", "DC resistance (DCR)"),
+  ("hold_current", "保持電流 (Ihold)", "Hold current (Ihold)"),
+  ("trip_current", "トリップ電流 (Itrip)", "Trip current (Itrip)"),
+  ("max_current", "最大遮断電流 (Imax)", "Max interrupt current (Imax)"),
+  ("max_voltage", "最大電圧 (Vmax)", "Max voltage (Vmax)"),
   ("frequency", "周波数", "Frequency"),
   ("load_capacitance", "負荷容量", "Load capacitance"),
   ("frequency_tolerance", "周波数許容差", "Frequency tolerance"),
@@ -944,6 +950,13 @@ let param_names : Array[(String, String, String)] = [
   ),
   ("collector_current", "コレクタ電流 (Ic)", "Collector current (Ic)"),
   ("isolation_voltage", "絶縁耐圧 (BVs)", "Isolation voltage (BVs)"),
+  ("cmr", "同相除去 (CMR / CMTI)", "Common-mode rejection (CMR / CMTI)"),
+  ("trigger_current", "トリガ電流 (IFT)", "Trigger current (IFT)"),
+  (
+    "off_state_voltage", "オフ時出力耐圧 (VDRM / VOFF)", "Off-state voltage (VDRM / VOFF)",
+  ),
+  ("on_resistance", "オン抵抗 (RON)", "On-resistance (RON)"),
+  ("on_resistance_flatness", "オン抵抗平坦性", "On-resistance flatness"),
   (
     "current_transfer_ratio", "電流伝達率 (CTR)", "Current transfer ratio (CTR)",
   ),
@@ -957,6 +970,16 @@ let param_names : Array[(String, String, String)] = [
   ("travel", "ストローク", "Travel"),
   ("supply_voltage", "電源電圧", "Supply voltage"),
   ("supply_current", "消費電流", "Supply current"),
+  (
+    "analog_supply_voltage", "アナログ電源電圧 (AVDD)", "Analog supply voltage (AVDD)",
+  ),
+  (
+    "digital_supply_voltage", "デジタル電源電圧 (DVDD)", "Digital supply voltage (DVDD)",
+  ),
+  ("analog_supply_current", "アナログ消費電流", "Analog supply current"),
+  (
+    "digital_supply_current", "デジタル消費電流", "Digital supply current",
+  ),
   ("operating_temperature", "動作温度範囲", "Operating temperature"),
   ("esd_hbm", "ESD耐圧 (HBM)", "ESD rating (HBM)"),
   ("channel_count", "チャネル数", "Channels"),
@@ -986,6 +1009,7 @@ let param_names : Array[(String, String, String)] = [
   ("bus_fault_voltage", "バス耐故障電圧", "Bus fault protection"),
   ("resolution", "分解能 (bit)", "Resolution (bits)"),
   ("sample_rate", "サンプリングレート", "Sample rate"),
+  ("reference", "基準電圧源", "Reference"),
   ("motor_type", "対応モーター", "Motor type"),
   (
     "motor_supply_voltage", "モーター電源電圧 (VM)", "Motor supply voltage (VM)",
@@ -1011,6 +1035,9 @@ let param_names : Array[(String, String, String)] = [
   ("coil_resistance", "コイル抵抗", "Coil resistance"),
   ("contact_current", "接点電流", "Contact current"),
   ("contact_voltage", "接点電圧", "Contact voltage"),
+  ("must_operate_voltage", "感動電圧", "Must-operate voltage"),
+  ("must_release_voltage", "開放電圧", "Must-release voltage"),
+  ("input_impedance", "入力インピーダンス", "Input impedance"),
   ("contact_form", "接点構成", "Contact form"),
   ("relay_type", "リレー種別", "Relay type"),
   ("taper", "抵抗変化特性 (カーブ)", "Taper"),
@@ -1029,6 +1056,11 @@ let param_names : Array[(String, String, String)] = [
   ("operate_point", "動作磁束密度 (BOP)", "Operate point (BOP)"),
   ("release_point", "復帰磁束密度 (BRP)", "Release point (BRP)"),
   ("magnetic_range", "磁束密度範囲", "Magnetic range"),
+  ("magnetic_sensitivity", "感度 (mV/mT)", "Sensitivity (mV/mT)"),
+  ("bandwidth", "帯域幅", "Bandwidth"),
+  ("timekeeping_accuracy", "計時精度", "Timekeeping accuracy"),
+  ("backup_current", "バックアップ電流 (VBAT)", "Backup current (VBAT)"),
+  ("max_frequency", "最大動作周波数", "Max frequency"),
   ("radio_protocol", "無線規格", "Radio protocol"),
   ("frequency_band", "周波数帯", "Frequency band"),
   ("tx_power", "送信出力", "TX power"),
@@ -1055,6 +1087,20 @@ fn param_name(lang : Lang, key : String) -> String {
 /// An enumerated parameter value's display name; dielectric codes and
 /// unknown values show as they are.
 fn param_value_label(lang : Lang, key : String, value : String) -> String {
+  // A multi-valued key's label lists its values (`i2c / spi`).
+  if value.contains(" / ") {
+    return value
+      .split(" / ")
+      .map(v => param_word_label(lang, key, v.to_owned()))
+      .collect()
+      .join(" / ")
+  }
+  param_word_label(lang, key, value)
+}
+
+///|
+/// One enumerated value's display name.
+fn param_word_label(lang : Lang, key : String, value : String) -> String {
   match (lang, key, value) {
     (_, "polarity", "npn") => "NPN"
     (_, "polarity", "pnp") => "PNP"
@@ -1132,6 +1178,14 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (_, "data_interface", "pwm") => "PWM"
     (_, "data_interface", "phase_enable") => "PHASE / ENABLE"
     (_, "data_interface", "step_dir") => "STEP / DIR"
+    (Ja, "data_interface", "parallel") => "パラレル"
+    (En, "data_interface", "parallel") => "Parallel"
+    (_, "data_interface", "lvds") => "LVDS"
+    (_, "data_interface", "jesd204") => "JESD204"
+    (Ja, "reference", "internal") => "内部"
+    (Ja, "reference", "external") => "外部"
+    (En, "reference", "internal") => "Internal"
+    (En, "reference", "external") => "External"
     (Ja, "motor_type", "brushed_dc") => "ブラシ付きDC"
     (Ja, "motor_type", "stepper") => "ステッピング"
     (Ja, "motor_type", "brushed_dc_or_stepper") =>
@@ -1191,6 +1245,8 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (Ja, "light_sensor_type", "ambient") => "照度"
     (Ja, "light_sensor_type", "proximity") => "近接"
     (Ja, "light_sensor_type", "ambient_proximity") => "照度 + 近接"
+    (Ja, "light_sensor_type", "ambient_color_proximity_gesture") =>
+      "照度 + カラー + 近接 + ジェスチャ"
     (Ja, "light_sensor_type", "color") => "カラー (RGB)"
     (Ja, "light_sensor_type", "uv") => "紫外線"
     (Ja, "light_sensor_type", "infrared") => "赤外線"
@@ -1198,6 +1254,8 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (En, "light_sensor_type", "proximity") => "Proximity"
     (En, "light_sensor_type", "ambient_proximity") =>
       "Ambient light + proximity"
+    (En, "light_sensor_type", "ambient_color_proximity_gesture") =>
+      "Ambient light + color + proximity + gesture"
     (En, "light_sensor_type", "color") => "Color (RGB)"
     (En, "light_sensor_type", "uv") => "UV"
     (En, "light_sensor_type", "infrared") => "Infrared"

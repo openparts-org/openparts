@@ -123,7 +123,9 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
 
     // The exposed thermal pad (PowerPAD, HSOP "E-PAD") on the underside,
     // centred, flush with the seating plane: "EP", as the QFN generator
-    // numbers it.
+    // numbers it. A pad-up package (`face: top`, TI HTSSOP DAD) shows it
+    // on the top face instead: no terminal, no land.
+    let mut details = crate::Details::None;
     if let Some(ep) = &package.dimensions.exposed_pad {
         let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.typ")?;
         let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.typ")?;
@@ -132,6 +134,21 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
                 "exposed pad ({ep_w} x {ep_l}) must lie inside the body ({body_w} x {body_l})"
             )));
         }
+        if ep.face == openparts_core::ExposedPadFace::Top {
+            details = crate::Details::TopPad {
+                width: ep_w,
+                length: ep_l,
+            };
+        }
+    }
+    if let Some(ep) = package
+        .dimensions
+        .exposed_pad
+        .as_ref()
+        .filter(|ep| ep.face.is_bottom())
+    {
+        let ep_w = defaults::dim(&ep.width, "dimensions.exposed_pad.width.typ")?;
+        let ep_l = defaults::dim(&ep.length, "dimensions.exposed_pad.length.typ")?;
         leads.push(Lead {
             number: "EP".to_string(),
             position: Point3 {
@@ -167,7 +184,7 @@ pub fn generate_soic(package: &Package) -> Result<MechanicalGeometry, McadError>
 
         pitch: crate::defaults::required(&package.pitch),
 
-        details: crate::Details::None,
+        details,
         body,
         leads,
         markers,
@@ -214,6 +231,7 @@ mod tests {
             aux_pads: vec![],
             pad_order: vec![],
             actuation: None,
+            terminal_shape: None,
             connector: None,
             edge: None,
             keepouts: vec![],
@@ -421,6 +439,7 @@ mod tests {
             },
             land_width: None,
             land_length: None,
+            face: Default::default(),
         });
         package
     }

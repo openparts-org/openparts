@@ -163,6 +163,7 @@ mod tests {
         s.dimensions.exposed_pad = Some(crate::ExposedPadDimensions {
             land_width: None,
             land_length: None,
+            face: Default::default(),
             width: s.dimensions.body_width.clone(),
             length: s.dimensions.body_length.clone(),
         });

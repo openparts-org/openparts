@@ -113,6 +113,17 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>, family: &Family) -> Result<
         )?;
         leads.push("ExposedPad".into());
     }
+    if let openparts_mcad::Details::TopPad { width, length } = g.details {
+        s.fragment(
+            fragment!("gullwing_top_pad"),
+            &vars!(ep_w = mm(width), ep_l = mm(length), standoff = mm(form.2)),
+        )?;
+        s.fragment(
+            fragment!("inlay"),
+            &vars!(target = "Body", tools = vec!["TopPad".to_string()]),
+        )?;
+        leads.push("TopPad".into());
+    }
     s.paint(&["Body".into()], looks::MOLD);
     s.paint(&leads, looks::TIN);
     Ok(())

@@ -55,6 +55,11 @@ families! {
     Do214: "do214",
     To220: "to220",
     Chip: "chip",
+    /// Chip resistor arrays / networks (Yageo YC124/YC164, Panasonic
+    /// EXB): a chip body with convex or concave terminals in two rows
+    /// along its long sides, 2, 4 or 8 elements at `pitch`; the
+    /// footprint is the source's land pattern (`pads`).
+    ChipArray: "chip_array" | "resistor_array",
     Radial: "radial",
     Axial: "axial",
     To92: "to92",

@@ -62,6 +62,11 @@ pub const CONDITION_SYMBOLS: &[ConditionSymbol] = &[
     sym("VF", Quantity::Voltage, "forward voltage"),
     sym("VOD", Quantity::Voltage, "input overdrive (comparators)"),
     sym("VM", Quantity::Voltage, "motor (bridge) supply voltage"),
+    sym(
+        "VBAT",
+        Quantity::Voltage,
+        "backup-battery voltage (an RTC's backup current)",
+    ),
     sym("ID", Quantity::Current, "drain current"),
     sym("IC", Quantity::Current, "collector current"),
     sym("IB", Quantity::Current, "base current"),
@@ -80,6 +85,11 @@ pub const CONDITION_SYMBOLS: &[ConditionSymbol] = &[
     sym("TS", Quantity::Temperature, "solder-point temperature"),
     sym("TT", Quantity::Temperature, "terminal temperature"),
     sym("f", Quantity::Frequency, "frequency"),
+    sym(
+        "FCLK",
+        Quantity::Frequency,
+        "clock frequency (an interface or core clock a supply current is stated at)",
+    ),
     sym("t", Quantity::Time, "duration"),
     sym(
         "THD",
