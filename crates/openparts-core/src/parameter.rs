@@ -48,6 +48,12 @@ pub struct ParameterValue {
     /// keys the vocabulary marks multi-valued take it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
+    /// An operating-range key's disjoint ranges (`supply_voltage` of
+    /// "1.65 V to 1.95 V or 3.0 V to 3.6 V"), instead of
+    /// `min`/`typ`/`max` + `unit`, ascending and not overlapping. Only
+    /// operating-range keys ([`ParameterSpec::span`]) take it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranges: Vec<ParameterRange>,
     /// Measurement conditions (section 11.2), e.g. `VGS: 10 V`.
     #[serde(
         default,
@@ -55,6 +61,22 @@ pub struct ParameterValue {
         serialize_with = "crate::condition::serialize_ordered"
     )]
     pub at: Conditions,
+}
+
+/// One of a [`ParameterValue`]'s disjoint ranges: `min`/`typ`/`max`
+/// in its own `unit` (at least one of the three).
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ParameterRange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typ: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
 }
 
 /// The values of one parameter key: one, or several condition variants
@@ -1047,10 +1069,11 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         CONVERTERS,
     ),
     within(num("sample_rate", Q::Frequency, CONVERTERS), 0.0, 1e11),
-    // Where the conversion reference comes from; both when selectable.
+    // Where the conversion reference comes from; both when selectable;
+    // `supply` when the converter uses its supply (MCP3002: VDD = VREF).
     multi(enumerated(
         "reference",
-        &["internal", "external"],
+        &["internal", "external", "supply"],
         &[C::Adc, C::Dac],
     )),
     // Motor drivers (the bridge supply VM; a separate logic supply is
@@ -1328,14 +1351,16 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         10.0,
     ),
     // A linear sensor's output per flux density (mV/mT; a microphone's
-    // `sensitivity` is another quantity) and its -3 dB bandwidth.
+    // `sensitivity` is another quantity), signed: negative when the
+    // output falls as the field rises (DRV5053 -11 mV/mT variants); and
+    // its -3 dB bandwidth.
     within(
         num(
             "magnetic_sensitivity",
             Q::MagneticSensitivity,
             &[C::MagneticSensor],
         ),
-        0.0,
+        -1e5,
         1e5,
     ),
     within(
@@ -1460,6 +1485,67 @@ pub enum Normalized {
     Text(&'static str),
     /// A multi-valued key's values (vocabulary spellings, as listed).
     Set(Vec<&'static str>),
+    /// An operating-range key's disjoint ranges (two or more,
+    /// ascending, not overlapping).
+    Ranges(Vec<NumericRange>),
+}
+
+/// One numeric value or range in SI.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct NumericRange {
+    pub typ: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+}
+
+impl NumericRange {
+    /// The lower end: `min`, else `typ`, else `max`.
+    pub fn low(&self) -> Option<f64> {
+        self.min.or(self.typ).or(self.max)
+    }
+
+    /// The upper end: `max`, else `typ`, else `min`.
+    pub fn high(&self) -> Option<f64> {
+        self.max.or(self.typ).or(self.min)
+    }
+}
+
+/// `min`/`typ`/`max` in `unit` checked (one of them stated, ordered,
+/// a unit of `q`) and converted to SI.
+fn numeric(
+    q: Quantity,
+    min: Option<f64>,
+    typ: Option<f64>,
+    max: Option<f64>,
+    unit: Option<&str>,
+) -> Result<NumericRange, ParameterError> {
+    if typ.is_none() && min.is_none() && max.is_none() {
+        return Err(ParameterError::WrongShape(
+            "a numeric parameter needs typ, min or max",
+        ));
+    }
+    let unit = unit.ok_or(ParameterError::MissingUnit)?;
+    let factor = q
+        .unit_factor(unit)
+        .ok_or_else(|| ParameterError::IncompatibleUnit {
+            unit: unit.to_string(),
+            quantity: q,
+        })?;
+    let le = |a: Option<f64>, b: Option<f64>| match (a, b) {
+        (Some(a), Some(b)) => a <= b,
+        _ => true,
+    };
+    if !(le(min, typ) && le(typ, max) && le(min, max)) {
+        return Err(ParameterError::OutOfOrder);
+    }
+    // Twelve significant digits: `10 µF` is 1e-5, not
+    // 9.999999999999999e-6.
+    let si = |v: Option<f64>| v.map(|v| round_significant(v * factor, 12));
+    Ok(NumericRange {
+        typ: si(typ),
+        min: si(min),
+        max: si(max),
+    })
 }
 
 /// Combined values of a multi-valued key that stand for several of its
@@ -1476,40 +1562,54 @@ impl ParameterValue {
                         "a numeric parameter takes typ/min/max + unit, not value",
                     ));
                 }
-                if self.typ.is_none() && self.min.is_none() && self.max.is_none() {
+                if self.ranges.is_empty() {
+                    let r = numeric(q, self.min, self.typ, self.max, self.unit.as_deref())?;
+                    return Ok(Normalized::Numeric {
+                        typ: r.typ,
+                        min: r.min,
+                        max: r.max,
+                    });
+                }
+                if !spec.span {
                     return Err(ParameterError::WrongShape(
-                        "a numeric parameter needs typ, min or max",
+                        "only an operating-range parameter takes ranges",
                     ));
                 }
-                let unit = self.unit.as_deref().ok_or(ParameterError::MissingUnit)?;
-                let factor =
-                    q.unit_factor(unit)
-                        .ok_or_else(|| ParameterError::IncompatibleUnit {
-                            unit: unit.to_string(),
-                            quantity: q,
-                        })?;
-                let (n, lo, hi) = (self.typ, self.min, self.max);
-                let le = |a: Option<f64>, b: Option<f64>| match (a, b) {
-                    (Some(a), Some(b)) => a <= b,
-                    _ => true,
-                };
-                if !(le(lo, n) && le(n, hi) && le(lo, hi)) {
-                    return Err(ParameterError::OutOfOrder);
+                if self.typ.is_some()
+                    || self.min.is_some()
+                    || self.max.is_some()
+                    || self.unit.is_some()
+                {
+                    return Err(ParameterError::WrongShape(
+                        "give typ/min/max or ranges, not both",
+                    ));
                 }
-                // Twelve significant digits: `10 µF` is 1e-5, not
-                // 9.999999999999999e-6.
-                let si = |v: Option<f64>| v.map(|v| round_significant(v * factor, 12));
-                Ok(Normalized::Numeric {
-                    typ: si(n),
-                    min: si(lo),
-                    max: si(hi),
-                })
+                if self.ranges.len() < 2 {
+                    return Err(ParameterError::WrongShape(
+                        "one range is written as min/typ/max, not ranges",
+                    ));
+                }
+                let out = self
+                    .ranges
+                    .iter()
+                    .map(|r| numeric(q, r.min, r.typ, r.max, r.unit.as_deref()))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if out.windows(2).any(|w| match (w[0].high(), w[1].low()) {
+                    (Some(a), Some(b)) => a >= b,
+                    _ => true,
+                }) {
+                    return Err(ParameterError::WrongShape(
+                        "ranges must be listed in ascending order and must not overlap",
+                    ));
+                }
+                Ok(Normalized::Ranges(out))
             }
             Enumerated(values) => {
                 if self.typ.is_some()
                     || self.min.is_some()
                     || self.max.is_some()
                     || self.unit.is_some()
+                    || !self.ranges.is_empty()
                 {
                     return Err(ParameterError::WrongShape(
                         "an enumerated parameter takes value, not typ/min/max/unit",
@@ -1562,7 +1662,7 @@ impl Normalized {
     /// Empty for a numeric value.
     pub fn members(&self, key: &str) -> Vec<&'static str> {
         let words: &[&'static str] = match self {
-            Normalized::Numeric { .. } => return Vec::new(),
+            Normalized::Numeric { .. } | Normalized::Ranges(_) => return Vec::new(),
             Normalized::Text(t) => std::slice::from_ref(t),
             Normalized::Set(ws) => ws,
         };
@@ -1584,9 +1684,12 @@ impl Normalized {
     /// The one number a numeric value is compared, sorted and filtered
     /// by (SI): a deviation key's larger magnitude; otherwise
     /// `typ`, else the middle of `min`/`max`, else its one limit.
+    /// Disjoint ranges are compared by their first.
     pub fn stated(&self, spec: &ParameterSpec) -> Option<f64> {
-        let Normalized::Numeric { typ, min, max } = *self else {
-            return None;
+        let (typ, min, max) = match self {
+            Normalized::Numeric { typ, min, max } => (*typ, *min, *max),
+            Normalized::Ranges(rs) => (rs[0].typ, rs[0].min, rs[0].max),
+            _ => return None,
         };
         if spec.deviation {
             return match (typ, min, max) {
@@ -1604,8 +1707,23 @@ impl Normalized {
         })
     }
 
+    /// The value's numbers as ranges: one for a numeric value, each of
+    /// disjoint ranges, none for an enumerated value.
+    pub fn ranges(&self) -> Vec<NumericRange> {
+        match self {
+            Normalized::Numeric { typ, min, max } => vec![NumericRange {
+                typ: *typ,
+                min: *min,
+                max: *max,
+            }],
+            Normalized::Ranges(rs) => rs.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     /// The display form: `100 nF`, `±10%`, `X7R`, `1.2 V typ`... Ranges
-    /// show as `min–max`; a lone limit as `≥ x` / `≤ x`.
+    /// show as `min–max`; a lone limit as `≥ x` / `≤ x`; disjoint
+    /// ranges as `1.65–1.95 V / 3–3.6 V`.
     pub fn label(&self, spec: &ParameterSpec) -> String {
         self.label_digits(spec, 4)
     }
@@ -1620,6 +1738,33 @@ impl Normalized {
         let (typ, min, max) = match *self {
             Normalized::Text(t) => return t.to_string(),
             Normalized::Set(ref ws) => return ws.join(" / "),
+            Normalized::Ranges(ref rs) => {
+                let f = |v: f64| format_value_digits(v, spec, digits);
+                return rs
+                    .iter()
+                    .map(|r| {
+                        let one = Normalized::Numeric {
+                            typ: r.typ,
+                            min: r.min,
+                            max: r.max,
+                        };
+                        match (r.typ, r.min, r.max) {
+                            // `1.65–1.95 V` when both ends share the unit.
+                            (None, Some(a), Some(b)) => {
+                                let (a, b) = (f(a), f(b));
+                                match (a.split_once(' '), b.split_once(' ')) {
+                                    (Some((na, ua)), Some((nb, ub))) if ua == ub => {
+                                        format!("{na}–{nb} {ub}")
+                                    }
+                                    _ => format!("{a}–{b}"),
+                                }
+                            }
+                            _ => one.label_digits(spec, digits),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+            }
             Normalized::Numeric { typ, min, max } => (typ, min, max),
         };
         let f = |v: f64| format_value_digits(v, spec, digits);
@@ -1899,8 +2044,110 @@ mod tests {
             unit: Some(unit.into()),
             value: None,
             values: Vec::new(),
+            ranges: Vec::new(),
             at: Default::default(),
         }
+    }
+
+    fn ranges(rs: &[(Option<f64>, Option<f64>, Option<f64>)], unit: &str) -> ParameterValue {
+        ParameterValue {
+            ranges: rs
+                .iter()
+                .map(|&(min, typ, max)| ParameterRange {
+                    min,
+                    typ,
+                    max,
+                    unit: Some(unit.into()),
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_operating_range_takes_disjoint_ranges() {
+        let sv = spec("supply_voltage");
+        let v = ranges(
+            &[(Some(1.65), None, Some(1.95)), (Some(3.0), None, Some(3.6))],
+            "V",
+        );
+        let n = v.normalize(sv).unwrap();
+        assert_eq!(n.ranges().len(), 2);
+        assert_eq!(n.label(sv), "1.65–1.95 V / 3–3.6 V");
+        // Compared by the first range.
+        assert!((n.stated(sv).unwrap() - 1.8).abs() < 1e-12);
+        // Nominal rails, mixed prefixes.
+        let nominal = ranges(&[(None, Some(1.8), None), (None, Some(3.3), None)], "V");
+        assert_eq!(nominal.normalize(sv).unwrap().label(sv), "1.8 V / 3.3 V");
+        let mut mixed = ranges(&[(Some(900.0), None, Some(1100.0))], "mV");
+        mixed.ranges.push(ParameterRange {
+            min: Some(1.65),
+            max: Some(1.95),
+            unit: Some("V".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            mixed.normalize(sv).unwrap().label(sv),
+            "900 mV–1.1 V / 1.65–1.95 V"
+        );
+        let wrong = |v: ParameterValue, s: &ParameterSpec| {
+            matches!(v.normalize(s), Err(ParameterError::WrongShape(_)))
+        };
+        // Overlapping, descending, a single range, a non-range key,
+        // ranges beside min/max.
+        assert!(wrong(
+            ranges(
+                &[(Some(1.6), None, Some(3.0)), (Some(2.7), None, Some(3.6))],
+                "V"
+            ),
+            sv
+        ));
+        assert!(wrong(
+            ranges(
+                &[(Some(3.0), None, Some(3.6)), (Some(1.65), None, Some(1.95))],
+                "V"
+            ),
+            sv
+        ));
+        assert!(wrong(ranges(&[(Some(3.0), None, Some(3.6))], "V"), sv));
+        assert!(wrong(
+            ranges(&[(None, Some(1.0), None), (None, Some(2.0), None)], "nF"),
+            spec("capacitance")
+        ));
+        let mut both = v.clone();
+        both.min = Some(1.65);
+        assert!(wrong(both, sv));
+        assert_eq!(
+            ranges(
+                &[(Some(1.0), None, Some(2.0)), (Some(3.0), None, Some(4.0))],
+                "A"
+            )
+            .normalize(sv),
+            Err(ParameterError::IncompatibleUnit {
+                unit: "A".into(),
+                quantity: Quantity::Voltage
+            })
+        );
+        assert_eq!(
+            ranges(
+                &[(Some(2.0), None, Some(1.0)), (Some(3.0), None, Some(4.0))],
+                "V"
+            )
+            .normalize(sv),
+            Err(ParameterError::OutOfOrder)
+        );
+    }
+
+    #[test]
+    fn signed_magnetic_sensitivity_and_supply_reference() {
+        let ms = spec("magnetic_sensitivity");
+        assert!(ms.in_range(-110.0) && ms.in_range(110.0));
+        let r = spec("reference");
+        let supply = ParameterValue {
+            value: Some("supply".into()),
+            ..Default::default()
+        };
+        assert_eq!(supply.normalize(r), Ok(Normalized::Text("supply")));
     }
 
     #[test]

@@ -24,3 +24,27 @@ test "every results column is a labelled parameter key" {
     "Current transfer ratio (CTR)",
   )
 }
+
+///|
+test "disjoint ranges show each range" {
+  let r = (lo : Double, hi : Double) => @api.ParameterRange::{
+    min: Some(lo),
+    typ: None,
+    max: Some(hi),
+    unit: Some("V"),
+  }
+  let v = @api.ParameterValue::{
+    at: None,
+    max: None,
+    min: None,
+    ranges: Some([r(1.65, 1.95), r(3.0, 3.6)]),
+    typ: None,
+    unit: None,
+    value: None,
+    values: None,
+  }
+  assert_eq(
+    format_parameter(En, "supply_voltage", v),
+    "1.65–1.95 V / 3–3.6 V",
+  )
+}

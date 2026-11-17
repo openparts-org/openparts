@@ -1186,6 +1186,8 @@ fn param_word_label(lang : Lang, key : String, value : String) -> String {
     (Ja, "reference", "external") => "外部"
     (En, "reference", "internal") => "Internal"
     (En, "reference", "external") => "External"
+    (Ja, "reference", "supply") => "電源電圧"
+    (En, "reference", "supply") => "Supply"
     (Ja, "motor_type", "brushed_dc") => "ブラシ付きDC"
     (Ja, "motor_type", "stepper") => "ステッピング"
     (Ja, "motor_type", "brushed_dc_or_stepper") =>

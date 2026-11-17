@@ -3707,6 +3707,30 @@ pub impl @json.FromJson for ParameterKind with fn from_json(json, path) {
 }
 
 ///|
+/// One of a [`ParameterValue`]'s disjoint ranges: `min`/`typ`/`max`
+/// in its own `unit` (at least one of the three).
+#derive(Eq)
+pub(all) struct ParameterRange {
+  max : Double?
+  min : Double?
+  typ : Double?
+  unit : String?
+}
+
+///|
+pub impl @json.FromJson for ParameterRange with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a ParameterRange object"))
+  }
+  {
+    max: opt_field(obj, "max", path),
+    min: opt_field(obj, "min", path),
+    typ: opt_field(obj, "typ", path),
+    unit: opt_field(obj, "unit", path),
+  }
+}
+
+///|
 /// One parameter value as the data states it. A numeric key uses
 /// `min`/`typ`/`max` + `unit` (like a [`crate::Dimension`]; none of
 /// the three is invented when the source doesn't state it); an
@@ -3718,6 +3742,7 @@ pub(all) struct ParameterValue {
   at : Map[String, Condition]?
   max : Double?
   min : Double?
+  ranges : Array[ParameterRange]?
   typ : Double?
   unit : String?
   value : String?
@@ -3733,6 +3758,7 @@ pub impl @json.FromJson for ParameterValue with fn from_json(json, path) {
     at: opt_field(obj, "at", path),
     max: opt_field(obj, "max", path),
     min: opt_field(obj, "min", path),
+    ranges: opt_field(obj, "ranges", path),
     typ: opt_field(obj, "typ", path),
     unit: opt_field(obj, "unit", path),
     value: opt_field(obj, "value", path),

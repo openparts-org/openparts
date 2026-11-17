@@ -498,6 +498,17 @@ fn quantity_fields(m: &Mapping, ptr: &str) -> Mapping {
             out.insert(s(k), v.clone());
         }
     }
+    // Disjoint ranges, each a quantity of its own.
+    if let Some(Value::Sequence(rs)) = m.get("ranges") {
+        let rs = rs
+            .iter()
+            .map(|r| match r {
+                Value::Mapping(rm) => Value::Mapping(quantity_fields(rm, ptr)),
+                other => other.clone(),
+            })
+            .collect();
+        out.insert(s("ranges"), Value::Sequence(rs));
+    }
     if let Some(Value::Mapping(at)) = m.get("at") {
         let mut conds: Vec<(String, String)> = at
             .iter()
@@ -868,6 +879,43 @@ parameters:
             Some("Features")
         );
         assert_eq!(format(text).unwrap(), text);
+    }
+
+    #[test]
+    fn disjoint_ranges_read_and_write_back() {
+        let text = r#"schema_version: "0.2"
+kind: device
+id: t/C
+manufacturer: t
+category: audio
+parameters:
+  analog_supply_voltage:  { min: 3.0 V, max: 3.6 V, src: t/DS p8 "AVDD" }
+  digital_supply_voltage: { ranges: [{ min: 1.65 V, max: 1.95 V }, { min: 3.0 V, max: 3.6 V }], src: t/DS p8 "IOVDD" }
+  supply_voltage:         { ranges: [{ typ: 1.8 V }, { typ: 3.3 V }], at: { TA: 25 °C }, src: t/DS p8 "x" }
+pins: {}
+"#;
+        let doc = read(text).unwrap();
+        let d: openparts_core::Device = serde_yaml::from_value(doc).unwrap();
+        let io = d.parameters["digital_supply_voltage"].primary();
+        assert_eq!(io.ranges.len(), 2);
+        assert_eq!(io.ranges[1].min, Some(3.0));
+        assert_eq!(io.ranges[1].unit.as_deref(), Some("V"));
+        assert!(io.min.is_none() && io.unit.is_none());
+        let sv = d.parameters["supply_voltage"].primary();
+        assert_eq!(sv.ranges[0].typ, Some(1.8));
+        assert_eq!(sv.at.len(), 1);
+        let out = format(text).unwrap();
+        assert!(
+            out.contains("ranges: [{ min: 1.65 V, max: 1.95 V }, { min: 3 V, max: 3.6 V }]"),
+            "{out}"
+        );
+        assert!(
+            out.contains("ranges: [{ typ: 1.8 V }, { typ: 3.3 V }], at: { TA: 25 °C }"),
+            "{out}"
+        );
+        assert_eq!(format(&out).unwrap(), out);
+        let again: openparts_core::Device = serde_yaml::from_value(read(&out).unwrap()).unwrap();
+        assert_eq!(again.parameters, d.parameters);
     }
 
     #[test]

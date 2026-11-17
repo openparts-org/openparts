@@ -1571,6 +1571,19 @@ mod tests {
                     ("bandwidth", num(20.0, "kHz")),
                 ],
             ),
+            // A negative sensitivity (output falls as the field rises).
+            (
+                C::MagneticSensor,
+                vec![("magnetic_sensitivity", num(-11.0, "mV/mT"))],
+            ),
+            // The supply as the reference (MCP3002: VDD = VREF).
+            (
+                C::Adc,
+                vec![
+                    ("reference", word("supply")),
+                    ("data_interface", word("spi")),
+                ],
+            ),
             (
                 C::Rtc,
                 vec![
@@ -1612,6 +1625,44 @@ mod tests {
         for (category, keys) in gaps {
             assert!(run(*category, keys).is_empty(), "{category:?}");
         }
+        // Disjoint supply ranges ("1.8 V or 3.3 V" IOVDD).
+        let ranges = |rs: &[(f64, f64)], unit: &str| ParameterValue {
+            ranges: rs
+                .iter()
+                .map(|&(lo, hi)| openparts_core::ParameterRange {
+                    min: Some(lo),
+                    max: Some(hi),
+                    unit: Some(unit.into()),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let codec = [
+            (
+                "analog_supply_voltage",
+                ranges(&[(1.65, 1.95), (3.0, 3.6)], "V"),
+            ),
+            (
+                "digital_supply_voltage",
+                ranges(&[(1.65, 1.95), (3.0, 3.6)], "V"),
+            ),
+        ];
+        assert!(run(C::Audio, &codec).is_empty());
+        // A unit slip in one range (malformed ranges: core's tests).
+        assert_eq!(
+            run(
+                C::Audio,
+                &[(
+                    "supply_voltage",
+                    ranges(&[(1.65, 1.95), (3000.0, 3600.0)], "V")
+                )]
+            ),
+            [(
+                "parameter.implausible_value".to_string(),
+                "/parameters/supply_voltage".to_string()
+            )]
+        );
         // A % slip on an RTC's ppm accuracy.
         assert_eq!(
             run(C::Rtc, &[("timekeeping_accuracy", num(2.0, "%"))]),

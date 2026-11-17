@@ -8,7 +8,7 @@
 use crate::Diagnostic;
 use openparts_core::{
     condition::comparable, format_value, parameter::plausible_for, parameter_spec,
-    ComponentCategory, Normalized, ParameterError, Parameters, ProvenanceMap,
+    ComponentCategory, ParameterError, Parameters, ProvenanceMap,
 };
 
 pub(crate) fn check_parameters(
@@ -59,11 +59,12 @@ pub(crate) fn check_parameters(
                 path.clone()
             };
             let normalized = value.normalize(spec);
-            if let (Ok(Normalized::Numeric { typ, min, max }), Some((lo, hi))) =
-                (&normalized, spec.range)
-            {
-                if let Some(v) = [*min, *typ, *max]
-                    .into_iter()
+            if let (Ok(n), Some((lo, hi))) = (&normalized, spec.range) {
+                // Every number, each of disjoint ranges' included.
+                if let Some(v) = n
+                    .ranges()
+                    .iter()
+                    .flat_map(|r| [r.min, r.typ, r.max])
                     .flatten()
                     .find(|v| !spec.in_range(*v))
                 {

@@ -332,6 +332,10 @@ fn parameter_terms(n: &Normalized, spec: &ParameterSpec) -> Vec<String> {
     if let Normalized::Set(words) = n {
         out.extend(words.iter().map(|w| w.to_string()));
     }
+    // Each of disjoint ranges on its own (`3–3.6 V`).
+    if let Normalized::Ranges(_) = n {
+        out.extend(n.label(spec).split(" / ").map(str::to_string));
+    }
     if let (Some(v), None) = (n.stated(spec), spec.display_unit) {
         if !spec.deviation {
             let label = format_value(v, spec);

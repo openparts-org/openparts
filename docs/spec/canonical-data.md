@@ -345,6 +345,8 @@ Device value into each Part.
 - *enumerated*: `value`, one of the key's listed spellings
   (case-sensitive). A *multi-valued* key (`data_interface`,
   `reference`) may instead list several in `values` (below).
+- An operating-range key may instead list *disjoint ranges* in
+  `ranges` (below).
 
 Each numeric key has a fixed physical quantity; its value normalises to
 that quantity's SI base unit. Accepted units (case-sensitive: `m` is
@@ -465,7 +467,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `bus_fault_voltage` | voltage, operating range (the bus pins' fault-protection / abs-max range as printed: `{ min: -58 V, max: 58 V }`) | `interface` |
 | `resolution` | `8` `10` `12` `14` `16` `18` `20` `22` `24` `32` (bits) | `adc`, `dac`, `audio_codec` |
 | `sample_rate` | frequency (max sample rate; a DAC's update rate; `SPS` `kSPS` `MSPS` allowed) | `adc`, `dac`, `audio_codec` |
-| `reference` | multi-valued: `internal` `external` (where the conversion reference comes from; `values: [internal, external]` when selectable) | `adc`, `dac` |
+| `reference` | multi-valued: `internal` `external` `supply` (where the conversion reference comes from; `supply`: the converter uses its supply, e.g. MCP3002 VDD = VREF; `values: [internal, external]` when selectable) | `adc`, `dac` |
 | `motor_type` | `brushed_dc` `stepper` `brushed_dc_or_stepper` (dual H-bridges sold for either) `bldc` | `motor_driver` |
 | `motor_supply_voltage` | voltage, operating range (VM, the bridge supply; a separate logic supply is `supply_voltage`) | `motor_driver` |
 | `output_current_peak` | current (peak / short-duration output current per output; a gate-driver optocoupler's IOPH/IOPL) | `driver`, optocoupler |
@@ -505,7 +507,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `magnetic_sensor_type` | `unipolar_switch` `omnipolar_switch` `bipolar_latch` `linear` `3d` `angle` | `magnetic_sensor` |
 | `operate_point`, `release_point` | magnetic flux density (BOP / BRP; signed for a latch, shown in `mT`) | `magnetic_sensor` |
 | `magnetic_range` | magnetic flux density, operating range (a linear/3D sensor's full scale: ±40 mT is `{ min: -40 mT, max: 40 mT }`) | `magnetic_sensor` |
-| `magnetic_sensitivity` | magnetic sensitivity (a linear Hall sensor's analog output, `mV/mT`; not the microphone `sensitivity`, which is a level in dBV; a digital magnetometer's LSB/mT has no key) | `magnetic_sensor` |
+| `magnetic_sensitivity` | magnetic sensitivity (a linear Hall sensor's analog output, `mV/mT`, signed as printed: negative when the output falls as the field rises, e.g. DRV5053 -11 mV/mT; not the microphone `sensitivity`, which is a level in dBV; a digital magnetometer's LSB/mT has no key) | `magnetic_sensor` |
 | `bandwidth` | frequency (a linear sensor's -3 dB output bandwidth) | `magnetic_sensor` |
 | `timekeeping_accuracy` | ratio, deviation (an RTC's frequency / timekeeping accuracy in `ppm`; the temperature range in `at: { TA: 0..40 °C }`) | `rtc` |
 | `backup_current` | current (the backup-supply current IBAT, `at: { VBAT: 3 V }`) | `rtc` |
@@ -532,6 +534,30 @@ catalog's range filter asks whether the range contains the asked span
 (`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
 3.3 V), and an alternative must cover the original's range.
 
+**Disjoint ranges.** When the source gives an operating range as
+alternatives with a gap between them ("IOVDD 1.8 V or 3.3 V
+operation": 1.65-1.95 V or 3.0-3.6 V), an operating-range key lists
+them in `ranges` instead of `min`/`typ`/`max`, as `values` does for an
+enumerated key. Each entry is a quantity like a single value
+(`min`/`typ`/`max` with units; a nominal-only rail is `{ typ: 1.8 V }`):
+
+```yaml
+analog_supply_voltage:  { ranges: [{ min: 1.65 V, max: 1.95 V }, { min: 3.0 V, max: 3.6 V }], src: p8 "Recommended Operating Conditions, AVDD" }
+digital_supply_voltage: { ranges: [{ min: 1.65 V, max: 1.95 V }, { min: 3.0 V, max: 3.6 V }], src: p8 "Recommended Operating Conditions, IOVDD" }
+```
+
+Two or more ranges, listed ascending and not overlapping; not beside
+`min`/`typ`/`max`; only on an operating-range key; one continuous range
+stays `min`/`max` (all `parameter.invalid`). `at` and condition
+variants work as for any value. Each range's numbers are checked
+against the key's plausible range. The catalog shows
+`1.65–1.95 V / 3–3.6 V`; its range filter matches when one of the
+ranges contains the asked span (3.3 V and 1.8 V match, 2.5 V does not,
+nor does 1.8..3.3 V across the gap); an alternative must cover each of
+the original's ranges with one of its own; the value sorts by its first
+range. Write a gap only when the source prints it: "1.65 V to 3.6 V"
+is one range.
+
 A *multi-valued* key (`data_interface`, `reference`) lists the values
 the part can be set to in `values` instead of `value`:
 
@@ -551,7 +577,8 @@ pins (AVDD / DVDD: converters, codecs, some sensors) records each rail
 in `analog_supply_voltage` / `digital_supply_voltage` (ranges) and
 `analog_supply_current` / `digital_supply_current`; `supply_voltage`
 stays for a part with one supply (or the single range a source gives
-for all rails). Keys, not a condition on `supply_voltage`: a condition
+for all rails); don't also write `supply_voltage` (or `supply_current`)
+repeating one of the rails. Keys, not a condition on `supply_voltage`: a condition
 is a measured quantity (section 11.2), not a pin name, and two rails
 are two operating ranges an alternative must cover each, so they
 compare and filter as keys of their own (as `motor_supply_voltage` for

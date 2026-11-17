@@ -600,20 +600,22 @@ impl ParamFilter {
                 .is_some_and(|v| self.numbers.iter().any(|&n| near(n, v)));
         let ranged = self.min.is_some() || self.max.is_some();
         let in_range = !ranged
-            || match f.span {
+            || if f.spans.is_empty() {
+                f.stated.is_some_and(|v| {
+                    self.min.is_none_or(|m| v >= m || near(v, m))
+                        && self.max.is_none_or(|m| v <= m || near(v, m))
+                })
+            } else {
                 // An operating range must contain the asked span: a
                 // part for 3.3 V has min <= 3.3 V and max >= 3.3 V.
-                Some((lo, hi)) => {
+                // Of disjoint ranges, one must.
+                f.spans.iter().any(|&(lo, hi)| {
                     self.min
                         .is_none_or(|m| lo.is_some_and(|lo| lo <= m || near(lo, m)))
                         && self
                             .max
                             .is_none_or(|m| hi.is_some_and(|hi| hi >= m || near(hi, m)))
-                }
-                None => f.stated.is_some_and(|v| {
-                    self.min.is_none_or(|m| v >= m || near(v, m))
-                        && self.max.is_none_or(|m| v <= m || near(v, m))
-                }),
+                })
             };
         in_values && in_range
     }
@@ -629,8 +631,9 @@ struct ParamFact {
     /// Option order: the SI value, or the vocabulary index.
     order: f64,
     /// An operating-range key's (`ParameterSpec::span`) lower and upper
-    /// end in SI (a lone `typ` is both).
-    span: Option<(Option<f64>, Option<f64>)>,
+    /// end in SI (a lone `typ` is both); one per range of disjoint
+    /// ranges, none for another key.
+    spans: Vec<(Option<f64>, Option<f64>)>,
     /// A multi-valued key's further values (option key, order): the
     /// part is an option under each (`key` is the first).
     also: Vec<(String, f64)>,
@@ -760,11 +763,13 @@ impl CatalogIndex {
                         label,
                     },
                 );
-                let span = match n {
-                    Normalized::Numeric { typ, min, max } if spec.span => {
-                        Some((min.or(typ), max.or(typ)))
-                    }
-                    _ => None,
+                let spans = if spec.span {
+                    n.ranges()
+                        .iter()
+                        .map(|r| (r.min.or(r.typ), r.max.or(r.typ)))
+                        .collect()
+                } else {
+                    Vec::new()
                 };
                 params.insert(
                     spec.key,
@@ -772,7 +777,7 @@ impl CatalogIndex {
                         key: fact_key,
                         stated,
                         order,
-                        span,
+                        spans,
                         also,
                     },
                 );
@@ -1085,10 +1090,15 @@ impl CatalogIndex {
                         counts.entry(k.as_str()).or_insert((*order, 0)).1 += 1;
                     }
                     // An operating range spans its ends, not its middle.
-                    let (lo, hi) = fact.span.map_or((fact.stated, fact.stated), |(lo, hi)| {
-                        (lo.or(fact.stated), hi.or(fact.stated))
-                    });
-                    for v in [lo, hi].into_iter().flatten() {
+                    let ends: Vec<Option<f64>> = if fact.spans.is_empty() {
+                        vec![fact.stated]
+                    } else {
+                        fact.spans
+                            .iter()
+                            .flat_map(|(lo, hi)| [lo.or(fact.stated), hi.or(fact.stated)])
+                            .collect()
+                    };
+                    for v in ends.into_iter().flatten() {
                         span = Some(span.map_or((v, v), |(a, b)| (a.min(v), b.max(v))));
                     }
                 }
@@ -1105,7 +1115,7 @@ impl CatalogIndex {
                                 && matches!(spec.shape, ParameterShape::Numeric(_)))
                             .then_some(*order),
                             order: *order,
-                            span: None,
+                            spans: Vec::new(),
                             also: Vec::new(),
                         };
                         let selected = filter.is_some_and(|f| {
@@ -1574,7 +1584,7 @@ mod tests {
             key: String::new(),
             stated: Some(v),
             order: v,
-            span: None,
+            spans: Vec::new(),
             also: Vec::new(),
         };
         assert!(c.matches(Some(&fact(1e-7))));
@@ -1609,7 +1619,7 @@ mod tests {
             key: "i2c".into(),
             stated: None,
             order: 6.0,
-            span: None,
+            spans: Vec::new(),
             also: vec![("spi".into(), 7.0)],
         };
         assert!(f.matches(Some(&both)));
@@ -1631,7 +1641,7 @@ mod tests {
             key: String::new(),
             stated: Some((lo + hi) / 2.0),
             order: (lo + hi) / 2.0,
-            span: Some((Some(lo), Some(hi))),
+            spans: vec![(Some(lo), Some(hi))],
             also: Vec::new(),
         };
         assert!(f.matches(Some(&part(1.8, 5.5))));
@@ -1641,6 +1651,19 @@ mod tests {
         let t = &q.params["operating_temperature"];
         assert!(t.matches(Some(&part(-40.0, 85.0))));
         assert!(!t.matches(Some(&part(-20.0, 70.0))));
+        // Disjoint ranges: one of them must contain the asked span.
+        let io = ParamFact {
+            spans: vec![(Some(1.65), Some(1.95)), (Some(3.0), Some(3.6))],
+            ..part(1.65, 1.95)
+        };
+        assert!(f.matches(Some(&io)));
+        let q = parse(&[("supply_voltage_min", "1.8"), ("supply_voltage_max", "1.8")]);
+        assert!(q.params["supply_voltage"].matches(Some(&io)));
+        let q = parse(&[("supply_voltage_min", "2.5"), ("supply_voltage_max", "2.5")]);
+        assert!(!q.params["supply_voltage"].matches(Some(&io)));
+        // Not a span across the gap either.
+        let q = parse(&[("supply_voltage_min", "1.8"), ("supply_voltage_max", "3.3")]);
+        assert!(!q.params["supply_voltage"].matches(Some(&io)));
     }
 
     /// The web catalog names every parameter key in both languages and

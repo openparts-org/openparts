@@ -315,6 +315,31 @@ fn data_number(v : Double) -> String {
 }
 
 ///|
+/// One of disjoint ranges: `1.65–1.95 V`, `1.8 V`, `≥ 3 V`.
+fn format_parameter_range(r : @api.ParameterRange) -> String {
+  let u = r.unit.unwrap_or("")
+  let q = (x : Double) => {
+    if u.is_empty() {
+      data_number(x)
+    } else {
+      "\{data_number(x)} \{u}"
+    }
+  }
+  match (r.min, r.typ, r.max) {
+    (_, Some(t), _) => q(t)
+    (Some(lo), None, Some(hi)) =>
+      if u.is_empty() {
+        "\{data_number(lo)}–\{data_number(hi)}"
+      } else {
+        "\{data_number(lo)}–\{data_number(hi)} \{u}"
+      }
+    (Some(lo), None, None) => "≥ " + q(lo)
+    (None, None, Some(hi)) => "≤ " + q(hi)
+    _ => "-"
+  }
+}
+
+///|
 /// One parameter value with its conditions, compactly:
 /// `18 mΩ (max 26.5 mΩ) @ VGS 10 V, ID 5.7 A`, `±10 %`, `N-channel`.
 fn format_parameter(
@@ -331,6 +356,9 @@ fn format_parameter(
     }
   }
   let value = match (v.value, v.min, v.typ, v.max) {
+    // Disjoint ranges (`1.65–1.95 V / 3–3.6 V`).
+    (None, None, None, None) if v.ranges is Some(rs) && !rs.is_empty() =>
+      rs.map(format_parameter_range).join(" / ")
     // A multi-valued key's list (`values: [i2c, spi]`).
     (None, None, None, None) if v.values is Some(ws) && !ws.is_empty() =>
       ws.map(w => param_value_label(lang, key, w)).join(" / ")

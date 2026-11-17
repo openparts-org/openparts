@@ -63,9 +63,9 @@ pub use package::{
     PackageSide, PackageSmt, PackageTab, PadCorner, PadCutout, PadSide, SlotAxis, TerminalShape,
 };
 pub use parameter::{
-    effective_parameters, format_value, parameter_spec, parse_value, Normalized, ParameterError,
-    ParameterShape, ParameterSpec, ParameterValue, ParameterValues, Parameters, Quantity,
-    PARAMETERS,
+    effective_parameters, format_value, parameter_spec, parse_value, Normalized, NumericRange,
+    ParameterError, ParameterRange, ParameterShape, ParameterSpec, ParameterValue, ParameterValues,
+    Parameters, Quantity, PARAMETERS,
 };
 pub use part::Part;
 pub use pin::{DiffPair, DiffPolarity, DiffStandard, Pin, PinOverride, PinType};

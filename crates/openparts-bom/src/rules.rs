@@ -9,7 +9,7 @@
 use openparts_core::{
     condition::{comparable, NormalizedCondition},
     conditions_label, effective_parameters, parameter_spec, ComponentCategory, Normalized,
-    ParameterSpec, Parameters,
+    NumericRange, ParameterSpec, Parameters,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -634,23 +634,38 @@ fn check_one(
 /// A `Covers` check: each limit the original states (`min`, `max`) is
 /// met by the candidate's same limit (lower or equal / higher or
 /// equal). A limit the candidate doesn't state is unverified; an
-/// original with neither (a lone `typ`) can't be judged.
+/// original with neither (a lone `typ`) can't be judged. With disjoint
+/// ranges (`1.65–1.95 V / 3–3.6 V`) each of the original's ranges must
+/// be covered by one of the candidate's.
 fn covers(rule: &ParameterRule, orig: &Normalized, cand: &Normalized) -> CheckStatus {
-    let (
-        Normalized::Numeric {
-            min: omin,
-            max: omax,
-            ..
-        },
-        Normalized::Numeric {
-            min: cmin,
-            max: cmax,
-            ..
-        },
-    ) = (orig, cand)
-    else {
+    let (os, cs) = (orig.ranges(), cand.ranges());
+    if os.is_empty() || cs.is_empty() {
         return CheckStatus::Unverified;
+    }
+    // Worst over the original's ranges of the best candidate range.
+    let rank = |s: CheckStatus| match s {
+        CheckStatus::Fail => 0,
+        CheckStatus::Unverified => 1,
+        CheckStatus::Pass => 2,
+        CheckStatus::Better => 3,
+        _ => 1,
     };
+    let mut worst: Option<CheckStatus> = None;
+    for o in &os {
+        let best = cs
+            .iter()
+            .map(|c| covers_one(rule, o, c))
+            .max_by_key(|s| rank(*s))
+            .unwrap_or(CheckStatus::Unverified);
+        if worst.is_none_or(|w| rank(best) < rank(w)) {
+            worst = Some(best);
+        }
+    }
+    worst.unwrap_or(CheckStatus::Unverified)
+}
+
+fn covers_one(rule: &ParameterRule, o: &NumericRange, c: &NumericRange) -> CheckStatus {
+    let (omin, omax, cmin, cmax) = (o.min, o.max, c.min, c.max);
     if omin.is_none() && omax.is_none() {
         return CheckStatus::Unverified;
     }
@@ -661,8 +676,8 @@ fn covers(rule: &ParameterRule, orig: &Normalized, cand: &Normalized) -> CheckSt
         let Some(o) = o else { continue };
         match c {
             None => unknown = true,
-            Some(c) if near(*o, *c) => {}
-            Some(c) if (*c < *o) == lower_better => wider = true,
+            Some(c) if near(o, c) => {}
+            Some(c) if (c < o) == lower_better => wider = true,
             Some(_) => return CheckStatus::Fail,
         }
     }
@@ -1069,6 +1084,43 @@ mod tests {
         max_only.max = Some(5.5);
         let c = compare(&orig, &params(&[("supply_voltage", max_only)]), None);
         assert_eq!(status(&c, "supply_voltage"), CheckStatus::Unverified);
+    }
+
+    fn ranges(rs: &[(f64, f64)]) -> ParameterValue {
+        ParameterValue {
+            ranges: rs
+                .iter()
+                .map(|&(lo, hi)| openparts_core::ParameterRange {
+                    min: Some(lo),
+                    max: Some(hi),
+                    unit: Some("V".into()),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn disjoint_ranges_must_each_be_covered() {
+        let key = "supply_voltage";
+        let check = |o: ParameterValue, c: ParameterValue| {
+            status(
+                &compare(&params(&[(key, o)]), &params(&[(key, c)]), None),
+                key,
+            )
+        };
+        let io = || ranges(&[(1.65, 1.95), (3.0, 3.6)]);
+        // A 3.3 V design: the 3.0-3.6 V range covers it.
+        assert_eq!(check(range(3.0, 3.6, "V"), io()), CheckStatus::Pass);
+        assert_eq!(check(range(3.1, 3.5, "V"), io()), CheckStatus::Better);
+        // 2.5 V lies in neither range.
+        assert_eq!(check(range(2.3, 2.7, "V"), io()), CheckStatus::Fail);
+        // Both of the original's ranges; a continuous candidate covers both.
+        assert_eq!(check(io(), io()), CheckStatus::Pass);
+        assert_eq!(check(io(), range(1.6, 3.6, "V")), CheckStatus::Better);
+        // The candidate has only the 3.3 V range.
+        assert_eq!(check(io(), range(3.0, 3.6, "V")), CheckStatus::Fail);
     }
 
     #[test]
