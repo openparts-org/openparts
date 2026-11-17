@@ -61,15 +61,15 @@ pub(crate) fn lands(package: &Package, g: &MechanicalGeometry) -> Option<Vec<Lea
     let ft = ipc::FABRICATION.powi(2) + ipc::PLACEMENT.powi(2);
     let ep = g.leads.iter().find(|l| l.number == "EP");
 
-    let lands = g
+    let mut lands: Vec<(Lead, Option<Axis>)> = g
         .leads
         .iter()
         .map(|lead| {
             if lead.mounting != Mounting::Smd || lead.number == "EP" || is_tab(package, g, lead) {
-                return lead.clone();
+                return (lead.clone(), None);
             }
             let Some(axis) = outward_axis(g, lead) else {
-                return lead.clone();
+                return (lead.clone(), None);
             };
             let (c, len, wid) = match axis {
                 Axis::X => (lead.position.x, lead.size.x, lead.size.y),
@@ -130,14 +130,75 @@ pub(crate) fn lands(package: &Package, g: &MechanicalGeometry) -> Option<Vec<Lea
                     },
                 ),
             };
-            Lead {
-                position,
-                size,
-                ..lead.clone()
-            }
+            (
+                Lead {
+                    position,
+                    size,
+                    ..lead.clone()
+                },
+                Some(axis),
+            )
         })
         .collect();
-    Some(lands)
+    clear_corners(&mut lands);
+    Some(lands.into_iter().map(|(lead, _)| lead).collect())
+}
+
+/// On a four-sided package with short lands per side (fine-pitch QFN),
+/// the heels of the two lands meeting at a corner can run into each
+/// other. When any do, every land of the package has its heel pulled
+/// back -- uniformly per side, toes unchanged -- until the corner lands
+/// keep `ipc::CORNER_CLEARANCE` from the neighbouring side's corner
+/// land. Packages whose lands don't collide are left exactly as they are.
+fn clear_corners(lands: &mut [(Lead, Option<Axis>)]) {
+    let rect = |l: &Lead| {
+        let (hx, hy) = (l.size.x / 2.0, l.size.y / 2.0);
+        (
+            l.position.x - hx,
+            l.position.x + hx,
+            l.position.y - hy,
+            l.position.y + hy,
+        )
+    };
+    // The smallest heel half-span each axis' lands need.
+    let (mut need_x, mut need_y) = (0.0_f64, 0.0_f64);
+    for (a, axis_a) in lands.iter() {
+        let Some(Axis::X) = axis_a else { continue };
+        for (b, axis_b) in lands.iter() {
+            let Some(Axis::Y) = axis_b else { continue };
+            let (ra, rb) = (rect(a), rect(b));
+            let overlap = ra.0 < rb.1 - 1e-9
+                && rb.0 < ra.1 - 1e-9
+                && ra.2 < rb.3 - 1e-9
+                && rb.2 < ra.3 - 1e-9;
+            if overlap {
+                // Clear the other land's side edge across this axis.
+                need_x = need_x.max(b.position.x.abs() + b.size.x / 2.0 + ipc::CORNER_CLEARANCE);
+                need_y = need_y.max(a.position.y.abs() + a.size.y / 2.0 + ipc::CORNER_CLEARANCE);
+            }
+        }
+    }
+    if need_x == 0.0 && need_y == 0.0 {
+        return;
+    }
+    for (lead, axis) in lands.iter_mut() {
+        let (c, len, need) = match axis {
+            Some(Axis::X) => (lead.position.x, &mut lead.size.x, need_x),
+            Some(Axis::Y) => (lead.position.y, &mut lead.size.y, need_y),
+            None => continue,
+        };
+        let (outer, inner) = (c.abs() + *len / 2.0, c.abs() - *len / 2.0);
+        if inner >= need - 1e-9 {
+            continue;
+        }
+        let inner = need.min(outer - 0.1);
+        *len = round(outer - inner);
+        let centre = c.signum() * round((outer + inner) / 2.0);
+        match axis {
+            Some(Axis::X) => lead.position.x = centre,
+            _ => lead.position.y = centre,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -242,6 +303,38 @@ mod tests {
         assert!((pad1.size.y - 0.6).abs() < 0.006, "{pad1:?}");
         // The lead (3D) keeps its own outline.
         assert!((g.leads[0].size.y - 0.41).abs() < 1e-9);
+    }
+
+    /// QFN-24 3x3, 0.4 pitch, L 0.30, no exposed pad (TDK ICM-20948):
+    /// the plain IPC lands of pins 1 and 24 cross at the corner, so every
+    /// heel is pulled back to clear the other side's corner land by
+    /// `CORNER_CLEARANCE`, toes where they were.
+    #[test]
+    fn corner_lands_that_collide_have_their_heels_pulled_back() {
+        let p = pkg(
+            "family: qfn\nlead_count: 24\npitch: {nominal: 0.4, unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {min: 2.9, nominal: 3.0, max: 3.1, unit: mm}\n\
+             \x20 body_length: {min: 2.9, nominal: 3.0, max: 3.1, unit: mm}\n\
+             \x20 lead_width: {min: 0.15, nominal: 0.2, max: 0.25, unit: mm}\n\
+             \x20 lead_length: {min: 0.25, nominal: 0.3, max: 0.35, unit: mm}\n",
+        );
+        let g = generate(&p).unwrap();
+        let land = |n: &str| g.lands.iter().find(|l| l.number == n).unwrap();
+        let (p1, p3, p24) = (land("1"), land("3"), land("24"));
+        // Unchanged toe (1.87 before the corner pass), shortened heel.
+        let toe = |l: &crate::Lead| -l.position.x + l.size.x / 2.0;
+        let heel = |l: &crate::Lead| -l.position.x - l.size.x / 2.0;
+        assert!((toe(p1) - 1.87).abs() < 0.006, "{p1:?}");
+        assert!((toe(p3) - toe(p1)).abs() < 1e-9 && (heel(p3) - heel(p1)).abs() < 1e-9);
+        // Pin 1's heel clears pin 24's side edge by the clearance...
+        let side_24 = -p24.position.x + p24.size.x / 2.0;
+        assert!(heel(p1) >= side_24 + 0.2 - 0.006, "{p1:?} {p24:?}");
+        // ... and pin 24's heel (top side) likewise clears pin 1.
+        let heel_24 = p24.position.y.abs() - p24.size.y / 2.0;
+        let side_1 = p1.position.y.abs() + p1.size.y / 2.0;
+        assert!(heel_24 >= side_1 + 0.2 - 0.006, "{p1:?} {p24:?}");
+        assert!((p24.size.y - p1.size.x).abs() < 1e-9);
     }
 
     #[test]

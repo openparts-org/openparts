@@ -43,7 +43,7 @@ pub use condition::{
     CONDITION_SYMBOLS,
 };
 pub use connector::{
-    is_connector_family, is_electromechanical_family, is_pad_body_family, CardMechanism,
+    is_connector_family, is_electromechanical_family, is_pad_body_family, is_shaft_family, CardMechanism,
     ConnectorInterface, ContactSide, PackageConnector,
 };
 pub use device::{Device, DeviceOverrides, DeviceRevision, PolarTerminal, RevisionDetection};

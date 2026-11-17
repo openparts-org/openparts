@@ -359,7 +359,7 @@ milli-, `M` mega-):
 | inductance | H | `nH` `uH` `µH` `mH` `H` |
 | voltage | V | `uV` `µV` `mV` `V` `kV` |
 | current | A | `fA` `pA` `nA` `uA` `µA` `mA` `A` |
-| power | W | `uW` `µW` `mW` `W` |
+| power | W | `uW` `µW` `mW` `W` `kW` |
 | frequency | Hz | `Hz` `kHz` `MHz` `GHz`; sample rates `SPS` `kSPS` `MSPS` (= Hz) |
 | ratio | 1 | `%` `ppm` `ppb` |
 | temperature coefficient | 1/K | `ppm/K` `ppm/°C` `%/K` `%/°C` |
@@ -381,6 +381,8 @@ milli-, `M` mega-):
 | illuminance | lx | `mlx` `lx` `klx` |
 | magnetic flux density | T | `nT` `uT` `µT` `mT` `T` `mG` `G` `Gs` (gauss = 100 µT) |
 | magnetic sensitivity | V/T (= mV/mT) | `mV/mT` `V/T` `mV/T` `V/mT` `mV/G` `mV/Gs` (mV/G = 10 mV/mT) |
+| pressure | Pa | `Pa` `hPa` `kPa` `MPa` `mbar` `bar` `psi` (1 mbar = 1 hPa; psi = 6894.757 Pa) |
+| voltage gain | V/V | `V/V` (never `%` or `dB`) |
 
 Vocabulary (key: quantity or values; categories it is plausible for):
 
@@ -416,6 +418,9 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `forward_current` | current (an optocoupler's: its input LED) | diode, LED, optocoupler |
 | `zener_voltage` | voltage (Vz at the test current; min/typ/max as printed) | diode |
 | `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
+| `clamping_voltage` | voltage (a TVS / ESD diode's clamping voltage VC at the printed peak pulse current, `at: { IPP: 1 A }`; the waveform, e.g. 8/20 µs, in the locator; one list entry per printed IPP) | diode |
+| `peak_pulse_current` | current (IPP, the rated peak pulse current; the waveform in the locator) | diode |
+| `peak_pulse_power` | power (PPP / PPPM, the rated peak pulse power, `600 W`, `1.5 kW`; the waveform in the locator) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
 | `wavelength` | length (dominant wavelength λd) | LED |
 | `peak_wavelength` | length (peak emission wavelength λp; infrared LEDs state only this; a light sensor's peak sensitivity) | LED, `light_sensor` |
@@ -429,7 +434,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `drain_current` | current (Id continuous) | transistor |
 | `rds_on` | resistance (a motor driver's: high side + low side of one bridge leg) | transistor, `motor_driver` |
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
-| `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor) | transistor, optocoupler |
+| `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor; a Darlington array's output rating VCE(sus) / VCEO) | transistor, optocoupler, `darlington_array` |
 | `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
 | `isolation_voltage` | voltage (input-output isolation, BVs; a relay's coil-contact dielectric strength; the rms/duration condition goes into the locator, or `at: { t: 60 s }`; a digital isolator's or isolated DC/DC converter's VISO) | optocoupler, relay, `digital_isolator`, `switching_regulator` (isolated DC/DC) |
 | `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
@@ -450,6 +455,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD) | ICs, LED |
 | `analog_supply_voltage`, `digital_supply_voltage` | voltage, operating range (a part with separate analog and digital supply pins: AVDD, DVDD; see below) | as `supply_voltage` |
 | `analog_supply_current`, `digital_supply_current` | current (the current of each rail, IAVDD / IDVDD) | as `supply_current` |
+| `io_supply_voltage` | voltage, operating range (a second, separate I/O supply rail beside the main supply: an MCU's VDDIO2, a CAN controller's VIO, a codec's IOVDD; the main rail stays `supply_voltage` or `digital_supply_voltage`) | as `supply_voltage` |
 | `operating_temperature` | temperature, operating range (`{ min: -40 °C, max: 85 °C }`, the operating -- not storage -- range) | any |
 | `esd_hbm` | voltage (human-body-model rating that holds for all pins, `typ: 2 kV` for "±2000 V"; a higher bus-pin-only rating is not this key) | ICs, LED |
 | `channel_count` | `1` `2` `3` `4` `5` `6` `7` `8` `9` `10` `12` `16` `18` `24` `32` `36` `48` `64` `144` (identical channels: amplifiers, gates, transceiver channels, motor bridges, LED outputs, audio channels, touch inputs) | `analog`, `interface`, `logic`, `driver`, `audio`, `touch_sensor` |
@@ -457,6 +463,8 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `slew_rate` | slew rate (shown in V/µs) | `op_amp`, `current_sense_amplifier` |
 | `input_offset_voltage` | voltage, a magnitude (VOS "±3 mV max" is `max: 3 mV`) | `op_amp`, `comparator`, `current_sense_amplifier` |
 | `input_bias_current` | current, a magnitude (IB) | `op_amp`, `comparator`, `current_sense_amplifier` |
+| `gain` | voltage gain (`V/V`; a fixed-gain variant's gain, on the Part when the variants of a Device differ: INA181A1 20 V/V, A2 50 V/V) | `current_sense_amplifier` |
+| `common_mode_voltage` | voltage, operating range (the input common-mode range VCM in absolute volts as printed; it may exceed the supply: INA181 -0.2..26 V) | `current_sense_amplifier` |
 | `supply_current_per_channel` | current (IQ per amplifier / comparator, as the source states it per channel) | `op_amp`, `comparator` |
 | `rail_to_rail_input`, `rail_to_rail_output` | `yes` `no` (only when the source says so: "rail-to-rail input", a common-mode range to both rails) | `op_amp`, `comparator` |
 | `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface`, optocoupler |
@@ -501,6 +509,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `impedance` | resistance (at the printed frequency, `at: { f: 100 MHz }`; a choke's common-mode impedance) | `ferrite_bead`, `common_mode_choke` |
 | `light_sensor_type` | `ambient` `proximity` `ambient_proximity` `ambient_color_proximity_gesture` (ALS + RGB + proximity + gesture: APDS-9960-class) `color` `uv` `infrared` | `light_sensor` |
 | `illuminance_range` | illuminance, operating range (the measurable range) | `light_sensor` |
+| `pressure_range` | pressure, operating range (the measurement range as printed: absolute `{ min: 300 hPa, max: 1100 hPa }`, a differential sensor's ±, a gauge sensor's 0..max) | `pressure_sensor` |
 | `target_gas` | `voc` `nox` `co2` `co` `h2` `ch4` `lpg` `alcohol` `nh3` `no2` `o2` `o3` `h2s` `combustible` `multiple` | `gas_sensor` |
 | `sensing_principle` | `metal_oxide` `ndir` `photoacoustic` `electrochemical` `catalytic` `thermal_conductivity` | `gas_sensor` |
 | `concentration_range` | ratio, operating range (shown in `ppm`) | `gas_sensor` |
@@ -508,7 +517,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `operate_point`, `release_point` | magnetic flux density (BOP / BRP; signed for a latch, shown in `mT`) | `magnetic_sensor` |
 | `magnetic_range` | magnetic flux density, operating range (a linear/3D sensor's full scale: ±40 mT is `{ min: -40 mT, max: 40 mT }`) | `magnetic_sensor` |
 | `magnetic_sensitivity` | magnetic sensitivity (a linear Hall sensor's analog output, `mV/mT`, signed as printed: negative when the output falls as the field rises, e.g. DRV5053 -11 mV/mT; not the microphone `sensitivity`, which is a level in dBV; a digital magnetometer's LSB/mT has no key) | `magnetic_sensor` |
-| `bandwidth` | frequency (a linear sensor's -3 dB output bandwidth) | `magnetic_sensor` |
+| `bandwidth` | frequency (a linear sensor's -3 dB output bandwidth; a current-sense amplifier's -3 dB bandwidth, per gain variant on the Part) | `magnetic_sensor`, `current_sense_amplifier` |
 | `timekeeping_accuracy` | ratio, deviation (an RTC's frequency / timekeeping accuracy in `ppm`; the temperature range in `at: { TA: 0..40 °C }`) | `rtc` |
 | `backup_current` | current (the backup-supply current IBAT, `at: { VBAT: 3 V }`) | `rtc` |
 | `max_frequency` | frequency (a timer's / counter's / flip-flop's maximum operating frequency) | `timer`, `logic` |
@@ -540,7 +549,8 @@ An *operating-range* key (`supply_voltage`, `analog_supply_voltage`,
 `digital_supply_voltage`, `operating_temperature`,
 `bus_fault_voltage`, `motor_supply_voltage`, `illuminance_range`,
 `concentration_range`, `magnetic_range`, `frequency_band`,
-`current_limit`) records the range's ends as `min`/`max`. The
+`current_limit`, `io_supply_voltage`, `common_mode_voltage`,
+`pressure_range`) records the range's ends as `min`/`max`. The
 catalog's range filter asks whether the range contains the asked span
 (`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
 3.3 V), and an alternative must cover the original's range.
@@ -669,7 +679,7 @@ from the quantity's table in section 11.1):
 
 | Quantity | Symbols |
 |---|---|
-| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) `VM` (motor supply) `VBAT` (backup battery: an RTC's backup current) |
+| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) `VCM` (input common-mode voltage: a current-sense amplifier's) `VM` (motor supply) `VBAT` (backup battery: an RTC's backup current) |
 | current | `ID` `IC` `IB` `IF` `IR` `IZT` `IPP` `IOUT` `IL` |
 | capacitance | `CL` (load capacitance) |
 | resistance | `RL` (load resistance) |
@@ -1089,6 +1099,8 @@ dimensions:
 | `ground_terminal_offset` | Ground terminal付きタクトスイッチ（奇数の`lead_count`）: Housing中心から−Y方向にGround terminalまでの距離（THT: ピン中心、SMD: 端子先端） | B3F-1100: 4.1、B3U-1100P: 1.9 | Ground terminalがあれば必須（THTで`pads`が全穴を与える場合を除く） |
 | `ground_terminal_width` | SMDのGround terminalのX方向の幅 | B3U-1100P: 0.5 | 省略可（省略時は`lead_width`、3D表示のみ） |
 | `can_diameter` | `smd_electrolytic`: 台座（Base plate）の上に立つ円筒Canの直径（20.9） | øD | `smd_electrolytic`では必須（他のFamilyでは不可） |
+| `bushing_diameter` / `bushing_length` | `rotary_encoder`・`potentiometer`: シャフト根元のBushing（ネジ部）の外径／Housing面からの長さ（20.14） | M7: 7 / 5 | 省略可（3D表示のみ。`potentiometer`は`bushing_length`が無ければBushingなし） |
+| `actuator_travel` | `slide_potentiometer`: レバーのX方向ストローク（両端位置の中心間距離、20.14） | PTA2043: 20 | 省略可（3D表示のみ） |
 
 省略可能なDimensionは、一次資料に記載がある場合だけ記録する。記載がなければFieldごと省略し
 （Unknown）、Geometry Generatorが自身のFamily既定値を使う。この既定値はGenerator実装の
@@ -1803,8 +1815,11 @@ without a size or with a drill, no `body_length` or `body_width`.
 
 ## 20.14 Electromechanical Parts
 
-`relay`, `buzzer` (alias `sounder`), `trimmer` (alias `trimpot`) and
-`rotary_encoder` draw a body over the source's recommended land pattern,
+`relay`, `buzzer` (alias `sounder`), `trimmer` (alias `trimpot`),
+`rotary_encoder`, `potentiometer` (aliases `rotary_potentiometer`,
+`panel_potentiometer`: a shaft potentiometer, 9 mm / 16 mm PCB and panel
+pots such as Bourns PTV09 and Alps RK09K) and `slide_potentiometer`
+(alias `slider`, Bourns PTA) draw a body over the source's recommended land pattern,
 like the connector families (section 20.6) but without a mating face or
 `connector` facts. Frame: top view, X right, Y up, the origin on the
 centre of the body outline `body_width` x `body_length` (the drawing's
@@ -1818,11 +1833,17 @@ gets the connectors' default ring), slotted mounting lugs (`drill_length`
 | Field | Meaning |
 |---|---|
 | `body_width`, `body_length` | the housing's outline along X and Y |
-| `body_height` | the housing's height above the board (a relay's, a buzzer's overall height; a trimmer's or an encoder's housing without its rotor, bushing or shaft) |
+| `body_height` | the housing's height above the board (a relay's, a buzzer's overall height; a trimmer's, an encoder's or a potentiometer's housing without its rotor, bushing, shaft or lever) |
 | `standoff` | the housing's underside above the board, when the source prints standoffs |
 | `can_diameter` | `buzzer`: a round can of this diameter (absent: a square housing) |
-| `actuator_diameter` | `trimmer`: the rotor's diameter; `rotary_encoder`: the shaft's |
-| `overall_height` | `trimmer`: the rotor top; `rotary_encoder`: the shaft top, above the board |
+| `actuator_diameter` | `trimmer`: the rotor's diameter; `rotary_encoder`, `potentiometer`: the shaft's |
+| `overall_height` | `trimmer`: the rotor top; `rotary_encoder`, `potentiometer` (vertical shaft): the shaft top; `slide_potentiometer`: the lever top, above the board |
+| `actuation` | `rotary_encoder`, `potentiometer`: `side` for a right-angle (horizontal) shaft parallel to the board, leaving the housing's **+Y** face (read the drawing turned so the shaft points up in the top view); absent: a vertical shaft on top |
+| `actuator_length` | `actuation: side`: bushing + shaft from the housing's +Y face to the shaft's end (the printed shaft length from the mounting face; arithmetic in the locator) |
+| `actuator_elevation` | `actuation: side`: the shaft axis above the board (absent: the housing's mid-height) |
+| `bushing_diameter`, `bushing_length` | `rotary_encoder`, `potentiometer`: the (threaded) bushing's outer diameter and its length beyond the housing face it stands on |
+| `actuator_width`, `actuator_thickness` | `slide_potentiometer`: the lever's size along X (travel direction) and Y |
+| `actuator_travel` | `slide_potentiometer`: the lever's travel along X |
 | `tail_length` | pins below the board's top surface (3D only) |
 
 The 3D model draws: a relay's housing; a buzzer's can or box with a
@@ -1830,16 +1851,30 @@ sound hole on top; a trimmer's housing with a slotted rotor on top (its
 diameter 75 % of the housing's smaller side and 0.5 mm high when not
 stated); an encoder's housing with a bushing and a D-flat shaft on top
 (6 mm, at most half the housing's smaller side, rising 15 mm when not
-stated); a pin down every plated hole and a foot on every SMD pad.
-Only top-adjust trimmers and vertical-shaft encoders are drawn as such
-(a side-adjust trimmer's rotor and a right-angle encoder's shaft would
-stand on top). Placement: pad 1 upper left (placement-model.md
-section 3).
+stated; the bushing as stated, else 1.17 x the shaft and 35 % of the
+rise up to 5 mm) or, with `actuation: side`, leaving the +Y face at
+`actuator_elevation`; a potentiometer's housing with its shaft the same
+way, a bushing only when `bushing_length` is stated (a metal shaft
+behind a bushing, else a moulded one); a slide potentiometer's housing
+with a slot along X in its top (`actuator_travel` + the lever long;
+75 % of the housing less the lever when not stated) and the lever in
+its middle (`actuator_width` x `actuator_thickness`, else 10 % of the
+width up to 4 mm x 25 % of the length; 5 mm above the housing when no
+`overall_height`); a pin down every plated hole and a foot on every
+SMD pad. Only top-adjust trimmers are drawn as such (a side-adjust
+trimmer's rotor would stand on top). Placement: pad 1 upper left
+(placement-model.md section 3); a side shaft turns with the body.
 
 Rule `electromechanical.invalid`: no `pads`, a `lead_count` other than
 the plated pad count, no `body_length` or `body_height`, an SMD pad
 without a size or a land-less slot without `slot_axis`, `connector`
-facts, or an `overall_height` below the housing top. `can_diameter` on
+facts, or an `overall_height` below the housing top; `bushing_*` outside
+`rotary_encoder`/`potentiometer`, `actuator_travel` outside
+`slide_potentiometer`. `actuation` outside the tact switch, encoder and
+potentiometer families, `actuator_length`/`actuator_elevation` on an
+encoder or potentiometer without `actuation: side`, and
+`actuator_width`/`actuator_thickness` outside the tact switches and
+`slide_potentiometer` are `tact_switch.invalid`. `can_diameter` on
 any family but `smd_electrolytic` and `buzzer` is
 `smd_electrolytic.invalid`.
 
@@ -1862,6 +1897,32 @@ pads:
     - { number: "2", x: -5.08, y: 2.54, drill: 1.0 }
     # ...
   src: p2 "PCB layout"
+```
+
+```yaml
+# A right-angle encoder (PEC11R-2 style): the shaft leaves the +Y face.
+family: rotary_encoder
+actuation: side
+dimensions:
+  body_width: { typ: 11.7 mm, src: ... }
+  body_length: { typ: 6.5 mm, src: ... }        # housing depth (along the shaft)
+  body_height: { typ: 12.5 mm, src: ... }
+  actuator_diameter: { typ: 6 mm, src: ... }
+  actuator_length: { typ: 20 mm, src: ... "shaft length L from mounting face" }
+  actuator_elevation: { typ: 7 mm, src: ... "shaft centre above PCB" }
+  bushing_diameter: { typ: 7 mm, src: ... "M7 x 0.75" }
+  bushing_length: { typ: 5 mm, src: ... }
+
+# A slide potentiometer (PTA style)
+family: slide_potentiometer
+dimensions:
+  body_width: { typ: 30 mm, src: ... }          # along the travel
+  body_length: { typ: 9 mm, src: ... }
+  body_height: { typ: 6.5 mm, src: ... }
+  overall_height: { typ: 21.5 mm, src: ... "lever top above PCB" }
+  actuator_width: { typ: 1.2 mm, src: ... }
+  actuator_thickness: { typ: 2.4 mm, src: ... }
+  actuator_travel: { typ: 15 mm, src: ... "travel" }
 ```
 
 ## 20.15 Chip Arrays

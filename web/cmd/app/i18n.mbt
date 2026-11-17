@@ -731,6 +731,8 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (Ja, "buzzer") => "ブザー"
     (Ja, "trimmer") => "半固定抵抗 (トリマ)"
     (Ja, "rotary_encoder") => "ロータリーエンコーダ"
+    (Ja, "potentiometer") => "可変抵抗 (シャフト)"
+    (Ja, "slide_potentiometer") => "スライド可変抵抗"
     (En, "chip") => "Chip"
     (En, "radial") => "Radial lead"
     (En, "axial") => "Axial lead"
@@ -756,6 +758,8 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (En, "buzzer") => "Buzzer"
     (En, "trimmer") => "Trimmer"
     (En, "rotary_encoder") => "Rotary encoder"
+    (En, "potentiometer") => "Potentiometer"
+    (En, "slide_potentiometer") => "Slide potentiometer"
     (_, "usb_c") => "USB Type-C"
     (_, "melf") => "MELF"
     (Ja, "chip_array") => "チップ抵抗アレイ"
@@ -934,6 +938,9 @@ let param_names : Array[(String, String, String)] = [
   (
     "zener_test_current", "ツェナー測定電流 (Izt)", "Zener test current (Izt)",
   ),
+  ("clamping_voltage", "クランプ電圧 (VC)", "Clamping voltage (VC)"),
+  ("peak_pulse_current", "ピークパルス電流 (IPP)", "Peak pulse current (IPP)"),
+  ("peak_pulse_power", "ピークパルス電力 (PPP)", "Peak pulse power (PPP)"),
   ("color", "発光色", "Color"),
   ("wavelength", "主波長", "Dominant wavelength"),
   ("peak_wavelength", "ピーク波長", "Peak wavelength"),
@@ -990,6 +997,9 @@ let param_names : Array[(String, String, String)] = [
   (
     "digital_supply_current", "デジタル消費電流", "Digital supply current",
   ),
+  (
+    "io_supply_voltage", "I/O電源電圧 (VDDIO / VIO)", "I/O supply voltage (VDDIO / VIO)",
+  ),
   ("operating_temperature", "動作温度範囲", "Operating temperature"),
   ("esd_hbm", "ESD耐圧 (HBM)", "ESD rating (HBM)"),
   ("channel_count", "チャネル数", "Channels"),
@@ -999,6 +1009,8 @@ let param_names : Array[(String, String, String)] = [
     "input_offset_voltage", "入力オフセット電圧", "Input offset voltage",
   ),
   ("input_bias_current", "入力バイアス電流", "Input bias current"),
+  ("gain", "ゲイン", "Gain"),
+  ("common_mode_voltage", "同相入力電圧範囲 (VCM)", "Common-mode range (VCM)"),
   (
     "supply_current_per_channel", "消費電流 (1回路あたり)", "Supply current per channel",
   ),
@@ -1059,6 +1071,7 @@ let param_names : Array[(String, String, String)] = [
   ("impedance", "インピーダンス", "Impedance"),
   ("light_sensor_type", "検出対象", "Sensing"),
   ("illuminance_range", "照度範囲", "Illuminance range"),
+  ("pressure_range", "圧力測定範囲", "Pressure range"),
   ("target_gas", "検出ガス", "Target gas"),
   ("sensing_principle", "検出方式", "Sensing principle"),
   ("concentration_range", "濃度範囲", "Concentration range"),

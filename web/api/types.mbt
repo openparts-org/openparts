@@ -2819,6 +2819,7 @@ pub(all) struct PackageDimensions {
   actuator_elevation : Dimension?
   actuator_length : Dimension?
   actuator_thickness : Dimension?
+  actuator_travel : Dimension?
   actuator_width : Dimension?
   aux_pad_length : Dimension?
   aux_pad_width : Dimension?
@@ -2828,6 +2829,8 @@ pub(all) struct PackageDimensions {
   body_length : Dimension
   body_offset : Dimension?
   body_width : Dimension
+  bushing_diameter : Dimension?
+  bushing_length : Dimension?
   can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
   ground_terminal_offset : Dimension?
@@ -2864,6 +2867,7 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     actuator_elevation: opt_field(obj, "actuator_elevation", path),
     actuator_length: opt_field(obj, "actuator_length", path),
     actuator_thickness: opt_field(obj, "actuator_thickness", path),
+    actuator_travel: opt_field(obj, "actuator_travel", path),
     actuator_width: opt_field(obj, "actuator_width", path),
     aux_pad_length: opt_field(obj, "aux_pad_length", path),
     aux_pad_width: opt_field(obj, "aux_pad_width", path),
@@ -2873,6 +2877,8 @@ pub impl @json.FromJson for PackageDimensions with fn from_json(json, path) {
     body_length: field(obj, "body_length", path),
     body_offset: opt_field(obj, "body_offset", path),
     body_width: field(obj, "body_width", path),
+    bushing_diameter: opt_field(obj, "bushing_diameter", path),
+    bushing_length: opt_field(obj, "bushing_length", path),
     can_diameter: opt_field(obj, "can_diameter", path),
     exposed_pad: opt_field(obj, "exposed_pad", path),
     ground_terminal_offset: opt_field(obj, "ground_terminal_offset", path),
@@ -2973,6 +2979,8 @@ pub(all) enum PackageFamily {
   Buzzer
   Trimmer
   RotaryEncoder
+  Potentiometer
+  SlidePotentiometer
 }
 
 ///|
@@ -3027,6 +3035,8 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     Buzzer => "buzzer"
     Trimmer => "trimmer"
     RotaryEncoder => "rotary_encoder"
+    Potentiometer => "potentiometer"
+    SlidePotentiometer => "slide_potentiometer"
   }
 }
 
@@ -3082,6 +3092,8 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     Buzzer,
     Trimmer,
     RotaryEncoder,
+    Potentiometer,
+    SlidePotentiometer,
   ]
 }
 
@@ -3136,6 +3148,8 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("buzzer") => Buzzer
     String("trimmer") => Trimmer
     String("rotary_encoder") => RotaryEncoder
+    String("potentiometer") => Potentiometer
+    String("slide_potentiometer") => SlidePotentiometer
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }

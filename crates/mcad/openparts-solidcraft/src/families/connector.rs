@@ -6,7 +6,9 @@
 //! mouth -- plus a foot on every SMD pad and a pin or tab down
 //! every plated hole. The electromechanical families (relay housing,
 //! buzzer can or box with its sound hole, trimmer housing with its
-//! slotted rotor, encoder housing with bushing and shaft) share the
+//! slotted rotor, encoder or potentiometer housing with bushing and
+//! shaft -- vertical, or leaving the +Y face (`actuation: side`) --,
+//! slide potentiometer housing with its slot and lever) share the
 //! contacts.
 
 use crate::common;
@@ -66,10 +68,38 @@ fn electromechanical(
             )?;
             looks_of.extend([("Housing", looks::TRIMMER), ("Rotor", looks::NYLON_NATURAL)]);
         }
+        F::RotaryEncoder | F::Potentiometer if e.side_shaft => {
+            s.fragment(
+                fragment!("shaft_side"),
+                &vars!(
+                    shaft_d = mm(e.top_diameter),
+                    shaft_len = mm(e.top_height),
+                    shaft_z = mm(e.shaft_elevation),
+                    bushing_h = mm(e.bushing_length)
+                ),
+            )?;
+            looks_of.push(("Housing", housing_look(family)));
+            if e.bushing_length > 0.0 {
+                s.fragment(
+                    fragment!("shaft_bushing_side"),
+                    &vars!(bushing_d = mm(e.bushing_diameter)),
+                )?;
+                looks_of.push(("Bushing", looks::NICKEL));
+            }
+            if family == F::RotaryEncoder {
+                s.fragment(fragment!("shaft_flat_side"), &vars!())?;
+            }
+            looks_of.push(("Shaft", shaft_look(family, e)));
+        }
         F::RotaryEncoder => {
             s.fragment(
                 fragment!("rotary_encoder"),
-                &vars!(shaft_d = mm(e.top_diameter), rise = mm(e.top_height)),
+                &vars!(
+                    shaft_d = mm(e.top_diameter),
+                    rise = mm(e.top_height),
+                    bushing_d = mm(e.bushing_diameter),
+                    bushing_h = mm(e.bushing_length)
+                ),
             )?;
             looks_of.extend([
                 ("Housing", looks::MOLD),
@@ -77,9 +107,55 @@ fn electromechanical(
                 ("Shaft", looks::NICKEL),
             ]);
         }
+        F::Potentiometer => {
+            s.fragment(
+                fragment!("potentiometer"),
+                &vars!(
+                    shaft_d = mm(e.top_diameter),
+                    rise = mm(e.top_height),
+                    bushing_h = mm(e.bushing_length)
+                ),
+            )?;
+            looks_of.push(("Housing", housing_look(family)));
+            if e.bushing_length > 0.0 {
+                s.fragment(
+                    fragment!("shaft_bushing_top"),
+                    &vars!(bushing_d = mm(e.bushing_diameter)),
+                )?;
+                looks_of.push(("Bushing", looks::NICKEL));
+            }
+            looks_of.push(("Shaft", shaft_look(family, e)));
+        }
+        F::SlidePotentiometer => {
+            s.fragment(
+                fragment!("slide_potentiometer"),
+                &vars!(
+                    lever_w = mm(e.lever_width),
+                    lever_t = mm(e.lever_thickness),
+                    rise = mm(e.top_height),
+                    slot_len = mm(e.slot_length)
+                ),
+            )?;
+            looks_of.extend([("Housing", looks::MOLD), ("Lever", looks::NICKEL)]);
+        }
         _ => return Err(ModelError::MissingDetails(family)),
     }
     Ok(())
+}
+
+/// An encoder's housing is moulded black; a potentiometer's too.
+fn housing_look(_family: F) -> crate::script::Look {
+    looks::MOLD
+}
+
+/// An encoder's shaft is metal; a potentiometer's is metal behind a
+/// bushing, else moulded (PTV09-style plastic shafts).
+fn shaft_look(family: F, e: &openparts_mcad::ElectromechanicalFeatures) -> crate::script::Look {
+    if family == F::RotaryEncoder || e.bushing_length > 0.0 {
+        looks::NICKEL
+    } else {
+        looks::MOLD
+    }
 }
 
 fn housing(
@@ -383,6 +459,29 @@ mod tests {
         let b = connector("rotary_encoder", shaft, tht, 3);
         assert_eq!(&b[..3], ["Housing", "Bushing", "Shaft"]);
         assert_eq!(b.len(), 6);
+        // Right-angle encoder and potentiometers: the shaft leaves the
+        // +Y face; a potentiometer's bushing only when stated.
+        let side = "\x20 actuator_length: {nominal: 15.0, unit: mm}\n\
+            \x20 actuator_elevation: {nominal: 2.0, unit: mm}\n\
+            \x20 actuator_diameter: {nominal: 2.0, unit: mm}\n\
+            actuation: side\n";
+        let b = connector("rotary_encoder", side, tht, 3);
+        assert_eq!(&b[..3], ["Housing", "Bushing", "Shaft"]);
+        assert_eq!(b.len(), 6);
+        let b = connector("potentiometer", side, tht, 3);
+        assert_eq!(&b[..2], ["Housing", "Shaft"]);
+        assert_eq!(b.len(), 5);
+        let bushed = "\x20 bushing_length: {nominal: 5.0, unit: mm}\n\
+            \x20 bushing_diameter: {nominal: 2.5, unit: mm}\n";
+        let b = connector("potentiometer", &format!("{bushed}{side}"), tht, 3);
+        assert_eq!(&b[..3], ["Housing", "Bushing", "Shaft"]);
+        let b = connector("potentiometer", shaft, tht, 3);
+        assert_eq!(&b[..2], ["Housing", "Shaft"]);
+        let b = connector("potentiometer", &format!("{shaft}{bushed}"), tht, 3);
+        assert_eq!(&b[..3], ["Housing", "Bushing", "Shaft"]);
+        let b = connector("slide_potentiometer", shaft, tht, 3);
+        assert_eq!(&b[..2], ["Housing", "Lever"]);
+        assert_eq!(b.len(), 5);
     }
 
     #[test]

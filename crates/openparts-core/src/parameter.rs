@@ -224,6 +224,12 @@ pub enum Quantity {
     /// A linear magnetic sensor's output per flux density, in V/T
     /// (= mV/mT, as datasheets print it).
     MagneticSensitivity,
+    /// Pressure, in pascal (`hPa`, `kPa`, `mbar`, `bar`, `psi` as
+    /// datasheets print them).
+    Pressure,
+    /// An amplifier's voltage gain, in V/V (a dimensionless ratio, kept
+    /// apart from [`Quantity::Ratio`] so `%` is never read as a gain).
+    VoltageGain,
 }
 
 impl Quantity {
@@ -256,6 +262,8 @@ impl Quantity {
         Quantity::Illuminance,
         Quantity::MagneticFluxDensity,
         Quantity::MagneticSensitivity,
+        Quantity::Pressure,
+        Quantity::VoltageGain,
     ];
 
     /// The SI (base) unit symbol normalised values are in.
@@ -288,6 +296,8 @@ impl Quantity {
             Quantity::Illuminance => "lx",
             Quantity::MagneticFluxDensity => "T",
             Quantity::MagneticSensitivity => "V/T",
+            Quantity::Pressure => "Pa",
+            Quantity::VoltageGain => "V/V",
         }
     }
 
@@ -347,6 +357,7 @@ impl Quantity {
                 ("μW", 1e-6),
                 ("mW", 1e-3),
                 ("W", 1.0),
+                ("kW", 1e3),
             ],
             // Sample rates as printed (samples per second) count as Hz.
             Quantity::Frequency => &[
@@ -442,6 +453,16 @@ impl Quantity {
                 ("mV/G", 10.0),
                 ("mV/Gs", 10.0),
             ],
+            Quantity::Pressure => &[
+                ("Pa", 1.0),
+                ("hPa", 1e2),
+                ("kPa", 1e3),
+                ("MPa", 1e6),
+                ("mbar", 1e2),
+                ("bar", 1e5),
+                ("psi", 6894.757293168),
+            ],
+            Quantity::VoltageGain => &[("V/V", 1.0)],
         }
     }
 
@@ -473,7 +494,7 @@ impl Quantity {
             Quantity::Inductance => (&SMALL[1..5], "H"),
             Quantity::Voltage => (&SMALL[2..6], "V"),
             Quantity::Current => (&SMALL[..5], "A"),
-            Quantity::Power => (&SMALL[2..5], "W"),
+            Quantity::Power => (&SMALL[2..6], "W"),
             Quantity::Frequency => (&SMALL[4..], "Hz"),
             Quantity::Ratio => (&[("", 1e-2)], "%"),
             Quantity::TemperatureCoefficient => (&[("", 1e-6)], "ppm/K"),
@@ -503,6 +524,8 @@ impl Quantity {
             Quantity::Illuminance => (&SMALL[3..6], "lx"),
             Quantity::MagneticFluxDensity => (&SMALL[1..5], "T"),
             Quantity::MagneticSensitivity => (&[("", 1.0)], "mV/mT"),
+            Quantity::Pressure => (&SMALL[4..7], "Pa"),
+            Quantity::VoltageGain => (&[("", 1.0)], "V/V"),
         }
     }
 }
@@ -624,8 +647,9 @@ const fn enumerated(
 const PASSIVE_RLC: &[C] = &[C::Capacitor, C::Resistor, C::Inductor];
 /// Forward/reverse ratings: diodes, LEDs and an optocoupler's input LED.
 const SEMIS_VF: &[C] = &[C::Diode, C::Led, C::Optocoupler];
-/// Collector ratings: BJTs and an optocoupler's phototransistor output.
-const COLLECTOR: &[C] = &[C::Transistor, C::Optocoupler];
+/// Collector ratings: BJTs, an optocoupler's phototransistor output
+/// and a Darlington array's outputs (VCE(sus) / VCEO).
+const COLLECTOR: &[C] = &[C::Transistor, C::Optocoupler, C::DarlingtonArray];
 /// Frequency-control parts: crystals (resonators) and oscillators.
 const XTAL: &[C] = &[C::Crystal, C::Oscillator];
 /// Integrated circuits (a group covers its subcategories) and LEDs
@@ -845,6 +869,13 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("forward_current", Q::Current, SEMIS_VF),
     num("zener_voltage", Q::Voltage, &[C::Diode]),
     num("zener_test_current", Q::Current, &[C::Diode]),
+    // TVS / ESD protection diodes: the clamping voltage VC at the
+    // printed pulse current (`at: { IPP: 1 A }`; the waveform, e.g.
+    // 8/20 µs, in the locator), the peak pulse current IPP and power
+    // PPP the part withstands.
+    within(num("clamping_voltage", Q::Voltage, &[C::Diode]), 0.0, 1e4),
+    within(num("peak_pulse_current", Q::Current, &[C::Diode]), 0.0, 1e4),
+    within(num("peak_pulse_power", Q::Power, &[C::Diode]), 0.0, 1e6),
     enumerated(
         "color",
         &[
@@ -1011,6 +1042,9 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         0.0,
         10.0,
     ),
+    // A second, separate I/O supply rail (an MCU's VDDIO2, a CAN
+    // controller's VIO, a codec's IOVDD) beside the main supply.
+    within(span(num("io_supply_voltage", Q::Voltage, SUPPLIED)), -1e3, 1e3),
     within(
         span(num("operating_temperature", Q::Temperature, C::ALL)),
         -100.0,
@@ -1051,6 +1085,26 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     // Magnitudes: the printed ±3 mV max is `max: 3 mV`.
     within(num("input_offset_voltage", Q::Voltage, AMPS), 0.0, 1.0),
     within(num("input_bias_current", Q::Current, AMPS), 0.0, 0.1),
+    // Current-sense amplifiers: the fixed gain of the variant (V/V; per
+    // Part where variants differ) and the input common-mode range
+    // (absolute volts, `VCM`), which may exceed the supply.
+    within(
+        shown_in(
+            num("gain", Q::VoltageGain, &[C::CurrentSenseAmplifier]),
+            "V/V",
+        ),
+        0.0,
+        1e6,
+    ),
+    within(
+        span(num(
+            "common_mode_voltage",
+            Q::Voltage,
+            &[C::CurrentSenseAmplifier],
+        )),
+        -1e3,
+        1e3,
+    ),
     within(
         num(
             "supply_current_per_channel",
@@ -1351,6 +1405,13 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         1e6,
     ),
     // Sensors
+    // A pressure sensor's measurement range (absolute, or ± for a
+    // differential sensor), as printed.
+    within(
+        span(num("pressure_range", Q::Pressure, &[C::PressureSensor])),
+        -1e8,
+        1e9,
+    ),
     enumerated(
         "light_sensor_type",
         &[
@@ -1474,7 +1535,11 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         1e5,
     ),
     within(
-        num("bandwidth", Q::Frequency, &[C::MagneticSensor]),
+        num(
+            "bandwidth",
+            Q::Frequency,
+            &[C::MagneticSensor, C::CurrentSenseAmplifier],
+        ),
         0.0,
         1e10,
     ),
@@ -2742,6 +2807,42 @@ mod tests {
         );
         assert!(spec("motor_supply_voltage").span);
         assert!(!spec("sensitivity").in_range(-200.0));
+        // Round 6: CSA gain / common mode, pressure range, TVS ratings,
+        // a second I/O supply, Darlington arrays' VCE.
+        for (key, c) in [
+            ("gain", C::CurrentSenseAmplifier),
+            ("bandwidth", C::CurrentSenseAmplifier),
+            ("common_mode_voltage", C::CurrentSenseAmplifier),
+            ("pressure_range", C::PressureSensor),
+            ("clamping_voltage", C::Diode),
+            ("peak_pulse_current", C::Diode),
+            ("peak_pulse_power", C::Diode),
+            ("io_supply_voltage", C::Microcontroller),
+            ("io_supply_voltage", C::CanController),
+            ("io_supply_voltage", C::AudioCodec),
+            ("collector_emitter_voltage", C::DarlingtonArray),
+        ] {
+            assert!(plausible_for(spec(key), c), "{key} for {c:?}");
+        }
+        assert!(!plausible_for(spec("gain"), C::OpAmp));
+        assert!(spec("pressure_range").span);
+        assert!(spec("common_mode_voltage").span);
+        assert!(spec("io_supply_voltage").span);
+        assert_eq!(lab(val(Some(50.0), None, None, "V/V"), "gain"), "50 V/V");
+        assert_eq!(
+            lab(val(None, Some(300.0), Some(1100.0), "hPa"), "pressure_range"),
+            "30 kPa–110 kPa"
+        );
+        assert_eq!(
+            lab(val(None, Some(-0.2), Some(26.0), "V"), "common_mode_voltage"),
+            "-200 mV–26 V"
+        );
+        assert_eq!(
+            lab(val(Some(1.5), None, None, "kW"), "peak_pulse_power"),
+            "1.5 kW"
+        );
+        assert!(close_to(parse_value("110k", spec("pressure_range")), 1.1e5));
+        assert!(crate::condition::condition_symbol("VCM").is_some());
     }
 
     fn close_to(a: Option<f64>, b: f64) -> bool {

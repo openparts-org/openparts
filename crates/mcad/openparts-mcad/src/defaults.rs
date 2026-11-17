@@ -483,6 +483,9 @@ pub(crate) mod ipc {
     pub const MIN_GAP: f64 = 0.2;
     /// Gap kept between a terminal land and an exposed pad.
     pub const EP_CLEARANCE: f64 = 0.2;
+    /// Gap kept between the two lands meeting at a package corner when
+    /// their heels would otherwise collide (as `EP_CLEARANCE`).
+    pub const CORNER_CLEARANCE: f64 = 0.2;
 }
 
 /// Explicit land patterns (`Package::pads`).
@@ -550,6 +553,26 @@ pub(crate) mod electromechanical {
     /// A rotary encoder's bushing + shaft above the housing without an
     /// `overall_height` (EC11, 20 mm shaft from the board: about 15 mm).
     pub const SHAFT_LENGTH: f64 = 15.0;
+    /// An encoder's bushing diameter without `bushing_diameter`, of the
+    /// shaft (M7 around a 6 mm shaft); also a potentiometer's when only
+    /// its `bushing_length` is stated.
+    pub const BUSHING_RATIO: f64 = 1.17;
+    /// An encoder's bushing length without `bushing_length`: this share
+    /// of the bushing + shaft, at most `BUSHING_MAX`.
+    pub const BUSHING_SHARE: f64 = 0.35;
+    pub const BUSHING_MAX: f64 = 5.0;
+    /// A slide potentiometer's lever without `actuator_width` /
+    /// `actuator_thickness`: these shares of the housing's width
+    /// (along X, at most `LEVER_MAX`) and length (along Y).
+    pub const LEVER_WIDTH_RATIO: f64 = 0.1;
+    pub const LEVER_MAX: f64 = 4.0;
+    pub const LEVER_THICKNESS_RATIO: f64 = 0.25;
+    /// A slide potentiometer lever's height above the housing without
+    /// an `overall_height`.
+    pub const LEVER_HEIGHT: f64 = 5.0;
+    /// A slide potentiometer's travel without `actuator_travel`, of the
+    /// housing's width less the lever.
+    pub const TRAVEL_RATIO: f64 = 0.75;
 }
 
 /// `smd_electrolytic` generator defaults (3D only: the footprint is the

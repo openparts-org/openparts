@@ -117,6 +117,15 @@ families! {
     /// vertical shaft, over the source's land pattern (signal and
     /// switch pins, mounting lugs).
     RotaryEncoder: "rotary_encoder",
+    /// Shaft potentiometers (9 mm / 16 mm panel and PCB pots, Bourns
+    /// PTV09, Alps RK09K): a housing with an optional bushing and a
+    /// shaft, vertical (on top) or, with `actuation: side`, parallel to
+    /// the board, over the source's land pattern (wiper pins, lugs).
+    Potentiometer: "potentiometer" | "rotary_potentiometer" | "panel_potentiometer",
+    /// Slide potentiometers (Bourns PTA): a long housing with a lever
+    /// standing out of the slot in its top, travelling along X, over the
+    /// source's land pattern.
+    SlidePotentiometer: "slide_potentiometer" | "slider",
 }
 
 impl PackageFamily {

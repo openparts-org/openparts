@@ -113,6 +113,11 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("forward_current", AtLeast),
     identity(within(rule("zener_voltage", Equal), 0.005)),
     rule("zener_test_current", Informational),
+    // TVS / ESD: a lower clamp protects better; the pulse ratings are
+    // ratings.
+    rule("clamping_voltage", AtMost),
+    rule("peak_pulse_current", AtLeast),
+    rule("peak_pulse_power", AtLeast),
     identity(rule("color", Equal)),
     within(rule("wavelength", Equal), 0.02),
     within(rule("peak_wavelength", Equal), 0.02),
@@ -159,6 +164,7 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("digital_supply_voltage", Covers),
     rule("analog_supply_current", AtMost),
     rule("digital_supply_current", AtMost),
+    rule("io_supply_voltage", Covers),
     rule("operating_temperature", Covers),
     rule("esd_hbm", AtLeast),
     // Amplifiers and comparators
@@ -167,6 +173,10 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     rule("slew_rate", AtLeast),
     rule("input_offset_voltage", AtMost),
     rule("input_bias_current", AtMost),
+    // Current-sense amplifiers: a fixed-gain variant is not another
+    // gain's replacement; the common-mode range must be covered.
+    identity(within(rule("gain", Equal), 0.005)),
+    rule("common_mode_voltage", Covers),
     rule("supply_current_per_channel", AtMost),
     rule("rail_to_rail_input", Ranked),
     rule("rail_to_rail_output", Ranked),
@@ -223,6 +233,7 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     // Ferrite beads, common-mode chokes
     identity(within(rule("impedance", Equal), 0.005)),
     // Sensors
+    rule("pressure_range", Covers),
     identity(rule("light_sensor_type", Equal)),
     rule("illuminance_range", Covers),
     identity(rule("target_gas", Equal)),

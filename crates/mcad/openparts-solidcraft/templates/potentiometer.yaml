@@ -1,0 +1,16 @@
+# Shaft potentiometer, vertical shaft: a housing with the shaft standing
+# on its top (a bushing, when stated, follows from
+# shaft_bushing_top). Vars: shaft_d, rise (bushing + shaft above the
+# housing), bushing_h (0: none).
+- params:
+    shaft_d: ["{{shaft_d}}", "shaft diameter (datasheet, else generator default)"]
+    rise: ["{{rise}}", "bushing + shaft above the housing (overall height, else generator default)"]
+    bushing_h: ["{{bushing_h}}", "bushing height (datasheet; 0: no bushing)"]
+    shaft_base: [standoff + body_h + bushing_h, shaft base]
+    shaft_l: [rise - bushing_h, shaft length above the bushing]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: shaft_d, height: shaft_l, axis: Z, base: [0 mm, 0 mm, shaft_base],
+     operation: new, body_name: Shaft, name: Shaft}

@@ -89,7 +89,9 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         | F::Relay
         | F::Buzzer
         | F::Trimmer
-        | F::RotaryEncoder => connector::generate_connector(package),
+        | F::RotaryEncoder
+        | F::Potentiometer
+        | F::SlidePotentiometer => connector::generate_connector(package),
         F::SmdLed => led::generate_smd_led(package),
         F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
         F::Melf => melf::generate_melf(package),

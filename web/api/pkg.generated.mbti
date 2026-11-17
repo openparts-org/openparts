@@ -418,16 +418,21 @@ pub(all) enum ComponentCategory {
   Relay
   Optocoupler
   PowerSwitch
+  Efuse
   Imu
+  TouchSensor
   PowerMonitor
   AnalogSwitch
   LevelShifter
+  UsbPdController
+  DigitalIsolator
   Logic
   Oscillator
   RotaryEncoder
   GateDriver
   MotorDriver
   LedDriver
+  DisplayDriver
   Potentiometer
   FerriteBead
   CommonModeChoke
@@ -948,6 +953,7 @@ pub(all) struct PackageDimensions {
   actuator_elevation : Dimension?
   actuator_length : Dimension?
   actuator_thickness : Dimension?
+  actuator_travel : Dimension?
   actuator_width : Dimension?
   aux_pad_length : Dimension?
   aux_pad_width : Dimension?
@@ -957,6 +963,8 @@ pub(all) struct PackageDimensions {
   body_length : Dimension
   body_offset : Dimension?
   body_width : Dimension
+  bushing_diameter : Dimension?
+  bushing_length : Dimension?
   can_diameter : Dimension?
   exposed_pad : ExposedPadDimensions?
   ground_terminal_offset : Dimension?
@@ -1042,6 +1050,8 @@ pub(all) enum PackageFamily {
   Buzzer
   Trimmer
   RotaryEncoder
+  Potentiometer
+  SlidePotentiometer
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String
@@ -1245,10 +1255,20 @@ pub fn ParameterKind::wire(Self) -> String
 pub impl @json.FromJson for ParameterKind
 
 #derive(Eq)
+pub(all) struct ParameterRange {
+  max : Double?
+  min : Double?
+  typ : Double?
+  unit : String?
+}
+pub impl @json.FromJson for ParameterRange
+
+#derive(Eq)
 pub(all) struct ParameterValue {
   at : Map[String, Condition]?
   max : Double?
   min : Double?
+  ranges : Array[ParameterRange]?
   typ : Double?
   unit : String?
   value : String?

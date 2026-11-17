@@ -6,7 +6,7 @@ use openparts_core::Package;
 use std::collections::BTreeSet;
 
 /// Paths of the package fields that must carry their own provenance.
-pub(crate) const PROVENANCE_REQUIRED: [&str; 33] = [
+pub(crate) const PROVENANCE_REQUIRED: [&str; 36] = [
     "/dimensions/overall_width",
     "/dimensions/overall_length",
     "/dimensions/overall_height",
@@ -40,6 +40,9 @@ pub(crate) const PROVENANCE_REQUIRED: [&str; 33] = [
     "/dimensions/ground_terminal_offset",
     "/dimensions/ground_terminal_width",
     "/dimensions/can_diameter",
+    "/dimensions/bushing_diameter",
+    "/dimensions/bushing_length",
+    "/dimensions/actuator_travel",
 ];
 
 pub(crate) fn check_package_provenance(entity: &str, package: &Package) -> Vec<Diagnostic> {
@@ -374,7 +377,9 @@ pub(crate) fn check_dimension(
 /// actuator and ground-terminal dimensions belong to the tact families,
 /// the side actuator's to `actuation: side`, which needs
 /// `actuator_length`; `actuator_width` and `actuator_thickness` go
-/// together. A THT package with `pads` gives every plated hole a drill.
+/// together. Outside them: `actuation: side` with `actuator_length` /
+/// `actuator_elevation` on a rotary encoder or shaft potentiometer, a
+/// slide potentiometer's lever `actuator_width` / `actuator_thickness`. A THT package with `pads` gives every plated hole a drill.
 pub(crate) fn check_package_tact_switch(entity: &str, package: &Package) -> Vec<Diagnostic> {
     use openparts_core::{Actuation, PackageFamily as F};
     let d = &package.dimensions;
@@ -411,13 +416,39 @@ pub(crate) fn check_package_tact_switch(entity: &str, package: &Package) -> Vec<
         ),
     ];
     if !tact {
-        if package.actuation.is_some() {
+        // Encoders and shaft potentiometers take a side shaft
+        // (`actuation: side`, its length and elevation); a slide
+        // potentiometer's lever its width and thickness.
+        let shaft = openparts_core::is_shaft_family(package.family);
+        let slide = package.family == F::SlidePotentiometer;
+        let is_side = package.actuation == Some(Actuation::Side);
+        if package.actuation.is_some() && !shaft {
             bad(
                 "/actuation",
-                "actuation belongs to the tact switch families",
+                "actuation belongs to the tact switch, rotary_encoder and potentiometer families",
             );
         }
-        for (path, present) in side.iter().chain(&ground) {
+        for (i, (path, present)) in side.iter().enumerate() {
+            if !*present {
+                continue;
+            }
+            let allowed = if i < 2 { shaft } else { slide };
+            if !allowed {
+                bad(
+                    path,
+                    "this dimension belongs to the tact switch families (actuator_length and \
+                     actuator_elevation also to a side-shaft rotary_encoder or potentiometer, \
+                     actuator_width and actuator_thickness to a slide_potentiometer)",
+                );
+            } else if shaft && !is_side {
+                bad(
+                    path,
+                    "a shaft's actuator_length and actuator_elevation need actuation: side \
+                     (a vertical shaft's top is overall_height)",
+                );
+            }
+        }
+        for (path, present) in &ground {
             if *present {
                 bad(path, "this dimension belongs to the tact switch families");
             }

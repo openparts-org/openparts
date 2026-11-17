@@ -346,7 +346,14 @@ fn a_melf_keeps_the_two_terminal_frame() {
 /// pins' tails below the board.
 #[test]
 fn electromechanical_families_place_their_pads_and_body() {
-    for family in ["relay", "buzzer", "trimmer", "rotary_encoder"] {
+    for family in [
+        "relay",
+        "buzzer",
+        "trimmer",
+        "rotary_encoder",
+        "potentiometer",
+        "slide_potentiometer",
+    ] {
         let p = pkg(&format!(
             "family: {family}\nlead_count: 3\npitch: {{unit: mm}}\n\
              dimensions:\n\

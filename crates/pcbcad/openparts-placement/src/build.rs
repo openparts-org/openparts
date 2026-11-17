@@ -1007,9 +1007,14 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
             "terminal block",
             "poles in a row along X, pole 1 on the left; the wire entry faces +Y",
         ),
-        F::Relay | F::Buzzer | F::Trimmer | F::RotaryEncoder => (
+        F::Relay
+        | F::Buzzer
+        | F::Trimmer
+        | F::RotaryEncoder
+        | F::Potentiometer
+        | F::SlidePotentiometer => (
             "electromechanical",
-            "pad 1 upper left; the body (rotor, shaft) turns with it",
+            "pad 1 upper left; the body (rotor, shaft, lever; a side shaft at +Y in the source frame) turns with it",
         ),
     }
 }

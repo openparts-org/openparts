@@ -173,24 +173,30 @@ pub struct PackageDimensions {
     pub lead_inset: Option<Dimension>,
     /// Switches: diameter of the round actuator (plunger) -- on top, or
     /// for a side-operated switch (`actuation: side`) across its
-    /// horizontal plunger. 3D model only.
+    /// horizontal plunger; an encoder's or potentiometer's shaft
+    /// diameter. 3D model only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_diameter: Option<Dimension>,
     /// Side-operated tact switches: how far the actuator reaches beyond
-    /// the housing's +Y face (the face it leaves).
+    /// the housing's +Y face (the face it leaves); a side-shaft
+    /// (`actuation: side`) encoder's or potentiometer's shaft, bushing
+    /// included, from that face to the shaft's end.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_length: Option<Dimension>,
-    /// Side-operated tact switches: height of the actuator's axis above
-    /// the board. Absent: the housing's mid-height. 3D model only.
+    /// Side-operated tact switches, side-shaft encoders and
+    /// potentiometers: height of the actuator's (shaft's) axis above the
+    /// board. Absent: the housing's mid-height. 3D model only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_elevation: Option<Dimension>,
     /// Side-operated tact switches with a rectangular (or square)
     /// actuator: its size along X. With `actuator_thickness`, replaces
-    /// `actuator_diameter`. 3D model only.
+    /// `actuator_diameter`. A slide potentiometer's lever: its size
+    /// along X (the travel direction). 3D model only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_width: Option<Dimension>,
     /// Side-operated tact switches with a rectangular actuator: its size
-    /// along Z. 3D model only.
+    /// along Z. A slide potentiometer's lever: its size along Y. 3D
+    /// model only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actuator_thickness: Option<Dimension>,
     /// Tact switches with a ground terminal (an odd `lead_count`): the
@@ -214,6 +220,20 @@ pub struct PackageDimensions {
     /// on the base plate (`body_width` x `body_length`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub can_diameter: Option<Dimension>,
+    /// Encoders and shaft potentiometers: the (threaded) bushing's
+    /// outer diameter (M7: 7 mm). 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bushing_diameter: Option<Dimension>,
+    /// Encoders and shaft potentiometers: the bushing's length beyond
+    /// the housing face it stands on. A potentiometer without it has
+    /// no bushing. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bushing_length: Option<Dimension>,
+    /// `slide_potentiometer`: the lever's travel along X (centre to
+    /// centre of its end positions); the top slot is cut that long plus
+    /// the lever. 3D model only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actuator_travel: Option<Dimension>,
 }
 
 impl PackageDimensions {
@@ -271,6 +291,9 @@ impl PackageDimensions {
             ("/dimensions/mating_diameter", &self.mating_diameter),
             ("/dimensions/pin_diameter", &self.pin_diameter),
             ("/dimensions/can_diameter", &self.can_diameter),
+            ("/dimensions/bushing_diameter", &self.bushing_diameter),
+            ("/dimensions/bushing_length", &self.bushing_length),
+            ("/dimensions/actuator_travel", &self.actuator_travel),
         ];
         out.extend(
             optional

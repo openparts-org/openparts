@@ -138,7 +138,7 @@ kept. A test checks every package of the dataset.
 | `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b`, `mini_usb_b`, `usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
 | `terminal_block` | Poles in a row along X, pole 1 on the left; the wire entry faces +Y (the family frame already has it so). |
 | `smd_led` | Pad 1 upper left. A source that numbers it lower right (WS2812B-2020: DO is pad 1) turns 180°. |
-| `relay`, `buzzer`, `trimmer`, `rotary_encoder` | Pad 1 upper left, as the connectors' contact 1; the housing (a trimmer's rotor, an encoder's shaft) turns with it. |
+| `relay`, `buzzer`, `trimmer`, `rotary_encoder`, `potentiometer`, `slide_potentiometer` | Pad 1 upper left, as the connectors' contact 1; the housing (a trimmer's rotor, an encoder's or potentiometer's shaft -- a side shaft leaving +Y in the source frame --, a slider's lever) turns with it. |
 
 The model reports the rule (`frame.zero_orientation`: rule, family row,
 convention, pin-1 pad). The turn and the move from the generator's frame are

@@ -1,0 +1,9 @@
+# An encoder's D-flat on the outer half of a side shaft (its top face).
+# Uses shaft_side's params.
+- params:
+    flat_t: [shaft_d * 0.3, "D-flat depth (generator default)"]
+- solid.box:
+    {length: shaft_d + 0.2 mm, width: shaft_l * 0.5 + 0.1 mm, height: flat_t + 0.1 mm,
+     center: [0 mm, shaft_y0 + shaft_l * 0.75 + 0.05 mm, shaft_z + shaft_d / 2 - flat_t / 2 + 0.05 mm],
+     operation: new, body_name: Flat, name: Flat}
+- solid.combine: {target: Shaft, tools: [Flat], operation: cut, keep_tools: false}

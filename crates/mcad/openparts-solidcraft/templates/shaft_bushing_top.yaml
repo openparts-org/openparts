@@ -1,0 +1,7 @@
+# The bushing under a vertical shaft (potentiometer). Uses the shaft
+# template's bushing_h. Vars: bushing_d.
+- params:
+    bushing_d: ["{{bushing_d}}", "bushing diameter (datasheet, else generator default)"]
+- solid.cylinder:
+    {diameter: bushing_d, height: bushing_h, axis: Z, base: [0 mm, 0 mm, standoff + body_h],
+     operation: new, body_name: Bushing, name: Bushing}

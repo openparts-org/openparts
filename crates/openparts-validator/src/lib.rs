@@ -1569,6 +1569,27 @@ mod tests {
                     ("on_resistance", num(31.0, "mΩ")),
                 ],
             ),
+            (
+                C::CurrentSenseAmplifier,
+                &[
+                    ("gain", num(50.0, "V/V")),
+                    ("common_mode_voltage", num(26.0, "V")),
+                ],
+            ),
+            (C::PressureSensor, &[("pressure_range", num(1100.0, "hPa"))]),
+            (
+                C::Diode,
+                &[
+                    ("clamping_voltage", num(9.8, "V")),
+                    ("peak_pulse_current", num(5.0, "A")),
+                    ("peak_pulse_power", num(1.5, "kW")),
+                ],
+            ),
+            (C::Microcontroller, &[("io_supply_voltage", num(1.8, "V"))]),
+            (
+                C::DarlingtonArray,
+                &[("collector_emitter_voltage", num(50.0, "V"))],
+            ),
         ];
         for (category, keys) in cases {
             assert!(run(*category, keys).is_empty(), "{category:?}");

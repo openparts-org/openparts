@@ -1,7 +1,8 @@
 //! The connector families (`card_socket`, `barrel_jack`,
 //! `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`,
 //! `mini_usb_b`, `usb_b`) and the electromechanical ones (`relay`,
-//! `buzzer`, `trimmer`, `rotary_encoder`: no mating face), from an
+//! `buzzer`, `trimmer`, `rotary_encoder`, `potentiometer`,
+//! `slide_potentiometer`: no mating face), from an
 //! explicit land pattern: every pad -- signal contacts, shield and hold-down
 //! pads, plated (often slotted) tabs, non-plated peg holes -- is listed in
 //! `Package::pads` as the source's recommended PCB layout gives it.
@@ -242,12 +243,27 @@ pub struct ElectromechanicalFeatures {
     pub tail_length: f64,
     /// A buzzer's round can (`can_diameter`); `None`: a square housing.
     pub can_diameter: Option<f64>,
-    /// A trimmer's rotor, an encoder's shaft (`actuator_diameter`, else
-    /// a default); 0 for a relay or buzzer.
+    /// A trimmer's rotor, an encoder's or potentiometer's shaft
+    /// (`actuator_diameter`, else a default); 0 for a relay or buzzer.
     pub top_diameter: f64,
-    /// How far the rotor or the bushing + shaft rise above the housing
-    /// (`overall_height` - standoff - `body_height`, else a default).
+    /// How far the rotor, the bushing + shaft or the lever rise above
+    /// the housing (`overall_height` - standoff - `body_height`, else a
+    /// default); a side shaft's bushing + shaft length beyond the
+    /// housing's +Y face (`actuator_length`, else a default).
     pub top_height: f64,
+    /// An encoder's or potentiometer's shaft lies parallel to the board
+    /// (`actuation: side`), leaving the housing's +Y face, its axis
+    /// `shaft_elevation` above the board.
+    pub side_shaft: bool,
+    pub shaft_elevation: f64,
+    /// The bushing around the shaft's base (0 x 0: none).
+    pub bushing_diameter: f64,
+    pub bushing_length: f64,
+    /// A slide potentiometer's lever (along X x along Y) and the top
+    /// slot it travels in (along X); 0 for the other families.
+    pub lever_width: f64,
+    pub lever_thickness: f64,
+    pub slot_length: f64,
 }
 
 pub fn electromechanical_features(
@@ -262,18 +278,75 @@ pub fn electromechanical_features(
     let above = value(&d.overall_height)
         .map(|top| top - value(&d.standoff).unwrap_or(0.0) - body_h)
         .filter(|h| *h > 0.0);
+    let standoff = value(&d.standoff).unwrap_or(0.0);
+    let side_shaft = openparts_core::is_shaft_family(package.family)
+        && package.actuation == Some(openparts_core::Actuation::Side);
+    // A side shaft leaves the +Y face: its size follows that face.
+    let face = if side_shaft {
+        body_w.min(body_h)
+    } else {
+        side
+    };
     let (top_diameter, top_height) = match package.family {
         F::Trimmer => (
             value(&d.actuator_diameter).unwrap_or(side * de::ROTOR_RATIO),
             above.unwrap_or(de::ROTOR_HEIGHT),
         ),
-        F::RotaryEncoder => (
-            value(&d.actuator_diameter)
-                .unwrap_or(de::SHAFT_DIAMETER)
-                .min(side * de::MAX_SHAFT_RATIO),
-            above.unwrap_or(de::SHAFT_LENGTH),
+        F::RotaryEncoder | F::Potentiometer => (
+            // A stated shaft fits the face it leaves; the default one
+            // at most half of it.
+            value(&d.actuator_diameter).map_or(
+                de::SHAFT_DIAMETER.min(face * de::MAX_SHAFT_RATIO),
+                |dia| dia.min(face),
+            ),
+            if side_shaft {
+                value(&d.actuator_length).filter(|l| *l > 0.0)
+            } else {
+                above
+            }
+            .unwrap_or(de::SHAFT_LENGTH),
         ),
+        F::SlidePotentiometer => (0.0, above.unwrap_or(de::LEVER_HEIGHT)),
         _ => (0.0, 0.0),
+    };
+    let (bushing_diameter, bushing_length) = match package.family {
+        F::RotaryEncoder | F::Potentiometer => {
+            let stated = value(&d.bushing_length).filter(|l| *l > 0.0);
+            let length = match (package.family, stated) {
+                (_, Some(l)) => l.min(top_height * 0.9),
+                (F::RotaryEncoder, None) => (top_height * de::BUSHING_SHARE).min(de::BUSHING_MAX),
+                _ => 0.0,
+            };
+            let dia = value(&d.bushing_diameter)
+                .unwrap_or(top_diameter * de::BUSHING_RATIO)
+                .max(top_diameter)
+                .min(face.max(top_diameter));
+            if length > 0.0 {
+                (dia, length)
+            } else {
+                (0.0, 0.0)
+            }
+        }
+        _ => (0.0, 0.0),
+    };
+    let (lever_width, lever_thickness, slot_length) = if package.family == F::SlidePotentiometer {
+        let w = value(&d.actuator_width)
+            .unwrap_or((body_w * de::LEVER_WIDTH_RATIO).min(de::LEVER_MAX))
+            .min(body_w * 0.5);
+        let t = value(&d.actuator_thickness)
+            .unwrap_or(body_l * de::LEVER_THICKNESS_RATIO)
+            .min(body_l * 0.8);
+        let travel = value(&d.actuator_travel).unwrap_or((body_w - w) * de::TRAVEL_RATIO);
+        (w, t, (travel + w).min(body_w * 0.95))
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+    let shaft_elevation = if side_shaft {
+        value(&d.actuator_elevation)
+            .unwrap_or(standoff + body_h / 2.0)
+            .max(top_diameter.max(bushing_diameter) / 2.0)
+    } else {
+        0.0
     };
     ElectromechanicalFeatures {
         tail_length,
@@ -282,6 +355,13 @@ pub fn electromechanical_features(
             .flatten(),
         top_diameter,
         top_height,
+        side_shaft,
+        shaft_elevation,
+        bushing_diameter,
+        bushing_length,
+        lever_width,
+        lever_thickness,
+        slot_length,
     }
 }
 
@@ -339,6 +419,63 @@ mod tests {
         };
         assert!((f.top_diameter - 7.5 * 0.75).abs() < 1e-9);
         assert!((f.top_height - 0.5).abs() < 1e-9);
+    }
+
+    fn mm(v: f64) -> Option<openparts_core::Dimension> {
+        Some(openparts_core::Dimension {
+            typ: Some(v),
+            unit: "mm".into(),
+            ..Default::default()
+        })
+    }
+
+    fn em(p: &Package) -> ElectromechanicalFeatures {
+        let crate::Details::Electromechanical(f) = generate(p).unwrap().details else {
+            panic!("electromechanical details");
+        };
+        f
+    }
+
+    #[test]
+    fn shafts_lie_on_their_side_and_levers_stand_in_a_slot() {
+        // A right-angle encoder: the shaft leaves the +Y face at the
+        // stated elevation, the stated bushing around its base.
+        let mut enc = relay();
+        enc.family = F::RotaryEncoder;
+        enc.actuation = Some(openparts_core::Actuation::Side);
+        enc.dimensions.actuator_diameter = mm(6.0);
+        enc.dimensions.actuator_length = mm(20.0);
+        enc.dimensions.actuator_elevation = mm(6.5);
+        enc.dimensions.bushing_diameter = mm(7.0);
+        enc.dimensions.bushing_length = mm(5.0);
+        let f = em(&enc);
+        assert!(f.side_shaft);
+        assert_eq!(
+            (f.top_diameter, f.top_height, f.shaft_elevation),
+            (6.0, 20.0, 6.5)
+        );
+        assert_eq!((f.bushing_diameter, f.bushing_length), (7.0, 5.0));
+        // A vertical encoder keeps its default bushing; a potentiometer
+        // without a stated bushing has none.
+        enc.actuation = None;
+        let f = em(&enc);
+        assert!(!f.side_shaft && f.bushing_length > 0.0);
+        let mut pot = relay();
+        pot.family = F::Potentiometer;
+        let f = em(&pot);
+        assert_eq!((f.bushing_diameter, f.bushing_length), (0.0, 0.0));
+        assert!((f.top_height - 15.0).abs() < 1e-9);
+        // A slide potentiometer's lever and slot.
+        let mut slide = relay();
+        slide.family = F::SlidePotentiometer;
+        slide.dimensions.actuator_width = mm(1.2);
+        slide.dimensions.actuator_thickness = mm(2.0);
+        slide.dimensions.actuator_travel = mm(8.0);
+        slide.dimensions.overall_height = mm(25.0);
+        let f = em(&slide);
+        assert_eq!((f.lever_width, f.lever_thickness), (1.2, 2.0));
+        assert!((f.slot_length - 9.2).abs() < 1e-9);
+        assert!((f.top_height - 15.0).abs() < 1e-9);
     }
 
     fn pkg(yaml: &str) -> Package {

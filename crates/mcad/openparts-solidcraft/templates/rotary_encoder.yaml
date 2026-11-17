@@ -1,11 +1,12 @@
 # Rotary encoder: a housing, a threaded bushing on its top and the
 # shaft standing in it, a D-flat cut into the shaft's upper half.
-# Vars: shaft_d, rise (bushing + shaft above the housing).
+# Vars: shaft_d, rise (bushing + shaft above the housing), bushing_d,
+# bushing_h.
 - params:
     shaft_d: ["{{shaft_d}}", "shaft diameter (datasheet, else generator default)"]
     rise: ["{{rise}}", "bushing + shaft above the housing (overall height, else generator default)"]
-    bushing_d: [shaft_d * 1.17, "bushing diameter (generator default: M7 for a 6 mm shaft)"]
-    bushing_h: ["min(5 mm, rise * 0.35)", "bushing height (generator default)"]
+    bushing_d: ["{{bushing_d}}", "bushing diameter (datasheet, else generator default: M7 for a 6 mm shaft)"]
+    bushing_h: ["{{bushing_h}}", "bushing height (datasheet, else generator default)"]
     shaft_base: [standoff + body_h + bushing_h, shaft base]
     shaft_l: [rise - bushing_h, shaft length above the bushing]
     flat_t: [shaft_d * 0.3, "D-flat depth (generator default)"]

@@ -1,0 +1,7 @@
+# The bushing around a side shaft's base, on the housing's +Y face.
+# Uses shaft_side's bushing_h and shaft_z. Vars: bushing_d.
+- params:
+    bushing_d: ["{{bushing_d}}", "bushing diameter (datasheet, else generator default)"]
+- solid.cylinder:
+    {diameter: bushing_d, height: bushing_h + 0.1 mm, axis: Y, base: [0 mm, body_l / 2 - 0.1 mm, shaft_z],
+     operation: new, body_name: Bushing, name: Bushing}

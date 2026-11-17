@@ -118,8 +118,16 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
       [
         "led_driver_type", "channel_count", "output_current", "supply_voltage", "data_interface",
       ]
-    "gate_driver" | "darlington_array" =>
-      ["channel_count", "supply_voltage", "output_current"]
+    "gate_driver" => ["channel_count", "supply_voltage", "output_current"]
+    "darlington_array" =>
+      ["channel_count", "collector_emitter_voltage", "output_current"]
+    "current_sense_amplifier" =>
+      [
+        "gain", "common_mode_voltage", "input_offset_voltage", "supply_voltage",
+        "channel_count",
+      ]
+    "pressure_sensor" =>
+      ["pressure_range", "data_interface", "supply_voltage", "supply_current"]
     "potentiometer" =>
       ["resistance", "taper", "tolerance", "power_rating", "rotation_angle"]
     "ferrite_bead" | "common_mode_choke" =>
@@ -212,7 +220,10 @@ fn param_columns_of_root(category : String) -> Array[String] {
         "esr",
       ]
     "diode" =>
-      ["reverse_voltage", "forward_current", "forward_voltage", "zener_voltage"]
+      [
+        "reverse_voltage", "forward_current", "forward_voltage", "zener_voltage",
+        "clamping_voltage",
+      ]
     "optocoupler" =>
       [
         "current_transfer_ratio", "isolation_voltage", "collector_emitter_voltage",

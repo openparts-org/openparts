@@ -1,0 +1,21 @@
+# Slide potentiometer: a long housing with a slot along X in its top and
+# the lever standing in the slot's middle. Vars: lever_w (along X),
+# lever_t (along Y), rise (lever top above the housing), slot_len.
+- params:
+    lever_w: ["{{lever_w}}", "lever size along X (datasheet, else generator default)"]
+    lever_t: ["{{lever_t}}", "lever size along Y (datasheet, else generator default)"]
+    rise: ["{{rise}}", "lever top above the housing (overall height, else generator default)"]
+    slot_len: ["{{slot_len}}", "slot length: travel + lever (datasheet travel, else generator default)"]
+    slot_w: ["min(lever_t + 0.4 mm, body_l * 0.9)", "slot width (generator default)"]
+    slot_d: ["min(1 mm, body_h * 0.3)", "slot depth (generator default)"]
+    top: [standoff + body_h, housing top]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.box:
+    {length: slot_len, width: slot_w, height: slot_d + 0.1 mm, center: [0 mm, 0 mm, top - slot_d / 2 + 0.05 mm],
+     operation: new, body_name: Slot, name: Slot}
+- solid.combine: {target: Housing, tools: [Slot], operation: cut, keep_tools: false}
+- solid.box:
+    {length: lever_w, width: lever_t, height: rise + slot_d, center: [0 mm, 0 mm, top - slot_d + (rise + slot_d) / 2],
+     operation: new, body_name: Lever, name: Lever}

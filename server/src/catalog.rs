@@ -1478,6 +1478,8 @@ fn family_label(f: PackageFamily) -> String {
         F::Buzzer => "Buzzer".into(),
         F::Trimmer => "Trimmer".into(),
         F::RotaryEncoder => "Rotary encoder".into(),
+        F::Potentiometer => "Potentiometer".into(),
+        F::SlidePotentiometer => "Slide potentiometer".into(),
         F::SmdLed => "SMD LED".into(),
         F::SmdElectrolytic => "SMD electrolytic".into(),
         F::SodFlat => "SOD (flat)".into(),

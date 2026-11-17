@@ -1,0 +1,17 @@
+# Right-angle (side-shaft) encoder or potentiometer: a housing with the
+# shaft leaving its +Y face parallel to the board. Vars: shaft_d,
+# shaft_len (bushing + shaft beyond the face), shaft_z (axis above the
+# board), bushing_h (0: none).
+- params:
+    shaft_d: ["{{shaft_d}}", "shaft diameter (datasheet, else generator default)"]
+    shaft_len: ["{{shaft_len}}", "bushing + shaft beyond the housing's +Y face (datasheet, else generator default)"]
+    shaft_z: ["{{shaft_z}}", "shaft axis above the board (datasheet, else the housing's middle)"]
+    bushing_h: ["{{bushing_h}}", "bushing length (datasheet, else generator default; 0: none)"]
+    shaft_y0: [body_l / 2 + bushing_h, shaft base beyond the bushing]
+    shaft_l: [shaft_len - bushing_h, shaft length beyond the bushing]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: shaft_d, height: shaft_l + 0.1 mm, axis: Y, base: [0 mm, shaft_y0 - 0.1 mm, shaft_z],
+     operation: new, body_name: Shaft, name: Shaft}

@@ -245,16 +245,16 @@ fn check_pad_body(package: &Package, mut bad: impl FnMut(&str, String)) {
     }
 }
 
-/// `electromechanical.invalid`: a `relay`, `buzzer`, `trimmer` or
-/// `rotary_encoder` package states its land pattern (`pads`, one plated
-/// pad per lead), its body (`body_length`, `body_height`), no `connector`
-/// facts, and a rotor/shaft top (`overall_height`) above the housing.
+/// `electromechanical.invalid`: a `relay`, `buzzer`, `trimmer`,
+/// `rotary_encoder`, `potentiometer` or `slide_potentiometer` package
+/// states its land pattern (`pads`, one plated pad per lead), its body
+/// (`body_length`, `body_height`), no `connector` facts, and a
+/// rotor/shaft/lever top (`overall_height`) above the housing; the
+/// bushing dimensions belong to the shaft families, `actuator_travel`
+/// to `slide_potentiometer`.
 pub(crate) fn check_electromechanical(entity: &str, package: &Package) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     let family = package.family;
-    if !openparts_core::is_electromechanical_family(family) {
-        return out;
-    }
     let mut bad = |path: &str, message: String| {
         out.push(Diagnostic::error(
             "electromechanical.invalid",
@@ -263,8 +263,39 @@ pub(crate) fn check_electromechanical(entity: &str, package: &Package) -> Vec<Di
             message,
         ))
     };
-    check_pad_body(package, &mut bad);
     let d = &package.dimensions;
+    let shaft = openparts_core::is_shaft_family(family);
+    for (path, present, ok, owner) in [
+        (
+            "/dimensions/bushing_diameter",
+            d.bushing_diameter.is_some(),
+            shaft,
+            "rotary_encoder and potentiometer",
+        ),
+        (
+            "/dimensions/bushing_length",
+            d.bushing_length.is_some(),
+            shaft,
+            "rotary_encoder and potentiometer",
+        ),
+        (
+            "/dimensions/actuator_travel",
+            d.actuator_travel.is_some(),
+            family == openparts_core::PackageFamily::SlidePotentiometer,
+            "slide_potentiometer",
+        ),
+    ] {
+        if present && !ok {
+            bad(
+                path,
+                format!("this dimension belongs to the {owner} families"),
+            );
+        }
+    }
+    if !openparts_core::is_electromechanical_family(family) {
+        return out;
+    }
+    check_pad_body(package, &mut bad);
     if d.body_length
         .typ
         .or(d.body_length.min)
@@ -744,6 +775,89 @@ mod tests {
             .contains(&"electromechanical.invalid /dimensions/overall_height".to_string()));
         // Other families are not this rule's.
         assert!(check_electromechanical("p", &pkg("melf", "")).is_empty());
+        // Shaft potentiometers and slide potentiometers are pad bodies
+        // too; bushings belong to the shaft families, the travel to a
+        // slide potentiometer.
+        for family in ["potentiometer", "slide_potentiometer"] {
+            assert!(
+                check_electromechanical("p", &pkg(family, "")).is_empty(),
+                "{family}"
+            );
+        }
+        let mm = |v: f64| {
+            Some(openparts_core::Dimension {
+                typ: Some(v),
+                unit: "mm".into(),
+                ..Default::default()
+            })
+        };
+        let mut pot = pkg("potentiometer", "");
+        pot.dimensions.bushing_length = mm(5.0);
+        pot.dimensions.bushing_diameter = mm(7.0);
+        assert!(check_electromechanical("p", &pot).is_empty());
+        pot.dimensions.actuator_travel = mm(20.0);
+        assert_eq!(
+            paths(&check_electromechanical("p", &pot)),
+            ["electromechanical.invalid /dimensions/actuator_travel"]
+        );
+        let mut trim = pkg("trimmer", "");
+        trim.dimensions.bushing_length = mm(5.0);
+        assert_eq!(
+            paths(&check_electromechanical("p", &trim)),
+            ["electromechanical.invalid /dimensions/bushing_length"]
+        );
+        let mut tact = pkg("tact_switch_tht", "");
+        tact.dimensions.bushing_diameter = mm(5.0);
+        assert_eq!(
+            paths(&check_electromechanical("p", &tact)),
+            ["electromechanical.invalid /dimensions/bushing_diameter"]
+        );
+    }
+
+    #[test]
+    fn side_shafts_and_slide_levers_take_their_actuator_dimensions() {
+        use crate::package::check_package_tact_switch;
+        let mm = |v: f64| {
+            Some(openparts_core::Dimension {
+                typ: Some(v),
+                unit: "mm".into(),
+                ..Default::default()
+            })
+        };
+        // A right-angle encoder: actuation side with its shaft length.
+        let mut enc = pkg("rotary_encoder", "actuation: side\n");
+        enc.dimensions.actuator_length = mm(20.0);
+        enc.dimensions.actuator_elevation = mm(6.5);
+        assert!(check_package_tact_switch("p", &enc).is_empty());
+        // Without actuation: side the side dimensions don't apply.
+        enc.actuation = None;
+        assert_eq!(
+            paths(&check_package_tact_switch("p", &enc)),
+            [
+                "tact_switch.invalid /dimensions/actuator_length",
+                "tact_switch.invalid /dimensions/actuator_elevation"
+            ]
+        );
+        // A slide potentiometer's lever; no side shaft.
+        let mut slide = pkg("slide_potentiometer", "");
+        slide.dimensions.actuator_width = mm(1.2);
+        slide.dimensions.actuator_thickness = mm(2.0);
+        assert!(check_package_tact_switch("p", &slide).is_empty());
+        slide.actuation = Some(openparts_core::Actuation::Side);
+        slide.dimensions.actuator_length = mm(3.0);
+        assert_eq!(
+            paths(&check_package_tact_switch("p", &slide)),
+            [
+                "tact_switch.invalid /actuation",
+                "tact_switch.invalid /dimensions/actuator_length"
+            ]
+        );
+        // A trimmer takes none of them.
+        let trim = pkg("trimmer", "actuation: side\n");
+        assert_eq!(
+            paths(&check_package_tact_switch("p", &trim)),
+            ["tact_switch.invalid /actuation"]
+        );
     }
 
     #[test]

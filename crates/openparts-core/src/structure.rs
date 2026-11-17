@@ -92,6 +92,14 @@ impl Package {
                 crate::Actuation::Top => Orientation::Vertical,
                 crate::Actuation::Side => Orientation::RightAngle,
             }),
+            // An encoder's or potentiometer's shaft stands up from the
+            // top or lies parallel to the board.
+            F::RotaryEncoder | F::Potentiometer => {
+                Some(match self.actuation.unwrap_or_default() {
+                    crate::Actuation::Top => Orientation::Vertical,
+                    crate::Actuation::Side => Orientation::RightAngle,
+                })
+            }
             // Connector families: as the source states it.
             _ => connector.and_then(|c| c.orientation),
         };
@@ -178,6 +186,10 @@ mod tests {
         assert_eq!(s.orientation, Some(Orientation::Vertical));
         let s = pkg("family: tact_switch_tht\nlead_count: 4\nactuation: side").structure();
         assert_eq!(s.orientation, Some(Orientation::RightAngle));
+        let s = pkg("family: rotary_encoder\nlead_count: 5\nactuation: side").structure();
+        assert_eq!(s.orientation, Some(Orientation::RightAngle));
+        let s = pkg("family: potentiometer\nlead_count: 3").structure();
+        assert_eq!(s.orientation, Some(Orientation::Vertical));
         let s = pkg("family: usb_c\nlead_count: 16").structure();
         assert_eq!(
             (s.gender, s.orientation),

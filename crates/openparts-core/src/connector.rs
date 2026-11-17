@@ -141,7 +141,21 @@ pub fn is_connector_family(family: F) -> bool {
 /// (`Package::pads`) in a frame centred on the body, but no mating face
 /// and no `connector` facts (Canonical Data Specification section 20.14).
 pub fn is_electromechanical_family(family: F) -> bool {
-    matches!(family, F::Relay | F::Buzzer | F::Trimmer | F::RotaryEncoder)
+    matches!(
+        family,
+        F::Relay
+            | F::Buzzer
+            | F::Trimmer
+            | F::RotaryEncoder
+            | F::Potentiometer
+            | F::SlidePotentiometer
+    )
+}
+
+/// The electromechanical families whose shaft may lie parallel to the
+/// board (`actuation: side`): rotary encoders and shaft potentiometers.
+pub fn is_shaft_family(family: F) -> bool {
+    matches!(family, F::RotaryEncoder | F::Potentiometer)
 }
 
 /// The families drawn as a body over the stated land pattern, the

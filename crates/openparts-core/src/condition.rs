@@ -57,6 +57,11 @@ pub const CONDITION_SYMBOLS: &[ConditionSymbol] = &[
         "total supply voltage V+ - V- (an amplifier's ±15 V is 30 V)",
     ),
     sym("VIN", Quantity::Voltage, "input voltage"),
+    sym(
+        "VCM",
+        Quantity::Voltage,
+        "input common-mode voltage (a current-sense or difference amplifier)",
+    ),
     sym("VOUT", Quantity::Voltage, "output voltage"),
     sym("VR", Quantity::Voltage, "reverse voltage"),
     sym("VF", Quantity::Voltage, "forward voltage"),
