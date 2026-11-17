@@ -2,7 +2,8 @@
 //! family -- card socket frame and shell, barrel-jack housing with its
 //! plug opening, terminal-block housing with a wire entry per pole, FPC
 //! housing with slot and actuator, RF base with its coupling barrel,
-//! micro-USB shell -- plus a foot on every SMD pad and a pin or tab down
+//! micro- and mini-USB shell, USB-B shell around its insulator and plug
+//! mouth -- plus a foot on every SMD pad and a pin or tab down
 //! every plated hole.
 
 use crate::common;
@@ -90,9 +91,18 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                 ("Insulator", looks::ALUMINA),
             ]);
         }
-        F::MicroUsbB => {
+        // Mini-B draws as micro-B does: a flat shell around its tongue.
+        F::MicroUsbB | F::MiniUsbB => {
             s.fragment(fragment!("micro_usb_b"), &vars!(shell_t = mm(shell_t)))?;
             looks_of.extend([("Shell", looks::NICKEL), ("Tongue", looks::MOLD)]);
+        }
+        F::UsbB => {
+            s.fragment(fragment!("usb_b"), &vars!(shell_t = mm(shell_t)))?;
+            looks_of.extend([
+                ("Shell", looks::NICKEL),
+                ("Housing", looks::MOLD),
+                ("Tongue", looks::MOLD),
+            ]);
         }
         _ => return Err(ModelError::MissingDetails(g.family)),
     }
@@ -267,12 +277,17 @@ mod tests {
         assert_eq!(b.len(), 7);
         let b = connector("fpc_connector", "", SMD_PADS, 5);
         assert_eq!(&b[..2], ["Housing", "Actuator"]);
-        let b = connector("micro_usb_b", "", SMD_PADS, 5);
-        assert_eq!(&b[..2], ["Shell", "Tongue"]);
+        for family in ["micro_usb_b", "mini_usb_b"] {
+            let b = connector(family, "", SMD_PADS, 5);
+            assert_eq!(&b[..2], ["Shell", "Tongue"], "{family}");
+        }
         let tht = "pads:\n\
             \x20 - {number: '1', x: 0, y: 2.0, width: 3.0, length: 1.6, drill: 1.0, drill_length: 2.4}\n\
             \x20 - {number: '2', x: 0, y: -2.0, width: 3.0, length: 1.6, drill: 1.0, drill_length: 2.4}\n\
             \x20 - {number: '3', x: 3.0, y: 0.0, width: 1.6, length: 3.0, drill: 1.0, drill_length: 2.4}\n";
+        let b = connector("usb_b", "", tht, 3);
+        assert_eq!(&b[..3], ["Shell", "Housing", "Tongue"]);
+        assert_eq!(b.len(), 6);
         let b = connector("barrel_jack", "", tht, 3);
         assert_eq!(&b[..2], ["Housing", "Pin"]);
         assert_eq!(b.len(), 5);

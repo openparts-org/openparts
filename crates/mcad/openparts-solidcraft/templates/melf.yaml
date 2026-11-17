@@ -1,0 +1,23 @@
+# MELF (MiniMELF / SOD-80, MELF): a cylinder lying on the board along X,
+# a metal end cap at each end, the body between them slightly thinner,
+# a band at the marked end. Vars: melf_len, melf_d, cap_len, band_x,
+# body_x (start of band and body along X).
+- params:
+    melf_len: ["{{melf_len}}", body length end cap to end cap (datasheet)]
+    melf_d: ["{{melf_d}}", end cap diameter (datasheet)]
+    cap_len: ["{{cap_len}}", "end cap length (datasheet, else generator default)"]
+    axis_z: [melf_d / 2, axis height (lying on the board)]
+    glass_d: [melf_d * 0.94, body diameter between the caps]
+    band_w: [(melf_len - 2 * cap_len) * 0.22, marking band width]
+- solid.cylinder:
+    {diameter: melf_d, height: cap_len, axis: X, base: [-(melf_len / 2), 0, axis_z],
+     operation: new, body_name: Cap1, name: Cap1}
+- solid.cylinder:
+    {diameter: melf_d, height: cap_len, axis: X, base: [melf_len / 2 - cap_len, 0, axis_z],
+     operation: new, body_name: Cap2, name: Cap2}
+- solid.cylinder:
+    {diameter: glass_d, height: band_w, axis: X, base: ["{{band_x}}", 0, axis_z],
+     operation: new, body_name: Band, name: Band}
+- solid.cylinder:
+    {diameter: glass_d, height: melf_len - 2 * cap_len - band_w, axis: X, base: ["{{body_x}}", 0, axis_z],
+     operation: new, body_name: Body, name: Body}

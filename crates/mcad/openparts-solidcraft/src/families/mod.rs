@@ -11,6 +11,7 @@ mod electrolytic;
 mod gullwing;
 mod header;
 mod led;
+mod melf;
 mod module;
 mod module_rows;
 mod qfn;
@@ -47,9 +48,12 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         | F::TerminalBlock
         | F::FpcConnector
         | F::RfCoax
-        | F::MicroUsbB => connector::build(&mut s, input)?,
+        | F::MicroUsbB
+        | F::MiniUsbB
+        | F::UsbB => connector::build(&mut s, input)?,
         F::SmdLed => led::build(&mut s, input)?,
         F::SmdElectrolytic => electrolytic::build(&mut s, input)?,
+        F::Melf => melf::build(&mut s, input)?,
         F::Qfn | F::Dfn | F::Son | F::Lga => qfn::build(&mut s, input)?,
         F::Chip => chip::build(&mut s, input)?,
         F::Radial => radial::build(&mut s, input)?,

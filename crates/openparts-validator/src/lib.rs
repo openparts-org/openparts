@@ -146,7 +146,7 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "connector.invalid",
-        meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height` (except `rf_coax`), an SMD pad without a size or a land-less slot without `slot_axis`, no `dimensions.body_length` (except an edge-mount `rf_coax` on a `+y` PCB edge line at 0, whose frame then starts at that line), or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
+        meaning: "a connector-family package (`card_socket`, `barrel_jack`, `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`, `mini_usb_b`, `usb_b`) has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_height` (except `rf_coax`), an SMD pad without a size or a land-less slot without `slot_axis`, no `dimensions.body_length` (except an edge-mount `rf_coax` on a `+y` PCB edge line at 0, whose frame then starts at that line), or lacks a `connector` field its family needs (card socket: `mechanism`, `interface`; FPC: `contact_side`; RF: `interface`, `orientation`); or a `connector` field doesn't fit the family; or an `edge_mount` connector has no `edge` with a `pcb_edge` line",
     },
     Rule {
         id: "pad_shape.invalid",
@@ -163,6 +163,10 @@ pub const RULES: &[Rule] = &[
     Rule {
         id: "smd_electrolytic.invalid",
         meaning: "an `smd_electrolytic` package has no `pads`, a `lead_count` other than its plated pad count (at least two), a pad without a size, no `dimensions.overall_height` or no `dimensions.can_diameter`; or another family states `can_diameter`",
+    },
+    Rule {
+        id: "melf.invalid",
+        meaning: "a `melf` package has a `lead_count` other than 2, no `pads`, other than two plated pads, a pad without a size or with a drill, or no `dimensions.body_length` or `body_width` (the diameter)",
     },
     Rule {
         id: "keepout.invalid",
@@ -396,6 +400,7 @@ pub fn validate_part(
     out.extend(connector::check_pad_sides(&package_entity, package));
     out.extend(connector::check_smd_led(&package_entity, package));
     out.extend(connector::check_smd_electrolytic(&package_entity, package));
+    out.extend(connector::check_melf(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,

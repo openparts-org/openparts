@@ -196,7 +196,7 @@ fn micro_usb_and_fpc_turn_contact_1_upper_left() {
         \x20 - {number: '5', x: -1.3, y: -2.0, width: 0.4, length: 1.35}\n\
         \x20 - {number: S, x: -3.6, y: 0.5, width: 1.8, length: 1.9, drill: 0.7, drill_length: 1.2}\n\
         \x20 - {number: S, x: 3.6, y: 0.5, width: 1.8, length: 1.9, drill: 0.7, drill_length: 1.2}\n";
-    for family in ["micro_usb_b", "fpc_connector"] {
+    for family in ["micro_usb_b", "mini_usb_b", "fpc_connector"] {
         let extra = if family == "fpc_connector" {
             "connector: {contact_side: bottom}\n"
         } else {
@@ -248,6 +248,8 @@ fn zero_orientation_rows_name_the_connector_families() {
         F::FpcConnector,
         F::RfCoax,
         F::MicroUsbB,
+        F::MiniUsbB,
+        F::UsbB,
     ] {
         assert_eq!(zero_orientation_row(f).0, "connector");
     }
@@ -316,4 +318,25 @@ fn an_smd_electrolytic_keeps_the_two_terminal_frame() {
     assert_eq!(m.model3d.rotation, 0.0);
     assert!(aligned(&g, &m));
     assert_eq!(m.frame.zero_orientation.family, "two-terminal");
+}
+
+/// A MiniMELF keeps the two-terminal frame (pad 1 on the left) and its
+/// height is the diameter it lies on the board with.
+#[test]
+fn a_melf_keeps_the_two_terminal_frame() {
+    let p = pkg("family: melf\nlead_count: 2\npitch: {unit: mm}\n\
+         dimensions:\n  body_width: {min: 1.4, max: 1.6, unit: mm}\n  body_length: {min: 3.3, max: 3.7, unit: mm}\n\
+         pads:\n\
+         \x20 - {number: '1', x: -1.875, y: 0, width: 1.25, length: 2.0}\n\
+         \x20 - {number: '2', x: 1.875, y: 0, width: 1.25, length: 2.0}\n");
+    let (g, m) = model(&p);
+    assert!(upper_left(&m));
+    assert_eq!(m.model3d.rotation, 0.0);
+    // The lands are the stated pads, the body centred between them.
+    assert!((pad(&m, "1").position.x + 1.875).abs() < 1e-9);
+    assert!((pad(&m, "2").size.y - 2.0).abs() < 1e-9);
+    assert!(m.body.regions[0].center.x.abs() < 1e-9);
+    assert_eq!(g.body.shape, openparts_mcad::BodyShape::CylinderX);
+    assert_eq!(m.frame.zero_orientation.family, "two-terminal");
+    assert!((m.body.height - 1.5).abs() < 1e-9, "{:?}", m.body.height);
 }

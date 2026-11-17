@@ -1293,7 +1293,9 @@ fn mounting(pkg: &Package) -> Option<Mounting> {
                 | F::TerminalBlock
                 | F::FpcConnector
                 | F::RfCoax
-                | F::MicroUsbB => return None,
+                | F::MicroUsbB
+                | F::MiniUsbB
+                | F::UsbB => return None,
                 _ => smd = true,
             }
         }
@@ -1411,6 +1413,9 @@ fn family_label(f: PackageFamily) -> String {
         F::FpcConnector => "FPC/FFC connector".into(),
         F::RfCoax => "RF coaxial".into(),
         F::MicroUsbB => "Micro-USB B".into(),
+        F::MiniUsbB => "Mini-USB B".into(),
+        F::UsbB => "USB-B".into(),
+        F::Melf => "MELF".into(),
         F::SmdLed => "SMD LED".into(),
         F::SmdElectrolytic => "SMD electrolytic".into(),
         F::SodFlat => "SOD (flat)".into(),

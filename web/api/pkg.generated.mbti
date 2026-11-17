@@ -68,6 +68,37 @@ pub(all) struct ArtifactsResponse {
 }
 pub impl @json.FromJson for ArtifactsResponse
 
+#derive(Eq)
+pub(all) struct AssemblyBody {
+  color : String?
+  height : Double
+  length : Double
+  width : Double
+}
+pub impl @json.FromJson for AssemblyBody
+
+#derive(Eq)
+pub(all) struct AssemblyComponent {
+  body : AssemblyBody?
+  part : String?
+  ref_ : String
+  rotation : Double?
+  side : AssemblySide?
+  stand_in_for : String?
+  x : Double
+  y : Double
+}
+pub impl @json.FromJson for AssemblyComponent
+
+#derive(Eq, @debug.Debug)
+pub(all) enum AssemblySide {
+  Top
+  Bottom
+}
+pub fn AssemblySide::all() -> Array[Self]
+pub fn AssemblySide::wire(Self) -> String
+pub impl @json.FromJson for AssemblySide
+
 #derive(Eq, @debug.Debug)
 pub(all) enum BomFormat {
   KicadCsv
@@ -971,8 +1002,11 @@ pub(all) enum PackageFamily {
   FpcConnector
   RfCoax
   MicroUsbB
+  MiniUsbB
+  UsbB
   SmdLed
   SmdElectrolytic
+  Melf
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String
@@ -1030,6 +1064,7 @@ pub impl @json.FromJson for PackagePadGrid
 #derive(Eq)
 pub(all) struct PackagePadRow {
   count : Int32
+  drill : Double?
   first : Int32
   inset : Double
   pad : Array[Double]
@@ -1186,6 +1221,7 @@ pub impl @json.FromJson for ParameterValue
 
 #derive(Eq)
 pub(all) struct Part {
+  assembly : Array[AssemblyComponent]?
   device : String
   existence : Existence
   id : String

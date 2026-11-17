@@ -2,8 +2,8 @@
 //! a stated land pattern and body, a `connector` record whose fields fit
 //! the family, an edge-mount part with its board edge, and provenance for
 //! the connector facts. Also the land shapes of any stated pad
-//! (section 20.7) and the land patterns of the `smd_led` and
-//! `smd_electrolytic` families.
+//! (section 20.7) and the land patterns of the `smd_led`,
+//! `smd_electrolytic` and `melf` families.
 
 use crate::Diagnostic;
 use openparts_core::{is_connector_family, Package, PackageFamily as F};
@@ -139,6 +139,60 @@ pub(crate) fn check_smd_electrolytic(entity: &str, package: &Package) -> Vec<Dia
         bad(
             "/dimensions/can_diameter",
             "an smd_electrolytic package states can_diameter",
+        );
+    }
+    out
+}
+
+/// `melf.invalid`: a `melf` package states its land pattern (`pads`,
+/// two plated SMD pads with a size) and its body (length and diameter).
+pub(crate) fn check_melf(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    if package.family != F::Melf {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let mut bad = |path: &str, message: &str| {
+        out.push(Diagnostic::error(
+            "melf.invalid",
+            entity,
+            Some(path),
+            message.to_string(),
+        ))
+    };
+    if package.lead_count != 2 {
+        bad("/lead_count", "a melf package has two terminals");
+    }
+    if package.pads.is_empty() {
+        bad("/pads", "a melf package lists its land pattern in pads");
+    } else {
+        let plated: Vec<_> = package.pads.iter().filter(|p| p.plated).collect();
+        if plated.len() != 2 {
+            bad("/pads", "a melf land pattern has two plated pads");
+        }
+        if plated
+            .iter()
+            .any(|p| p.land_unstated() || p.drill.is_some())
+        {
+            bad(
+                "/pads",
+                "every pad of a melf package is an SMD land with a size",
+            );
+        }
+    }
+    let d = &package.dimensions;
+    let unstated = |dim: &openparts_core::Dimension| {
+        dim.typ.is_none() && dim.min.is_none() && dim.max.is_none()
+    };
+    if unstated(&d.body_length) {
+        bad(
+            "/dimensions/body_length",
+            "a melf package states body_length (end cap to end cap)",
+        );
+    }
+    if unstated(&d.body_width) {
+        bad(
+            "/dimensions/body_width",
+            "a melf package states body_width (the diameter)",
         );
     }
     out
@@ -301,6 +355,28 @@ mod tests {
         d.iter()
             .map(|d| format!("{} {}", d.rule_id, d.field_path.clone().unwrap_or_default()))
             .collect()
+    }
+
+    #[test]
+    fn a_melf_states_two_lands_and_its_body() {
+        // Two plated lands and a peg hole: fine.
+        assert!(check_melf("p", &pkg("melf", "")).is_empty());
+        let mut p = pkg("melf", "");
+        p.pads[1].drill = Some(0.5);
+        p.lead_count = 3;
+        p.dimensions.body_width.typ = None;
+        assert_eq!(
+            paths(&check_melf("p", &p)),
+            [
+                "melf.invalid /lead_count",
+                "melf.invalid /pads",
+                "melf.invalid /dimensions/body_width"
+            ]
+        );
+        p.pads.clear();
+        assert!(paths(&check_melf("p", &p)).contains(&"melf.invalid /pads".to_string()));
+        // Other families are not this rule's.
+        assert!(check_melf("p", &pkg("smd_led", "")).is_empty());
     }
 
     #[test]

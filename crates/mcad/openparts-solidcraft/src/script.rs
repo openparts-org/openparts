@@ -206,6 +206,13 @@ pub mod looks {
     pub const DIE: Look = Look::dielectric("#3a3f4a", 0.4);
     /// Green polyamide terminal-block housing.
     pub const TERMINAL_BLOCK: Look = Look::dielectric("#2f7d4a", 0.6);
+    /// Tinted glass of a glass-bodied diode (DO-35, MiniMELF).
+    pub const GLASS: Look = Look {
+        color: "#e07b24",
+        metallic: 0.0,
+        roughness: 0.1,
+        opacity: 0.7,
+    };
     /// Generic grey body for anything without a better guess.
     pub const NEUTRAL: Look = Look::dielectric("#6d7178", 0.6);
 }

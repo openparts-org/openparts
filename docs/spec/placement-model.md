@@ -124,7 +124,7 @@ kept. A test checks every package of the dataset.
 
 | Families | At θ = 0 |
 | --- | --- |
-| `chip`, `sod`, `sod_flat`, `do214`, `axial`, `radial`, `smd_electrolytic` | Body along X; pin 1 (cathode, +, pad 1) on the left. |
+| `chip`, `sod`, `sod_flat`, `do214`, `axial`, `radial`, `smd_electrolytic`, `melf` | Body along X; pin 1 (cathode, +, pad 1) on the left. |
 | `to92`, `to220`, `sip` | Leads in a row along X; pin 1 on the left. |
 | `sot`, `sot223`, `dpak`, `d2pak` | Leads down the left side, pin 1 at the top; the opposite lead or the tab on the right. SOT-23: pins 1 and 2 on the left, 3 on the right. The generator draws SOT leads along the bottom, so SOT packages turn −90°. |
 | `soic`, `tssop`, `ssop`, `msop`, `son`, `dfn`, `dip` | Rows along Y; pin 1 at the top of the left row; numbering counter-clockwise. |
@@ -135,7 +135,7 @@ kept. A test checks every package of the dataset.
 | `right_angle_header` | Pins in a column along Y, pin 1 at the top; the mating side is +X or −X as the source's hole pattern puts it (a side-entry wire-to-board header's housing stands over the column). |
 | `tact_switch_smd`, `tact_switch_tht` | Pad 1 upper left. A vendor numbering that puts it lower right turns 180°. A side-operated switch's actuator (+Y in the family frame, Canonical Data Specification 20.11) turns with it; it is an `actuator` body region inside the courtyard. A top actuator is an `actuator` region too: its plunger sets the height. |
 | `usb_c` | Contact A1 upper left: the opening (mating face) faces −Y. The family's source frame has it facing +Y, so receptacles turn 180°. |
-| `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
+| `card_socket`, `barrel_jack`, `fpc_connector`, `rf_coax`, `micro_usb_b`, `mini_usb_b`, `usb_b` | Contact 1 upper left; the mating face (+Y in the family frame, Canonical Data Specification 20.6) turns with it. Where it ends up depends on the source's numbering: contacts numbered 1… from the left along the rear edge (pin 1 lower left of the land centroid) turn −90°, so the mating face faces +X. |
 | `terminal_block` | Poles in a row along X, pole 1 on the left; the wire entry faces +Y (the family frame already has it so). |
 | `smd_led` | Pad 1 upper left. A source that numbers it lower right (WS2812B-2020: DO is pad 1) turns 180°. |
 

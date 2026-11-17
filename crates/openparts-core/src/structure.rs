@@ -74,7 +74,9 @@ impl Package {
             | F::CardSocket
             | F::BarrelJack
             | F::FpcConnector
-            | F::MicroUsbB => Some(Gender::Female),
+            | F::MicroUsbB
+            | F::MiniUsbB
+            | F::UsbB => Some(Gender::Female),
             _ => None,
         };
         let connector = self.connector.as_ref();

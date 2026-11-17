@@ -6,7 +6,7 @@
 
 use super::wire_d;
 use crate::common::{self, edge_point};
-use crate::script::{looks, mm, Look};
+use crate::script::{looks, mm};
 use crate::template::{fragment, vars};
 use crate::{ModelError, ModelInput, Script};
 use openparts_core::PackageConstruction;
@@ -59,15 +59,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         wires.push(name);
     }
     if glass {
-        s.paint(
-            &["Body".into()],
-            Look {
-                color: "#e07b24",
-                metallic: 0.0,
-                roughness: 0.1,
-                opacity: 0.7,
-            },
-        );
+        s.paint(&["Body".into()], looks::GLASS);
         s.paint(&["Band".into()], looks::MOLD);
     } else {
         s.paint(&["Body".into()], looks::MOLD);

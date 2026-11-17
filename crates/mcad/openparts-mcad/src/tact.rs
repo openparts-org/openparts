@@ -23,9 +23,11 @@
 //!
 //! - SMD: `overall_width` is the toe-to-toe span (X); each pad is the
 //!   foot, `lead_length` in from the toe (else from the housing edge),
-//!   `lead_width` wide. A ground foot runs from the housing edge to its
-//!   tip at `ground_terminal_offset`, `ground_terminal_width` (else
-//!   `lead_width`) wide.
+//!   `lead_width` wide -- else, when the source prints only its land
+//!   pattern (`pads`), as wide as the nearest land across the terminal
+//!   (3D only; the footprint keeps the pads). A ground foot runs from the
+//!   housing edge to its tip at `ground_terminal_offset`,
+//!   `ground_terminal_width` (else `lead_width`, else its land) wide.
 //! - THT: `row_spacing` is the X distance between the pin columns,
 //!   `hole_diameter` the drill, `pad_diameter` the land (else drill +
 //!   2 x 0.4 mm); `standoff` lifts the housing (stand-off bumps). With
@@ -129,8 +131,15 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
         }
         let toe = span / 2.0;
         let foot = value(&d.lead_length).unwrap_or(toe - body_w / 2.0).min(toe);
-        let width =
-            value(&d.lead_width).ok_or(McadError::MissingDimension("dimensions.lead_width"))?;
+        // The terminal's width; a source that prints only its land
+        // pattern gives the land's size across the terminal instead (3D
+        // only: the footprint keeps the pads).
+        let stated_width = value(&d.lead_width);
+        let width_at = |x: f64, y: f64, across_y: bool| {
+            stated_width
+                .or_else(|| nearest_land(package, x, y, across_y))
+                .ok_or(McadError::MissingDimension("dimensions.lead_width"))
+        };
         let t = value(&d.lead_thickness).unwrap_or(crate::defaults::tact::SMD_LEAD_T);
         let foot_lead = |number: String, position: Point3, x: f64, y: f64| Lead {
             number,
@@ -142,7 +151,7 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
             shape: crate::LandShape::Rect,
             side: openparts_core::PadSide::Top,
         };
-        let mut leads: Vec<Lead> = corners
+        let leads: Result<Vec<Lead>, McadError> = corners
             .iter()
             .enumerate()
             .map(|(i, &(sx, y))| {
@@ -151,9 +160,10 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                     y,
                     z: t / 2.0,
                 };
-                foot_lead(number(i), at, foot, width)
+                Ok(foot_lead(number(i), at, foot, width_at(at.x, y, true)?))
             })
             .collect();
+        let mut leads = leads?;
         if let (true, Some(tip)) = (ground, ground_y) {
             if tip <= body_l / 2.0 {
                 return Err(McadError::InconsistentDimensions(format!(
@@ -161,11 +171,14 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
                     body_l / 2.0
                 )));
             }
-            let gw = value(&d.ground_terminal_width).unwrap_or(width);
             let at = Point3 {
                 x: 0.0,
                 y: -(tip + body_l / 2.0) / 2.0,
                 z: t / 2.0,
+            };
+            let gw = match value(&d.ground_terminal_width) {
+                Some(w) => w,
+                None => width_at(at.x, at.y, false)?,
             };
             leads.push(foot_lead(
                 number(corners_n as usize),
@@ -206,6 +219,29 @@ pub fn generate_tact_switch(package: &Package) -> Result<MechanicalGeometry, Mca
     features.side = side_actuator(package, &geometry)?;
     geometry.details = crate::Details::Switch(features);
     Ok(geometry)
+}
+
+/// The size across a terminal of the land nearest to its foot at
+/// (`x`, `y`): the land's Y extent for a corner terminal (`across_y`),
+/// its X extent for the ground terminal. `None` without `pads`.
+fn nearest_land(package: &Package, x: f64, y: f64, across_y: bool) -> Option<f64> {
+    package
+        .pads
+        .iter()
+        .filter(|p| p.plated && !p.land_unstated())
+        .min_by(|a, b| {
+            let d = |p: &&openparts_core::PackagePad| (p.x - x).hypot(p.y - y);
+            d(a).total_cmp(&d(b))
+        })
+        .map(|p| {
+            let (w, l) = p.extent();
+            if across_y {
+                l
+            } else {
+                w
+            }
+        })
+        .filter(|w| *w > 0.0)
 }
 
 /// THT pins standing in the source's PCB holes (`pads`): one per plated
@@ -403,6 +439,36 @@ mod tests {
         assert!((l4.position.x + l4.size.x / 2.0 - 4.5).abs() < 1e-9);
         assert!((l4.size.x - 1.0).abs() < 1e-9 && (l4.size.y - 0.7).abs() < 1e-9);
         assert_eq!(l4.mounting, Mounting::Smd);
+    }
+
+    /// Alps SKRP: the catalog prints the land pattern but no terminal
+    /// width; the feet take the lands' size across them (3D only).
+    #[test]
+    fn smd_feet_without_a_lead_width_take_the_land_across_them() {
+        let p = pkg(
+            "family: tact_switch_smd\npitch: {nominal: 2.15, unit: mm}\ndimensions:\n\
+             \x20 body_width: {nominal: 4.2, unit: mm}\n\
+             \x20 body_length: {nominal: 3.2, unit: mm}\n\
+             \x20 body_height: {nominal: 2.5, unit: mm}\n\
+             \x20 overall_width: {nominal: 4.6, unit: mm}\n\
+             pads:\n\
+             \x20 - {number: '1', x: -2.075, y: 1.075, width: 1.05, length: 0.65}\n\
+             \x20 - {number: '2', x: -2.075, y: -1.075, width: 1.05, length: 0.65}\n\
+             \x20 - {number: '3', x: 2.075, y: -1.075, width: 1.05, length: 0.6}\n\
+             \x20 - {number: '4', x: 2.075, y: 1.075, width: 1.05, length: 0.65}\n",
+        );
+        let g = crate::generate(&p).unwrap();
+        let widths: Vec<f64> = g.leads.iter().map(|l| l.size.y).collect();
+        assert_eq!(widths, [0.65, 0.65, 0.6, 0.65]);
+        // The footprint keeps the stated lands.
+        assert!((g.lands[0].size.x - 1.05).abs() < 1e-9);
+        // Neither a lead width nor lands: nothing to draw the feet from.
+        let mut bare = p.clone();
+        bare.pads.clear();
+        assert!(matches!(
+            crate::generate(&bare),
+            Err(McadError::MissingDimension("dimensions.lead_width"))
+        ));
     }
 
     #[test]

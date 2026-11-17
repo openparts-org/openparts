@@ -1071,7 +1071,7 @@ dimensions:
 ```text
 molded           Transfer mold（樹脂/epoxy）Body。IC、SOD/SMA diode、"molded plastic" DO-41など
 tantalum_molded  固体タンタルコンデンサ素子をMoldしたCase（KEMET T49xなど）
-glass            ガラス封止Body（一次資料がglassと明記するDO-35小信号diodeなど。"DO-35"というCase名だけでは設定しない）
+glass            ガラス封止Body（一次資料がglassと明記するDO-35小信号diode、MiniMELF diodeなど。"DO-35"というCase名だけでは設定しない）
 ceramic          焼成セラミックBody＋端子電極（MLCC、セラミックChip inductor/fuse）
 metal_can        金属Can（水晶振動子、アルミ電解コンデンサ）
 ```
@@ -1209,7 +1209,7 @@ keeps the pad size).
 
 ## 20.6 Connector Families
 
-Six families describe board connectors whose land pattern is too irregular
+Eight families describe board connectors whose land pattern is too irregular
 for a parametric generator. Each takes its footprint from an explicit land
 pattern (`pads`, required), exactly as the source's recommended PCB layout
 draws it: signal contacts, shield and hold-down pads, plated (often slotted)
@@ -1223,8 +1223,10 @@ tabs, and non-plated peg holes (`plated: false`).
 | `fpc_connector` (alias `ffc_connector`) | FPC/FFC connectors | contacts at 0.5/1.0 mm, solder tabs, top or bottom contact |
 | `rf_coax` | RF coaxial connectors (SMA, MCX, MMCX, U.FL) | centre and ground pads or holes; vertical, right angle or edge mount |
 | `micro_usb_b` | Micro-USB B receptacles | five contacts, shell tabs (SMT pads or plated slots), pegs |
+| `mini_usb_b` | Mini-USB B receptacles | five contacts at 0.8 mm, four SMT shell pads, pegs |
+| `usb_b` | USB Type-B receptacles (the square plug), usually through-hole | four contacts in two rows, two plated shell-stake holes |
 
-Frame (all six): top view, X right, Y up, **origin at the centre of the body
+Frame (all eight): top view, X right, Y up, **origin at the centre of the body
 outline** `body_width` (X) × `body_length` (Y); the mating face (card slot,
 plug opening, cable or wire entry, a right-angle RF connector's barrel)
 toward +Y. When the source dimensions the layout from a pin or a datum
@@ -1238,14 +1240,15 @@ What a body is, per family: the card socket's outline (frame and shell), the
 barrel jack's housing, the terminal block's housing, the FPC connector's
 housing including its actuator, the RF connector's base or flange (its
 coupling barrel is drawn beyond it from `mating_diameter`/`mating_length`),
-the micro-USB shell.
+the micro- or mini-USB shell, the USB-B shell (the plug mouth and tongue
+are drawn inside it; their sizes are drawing defaults).
 
 `connector` (optional record, provenance `/connector`) holds what the source
 states about how the part mates:
 
 | Field | Values | Family |
 |---|---|---|
-| `gender` | `male`, `female` | any; families that fix it (card socket, barrel jack, FPC, micro-USB: female) ignore it |
+| `gender` | `male`, `female` | any; families that fix it (card socket, barrel jack, FPC, micro-, mini- and USB-B: female) ignore it |
 | `orientation` | `vertical`, `right_angle` (mating direction to the board; a terminal block's wire entry) | any connector family |
 | `mechanism` | `push_push`, `push_pull`, `hinged` | `card_socket` (required) |
 | `contact_side` | `top`, `bottom`, `dual` (the cable face the contacts touch) | `fpc_connector` (required) |
@@ -1408,7 +1411,7 @@ LED's cathode 1, Everlight its anode), as the 3D model's band does:
 
 | Device `category` | Marked pin (name, any case) | Families | Mark |
 |---|---|---|---|
-| `diode`, `led` (and their subcategories) | `Cathode`, `K` | `chip`, `sod`, `sod_flat`, `do214`, `smd_led`, `axial`, `radial` | band |
+| `diode`, `led` (and their subcategories) | `Cathode`, `K` | `chip`, `sod`, `sod_flat`, `do214`, `smd_led`, `axial`, `radial`, `melf` | band |
 | `capacitor` | `+`, `Anode`, `Positive` | `chip` (tantalum), `axial` | band |
 | `capacitor` | `+`, `Anode`, `Positive` | `smd_electrolytic`, `radial` | plus |
 
@@ -1438,7 +1441,10 @@ source draws it with the terminals left and right. Positions are
 numbered 1 top-left, 2 bottom-left, 3 bottom-right, 4 top-right (two
 terminals: 1 left, 2 right), `pitch` apart along Y; `pad_order` gives the
 source's numbers in that order. SMD feet reach `overall_width` toe to
-toe (`lead_width`, `lead_length`); THT pins stand `row_spacing` apart in
+toe (`lead_width`, `lead_length`); a source that prints only the land
+pattern leaves `lead_width` out, and the 3D model draws each foot as
+wide as its nearest land across the terminal (`pads`; a drawing
+default, never written back -- the footprint keeps the lands); THT pins stand `row_spacing` apart in
 `hole_diameter` holes. `pads`, when the source recommends a land pattern
 or PCB holes, replace the generated lands; in `tact_switch_tht` they
 also place the pins (one per plated hole, each with its `drill`; a hole
@@ -1560,6 +1566,31 @@ and `body`, `stand_in_for` without `part` or empty, a non-positive box size, a `
 an `assembly` of its own), `provenance.missing` (an entry without `src`), and
 the warning `assembly.outside` (a component's pads or body reach past the
 board outline -- expected for an overhanging USB connector).
+
+## 20.13 MELF Parts
+
+`melf` is a two-terminal part with a cylindrical body lying on the board
+along X and a metal end cap at each end: MicroMELF, MiniMELF (SOD-80)
+and MELF diodes and resistors. Frame: top view, origin at the body's
+centre, terminal `1` at -X (a diode's cathode band at the end of the
+pin its Device names `Cathode`, section 20.10).
+
+| Field | The source's |
+|---|---|
+| `body_length` | the length end cap to end cap (along X) |
+| `body_width` | the diameter (the end caps'); the height above the board is the same |
+| `lead_length` | an end cap's length, often a lone max (drawn there) |
+
+The footprint is the source's recommended land pattern (`pads`,
+required, two plated SMD pads); its gap and pad sizes are often printed
+as "min"/"max" limits of a recommendation: record the values as the
+source prints them and write the arithmetic of the centres in the
+locator. The 3D model draws the end caps (`lead_length`, else 12 % of
+the body length), the body between them slightly thinner, and a band
+at the marked end; a body the source states as glass (`construction:
+glass`) is drawn as glass with a dark band. Rule `melf.invalid`: a
+`lead_count` other than 2, no `pads`, other than two plated pads, a pad
+without a size or with a drill, no `body_length` or `body_width`.
 
 ---
 

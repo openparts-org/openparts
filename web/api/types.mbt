@@ -161,6 +161,104 @@ pub impl @json.FromJson for ArtifactsResponse with fn from_json(json, path) {
 }
 
 ///|
+/// A placeholder box for a component without an OpenParts part: its
+/// size from the component's own datasheet (else the design file), in
+/// the component's frame before rotation -- the axes of a package's
+/// `body_width` (X), `body_length` (Y) and `body_height` (Z). Lengths in
+/// mm.
+#derive(Eq)
+pub(all) struct AssemblyBody {
+  color : String?
+  height : Double
+  length : Double
+  width : Double
+}
+
+///|
+pub impl @json.FromJson for AssemblyBody with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a AssemblyBody object"))
+  }
+  {
+    color: opt_field(obj, "color", path),
+    height: field(obj, "height", path),
+    length: field(obj, "length", path),
+    width: field(obj, "width", path),
+  }
+}
+
+///|
+/// One component on a module board: an OpenParts `part` (its own
+/// generated 3D model) or a `body` box, exactly one of the two.
+///
+/// `x`/`y` (mm) place the component's origin -- its Placement Model
+/// origin, the land-pattern centroid -- in the module package's frame
+/// (for `module`: the board centre, +X right, +Y up, top view);
+/// `rotation` (degrees) turns it counter-clockwise seen from the top
+/// from its zero orientation. A `bottom` component is first turned over
+/// about its own Y axis (x -> -x), as a bottom-side part in the
+/// Placement Model (`board = T · R(θ) · M`).
+#derive(Eq)
+pub(all) struct AssemblyComponent {
+  body : AssemblyBody?
+  part : String?
+  ref_ : String
+  rotation : Double?
+  side : AssemblySide?
+  stand_in_for : String?
+  x : Double
+  y : Double
+}
+
+///|
+pub impl @json.FromJson for AssemblyComponent with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a AssemblyComponent object"))
+  }
+  {
+    body: opt_field(obj, "body", path),
+    part: opt_field(obj, "part", path),
+    ref_: field(obj, "ref", path),
+    rotation: opt_field(obj, "rotation", path),
+    side: opt_field(obj, "side", path),
+    stand_in_for: opt_field(obj, "stand_in_for", path),
+    x: field(obj, "x", path),
+    y: field(obj, "y", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum AssemblySide {
+  Top
+  Bottom
+}
+
+///|
+/// The wire (JSON) string.
+pub fn AssemblySide::wire(self : AssemblySide) -> String {
+  match self {
+    Top => "top"
+    Bottom => "bottom"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn AssemblySide::all() -> Array[AssemblySide] {
+  [Top, Bottom]
+}
+
+///|
+pub impl @json.FromJson for AssemblySide with fn from_json(json, path) {
+  match json {
+    String("top") => Top
+    String("bottom") => Bottom
+    _ => raise @json.JsonDecodeError((path, "expected a AssemblySide"))
+  }
+}
+
+///|
 #derive(Eq, Debug)
 pub(all) enum BomFormat {
   KicadCsv
@@ -2735,8 +2833,11 @@ pub(all) enum PackageFamily {
   FpcConnector
   RfCoax
   MicroUsbB
+  MiniUsbB
+  UsbB
   SmdLed
   SmdElectrolytic
+  Melf
 }
 
 ///|
@@ -2781,8 +2882,11 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     FpcConnector => "fpc_connector"
     RfCoax => "rf_coax"
     MicroUsbB => "micro_usb_b"
+    MiniUsbB => "mini_usb_b"
+    UsbB => "usb_b"
     SmdLed => "smd_led"
     SmdElectrolytic => "smd_electrolytic"
+    Melf => "melf"
   }
 }
 
@@ -2828,8 +2932,11 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     FpcConnector,
     RfCoax,
     MicroUsbB,
+    MiniUsbB,
+    UsbB,
     SmdLed,
     SmdElectrolytic,
+    Melf,
   ]
 }
 
@@ -2874,8 +2981,11 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("fpc_connector") => FpcConnector
     String("rf_coax") => RfCoax
     String("micro_usb_b") => MicroUsbB
+    String("mini_usb_b") => MiniUsbB
+    String("usb_b") => UsbB
     String("smd_led") => SmdLed
     String("smd_electrolytic") => SmdElectrolytic
+    String("melf") => Melf
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }
@@ -3025,6 +3135,7 @@ pub impl @json.FromJson for PackagePadGrid with fn from_json(json, path) {
 #derive(Eq)
 pub(all) struct PackagePadRow {
   count : Int32
+  drill : Double?
   first : Int32
   inset : Double
   pad : Array[Double]
@@ -3040,6 +3151,7 @@ pub impl @json.FromJson for PackagePadRow with fn from_json(json, path) {
   }
   {
     count: field(obj, "count", path),
+    drill: opt_field(obj, "drill", path),
     first: field(obj, "first", path),
     inset: field(obj, "inset", path),
     pad: field(obj, "pad", path),
@@ -3497,6 +3609,7 @@ pub impl @json.FromJson for ParameterValue with fn from_json(json, path) {
 /// pinout or Package dimensions — only references them.
 #derive(Eq)
 pub(all) struct Part {
+  assembly : Array[AssemblyComponent]?
   device : String
   existence : Existence
   id : String
@@ -3518,6 +3631,7 @@ pub impl @json.FromJson for Part with fn from_json(json, path) {
     raise @json.JsonDecodeError((path, "expected a Part object"))
   }
   {
+    assembly: opt_field(obj, "assembly", path),
     device: field(obj, "device", path),
     existence: field(obj, "existence", path),
     id: field(obj, "id", path),

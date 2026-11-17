@@ -1,5 +1,6 @@
 //! The connector families (`card_socket`, `barrel_jack`,
-//! `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`), from an
+//! `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`,
+//! `mini_usb_b`, `usb_b`), from an
 //! explicit land pattern: every pad -- signal contacts, shield and hold-down
 //! pads, plated (often slotted) tabs, non-plated peg holes -- is listed in
 //! `Package::pads` as the source's recommended PCB layout gives it.

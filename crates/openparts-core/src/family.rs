@@ -81,6 +81,10 @@ families! {
     RfCoax: "rf_coax",
     /// Micro-USB B receptacles.
     MicroUsbB: "micro_usb_b",
+    /// Mini-USB B receptacles.
+    MiniUsbB: "mini_usb_b",
+    /// Standard USB Type-B receptacles (the square plug).
+    UsbB: "usb_b",
     /// Top-view SMD LEDs with terminals on two opposite sides (5050 and
     /// 3535 PLCC, 2020 chip-scale), addressable RGB LEDs among them; the
     /// footprint is the source's land pattern (`pads`).
@@ -90,6 +94,10 @@ families! {
     /// bent under the plate; the footprint is the source's land pattern
     /// (`pads`).
     SmdElectrolytic: "smd_electrolytic" | "v_chip",
+    /// MELF two-terminal parts (MicroMELF, MiniMELF/SOD-80, MELF): a
+    /// cylindrical body lying along X with a metal end cap at each end;
+    /// the footprint is the source's land pattern (`pads`).
+    Melf: "melf",
 }
 
 impl PackageFamily {

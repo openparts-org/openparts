@@ -376,6 +376,16 @@ pub(crate) mod chip {
     pub const BODY_HEIGHT: f64 = 0.45;
 }
 
+/// `melf` generator defaults (3D only: the footprint is the stated
+/// land pattern).
+pub(crate) mod melf {
+    /// An end cap's length, of the body length, when the source doesn't
+    /// state it (MiniMELF: about 0.4 of 3.5).
+    pub const CAP_RATIO: f64 = 0.12;
+    /// A stated end cap never covers more than this share of the body.
+    pub const MAX_CAP_RATIO: f64 = 0.3;
+}
+
 /// `tact` generator defaults.
 pub(crate) mod tact {
     /// THT pin length below the board (3D only).

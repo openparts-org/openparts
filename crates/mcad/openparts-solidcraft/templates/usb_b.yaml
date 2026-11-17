@@ -1,0 +1,29 @@
+# USB Type-B receptacle: a metal shell open at the +Y face around a
+# black insulator, the square plug mouth cut into the insulator's face
+# and the moulded tongue standing in the mouth. Vars: shell_t.
+- params:
+    shell_t: ["{{shell_t}}", shell sheet thickness]
+    mouth_w: [body_w * 0.62, plug mouth width]
+    mouth_h: [body_h * 0.6, plug mouth height]
+    mouth_l: [body_l * 0.6, plug mouth depth]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Shell, name: Shell}
+- solid.box:
+    {length: body_w - 2 * shell_t, width: body_l, height: body_h - 2 * shell_t,
+     center: [0 mm, shell_t + 0.05 mm, standoff + body_h / 2],
+     operation: new, body_name: Cavity, name: Cavity}
+- solid.combine: {target: Shell, tools: [Cavity], operation: cut, keep_tools: false}
+- solid.box:
+    {length: body_w - 2 * shell_t, width: body_l - shell_t, height: body_h - 2 * shell_t,
+     center: [0 mm, shell_t / 2, standoff + body_h / 2],
+     operation: new, body_name: Housing, name: Housing}
+- solid.box:
+    {length: mouth_w, width: mouth_l + 0.1 mm, height: mouth_h,
+     center: [0 mm, body_l / 2 - mouth_l / 2 + 0.05 mm, standoff + body_h / 2],
+     operation: new, body_name: Mouth, name: Mouth}
+- solid.combine: {target: Housing, tools: [Mouth], operation: cut, keep_tools: false}
+- solid.box:
+    {length: mouth_w * 0.6, width: mouth_l * 0.9, height: mouth_h * 0.35,
+     center: [0 mm, body_l / 2 - mouth_l * 0.55, standoff + body_h / 2],
+     operation: new, body_name: Tongue, name: Tongue}

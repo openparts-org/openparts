@@ -131,6 +131,8 @@ pub fn is_connector_family(family: F) -> bool {
             | F::FpcConnector
             | F::RfCoax
             | F::MicroUsbB
+            | F::MiniUsbB
+            | F::UsbB
     )
 }
 

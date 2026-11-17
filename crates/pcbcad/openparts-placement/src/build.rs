@@ -474,7 +474,9 @@ fn make(
 /// package is a two-terminal family with exactly two plated pad numbers.
 fn polarity(family: F, device: &Device, pads: &[Pad]) -> Option<Polarity> {
     let mark = match family {
-        F::Chip | F::Sod | F::SodFlat | F::Do214 | F::SmdLed | F::Axial => PolarityMark::Band,
+        F::Chip | F::Sod | F::SodFlat | F::Do214 | F::SmdLed | F::Axial | F::Melf => {
+            PolarityMark::Band
+        }
         F::SmdElectrolytic => PolarityMark::Plus,
         F::Radial => match device.polarity_pin()?.1 {
             openparts_core::PolarTerminal::Positive => PolarityMark::Plus,
@@ -951,7 +953,8 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
         | F::Do214
         | F::Axial
         | F::Radial
-        | F::SmdElectrolytic => (
+        | F::SmdElectrolytic
+        | F::Melf => (
             "two-terminal",
             "body along X, pin 1 (cathode, +, pad 1) on the left",
         ),
@@ -983,7 +986,13 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
             "pad 1 upper left; a side actuator (+Y in the source frame) turns with it",
         ),
         F::UsbC => ("USB-C receptacle", "contact A1 upper left: the opening faces −Y"),
-        F::CardSocket | F::BarrelJack | F::FpcConnector | F::RfCoax | F::MicroUsbB => (
+        F::CardSocket
+        | F::BarrelJack
+        | F::FpcConnector
+        | F::RfCoax
+        | F::MicroUsbB
+        | F::MiniUsbB
+        | F::UsbB => (
             "connector",
             "contact 1 upper left; the mating face (+Y in the source frame) turns with it",
         ),

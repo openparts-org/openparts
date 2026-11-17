@@ -17,6 +17,7 @@ mod ipc;
 mod land;
 mod led;
 mod lqfp;
+mod melf;
 mod module;
 mod qfn;
 mod radial;
@@ -80,9 +81,12 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         | F::TerminalBlock
         | F::FpcConnector
         | F::RfCoax
-        | F::MicroUsbB => connector::generate_connector(package),
+        | F::MicroUsbB
+        | F::MiniUsbB
+        | F::UsbB => connector::generate_connector(package),
         F::SmdLed => led::generate_smd_led(package),
         F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
+        F::Melf => melf::generate_melf(package),
     }?;
     renumber(&mut geometry, package)?;
     // `usb_c`, the connector families, THT tact switches and modules

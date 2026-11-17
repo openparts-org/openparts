@@ -426,6 +426,9 @@ const SYNONYMS: &[(&str, &str)] = &[
     ("ffcコネクタ", "fpc_connector"),
     ("同軸コネクタ", "rf_coax"),
     ("マイクロusb", "micro_usb_b"),
+    ("ミニusb", "mini_usb_b"),
+    ("ミニメルフ", "melf"),
+    ("メルフ", "melf"),
     ("アドレサブルled", "single_wire"),
     ("フルカラーled", "rgb"),
     ("チップled", "smd_led"),
@@ -580,6 +583,9 @@ const WORD_SYNONYMS: &[(&str, &str)] = &[
     ("boxheader", "shrouded"),
     ("epad", "exposedpad"),
     ("vchip", "smd_electrolytic"),
+    ("minimelf", "melf"),
+    ("micromelf", "melf"),
+    ("sod80", "melf"),
 ];
 
 /// The query as words, each with its alternative spellings (a word
