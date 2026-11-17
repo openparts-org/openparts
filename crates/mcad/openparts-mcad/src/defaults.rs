@@ -522,6 +522,24 @@ pub(crate) mod connector {
     pub const RF_FLANGE_DEPTH: f64 = 1.5;
 }
 
+/// Electromechanical families' generator defaults (3D only: the
+/// footprint is the stated land pattern).
+pub(crate) mod electromechanical {
+    /// A trimmer's rotor diameter, of the housing's smaller side, when
+    /// no `actuator_diameter` is stated.
+    pub const ROTOR_RATIO: f64 = 0.75;
+    /// A trimmer rotor's height above the housing, without an
+    /// `overall_height`.
+    pub const ROTOR_HEIGHT: f64 = 0.5;
+    /// A rotary encoder's shaft diameter without `actuator_diameter`
+    /// (EC11: 6 mm), never more than half the housing's smaller side.
+    pub const SHAFT_DIAMETER: f64 = 6.0;
+    pub const MAX_SHAFT_RATIO: f64 = 0.5;
+    /// A rotary encoder's bushing + shaft above the housing without an
+    /// `overall_height` (EC11, 20 mm shaft from the board: about 15 mm).
+    pub const SHAFT_LENGTH: f64 = 15.0;
+}
+
 /// `smd_electrolytic` generator defaults (3D only: the footprint is the
 /// stated land pattern). Sources dimension the plate's outline, the can
 /// and the terminals' outline, not the plate's thickness or the size of

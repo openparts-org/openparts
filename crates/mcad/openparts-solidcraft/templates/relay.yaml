@@ -1,0 +1,5 @@
+# PCB relay: a rectangular housing over its pins (the pins and SMD
+# terminals are drawn per pad). No vars.
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}

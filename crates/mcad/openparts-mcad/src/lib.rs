@@ -30,7 +30,7 @@ mod to220;
 mod to92;
 mod usb_c;
 
-pub use connector::{edge_flange, ConnectorFeatures};
+pub use connector::{edge_flange, ConnectorFeatures, ElectromechanicalFeatures};
 pub use electrolytic::ElectrolyticFeatures;
 pub use header::{HeaderFeatures, HeaderKind, HeaderSmt, Shroud};
 pub use land::pad_shape_error;
@@ -83,20 +83,25 @@ pub fn generate(package: &Package) -> Result<MechanicalGeometry, McadError> {
         | F::RfCoax
         | F::MicroUsbB
         | F::MiniUsbB
-        | F::UsbB => connector::generate_connector(package),
+        | F::UsbB
+        | F::Relay
+        | F::Buzzer
+        | F::Trimmer
+        | F::RotaryEncoder => connector::generate_connector(package),
         F::SmdLed => led::generate_smd_led(package),
         F::SmdElectrolytic => electrolytic::generate_smd_electrolytic(package),
         F::Melf => melf::generate_melf(package),
     }?;
     renumber(&mut geometry, package)?;
-    // `usb_c`, the connector families, THT tact switches and modules
+    // `usb_c`, the connector and electromechanical families, THT tact
+    // switches and modules
     // draw their leads from the pads.
     // A module's explicit pads are among its leads already.
     if !package.pads.is_empty()
         && package.family != F::UsbC
         && package.family != F::TactSwitchTht
         && package.family != F::Module
-        && !openparts_core::is_connector_family(package.family)
+        && !openparts_core::is_pad_body_family(package.family)
     {
         geometry.lands = land::from_pads(package)?;
     } else if let Some(lands) = ipc::lands(package, &geometry) {
@@ -329,6 +334,9 @@ pub enum Details {
     UsbC(UsbCFeatures),
     /// The connector families (`connector.rs`).
     Connector(ConnectorFeatures),
+    /// The electromechanical families (`connector.rs`): relay, buzzer,
+    /// trimmer, rotary encoder.
+    Electromechanical(ElectromechanicalFeatures),
     /// `smd_electrolytic`: the can and the base plate.
     Electrolytic(ElectrolyticFeatures),
     /// TO-252/TO-263: lead positions cut short at the body, as (lead

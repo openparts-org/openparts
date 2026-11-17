@@ -357,10 +357,10 @@ milli-, `M` mega-):
 | voltage | V | `uV` `µV` `mV` `V` `kV` |
 | current | A | `fA` `pA` `nA` `uA` `µA` `mA` `A` |
 | power | W | `uW` `µW` `mW` `W` |
-| frequency | Hz | `Hz` `kHz` `MHz` `GHz` |
-| ratio | 1 | `%` `ppm` |
+| frequency | Hz | `Hz` `kHz` `MHz` `GHz`; sample rates `SPS` `kSPS` `MSPS` (= Hz) |
+| ratio | 1 | `%` `ppm` `ppb` |
 | temperature coefficient | 1/K | `ppm/K` `ppm/°C` `%/K` `%/°C` |
-| length | m | `nm` `um` `µm` `mm` `m` |
+| length | m | `nm` `um` `µm` `mm` `cm` `m` |
 | force | N | `mN` `N` `gf` (= 9.80665 mN) |
 | information | bit | `bit` `Kbit` `kbit` `Mbit` `Gbit` (binary: 2^10, 2^20, 2^30, as memory datasheets use them) |
 | luminous intensity | cd | `µcd` `ucd` `mcd` `cd` |
@@ -369,6 +369,14 @@ milli-, `M` mega-):
 | angle | ° (not SI) | `°` `deg` |
 | temperature | °C (not SI) | `°C` |
 | time | s | `ps` `ns` `us` `µs` `ms` `s` |
+| decibel | dB (logarithmic, not converted) | `dB` |
+| level re 1 V | dBV | `dBV` |
+| level re full scale | dBFS | `dBFS` |
+| sound pressure level | dB SPL | `dB` `dBSPL` `dBA` `dB(A)` (A-weighted counts as the same scale) |
+| RF power level | dBm | `dBm` |
+| antenna gain | dBi | `dBi` |
+| illuminance | lx | `mlx` `lx` `klx` |
+| magnetic flux density | T | `nT` `uT` `µT` `mT` `T` `mG` `G` `Gs` (gauss = 100 µT) |
 
 Vocabulary (key: quantity or values; categories it is plausible for):
 
@@ -377,17 +385,17 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `capacitance` | capacitance | capacitor |
 | `tolerance` | ratio, deviation | capacitor, resistor, inductor |
 | `capacitance_tolerance` | capacitance, deviation (absolute, e.g. ±0.25 pF) | capacitor |
-| `rated_voltage` | voltage | capacitor, fuse, resistor |
+| `rated_voltage` | voltage | capacitor, fuse, resistor, `common_mode_choke`, `buzzer` |
 | `dielectric` | `C0G` `NP0` `U2J` `X5R` `X5S` `X6S` `X6T` `X7R` `X7S` `X7T` `X8L` `X8R` `Y5V` `Z5U` | capacitor |
 | `esr` | resistance | capacitor, crystal |
 | `resistance` | resistance | resistor |
 | `power_rating` | power | resistor, diode, LED |
 | `temperature_coefficient` | temperature coefficient, deviation | resistor |
 | `inductance` | inductance | inductor |
-| `rated_current` | current | inductor, fuse |
+| `rated_current` | current | inductor, fuse, `buzzer` (its current draw) |
 | `saturation_current` | current | inductor |
 | `dcr` | resistance | inductor |
-| `frequency` | frequency (nominal) | crystal, oscillator |
+| `frequency` | frequency (nominal; a buzzer's resonant or oscillation frequency) | crystal, oscillator, `buzzer` |
 | `load_capacitance` | capacitance (CL the frequency is specified at) | crystal |
 | `frequency_tolerance` | ratio, deviation (at 25 °C, in `ppm`) | crystal, oscillator |
 | `frequency_stability` | ratio, deviation (over temperature, in `ppm`; the range in `at: { TA: -40..85 °C }`) | crystal, oscillator |
@@ -402,25 +410,25 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `zener_test_current` | current (Izt, the current Vz is specified at) | diode |
 | `color` | `red` `orange` `amber` `yellow` `green` `blue` `white` `infrared` `ultraviolet` `rgb` | LED |
 | `wavelength` | length (dominant wavelength λd) | LED |
-| `peak_wavelength` | length (peak emission wavelength λp; infrared LEDs state only this) | LED |
+| `peak_wavelength` | length (peak emission wavelength λp; infrared LEDs state only this; a light sensor's peak sensitivity) | LED, `light_sensor` |
 | `luminous_intensity` | luminous intensity (Iv; the drive current in `at: { IF: ... }`) | LED |
 | `viewing_angle` | angle (full angle at half intensity, 2θ½, in `°`) | LED |
 | `wavelength_red`, `wavelength_green`, `wavelength_blue` | length (an RGB LED's dominant wavelength per emitter, as `wavelength`) | LED |
 | `luminous_intensity_red`, `luminous_intensity_green`, `luminous_intensity_blue` | luminous intensity (an RGB LED's Iv per emitter) | LED |
-| `data_interface` | `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class) | LED |
+| `data_interface` | `single_wire` (self-clocked serial data in, cascaded out: WS2812-class), `clock_data` (separate clock and data lines: APA102-class), `analog` `pdm` `i2s` `tdm` `i2c` `spi` `i2c_spi` (both) `uart` `usb` `sdio` `pwm` `phase_enable` `step_dir` (the part's primary signal or control interface) | LED, `sensor`, `analog`, `driver`, `audio`, `rf` |
 | `polarity` | `npn` `pnp` `n_channel` `p_channel` | transistor |
 | `drain_source_voltage` | voltage (Vds max) | transistor |
 | `drain_current` | current (Id continuous) | transistor |
-| `rds_on` | resistance | transistor |
+| `rds_on` | resistance (a motor driver's: high side + low side of one bridge leg) | transistor, `motor_driver` |
 | `gate_threshold_voltage` | voltage (Vgs(th)) | transistor |
 | `collector_emitter_voltage` | voltage (Vceo; an optocoupler's: its output transistor) | transistor, optocoupler |
 | `collector_current` | current (Ic; an optocoupler's: its output transistor) | transistor, optocoupler |
-| `isolation_voltage` | voltage (input-output isolation, BVs; the rms/duration condition goes into the locator, or `at: { t: 60 s }`) | optocoupler |
+| `isolation_voltage` | voltage (input-output isolation, BVs; a relay's coil-contact dielectric strength; the rms/duration condition goes into the locator, or `at: { t: 60 s }`) | optocoupler, relay |
 | `current_transfer_ratio` | ratio (CTR = Ic/IF, in `%`; a range, not a deviation) | optocoupler |
 | `output_type` | `fixed` `adjustable` | `power` |
 | `output_voltage` | voltage | `power` |
 | `input_voltage_max` | voltage | `power` |
-| `output_current` | current (max) | `power` |
+| `output_current` | current (max; a driver's per output -- bridge, LED channel -- continuous) | `power`, `driver` |
 | `dropout_voltage` | voltage | `linear_regulator` |
 | `capacity` | information | `memory` |
 | `actuation_force` | force | `switch` |
@@ -429,7 +437,7 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD) | ICs, LED |
 | `operating_temperature` | temperature, operating range (`{ min: -40 °C, max: 85 °C }`, the operating -- not storage -- range) | any |
 | `esd_hbm` | voltage (human-body-model rating that holds for all pins, `typ: 2 kV` for "±2000 V"; a higher bus-pin-only rating is not this key) | ICs, LED |
-| `channel_count` | `1` `2` `3` `4` `6` `8` `16` (identical channels: amplifiers, gates, transceiver channels) | `analog`, `interface`, `logic`, `driver` |
+| `channel_count` | `1` `2` `3` `4` `5` `6` `8` `9` `10` `12` `16` `18` `24` `32` `36` `48` `64` `144` (identical channels: amplifiers, gates, transceiver channels, motor bridges, LED outputs, audio channels) | `analog`, `interface`, `logic`, `driver`, `audio` |
 | `gain_bandwidth` | frequency (GBW / GBP) | `op_amp`, `current_sense_amplifier` |
 | `slew_rate` | slew rate (shown in V/µs) | `op_amp`, `current_sense_amplifier` |
 | `input_offset_voltage` | voltage, a magnitude (VOS "±3 mV max" is `max: 3 mV`) | `op_amp`, `comparator`, `current_sense_amplifier` |
@@ -437,19 +445,66 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `supply_current_per_channel` | current (IQ per amplifier / comparator, as the source states it per channel) | `op_amp`, `comparator` |
 | `rail_to_rail_input`, `rail_to_rail_output` | `yes` `no` (only when the source says so: "rail-to-rail input", a common-mode range to both rails) | `op_amp`, `comparator` |
 | `propagation_delay` | time (tpd / tPLH-tPHL; the supply and load in `at: { VCC: 3.3 V, CL: 15 pF }`, a comparator's overdrive in `VOD`) | `comparator`, `logic`, `interface` |
-| `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface` |
+| `output_structure` | `push_pull` `open_drain` `open_collector` | `comparator`, `logic`, `interface`, `magnetic_sensor` |
 | `logic_function` | `buffer` `inverter` `and` `nand` `or` `nor` `xor` `xnor` `bus_transceiver` `flip_flop` `latch` `shift_register` `counter` `decoder` `multiplexer` | `logic` |
 | `output_current_high`, `output_current_low` | current, a magnitude (IOH "-24 mA" is `24 mA`; IOL; the supply in `at: { VCC: ... }`) | `logic`, `interface` |
 | `data_rate` | data rate (the signalling rate the source guarantees; an addressable LED's serial input) | LED, `interface` |
 | `bus_fault_voltage` | voltage, operating range (the bus pins' fault-protection / abs-max range as printed: `{ min: -58 V, max: 58 V }`) | `interface` |
+| `resolution` | `8` `10` `12` `14` `16` `18` `20` `22` `24` `32` (bits) | `adc`, `dac`, `audio_codec` |
+| `sample_rate` | frequency (max sample/update rate; `SPS` units allowed) | `adc`, `dac`, `audio_codec` |
+| `motor_type` | `brushed_dc` `stepper` `brushed_dc_or_stepper` (dual H-bridges sold for either) `bldc` | `motor_driver` |
+| `motor_supply_voltage` | voltage, operating range (VM, the bridge supply; a separate logic supply is `supply_voltage`) | `motor_driver` |
+| `output_current_peak` | current (peak / short-duration output current per output) | `driver` |
+| `microstepping` | `1` `2` `4` `8` `16` `32` `64` `128` `256` (the finest step, 1/N) | `motor_driver` |
+| `led_driver_type` | `constant_current` (linear current sinks/sources) `switching` (boost/buck LED driver) `matrix` (scanned LED matrix) `pwm` (PWM outputs without current regulation) | `led_driver` |
+| `amplifier_class` | `a` `ab` `d` `g` `h` | `audio_amplifier` |
+| `output_power` | power (per channel; load, supply and distortion in `at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`) | `audio_amplifier` |
+| `thd_n` | ratio (THD+N, in `%`) | `audio_amplifier`, `audio_codec` |
+| `snr` | decibel | `audio` |
+| `sensitivity` | level re 1 V (an analog microphone's, `dBV` at 94 dB SPL / 1 kHz) | `microphone` |
+| `sensitivity_digital` | level re full scale (a digital microphone's, `dBFS`) | `microphone` |
+| `acoustic_overload_point` | sound pressure level (AOP) | `microphone` |
+| `sound_pressure` | sound pressure level (at the printed distance and drive: `at: { d: 10 cm, VIN: 5 V }`) | `buzzer` |
+| `buzzer_type` | `magnetic` `piezo` | `buzzer` |
+| `buzzer_drive` | `internal` (a built-in oscillator: an "active" buzzer that runs on DC) `external` (a transducer driven with the tone) | `buzzer` |
+| `coil_voltage` | voltage (rated coil voltage) | relay |
+| `coil_resistance` | resistance | relay, `buzzer` (magnetic) |
+| `contact_current` | current (max switching current; AC/DC in the locator) | relay |
+| `contact_voltage` | voltage (max switching voltage) | relay |
+| `contact_form` | `1a` (SPST-NO) `1b` (SPST-NC) `1c` (SPDT) `2a` `2b` `2c` (DPDT) `4c` | relay |
+| `relay_type` | `electromechanical` `latching` `reed` `solid_state` | relay |
+| `taper` | `linear` (B) `logarithmic` (A) `reverse_logarithmic` (C) | `potentiometer` |
+| `rotation_angle` | angle (effective rotation; multi-turn: turns × 360°) | `potentiometer`, `rotary_encoder` |
+| `resistive_element` | `carbon` `cermet` `conductive_plastic` `wirewound` `metal_film` | `potentiometer` |
+| `pulses_per_revolution` | `4` `6` `8` `9` `10` `11` `12` `15` `16` `18` `20` `24` `25` `30` `32` `36` `40` `48` `50` `60` `64` `100` `128` `200` `256` `360` `400` `500` `512` `1000` `1024` `2048` | `rotary_encoder` |
+| `detents` | `0` (smooth) `4` `8` `9` `10` `11` `12` `15` `16` `18` `20` `24` `30` `32` `36` | `rotary_encoder` |
+| `push_switch` | `yes` `no` | `rotary_encoder` |
+| `impedance` | resistance (at the printed frequency, `at: { f: 100 MHz }`; a choke's common-mode impedance) | `ferrite_bead`, `common_mode_choke` |
+| `light_sensor_type` | `ambient` `proximity` `ambient_proximity` `color` `uv` `infrared` | `light_sensor` |
+| `illuminance_range` | illuminance, operating range (the measurable range) | `light_sensor` |
+| `target_gas` | `voc` `nox` `co2` `co` `h2` `ch4` `lpg` `alcohol` `nh3` `no2` `o2` `o3` `h2s` `combustible` `multiple` | `gas_sensor` |
+| `sensing_principle` | `metal_oxide` `ndir` `photoacoustic` `electrochemical` `catalytic` `thermal_conductivity` | `gas_sensor` |
+| `concentration_range` | ratio, operating range (shown in `ppm`) | `gas_sensor` |
+| `magnetic_sensor_type` | `unipolar_switch` `omnipolar_switch` `bipolar_latch` `linear` `3d` `angle` | `magnetic_sensor` |
+| `operate_point`, `release_point` | magnetic flux density (BOP / BRP; signed for a latch, shown in `mT`) | `magnetic_sensor` |
+| `magnetic_range` | magnetic flux density, operating range (a linear/3D sensor's full scale: ±40 mT is `{ min: -40 mT, max: 40 mT }`) | `magnetic_sensor` |
+| `radio_protocol` | `wifi` `wifi_ble` `wifi_bluetooth` (Classic + LE) `wifi_ble_802154` `ble` `bluetooth` (Classic + LE) `ble_802154` `ieee802154` (Zigbee/Thread) `lora` `sub_ghz` `cellular` `gnss` `uwb` `nfc` (several radios: the combined value) | `rf` |
+| `frequency_band` | frequency, operating range (2.4-2.4835 GHz) | `rf` |
+| `tx_power` | RF power level (max output, `dBm`) | `rf` |
+| `rx_sensitivity` | RF power level (`dBm`; the data rate in the locator) | `rf` |
+| `antenna_type` | `pcb_trace` `chip` `ceramic_patch` `external_connector` `external_pad` `whip` `flex` (a module's antenna, or an antenna's construction) | `rf` |
+| `peak_gain` | antenna gain (`dBi`) | `antenna` |
 
 A group in the last column covers its subcategories (section 14.1);
 `rated_voltage` and `rated_current` are also plausible for `switch`
 (contact ratings). "ICs" are `microcontroller`, `power`, `memory`,
-`sensor`, `analog`, `interface`, `logic`, `timing` and `driver`.
+`sensor`, `analog`, `interface`, `logic`, `timing`, `driver`, `audio`
+and `rf` (`supply_voltage` also fits an active buzzer's or a module's
+operating range).
 
 An *operating-range* key (`supply_voltage`, `operating_temperature`,
-`bus_fault_voltage`) records the range's ends as `min`/`max`. The
+`bus_fault_voltage`, `motor_supply_voltage`, `illuminance_range`,
+`concentration_range`, `magnetic_range`, `frequency_band`) records the range's ends as `min`/`max`. The
 catalog's range filter asks whether the range contains the asked span
 (`supply_voltage_min=3.3&supply_voltage_max=3.3`: parts that run at
 3.3 V), and an alternative must cover the original's range.
@@ -528,13 +583,15 @@ from the quantity's table in section 11.1):
 
 | Quantity | Symbols |
 |---|---|
-| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) |
+| voltage | `VGS` `VDS` `VCE` `VCC` `VDD` `VS` (total supply V+ - V-: ±15 V is 30 V) `VIN` `VOUT` `VR` `VF` `VOD` (comparator input overdrive) `VM` (motor supply) |
 | current | `ID` `IC` `IB` `IF` `IR` `IZT` `IPP` `IOUT` `IL` |
 | capacitance | `CL` (load capacitance) |
 | resistance | `RL` (load resistance) |
 | temperature (`°C`) | `TA` (ambient) `TJ` (junction) `TC` (case) `TL` (lead) `TS` (solder point) `TT` (terminal) |
 | frequency | `f` |
 | time (`ns` `µs` `ms` `s`) | `t` |
+| ratio (`%`) | `THD` (the distortion an audio amplifier's output power is stated at) |
+| length (`mm` `cm` `m`) | `d` (measuring distance: a buzzer's sound pressure at 10 cm) |
 
 An unknown symbol, a unit that doesn't fit it, or two variants with the
 same conditions are errors (`parameter.condition`). Grow the table like
@@ -665,8 +722,8 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 |---|---|
 | `microcontroller` | |
 | `capacitor` | |
-| `resistor` | |
-| `inductor` | |
+| `resistor` | `potentiometer` (potentiometers and trimmers) |
+| `inductor` | `ferrite_bead`, `common_mode_choke` |
 | `crystal` | (bare resonators; a clock oscillator is `oscillator` under `timing`) |
 | `diode` | |
 | `transistor` | |
@@ -674,15 +731,18 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 | `optocoupler` | |
 | `fuse` | |
 | `connector` | |
-| `switch` | `tact_switch` |
+| `relay` | (electromechanical, reed and solid-state relays) |
+| `switch` | `tact_switch`, `rotary_encoder` |
 | `power` | `linear_regulator`, `switching_regulator`, `battery_charger`, `voltage_reference`, `power_switch` (load switches, power muxes) |
 | `memory` | `flash`, `eeprom`, `sram` |
-| `sensor` | `pressure_sensor`, `imu` (accelerometers, gyroscopes, IMUs), `temperature_sensor` |
+| `sensor` | `pressure_sensor`, `imu` (accelerometers, gyroscopes, IMUs), `temperature_sensor`, `light_sensor` (ambient light, proximity, colour, UV), `gas_sensor` (gas, VOC, CO2), `magnetic_sensor` (Hall switches/latches, linear Hall, magnetometers) |
 | `analog` | `op_amp`, `comparator`, `current_sense_amplifier`, `power_monitor` (current/power monitors with a digital interface), `analog_switch` (analog switches, multiplexers), `adc`, `dac` |
 | `interface` | `io_expander`, `can_controller`, `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter` |
 | `logic` | (gates, buffers, bus transceivers, shift registers, decoders) |
 | `timing` | `oscillator` (clock oscillators: XO, TCXO, VCXO, MEMS -- a resonator with its drive circuit and a clock output), `timer`, `rtc` |
-| `driver` | `gate_driver`, `darlington_array` |
+| `driver` | `gate_driver`, `darlington_array`, `motor_driver` (brushed DC, stepper, BLDC), `led_driver` (constant-current, matrix, PWM and switching LED drivers) |
+| `audio` | `audio_amplifier`, `audio_codec`, `microphone`, `buzzer` (buzzers and sounders) |
+| `rf` | `wireless_module` (a radio with its antenna or antenna connector on a module), `antenna`; a bare RF transceiver IC is `rf` itself |
 | `other` | |
 
 Why a tree in one field rather than `category` + `subcategory`: a
@@ -1591,6 +1651,69 @@ at the marked end; a body the source states as glass (`construction:
 glass`) is drawn as glass with a dark band. Rule `melf.invalid`: a
 `lead_count` other than 2, no `pads`, other than two plated pads, a pad
 without a size or with a drill, no `body_length` or `body_width`.
+
+## 20.14 Electromechanical Parts
+
+`relay`, `buzzer` (alias `sounder`), `trimmer` (alias `trimpot`) and
+`rotary_encoder` draw a body over the source's recommended land pattern,
+like the connector families (section 20.6) but without a mating face or
+`connector` facts. Frame: top view, X right, Y up, the origin on the
+centre of the body outline `body_width` x `body_length` (the drawing's
+top view of the housing; a round buzzer's outline is its diameter both
+ways). `lead_count` is the number of plated pads; non-plated holes
+(locating pegs) don't count. Every pad is listed in `pads` as the source
+draws it: THT pins with their `drill` (a land the source doesn't draw
+gets the connectors' default ring), slotted mounting lugs (`drill_length`
++ `slot_axis`), SMD terminals with their size.
+
+| Field | Meaning |
+|---|---|
+| `body_width`, `body_length` | the housing's outline along X and Y |
+| `body_height` | the housing's height above the board (a relay's, a buzzer's overall height; a trimmer's or an encoder's housing without its rotor, bushing or shaft) |
+| `standoff` | the housing's underside above the board, when the source prints standoffs |
+| `can_diameter` | `buzzer`: a round can of this diameter (absent: a square housing) |
+| `actuator_diameter` | `trimmer`: the rotor's diameter; `rotary_encoder`: the shaft's |
+| `overall_height` | `trimmer`: the rotor top; `rotary_encoder`: the shaft top, above the board |
+| `tail_length` | pins below the board's top surface (3D only) |
+
+The 3D model draws: a relay's housing; a buzzer's can or box with a
+sound hole on top; a trimmer's housing with a slotted rotor on top (its
+diameter 75 % of the housing's smaller side and 0.5 mm high when not
+stated); an encoder's housing with a bushing and a D-flat shaft on top
+(6 mm, at most half the housing's smaller side, rising 15 mm when not
+stated); a pin down every plated hole and a foot on every SMD pad.
+Only top-adjust trimmers and vertical-shaft encoders are drawn as such
+(a side-adjust trimmer's rotor and a right-angle encoder's shaft would
+stand on top). Placement: pad 1 upper left (placement-model.md
+section 3).
+
+Rule `electromechanical.invalid`: no `pads`, a `lead_count` other than
+the plated pad count, no `body_length` or `body_height`, an SMD pad
+without a size or a land-less slot without `slot_axis`, `connector`
+facts, or an `overall_height` below the housing top. `can_diameter` on
+any family but `smd_electrolytic` and `buzzer` is
+`smd_electrolytic.invalid`.
+
+```yaml
+schema_version: "0.2"
+kind: package
+id: manufacturers/example/RELAY-5
+family: relay
+lead_count: { value: 5, src: p2 "PCB layout" }
+source: example/RELAY-DS
+pitch: { typ: 2.54 mm, src: p2 "PCB layout" }
+geometry: { type: parametric, generator: relay }
+dimensions:
+  body_width: { max: 12.5 mm, src: p2 "Dimensions" }
+  body_length: { max: 7.5 mm, src: p2 "Dimensions" }
+  body_height: { max: 10 mm, src: p2 "Dimensions" }
+pads:
+  value:
+    - { number: "1", x: -5.08, y: -2.54, drill: 1.0 }
+    - { number: "2", x: -5.08, y: 2.54, drill: 1.0 }
+    # ...
+  src: p2 "PCB layout"
+```
 
 ---
 

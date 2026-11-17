@@ -994,6 +994,9 @@ pub(all) enum ComponentCategory {
   TactSwitch
   Driver
   DarlingtonArray
+  Audio
+  Rf
+  Relay
   Optocoupler
   PowerSwitch
   Imu
@@ -1002,7 +1005,22 @@ pub(all) enum ComponentCategory {
   LevelShifter
   Logic
   Oscillator
+  RotaryEncoder
   GateDriver
+  MotorDriver
+  LedDriver
+  Potentiometer
+  FerriteBead
+  CommonModeChoke
+  LightSensor
+  GasSensor
+  MagneticSensor
+  AudioAmplifier
+  AudioCodec
+  Microphone
+  Buzzer
+  WirelessModule
+  Antenna
 }
 
 ///|
@@ -1051,6 +1069,9 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     TactSwitch => "tact_switch"
     Driver => "driver"
     DarlingtonArray => "darlington_array"
+    Audio => "audio"
+    Rf => "rf"
+    Relay => "relay"
     Optocoupler => "optocoupler"
     PowerSwitch => "power_switch"
     Imu => "imu"
@@ -1059,7 +1080,22 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     LevelShifter => "level_shifter"
     Logic => "logic"
     Oscillator => "oscillator"
+    RotaryEncoder => "rotary_encoder"
     GateDriver => "gate_driver"
+    MotorDriver => "motor_driver"
+    LedDriver => "led_driver"
+    Potentiometer => "potentiometer"
+    FerriteBead => "ferrite_bead"
+    CommonModeChoke => "common_mode_choke"
+    LightSensor => "light_sensor"
+    GasSensor => "gas_sensor"
+    MagneticSensor => "magnetic_sensor"
+    AudioAmplifier => "audio_amplifier"
+    AudioCodec => "audio_codec"
+    Microphone => "microphone"
+    Buzzer => "buzzer"
+    WirelessModule => "wireless_module"
+    Antenna => "antenna"
   }
 }
 
@@ -1109,6 +1145,9 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     TactSwitch,
     Driver,
     DarlingtonArray,
+    Audio,
+    Rf,
+    Relay,
     Optocoupler,
     PowerSwitch,
     Imu,
@@ -1117,7 +1156,22 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     LevelShifter,
     Logic,
     Oscillator,
+    RotaryEncoder,
     GateDriver,
+    MotorDriver,
+    LedDriver,
+    Potentiometer,
+    FerriteBead,
+    CommonModeChoke,
+    LightSensor,
+    GasSensor,
+    MagneticSensor,
+    AudioAmplifier,
+    AudioCodec,
+    Microphone,
+    Buzzer,
+    WirelessModule,
+    Antenna,
   ]
 }
 
@@ -1166,6 +1220,9 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("tact_switch") => TactSwitch
     String("driver") => Driver
     String("darlington_array") => DarlingtonArray
+    String("audio") => Audio
+    String("rf") => Rf
+    String("relay") => Relay
     String("optocoupler") => Optocoupler
     String("power_switch") => PowerSwitch
     String("imu") => Imu
@@ -1174,7 +1231,22 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("level_shifter") => LevelShifter
     String("logic") => Logic
     String("oscillator") => Oscillator
+    String("rotary_encoder") => RotaryEncoder
     String("gate_driver") => GateDriver
+    String("motor_driver") => MotorDriver
+    String("led_driver") => LedDriver
+    String("potentiometer") => Potentiometer
+    String("ferrite_bead") => FerriteBead
+    String("common_mode_choke") => CommonModeChoke
+    String("light_sensor") => LightSensor
+    String("gas_sensor") => GasSensor
+    String("magnetic_sensor") => MagneticSensor
+    String("audio_amplifier") => AudioAmplifier
+    String("audio_codec") => AudioCodec
+    String("microphone") => Microphone
+    String("buzzer") => Buzzer
+    String("wireless_module") => WirelessModule
+    String("antenna") => Antenna
     _ => raise @json.JsonDecodeError((path, "expected a ComponentCategory"))
   }
 }
@@ -2838,6 +2910,10 @@ pub(all) enum PackageFamily {
   SmdLed
   SmdElectrolytic
   Melf
+  Relay
+  Buzzer
+  Trimmer
+  RotaryEncoder
 }
 
 ///|
@@ -2887,6 +2963,10 @@ pub fn PackageFamily::wire(self : PackageFamily) -> String {
     SmdLed => "smd_led"
     SmdElectrolytic => "smd_electrolytic"
     Melf => "melf"
+    Relay => "relay"
+    Buzzer => "buzzer"
+    Trimmer => "trimmer"
+    RotaryEncoder => "rotary_encoder"
   }
 }
 
@@ -2937,6 +3017,10 @@ pub fn PackageFamily::all() -> Array[PackageFamily] {
     SmdLed,
     SmdElectrolytic,
     Melf,
+    Relay,
+    Buzzer,
+    Trimmer,
+    RotaryEncoder,
   ]
 }
 
@@ -2986,6 +3070,10 @@ pub impl @json.FromJson for PackageFamily with fn from_json(json, path) {
     String("smd_led") => SmdLed
     String("smd_electrolytic") => SmdElectrolytic
     String("melf") => Melf
+    String("relay") => Relay
+    String("buzzer") => Buzzer
+    String("trimmer") => Trimmer
+    String("rotary_encoder") => RotaryEncoder
     _ => raise @json.JsonDecodeError((path, "expected a PackageFamily"))
   }
 }

@@ -413,6 +413,9 @@ pub(all) enum ComponentCategory {
   TactSwitch
   Driver
   DarlingtonArray
+  Audio
+  Rf
+  Relay
   Optocoupler
   PowerSwitch
   Imu
@@ -421,7 +424,22 @@ pub(all) enum ComponentCategory {
   LevelShifter
   Logic
   Oscillator
+  RotaryEncoder
   GateDriver
+  MotorDriver
+  LedDriver
+  Potentiometer
+  FerriteBead
+  CommonModeChoke
+  LightSensor
+  GasSensor
+  MagneticSensor
+  AudioAmplifier
+  AudioCodec
+  Microphone
+  Buzzer
+  WirelessModule
+  Antenna
 }
 pub fn ComponentCategory::all() -> Array[Self]
 pub fn ComponentCategory::wire(Self) -> String
@@ -1007,6 +1025,10 @@ pub(all) enum PackageFamily {
   SmdLed
   SmdElectrolytic
   Melf
+  Relay
+  Buzzer
+  Trimmer
+  RotaryEncoder
 }
 pub fn PackageFamily::all() -> Array[Self]
 pub fn PackageFamily::wire(Self) -> String

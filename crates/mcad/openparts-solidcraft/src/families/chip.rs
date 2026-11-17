@@ -41,6 +41,8 @@ fn style(input: &ModelInput<'_>) -> Style {
         Some(ComponentCategory::Capacitor) => Style::Ceramic(looks::CERAMIC_TAN),
         Some(ComponentCategory::Inductor) if b.x.min(b.y) >= 3.0 => Style::PowerInductor,
         Some(ComponentCategory::Inductor) => Style::Ceramic(looks::CHIP_INDUCTOR),
+        // Ferrite beads look like chip inductors (grey ferrite).
+        Some(ComponentCategory::FerriteBead) => Style::Ceramic(looks::CHIP_INDUCTOR),
         Some(ComponentCategory::Fuse) => Style::Ceramic(looks::FUSE_BODY),
         Some(ComponentCategory::Led) => Style::Led,
         Some(ComponentCategory::Crystal) => Style::Crystal,

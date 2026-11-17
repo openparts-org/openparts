@@ -162,11 +162,15 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: "smd_electrolytic.invalid",
-        meaning: "an `smd_electrolytic` package has no `pads`, a `lead_count` other than its plated pad count (at least two), a pad without a size, no `dimensions.overall_height` or no `dimensions.can_diameter`; or another family states `can_diameter`",
+        meaning: "an `smd_electrolytic` package has no `pads`, a `lead_count` other than its plated pad count (at least two), a pad without a size, no `dimensions.overall_height` or no `dimensions.can_diameter`; or another family than `buzzer` states `can_diameter`",
     },
     Rule {
         id: "melf.invalid",
         meaning: "a `melf` package has a `lead_count` other than 2, no `pads`, other than two plated pads, a pad without a size or with a drill, or no `dimensions.body_length` or `body_width` (the diameter)",
+    },
+    Rule {
+        id: "electromechanical.invalid",
+        meaning: "a `relay`, `buzzer`, `trimmer` or `rotary_encoder` package has no `pads`, a `lead_count` other than its plated pad count, no `dimensions.body_length` or `body_height`, an SMD pad without a size or a land-less slot without `slot_axis`, `connector` facts, or an `overall_height` (rotor or shaft top) below the housing top",
     },
     Rule {
         id: "keepout.invalid",
@@ -401,6 +405,7 @@ pub fn validate_part(
     out.extend(connector::check_smd_led(&package_entity, package));
     out.extend(connector::check_smd_electrolytic(&package_entity, package));
     out.extend(connector::check_melf(&package_entity, package));
+    out.extend(connector::check_electromechanical(&package_entity, package));
     out.extend(cross::check_pins_and_pads(&device_entity, device, package));
     out.extend(cross::check_provenance_paths(
         &part_entity,
@@ -1352,6 +1357,143 @@ mod tests {
                 })
                 .collect()
         };
+        // The categories added for motor/LED drivers, audio, sensors,
+        // electromechanical parts, EMI parts and RF.
+        let cases: &[(C, &[(&str, ParameterValue)])] = &[
+            (
+                C::MotorDriver,
+                &[
+                    ("motor_type", word("brushed_dc_or_stepper")),
+                    ("motor_supply_voltage", num(10.8, "V")),
+                    ("output_current", num(1.5, "A")),
+                    ("output_current_peak", num(2.0, "A")),
+                    ("microstepping", word("16")),
+                    ("channel_count", word("2")),
+                    ("rds_on", num(360.0, "mΩ")),
+                    ("data_interface", word("step_dir")),
+                ],
+            ),
+            (
+                C::LedDriver,
+                &[
+                    ("led_driver_type", word("constant_current")),
+                    ("channel_count", word("24")),
+                    ("output_current", num(30.0, "mA")),
+                ],
+            ),
+            (
+                C::AudioAmplifier,
+                &[
+                    ("amplifier_class", word("d")),
+                    ("output_power", num(2.5, "W")),
+                    ("thd_n", num(10.0, "%")),
+                    ("supply_voltage", num(5.0, "V")),
+                    ("snr", num(90.0, "dB")),
+                ],
+            ),
+            (
+                C::Microphone,
+                &[
+                    ("sensitivity_digital", num(-26.0, "dBFS")),
+                    ("acoustic_overload_point", num(120.0, "dBSPL")),
+                    ("data_interface", word("pdm")),
+                ],
+            ),
+            (
+                C::Buzzer,
+                &[
+                    ("buzzer_type", word("magnetic")),
+                    ("buzzer_drive", word("internal")),
+                    ("rated_voltage", num(5.0, "V")),
+                    ("frequency", num(2.3, "kHz")),
+                    ("sound_pressure", num(85.0, "dB")),
+                    ("coil_resistance", num(42.0, "Ω")),
+                ],
+            ),
+            (
+                C::Relay,
+                &[
+                    ("coil_voltage", num(5.0, "V")),
+                    ("contact_form", word("1c")),
+                    ("contact_current", num(10.0, "A")),
+                    ("isolation_voltage", num(4000.0, "V")),
+                ],
+            ),
+            (
+                C::Potentiometer,
+                &[
+                    ("resistance", num(10.0, "kΩ")),
+                    ("taper", word("linear")),
+                    ("rotation_angle", num(240.0, "°")),
+                ],
+            ),
+            (
+                C::RotaryEncoder,
+                &[
+                    ("pulses_per_revolution", word("20")),
+                    ("detents", word("20")),
+                    ("push_switch", word("yes")),
+                ],
+            ),
+            (
+                C::FerriteBead,
+                &[
+                    ("impedance", num(600.0, "Ω")),
+                    ("rated_current", num(500.0, "mA")),
+                    ("dcr", num(0.15, "Ω")),
+                ],
+            ),
+            (
+                C::LightSensor,
+                &[
+                    ("light_sensor_type", word("ambient")),
+                    ("illuminance_range", num(83.0, "klx")),
+                    ("data_interface", word("i2c")),
+                ],
+            ),
+            (
+                C::GasSensor,
+                &[
+                    ("target_gas", word("co2")),
+                    ("concentration_range", num(5000.0, "ppm")),
+                ],
+            ),
+            (
+                C::MagneticSensor,
+                &[
+                    ("magnetic_sensor_type", word("omnipolar_switch")),
+                    ("operate_point", num(3.0, "mT")),
+                    ("output_structure", word("push_pull")),
+                ],
+            ),
+            (
+                C::WirelessModule,
+                &[
+                    ("radio_protocol", word("wifi_ble")),
+                    ("tx_power", num(20.0, "dBm")),
+                    ("antenna_type", word("pcb_trace")),
+                    ("supply_voltage", num(3.3, "V")),
+                ],
+            ),
+            (
+                C::Antenna,
+                &[
+                    ("frequency_band", num(2.45, "GHz")),
+                    ("peak_gain", num(1.5, "dBi")),
+                ],
+            ),
+        ];
+        for (category, keys) in cases {
+            assert!(run(*category, keys).is_empty(), "{category:?}");
+        }
+        // A light sensor has no TX power.
+        assert_eq!(
+            run(C::LightSensor, &[("tx_power", num(0.0, "dBm"))]),
+            [(
+                "parameter.implausible".to_string(),
+                "/parameters/tx_power".to_string()
+            )]
+        );
         let osc = [
             ("frequency", num(25.0, "MHz")),
             ("frequency_stability", num(50.0, "ppm")),

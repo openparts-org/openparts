@@ -340,3 +340,28 @@ fn a_melf_keeps_the_two_terminal_frame() {
     assert_eq!(m.frame.zero_orientation.family, "two-terminal");
     assert!((m.body.height - 1.5).abs() < 1e-9, "{:?}", m.body.height);
 }
+
+/// The electromechanical families (20.14) place like the connectors:
+/// their stated pads, pin 1 upper left, the 3D body over the lands, the
+/// pins' tails below the board.
+#[test]
+fn electromechanical_families_place_their_pads_and_body() {
+    for family in ["relay", "buzzer", "trimmer", "rotary_encoder"] {
+        let p = pkg(&format!(
+            "family: {family}\nlead_count: 3\npitch: {{unit: mm}}\n\
+             dimensions:\n\
+             \x20 body_width: {{typ: 9.5, unit: mm}}\n\
+             \x20 body_length: {{typ: 9.5, unit: mm}}\n\
+             \x20 body_height: {{typ: 4.8, unit: mm}}\n\
+             pads:\n\
+             \x20 - {{number: '1', x: -2.5, y: 2.5, width: 1.6, length: 1.6, drill: 0.9}}\n\
+             \x20 - {{number: '2', x: 0, y: -2.5, width: 1.6, length: 1.6, drill: 0.9}}\n\
+             \x20 - {{number: '3', x: 2.5, y: 2.5, width: 1.6, length: 1.6, drill: 0.9}}\n"
+        ));
+        let (g, m) = model(&p);
+        assert_eq!(m.pads.len(), 3, "{family}");
+        assert!(upper_left(&m), "{family}");
+        assert!(aligned(&g, &m), "{family}");
+        assert_eq!(zero_orientation_row(p.family).0, "electromechanical");
+    }
+}

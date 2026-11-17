@@ -213,6 +213,8 @@ pub mod looks {
         roughness: 0.1,
         opacity: 0.7,
     };
+    /// Blue moulded housing of a trimmer potentiometer.
+    pub const TRIMMER: Look = Look::dielectric("#2f5fa8", 0.6);
     /// Generic grey body for anything without a better guess.
     pub const NEUTRAL: Look = Look::dielectric("#6d7178", 0.6);
 }

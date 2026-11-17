@@ -108,12 +108,12 @@ Canonical Data Specification section 11.1):
 
 | Rule | Keys | Pass when |
 | --- | --- | --- |
-| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, clock_output, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength, peak_wavelength, wavelength_red/_green/_blue (2 %), capacity, color, data_interface, polarity, output_type, channel_count, output_structure, logic_function | the same value (relative tolerance 1e-6 unless stated) |
-| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current, drive_level, esd_hbm, gain_bandwidth, slew_rate, output_current_high, output_current_low, data_rate | candidate >= original |
-| `at_most` | tolerance, capacitance_tolerance, esr, dcr, temperature_coefficient, frequency_tolerance, frequency_stability, aging, forward_voltage, rds_on, dropout_voltage, supply_current, input_offset_voltage, input_bias_current, supply_current_per_channel, propagation_delay | candidate <= original |
-| `ranked` | dielectric: C0G = NP0 > U2J > X8R > X8L > X7R > X7S > X7T > X6S > X6T > X5R > X5S > Y5V = Z5U; rail_to_rail_input, rail_to_rail_output: yes > no | candidate's grade >= original's |
-| `covers` | supply_voltage, operating_temperature, bus_fault_voltage (the operating-range keys, `span` in the vocabulary) | the candidate's range contains the original's: its `min` <= the original's `min` and its `max` >= the original's `max`, for each limit the original states |
-| `informational` | gate_threshold_voltage, zener_test_current, luminous_intensity (and its _red/_green/_blue keys), viewing_angle, shunt_capacitance, actuation_force, travel | shown, not judged |
+| `equal` | capacitance, resistance, inductance, frequency, load_capacitance, clock_output, output_voltage (0.5 %), zener_voltage (0.5 %), wavelength, peak_wavelength, wavelength_red/_green/_blue (2 %), capacity, color, data_interface, polarity, output_type, channel_count, output_structure, logic_function, motor_type, led_driver_type, buzzer_type, buzzer_drive, coil_voltage (0.5 %), contact_form, relay_type, taper, pulses_per_revolution, detents, push_switch, impedance (0.5 %), light_sensor_type, target_gas, magnetic_sensor_type, radio_protocol | the same value (relative tolerance 1e-6 unless stated) |
+| `at_least` | rated_voltage, rated_current, saturation_current, power_rating, reverse_voltage, forward_current, drain_source_voltage, drain_current, collector_emitter_voltage, collector_current, isolation_voltage, current_transfer_ratio, input_voltage_max, output_current, drive_level, esd_hbm, gain_bandwidth, slew_rate, output_current_high, output_current_low, data_rate, sample_rate, output_current_peak, output_power, snr, acoustic_overload_point, sound_pressure, contact_current, contact_voltage, tx_power | candidate >= original |
+| `at_most` | tolerance, capacitance_tolerance, esr, dcr, temperature_coefficient, frequency_tolerance, frequency_stability, aging, forward_voltage, rds_on, dropout_voltage, supply_current, input_offset_voltage, input_bias_current, supply_current_per_channel, propagation_delay, thd_n, rx_sensitivity | candidate <= original |
+| `ranked` | dielectric: C0G = NP0 > U2J > X8R > X8L > X7R > X7S > X7T > X6S > X6T > X5R > X5S > Y5V = Z5U; rail_to_rail_input, rail_to_rail_output: yes > no; resolution: more bits; microstepping: finer steps | candidate's grade >= original's |
+| `covers` | supply_voltage, operating_temperature, bus_fault_voltage, motor_supply_voltage, illuminance_range, concentration_range, magnetic_range, frequency_band (the operating-range keys, `span` in the vocabulary) | the candidate's range contains the original's: its `min` <= the original's `min` and its `max` >= the original's `max`, for each limit the original states |
+| `informational` | gate_threshold_voltage, zener_test_current, luminous_intensity (and its _red/_green/_blue keys), viewing_angle, shunt_capacitance, actuation_force, travel, amplifier_class, sensitivity, sensitivity_digital, coil_resistance, rotation_angle, resistive_element, sensing_principle, operate_point, release_point, antenna_type, peak_gain | shown, not judged |
 
 - A rating compares its guaranteed limit when both parts state one
   (an `at_least` key's `min`, an `at_most` key's `max`), else the stated
@@ -127,12 +127,18 @@ Canonical Data Specification section 11.1):
 - Identity keys (`identity: true`): capacitance, resistance,
   inductance, frequency, clock_output, zener_voltage, color,
   data_interface, polarity, output_type, output_voltage, capacity,
-  channel_count, logic_function. One that differs makes the candidate a
+  channel_count, logic_function, motor_type, led_driver_type,
+  buzzer_type, buzzer_drive, coil_voltage, contact_form, taper,
+  pulses_per_revolution, impedance, light_sensor_type, target_gas,
+  magnetic_sensor_type, radio_protocol. One that differs makes the candidate a
   different part (a quad op-amp is not a dual one). The category's
   required identity keys (a capacitor's capacitance, a resistor's
   resistance, an inductor's inductance, a crystal's or an oscillator's
   frequency, an LED's colour, a transistor's polarity, a memory's
-  capacity, a linear regulator's output voltage) must be stated by the
+  capacity, a linear regulator's output voltage, a potentiometer's
+  resistance, a ferrite bead's impedance, a motor driver's motor type,
+  a relay's coil voltage and contact form, an encoder's pulses per
+  revolution, a wireless module's radio protocol) must be stated by the
   original too: when it isn't, nothing is `meets`.
 
 The verdict: `meets` (every check passes or is better), `unverified`

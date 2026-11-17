@@ -287,7 +287,14 @@ pub fn reference_prefix(category: openparts_core::ComponentCategory) -> &'static
         C::Oscillator => "X",
         C::Fuse => "F",
         C::Connector => "J",
-        C::Switch | C::TactSwitch => "SW",
+        C::Switch | C::TactSwitch | C::RotaryEncoder => "SW",
+        C::Potentiometer => "RV",
+        C::FerriteBead => "FB",
+        C::CommonModeChoke => "FL",
+        C::Relay => "K",
+        C::Buzzer => "BZ",
+        C::Microphone => "MK",
+        C::Antenna => "AE",
         // Integrated circuits, modules, optocouplers.
         _ => "U",
     }

@@ -368,6 +368,24 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Driver => "ドライバIC"
         GateDriver => "ゲートドライバ"
         DarlingtonArray => "ダーリントンアレイ"
+        MotorDriver => "モータードライバ"
+        LedDriver => "LEDドライバ"
+        Relay => "リレー"
+        RotaryEncoder => "ロータリーエンコーダ"
+        Potentiometer => "可変抵抗・半固定抵抗"
+        FerriteBead => "フェライトビーズ"
+        CommonModeChoke => "コモンモードチョーク"
+        LightSensor => "照度・近接センサ"
+        GasSensor => "ガスセンサ"
+        MagneticSensor => "磁気センサ (ホール)"
+        Audio => "オーディオ"
+        AudioAmplifier => "オーディオアンプ"
+        AudioCodec => "オーディオコーデック"
+        Microphone => "マイクロホン"
+        Buzzer => "ブザー"
+        Rf => "RF・無線"
+        WirelessModule => "無線モジュール"
+        Antenna => "アンテナ"
       }
     En =>
       match c {
@@ -422,6 +440,24 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
         Driver => "Driver ICs"
         GateDriver => "Gate driver"
         DarlingtonArray => "Darlington array"
+        MotorDriver => "Motor driver"
+        LedDriver => "LED driver"
+        Relay => "Relay"
+        RotaryEncoder => "Rotary encoder"
+        Potentiometer => "Potentiometer / trimmer"
+        FerriteBead => "Ferrite bead"
+        CommonModeChoke => "Common-mode choke"
+        LightSensor => "Light / proximity sensor"
+        GasSensor => "Gas sensor"
+        MagneticSensor => "Magnetic (Hall) sensor"
+        Audio => "Audio"
+        AudioAmplifier => "Audio amplifier"
+        AudioCodec => "Audio codec"
+        Microphone => "Microphone"
+        Buzzer => "Buzzer"
+        Rf => "RF / wireless"
+        WirelessModule => "Wireless module"
+        Antenna => "Antenna"
       }
   }
 }
@@ -681,6 +717,10 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (Ja, "usb_b") => "USB Type-B"
     (Ja, "smd_led") => "表面実装LED"
     (Ja, "smd_electrolytic") => "チップ形アルミ電解"
+    (Ja, "relay") => "リレー"
+    (Ja, "buzzer") => "ブザー"
+    (Ja, "trimmer") => "半固定抵抗 (トリマ)"
+    (Ja, "rotary_encoder") => "ロータリーエンコーダ"
     (En, "chip") => "Chip"
     (En, "radial") => "Radial lead"
     (En, "axial") => "Axial lead"
@@ -702,6 +742,10 @@ fn family_label(lang : Lang, value : String, fallback : String) -> String {
     (En, "usb_b") => "USB Type-B"
     (En, "smd_led") => "SMD LED"
     (En, "smd_electrolytic") => "SMD electrolytic"
+    (En, "relay") => "Relay"
+    (En, "buzzer") => "Buzzer"
+    (En, "trimmer") => "Trimmer"
+    (En, "rotary_encoder") => "Rotary encoder"
     (_, "usb_c") => "USB Type-C"
     (_, "melf") => "MELF"
     (_, "sot223") => "SOT-223"
@@ -940,6 +984,57 @@ let param_names : Array[(String, String, String)] = [
   ),
   ("data_rate", "データレート", "Data rate"),
   ("bus_fault_voltage", "バス耐故障電圧", "Bus fault protection"),
+  ("resolution", "分解能 (bit)", "Resolution (bits)"),
+  ("sample_rate", "サンプリングレート", "Sample rate"),
+  ("motor_type", "対応モーター", "Motor type"),
+  (
+    "motor_supply_voltage", "モーター電源電圧 (VM)", "Motor supply voltage (VM)",
+  ),
+  ("output_current_peak", "ピーク出力電流", "Peak output current"),
+  (
+    "microstepping", "マイクロステップ (最小 1/N)", "Microstepping (finest 1/N)",
+  ),
+  ("led_driver_type", "駆動方式", "Driver type"),
+  ("amplifier_class", "アンプ級", "Amplifier class"),
+  ("output_power", "出力電力", "Output power"),
+  ("thd_n", "全高調波歪み+雑音 (THD+N)", "THD+N"),
+  ("snr", "S/N比", "Signal-to-noise ratio"),
+  ("sensitivity", "感度 (dBV)", "Sensitivity (dBV)"),
+  ("sensitivity_digital", "感度 (dBFS)", "Sensitivity (dBFS)"),
+  (
+    "acoustic_overload_point", "音響過負荷点 (AOP)", "Acoustic overload point (AOP)",
+  ),
+  ("sound_pressure", "音圧", "Sound pressure"),
+  ("buzzer_type", "発音方式", "Buzzer type"),
+  ("buzzer_drive", "駆動回路", "Drive"),
+  ("coil_voltage", "コイル定格電圧", "Coil voltage"),
+  ("coil_resistance", "コイル抵抗", "Coil resistance"),
+  ("contact_current", "接点電流", "Contact current"),
+  ("contact_voltage", "接点電圧", "Contact voltage"),
+  ("contact_form", "接点構成", "Contact form"),
+  ("relay_type", "リレー種別", "Relay type"),
+  ("taper", "抵抗変化特性 (カーブ)", "Taper"),
+  ("rotation_angle", "回転角度", "Rotation angle"),
+  ("resistive_element", "抵抗体", "Resistive element"),
+  ("pulses_per_revolution", "パルス数 (1回転)", "Pulses per revolution"),
+  ("detents", "クリック数", "Detents"),
+  ("push_switch", "プッシュスイッチ", "Push switch"),
+  ("impedance", "インピーダンス", "Impedance"),
+  ("light_sensor_type", "検出対象", "Sensing"),
+  ("illuminance_range", "照度範囲", "Illuminance range"),
+  ("target_gas", "検出ガス", "Target gas"),
+  ("sensing_principle", "検出方式", "Sensing principle"),
+  ("concentration_range", "濃度範囲", "Concentration range"),
+  ("magnetic_sensor_type", "センサ種別", "Sensor type"),
+  ("operate_point", "動作磁束密度 (BOP)", "Operate point (BOP)"),
+  ("release_point", "復帰磁束密度 (BRP)", "Release point (BRP)"),
+  ("magnetic_range", "磁束密度範囲", "Magnetic range"),
+  ("radio_protocol", "無線規格", "Radio protocol"),
+  ("frequency_band", "周波数帯", "Frequency band"),
+  ("tx_power", "送信出力", "TX power"),
+  ("rx_sensitivity", "受信感度", "RX sensitivity"),
+  ("antenna_type", "アンテナ", "Antenna"),
+  ("peak_gain", "ピーク利得", "Peak gain"),
 ]
 
 ///|
@@ -1023,6 +1118,167 @@ fn param_value_label(lang : Lang, key : String, value : String) -> String {
     (En, "logic_function", "bus_transceiver") => "Bus transceiver"
     (En, "logic_function", "flip_flop") => "Flip-flop"
     (En, "logic_function", "shift_register") => "Shift register"
+    (Ja, "data_interface", "analog") => "アナログ"
+    (En, "data_interface", "analog") => "Analog"
+    (_, "data_interface", "pdm") => "PDM"
+    (_, "data_interface", "i2s") => "I²S"
+    (_, "data_interface", "tdm") => "TDM"
+    (_, "data_interface", "i2c") => "I²C"
+    (_, "data_interface", "spi") => "SPI"
+    (_, "data_interface", "i2c_spi") => "I²C / SPI"
+    (_, "data_interface", "uart") => "UART"
+    (_, "data_interface", "usb") => "USB"
+    (_, "data_interface", "sdio") => "SDIO"
+    (_, "data_interface", "pwm") => "PWM"
+    (_, "data_interface", "phase_enable") => "PHASE / ENABLE"
+    (_, "data_interface", "step_dir") => "STEP / DIR"
+    (Ja, "motor_type", "brushed_dc") => "ブラシ付きDC"
+    (Ja, "motor_type", "stepper") => "ステッピング"
+    (Ja, "motor_type", "brushed_dc_or_stepper") =>
+      "ブラシ付きDC / ステッピング"
+    (Ja, "motor_type", "bldc") => "ブラシレス (BLDC)"
+    (En, "motor_type", "brushed_dc") => "Brushed DC"
+    (En, "motor_type", "stepper") => "Stepper"
+    (En, "motor_type", "brushed_dc_or_stepper") => "Brushed DC / stepper"
+    (En, "motor_type", "bldc") => "Brushless (BLDC)"
+    (Ja, "led_driver_type", "constant_current") => "定電流"
+    (Ja, "led_driver_type", "switching") => "スイッチング"
+    (Ja, "led_driver_type", "matrix") => "マトリクス"
+    (Ja, "led_driver_type", "pwm") => "PWM"
+    (En, "led_driver_type", "constant_current") => "Constant current"
+    (En, "led_driver_type", "switching") => "Switching"
+    (En, "led_driver_type", "matrix") => "Matrix"
+    (En, "led_driver_type", "pwm") => "PWM"
+    (Ja, "amplifier_class", v) => v.to_upper() + "級"
+    (En, "amplifier_class", v) => "Class " + v.to_upper()
+    (Ja, "buzzer_type", "magnetic") => "電磁式"
+    (Ja, "buzzer_type", "piezo") => "圧電式"
+    (En, "buzzer_type", "magnetic") => "Magnetic"
+    (En, "buzzer_type", "piezo") => "Piezo"
+    (Ja, "buzzer_drive", "internal") => "発振回路内蔵 (自励)"
+    (Ja, "buzzer_drive", "external") => "外部駆動 (他励)"
+    (En, "buzzer_drive", "internal") => "Internal (self-drive)"
+    (En, "buzzer_drive", "external") => "External drive"
+    (_, "contact_form", v) => v.to_upper()
+    (Ja, "relay_type", "electromechanical") => "電磁リレー"
+    (Ja, "relay_type", "latching") => "ラッチング"
+    (Ja, "relay_type", "reed") => "リード"
+    (Ja, "relay_type", "solid_state") => "ソリッドステート (SSR)"
+    (En, "relay_type", "electromechanical") => "Electromechanical"
+    (En, "relay_type", "latching") => "Latching"
+    (En, "relay_type", "reed") => "Reed"
+    (En, "relay_type", "solid_state") => "Solid state"
+    (Ja, "taper", "linear") => "B (直線)"
+    (Ja, "taper", "logarithmic") => "A (対数)"
+    (Ja, "taper", "reverse_logarithmic") => "C (逆対数)"
+    (En, "taper", "linear") => "Linear"
+    (En, "taper", "logarithmic") => "Logarithmic"
+    (En, "taper", "reverse_logarithmic") => "Reverse logarithmic"
+    (Ja, "resistive_element", "carbon") => "カーボン"
+    (Ja, "resistive_element", "cermet") => "サーメット"
+    (Ja, "resistive_element", "conductive_plastic") =>
+      "導電性プラスチック"
+    (Ja, "resistive_element", "wirewound") => "巻線"
+    (Ja, "resistive_element", "metal_film") => "金属皮膜"
+    (En, "resistive_element", "conductive_plastic") => "Conductive plastic"
+    (En, "resistive_element", "metal_film") => "Metal film"
+    (Ja, "push_switch", "yes") => "あり"
+    (Ja, "push_switch", "no") => "なし"
+    (En, "push_switch", "yes") => "Yes"
+    (En, "push_switch", "no") => "No"
+    (Ja, "detents", "0") => "なし (スムーズ)"
+    (En, "detents", "0") => "None (smooth)"
+    (Ja, "light_sensor_type", "ambient") => "照度"
+    (Ja, "light_sensor_type", "proximity") => "近接"
+    (Ja, "light_sensor_type", "ambient_proximity") => "照度 + 近接"
+    (Ja, "light_sensor_type", "color") => "カラー (RGB)"
+    (Ja, "light_sensor_type", "uv") => "紫外線"
+    (Ja, "light_sensor_type", "infrared") => "赤外線"
+    (En, "light_sensor_type", "ambient") => "Ambient light"
+    (En, "light_sensor_type", "proximity") => "Proximity"
+    (En, "light_sensor_type", "ambient_proximity") =>
+      "Ambient light + proximity"
+    (En, "light_sensor_type", "color") => "Color (RGB)"
+    (En, "light_sensor_type", "uv") => "UV"
+    (En, "light_sensor_type", "infrared") => "Infrared"
+    (_, "target_gas", "voc") => "VOC"
+    (_, "target_gas", "nox") => "NOx"
+    (_, "target_gas", "co2") => "CO₂"
+    (_, "target_gas", "co") => "CO"
+    (_, "target_gas", "h2") => "H₂"
+    (_, "target_gas", "ch4") => "CH₄"
+    (_, "target_gas", "lpg") => "LPG"
+    (_, "target_gas", "nh3") => "NH₃"
+    (_, "target_gas", "no2") => "NO₂"
+    (_, "target_gas", "o2") => "O₂"
+    (_, "target_gas", "o3") => "O₃"
+    (_, "target_gas", "h2s") => "H₂S"
+    (Ja, "target_gas", "alcohol") => "アルコール"
+    (Ja, "target_gas", "combustible") => "可燃性ガス"
+    (Ja, "target_gas", "multiple") => "複数"
+    (En, "target_gas", "alcohol") => "Alcohol"
+    (En, "target_gas", "combustible") => "Combustible gas"
+    (En, "target_gas", "multiple") => "Multiple"
+    (Ja, "sensing_principle", "metal_oxide") => "金属酸化物半導体 (MOX)"
+    (Ja, "sensing_principle", "ndir") => "非分散型赤外線 (NDIR)"
+    (Ja, "sensing_principle", "photoacoustic") => "光音響"
+    (Ja, "sensing_principle", "electrochemical") => "電気化学"
+    (Ja, "sensing_principle", "catalytic") => "接触燃焼"
+    (Ja, "sensing_principle", "thermal_conductivity") => "熱伝導"
+    (En, "sensing_principle", "metal_oxide") => "Metal oxide (MOX)"
+    (En, "sensing_principle", "ndir") => "NDIR"
+    (En, "sensing_principle", "photoacoustic") => "Photoacoustic"
+    (En, "sensing_principle", "electrochemical") => "Electrochemical"
+    (En, "sensing_principle", "catalytic") => "Catalytic"
+    (En, "sensing_principle", "thermal_conductivity") => "Thermal conductivity"
+    (Ja, "magnetic_sensor_type", "unipolar_switch") =>
+      "ユニポーラスイッチ"
+    (Ja, "magnetic_sensor_type", "omnipolar_switch") =>
+      "オムニポーラスイッチ"
+    (Ja, "magnetic_sensor_type", "bipolar_latch") => "バイポーララッチ"
+    (Ja, "magnetic_sensor_type", "linear") => "リニア"
+    (Ja, "magnetic_sensor_type", "3d") => "3軸"
+    (Ja, "magnetic_sensor_type", "angle") => "角度"
+    (En, "magnetic_sensor_type", "unipolar_switch") => "Unipolar switch"
+    (En, "magnetic_sensor_type", "omnipolar_switch") => "Omnipolar switch"
+    (En, "magnetic_sensor_type", "bipolar_latch") => "Bipolar latch"
+    (En, "magnetic_sensor_type", "linear") => "Linear"
+    (En, "magnetic_sensor_type", "3d") => "3D"
+    (En, "magnetic_sensor_type", "angle") => "Angle"
+    (_, "radio_protocol", "wifi") => "Wi-Fi"
+    (_, "radio_protocol", "wifi_ble") => "Wi-Fi + Bluetooth LE"
+    (_, "radio_protocol", "wifi_bluetooth") =>
+      "Wi-Fi + Bluetooth (Classic + LE)"
+    (_, "radio_protocol", "wifi_ble_802154") =>
+      "Wi-Fi + Bluetooth LE + 802.15.4"
+    (_, "radio_protocol", "ble") => "Bluetooth LE"
+    (_, "radio_protocol", "bluetooth") => "Bluetooth (Classic + LE)"
+    (_, "radio_protocol", "ble_802154") => "Bluetooth LE + 802.15.4"
+    (_, "radio_protocol", "ieee802154") => "IEEE 802.15.4 (Zigbee / Thread)"
+    (_, "radio_protocol", "lora") => "LoRa"
+    (Ja, "radio_protocol", "sub_ghz") => "サブGHz"
+    (Ja, "radio_protocol", "cellular") => "セルラー (LTE)"
+    (En, "radio_protocol", "sub_ghz") => "Sub-GHz"
+    (En, "radio_protocol", "cellular") => "Cellular (LTE)"
+    (_, "radio_protocol", "gnss") => "GNSS"
+    (_, "radio_protocol", "uwb") => "UWB"
+    (_, "radio_protocol", "nfc") => "NFC"
+    (Ja, "antenna_type", "pcb_trace") => "基板パターン"
+    (Ja, "antenna_type", "chip") => "チップ"
+    (Ja, "antenna_type", "ceramic_patch") => "セラミックパッチ"
+    (Ja, "antenna_type", "external_connector") => "外部 (コネクタ)"
+    (Ja, "antenna_type", "external_pad") => "外部 (端子)"
+    (Ja, "antenna_type", "whip") => "ホイップ"
+    (Ja, "antenna_type", "flex") => "フレキシブル"
+    (En, "antenna_type", "pcb_trace") => "PCB trace"
+    (En, "antenna_type", "chip") => "Chip"
+    (En, "antenna_type", "ceramic_patch") => "Ceramic patch"
+    (En, "antenna_type", "external_connector") => "External (connector)"
+    (En, "antenna_type", "external_pad") => "External (pad)"
+    (En, "antenna_type", "whip") => "Whip"
+    (En, "antenna_type", "flex") => "Flex"
+    (En, "resistive_element", v) =>
+      v[:1].to_owned().to_upper() + v[1:].to_owned()
     (En, "logic_function", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
     (En, "color", v) => v[:1].to_owned().to_upper() + v[1:].to_owned()
     _ => value

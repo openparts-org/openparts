@@ -164,6 +164,60 @@ pub const PARAMETER_RULES: &[ParameterRule] = &[
     // Interface
     rule("data_rate", AtLeast),
     rule("bus_fault_voltage", Covers),
+    // Converters
+    rule("resolution", Ranked),
+    rule("sample_rate", AtLeast),
+    // Motor drivers
+    identity(rule("motor_type", Equal)),
+    rule("motor_supply_voltage", Covers),
+    rule("output_current_peak", AtLeast),
+    rule("microstepping", Ranked),
+    // LED drivers
+    identity(rule("led_driver_type", Equal)),
+    // Audio
+    rule("amplifier_class", Informational),
+    rule("output_power", AtLeast),
+    rule("thd_n", AtMost),
+    rule("snr", AtLeast),
+    rule("sensitivity", Informational),
+    rule("sensitivity_digital", Informational),
+    rule("acoustic_overload_point", AtLeast),
+    rule("sound_pressure", AtLeast),
+    identity(rule("buzzer_type", Equal)),
+    identity(rule("buzzer_drive", Equal)),
+    // Relays
+    identity(within(rule("coil_voltage", Equal), 0.005)),
+    rule("coil_resistance", Informational),
+    rule("contact_current", AtLeast),
+    rule("contact_voltage", AtLeast),
+    identity(rule("contact_form", Equal)),
+    rule("relay_type", Equal),
+    // Potentiometers and encoders
+    identity(rule("taper", Equal)),
+    rule("rotation_angle", Informational),
+    rule("resistive_element", Informational),
+    identity(rule("pulses_per_revolution", Equal)),
+    rule("detents", Equal),
+    rule("push_switch", Equal),
+    // Ferrite beads, common-mode chokes
+    identity(within(rule("impedance", Equal), 0.005)),
+    // Sensors
+    identity(rule("light_sensor_type", Equal)),
+    rule("illuminance_range", Covers),
+    identity(rule("target_gas", Equal)),
+    rule("sensing_principle", Informational),
+    rule("concentration_range", Covers),
+    identity(rule("magnetic_sensor_type", Equal)),
+    rule("operate_point", Informational),
+    rule("release_point", Informational),
+    rule("magnetic_range", Covers),
+    // RF
+    identity(rule("radio_protocol", Equal)),
+    rule("frequency_band", Covers),
+    rule("tx_power", AtLeast),
+    rule("rx_sensitivity", AtMost),
+    rule("antenna_type", Informational),
+    rule("peak_gain", Informational),
 ];
 
 /// Dielectric grades, best first: temperature stability of the
@@ -203,6 +257,10 @@ fn rank(key: &str, value: &str) -> Option<u8> {
             "no" => Some(0),
             _ => None,
         },
+        // More bits, finer microsteps rank higher (1/256 step is
+        // rank 8).
+        "resolution" => value.parse::<u8>().ok(),
+        "microstepping" => value.parse::<u16>().ok().map(|n| n.trailing_zeros() as u8),
         _ => None,
     }
 }
@@ -230,6 +288,22 @@ pub fn expected_parameters(category: ComponentCategory) -> &'static [&'static st
         C::Led => &["color", "forward_voltage"],
         C::Fuse => &["rated_current", "rated_voltage"],
         C::Optocoupler => &["current_transfer_ratio", "isolation_voltage"],
+        C::MotorDriver => &["motor_type", "motor_supply_voltage", "output_current"],
+        C::LedDriver => &["led_driver_type", "channel_count", "output_current"],
+        C::AudioAmplifier => &["amplifier_class", "output_power", "supply_voltage"],
+        C::AudioCodec => &["resolution", "sample_rate", "snr"],
+        C::Microphone => &["data_interface", "snr"],
+        C::Buzzer => &["buzzer_type", "buzzer_drive", "rated_voltage", "frequency"],
+        C::Relay => &["coil_voltage", "contact_form", "contact_current"],
+        C::Potentiometer => &["resistance", "taper", "power_rating"],
+        C::RotaryEncoder => &["pulses_per_revolution", "detents"],
+        C::FerriteBead => &["impedance", "rated_current", "dcr"],
+        C::CommonModeChoke => &["impedance", "rated_current", "dcr"],
+        C::LightSensor => &["light_sensor_type", "data_interface"],
+        C::GasSensor => &["target_gas", "data_interface"],
+        C::MagneticSensor => &["magnetic_sensor_type", "supply_voltage"],
+        C::WirelessModule => &["radio_protocol", "supply_voltage", "antenna_type"],
+        C::Antenna => &["frequency_band", "peak_gain"],
         c if c.is_within(C::Memory) => &["capacity"],
         c if c.is_within(C::Power) => &["output_type", "output_voltage", "output_current"],
         _ => &[],
@@ -398,6 +472,12 @@ pub fn identity_keys(category: ComponentCategory) -> Vec<&'static str> {
         C::Transistor => vec!["polarity"],
         c if c.is_within(C::Memory) => vec!["capacity"],
         C::LinearRegulator => vec!["output_voltage"],
+        C::Potentiometer => vec!["resistance"],
+        C::FerriteBead => vec!["impedance"],
+        C::MotorDriver => vec!["motor_type"],
+        C::Relay => vec!["coil_voltage", "contact_form"],
+        C::RotaryEncoder => vec!["pulses_per_revolution"],
+        C::WirelessModule => vec!["radio_protocol"],
         _ => vec![],
     }
 }
@@ -637,6 +717,18 @@ mod tests {
         for d in open_parts_dielectrics {
             assert!(rank("dielectric", d).is_some(), "no rank for {d}");
         }
+        // Every value of a ranked key has a rank.
+        for r in PARAMETER_RULES.iter().filter(|r| r.kind == Ranked) {
+            if let openparts_core::ParameterShape::Enumerated(values) =
+                parameter_spec(r.key).unwrap().shape
+            {
+                for v in values {
+                    assert!(rank(r.key, v).is_some(), "no rank for {} {v}", r.key);
+                }
+            }
+        }
+        assert!(rank("microstepping", "256") > rank("microstepping", "16"));
+        assert!(rank("resolution", "24") > rank("resolution", "16"));
         // Operating ranges are compared by containment, and only they.
         for r in PARAMETER_RULES {
             let spec = parameter_spec(r.key).unwrap();

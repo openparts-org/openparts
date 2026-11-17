@@ -1,0 +1,11 @@
+# Square (SMD) buzzer: a rectangular housing with a round sound hole
+# in the middle of its top. No vars.
+- params:
+    hole_d: ["min(body_w, body_l) * 0.2", "sound hole diameter (generator default)"]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: hole_d, height: body_h * 0.5 + 0.1 mm, axis: Z, base: [0 mm, 0 mm, standoff + body_h * 0.5],
+     operation: new, body_name: Hole, name: Hole}
+- solid.combine: {target: Housing, tools: [Hole], operation: cut, keep_tools: false}

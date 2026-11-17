@@ -399,6 +399,7 @@ fn make(
             (Details::Header(f), _) => f.tail_length,
             (Details::UsbC(f), _) => f.tail_length,
             (Details::Connector(f), _) => f.tail_length,
+            (Details::Electromechanical(f), _) => f.tail_length,
             (_, Some(d)) => stated(d).unwrap_or(0.0),
             _ => lands
                 .iter()
@@ -1000,6 +1001,10 @@ pub(crate) fn zero_orientation_row(f: F) -> (&'static str, &'static str) {
         F::TerminalBlock => (
             "terminal block",
             "poles in a row along X, pole 1 on the left; the wire entry faces +Y",
+        ),
+        F::Relay | F::Buzzer | F::Trimmer | F::RotaryEncoder => (
+            "electromechanical",
+            "pad 1 upper left; the body (rotor, shaft) turns with it",
         ),
     }
 }

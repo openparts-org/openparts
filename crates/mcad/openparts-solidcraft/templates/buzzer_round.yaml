@@ -1,0 +1,12 @@
+# Round buzzer: a can of diameter can_d standing on the board, a sound
+# hole in the middle of its top. Vars: can_d.
+- params:
+    can_d: ["{{can_d}}", can diameter (datasheet)]
+    hole_d: [can_d * 0.2, "sound hole diameter (generator default)"]
+- solid.cylinder:
+    {diameter: can_d, height: body_h, axis: Z, base: [0 mm, 0 mm, standoff],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: hole_d, height: body_h * 0.5 + 0.1 mm, axis: Z, base: [0 mm, 0 mm, standoff + body_h * 0.5],
+     operation: new, body_name: Hole, name: Hole}
+- solid.combine: {target: Housing, tools: [Hole], operation: cut, keep_tools: false}

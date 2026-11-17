@@ -174,6 +174,26 @@ pub enum Quantity {
     Temperature,
     /// A duration: measurement conditions and delays.
     Time,
+    /// A ratio in decibels (signal-to-noise ratio); logarithmic, so
+    /// kept in `dB` rather than converted.
+    Decibel,
+    /// A level relative to 1 V rms (an analog microphone's
+    /// sensitivity), in dBV.
+    DecibelVolt,
+    /// A level relative to digital full scale (a digital microphone's
+    /// sensitivity), in dBFS.
+    DecibelFullScale,
+    /// A sound pressure level (re 20 µPa), in dB SPL; A-weighted
+    /// figures (`dBA`) count as the same scale.
+    SoundPressureLevel,
+    /// An RF power level relative to 1 mW, in dBm.
+    PowerLevel,
+    /// An antenna gain relative to an isotropic radiator, in dBi.
+    AntennaGain,
+    /// Illuminance, in lux.
+    Illuminance,
+    /// Magnetic flux density, in tesla (`G`: gauss = 100 µT).
+    MagneticFluxDensity,
 }
 
 impl Quantity {
@@ -197,6 +217,14 @@ impl Quantity {
         Quantity::Angle,
         Quantity::Temperature,
         Quantity::Time,
+        Quantity::Decibel,
+        Quantity::DecibelVolt,
+        Quantity::DecibelFullScale,
+        Quantity::SoundPressureLevel,
+        Quantity::PowerLevel,
+        Quantity::AntennaGain,
+        Quantity::Illuminance,
+        Quantity::MagneticFluxDensity,
     ];
 
     /// The SI (base) unit symbol normalised values are in.
@@ -220,6 +248,14 @@ impl Quantity {
             Quantity::Angle => "°",
             Quantity::Temperature => "°C",
             Quantity::Time => "s",
+            Quantity::Decibel => "dB",
+            Quantity::DecibelVolt => "dBV",
+            Quantity::DecibelFullScale => "dBFS",
+            Quantity::SoundPressureLevel => "dBSPL",
+            Quantity::PowerLevel => "dBm",
+            Quantity::AntennaGain => "dBi",
+            Quantity::Illuminance => "lx",
+            Quantity::MagneticFluxDensity => "T",
         }
     }
 
@@ -280,8 +316,17 @@ impl Quantity {
                 ("mW", 1e-3),
                 ("W", 1.0),
             ],
-            Quantity::Frequency => &[("Hz", 1.0), ("kHz", 1e3), ("MHz", 1e6), ("GHz", 1e9)],
-            Quantity::Ratio => &[("%", 1e-2), ("ppm", 1e-6)],
+            // Sample rates as printed (samples per second) count as Hz.
+            Quantity::Frequency => &[
+                ("Hz", 1.0),
+                ("kHz", 1e3),
+                ("MHz", 1e6),
+                ("GHz", 1e9),
+                ("SPS", 1.0),
+                ("kSPS", 1e3),
+                ("MSPS", 1e6),
+            ],
+            Quantity::Ratio => &[("%", 1e-2), ("ppm", 1e-6), ("ppb", 1e-9)],
             Quantity::TemperatureCoefficient => &[
                 ("ppm/K", 1e-6),
                 ("ppm/°C", 1e-6),
@@ -294,6 +339,7 @@ impl Quantity {
                 ("µm", 1e-6),
                 ("μm", 1e-6),
                 ("mm", 1e-3),
+                ("cm", 1e-2),
                 ("m", 1.0),
             ],
             Quantity::Force => &[("mN", 1e-3), ("N", 1.0), ("gf", 9.80665e-3)],
@@ -332,6 +378,26 @@ impl Quantity {
                 ("µs", 1e-6),
                 ("ms", 1e-3),
                 ("s", 1.0),
+            ],
+            Quantity::Decibel => &[("dB", 1.0)],
+            Quantity::DecibelVolt => &[("dBV", 1.0)],
+            Quantity::DecibelFullScale => &[("dBFS", 1.0)],
+            Quantity::SoundPressureLevel => {
+                &[("dB", 1.0), ("dBSPL", 1.0), ("dBA", 1.0), ("dB(A)", 1.0)]
+            }
+            Quantity::PowerLevel => &[("dBm", 1.0)],
+            Quantity::AntennaGain => &[("dBi", 1.0)],
+            Quantity::Illuminance => &[("mlx", 1e-3), ("lx", 1.0), ("klx", 1e3)],
+            Quantity::MagneticFluxDensity => &[
+                ("nT", 1e-9),
+                ("uT", 1e-6),
+                ("µT", 1e-6),
+                ("μT", 1e-6),
+                ("mT", 1e-3),
+                ("T", 1.0),
+                ("mG", 1e-7),
+                ("G", 1e-4),
+                ("Gs", 1e-4),
             ],
         }
     }
@@ -385,6 +451,14 @@ impl Quantity {
             Quantity::Angle => (&[("", 1.0)], "°"),
             Quantity::Temperature => (&[("", 1.0)], "°C"),
             Quantity::Time => (&SMALL[..5], "s"),
+            Quantity::Decibel => (&[("", 1.0)], "dB"),
+            Quantity::DecibelVolt => (&[("", 1.0)], "dBV"),
+            Quantity::DecibelFullScale => (&[("", 1.0)], "dBFS"),
+            Quantity::SoundPressureLevel => (&[("", 1.0)], "dB SPL"),
+            Quantity::PowerLevel => (&[("", 1.0)], "dBm"),
+            Quantity::AntennaGain => (&[("", 1.0)], "dBi"),
+            Quantity::Illuminance => (&SMALL[3..6], "lx"),
+            Quantity::MagneticFluxDensity => (&SMALL[1..5], "T"),
         }
     }
 }
@@ -512,6 +586,8 @@ const ICS_AND_LED: &[C] = &[
     C::Logic,
     C::Timing,
     C::Driver,
+    C::Audio,
+    C::Rf,
 ];
 /// A supply-voltage range: ICs and driver LEDs, but not regulators
 /// (their input is `input_voltage_max`).
@@ -525,13 +601,32 @@ const SUPPLIED: &[C] = &[
     C::Logic,
     C::Timing,
     C::Driver,
+    C::Audio,
+    C::Rf,
 ];
 /// Amplifier inputs: op-amps, comparators, current-sense amplifiers.
 const AMPS: &[C] = &[C::OpAmp, C::Comparator, C::CurrentSenseAmplifier];
 /// Digital outputs with a timing: comparators, logic, interface ICs.
 const DIGITAL: &[C] = &[C::Comparator, C::Logic, C::Interface];
-/// Parts made of identical channels (amplifiers, gates, transceivers).
-const CHANNELS: &[C] = &[C::Analog, C::Interface, C::Logic, C::Driver];
+/// Digital outputs: [`DIGITAL`] and Hall switches.
+const DIGITAL_OUT: &[C] = &[C::Comparator, C::Logic, C::Interface, C::MagneticSensor];
+/// Parts made of identical channels (amplifiers, gates, transceivers,
+/// motor bridges, LED outputs, audio channels).
+const CHANNELS: &[C] = &[C::Analog, C::Interface, C::Logic, C::Driver, C::Audio];
+/// A digital (or analog) signal interface: addressable LEDs, sensors,
+/// converters, drivers, audio parts and radio modules.
+const INTERFACED: &[C] = &[C::Led, C::Sensor, C::Analog, C::Driver, C::Audio, C::Rf];
+/// Converters with a resolution and a sample rate.
+const CONVERTERS: &[C] = &[C::Adc, C::Dac, C::AudioCodec];
+/// Coil-driven parts: relays and magnetic buzzers.
+const COILS: &[C] = &[C::Relay, C::Buzzer];
+/// Counts as printed (pulses, detents): a closed list of the values
+/// datasheets use.
+const ENCODER_COUNTS: &[&str] = &[
+    "4", "6", "8", "9", "10", "11", "12", "15", "16", "18", "20", "24", "25", "30", "32", "36",
+    "40", "48", "50", "60", "64", "100", "128", "200", "256", "360", "400", "500", "512", "1000",
+    "1024", "2048",
+];
 /// `yes` / `no` flags (ranked: `yes` is better).
 const YES_NO: &[&str] = &["yes", "no"];
 /// ±1000 ppm: a frequency deviation beyond it is a unit slip.
@@ -552,7 +647,14 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num(
         "rated_voltage",
         Q::Voltage,
-        &[C::Capacitor, C::Fuse, C::Resistor, C::Switch],
+        &[
+            C::Capacitor,
+            C::Fuse,
+            C::Resistor,
+            C::Switch,
+            C::CommonModeChoke,
+            C::Buzzer,
+        ],
     ),
     enumerated(
         "dielectric",
@@ -579,12 +681,16 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num(
         "rated_current",
         Q::Current,
-        &[C::Inductor, C::Fuse, C::Switch],
+        &[C::Inductor, C::Fuse, C::Switch, C::Buzzer],
     ),
     num("saturation_current", Q::Current, &[C::Inductor]),
     num("dcr", Q::Resistance, &[C::Inductor]),
     // Crystals and oscillators
-    num("frequency", Q::Frequency, XTAL),
+    num(
+        "frequency",
+        Q::Frequency,
+        &[C::Crystal, C::Oscillator, C::Buzzer],
+    ),
     within(
         num("load_capacitance", Q::Capacitance, &[C::Crystal]),
         0.0,
@@ -655,7 +761,10 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     shown_in(num("wavelength", Q::Length, &[C::Led]), "nm"),
     within(
-        shown_in(num("peak_wavelength", Q::Length, &[C::Led]), "nm"),
+        shown_in(
+            num("peak_wavelength", Q::Length, &[C::Led, C::LightSensor]),
+            "nm",
+        ),
         1e-7,
         1e-5,
     ),
@@ -671,7 +780,30 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     num("luminous_intensity_red", Q::LuminousIntensity, &[C::Led]),
     num("luminous_intensity_green", Q::LuminousIntensity, &[C::Led]),
     num("luminous_intensity_blue", Q::LuminousIntensity, &[C::Led]),
-    enumerated("data_interface", &["single_wire", "clock_data"], &[C::Led]),
+    // Also the signal interface of sensors, converters, drivers, audio
+    // parts and radio modules (its primary one; `i2c_spi` for a part
+    // with both).
+    enumerated(
+        "data_interface",
+        &[
+            "single_wire",
+            "clock_data",
+            "analog",
+            "pdm",
+            "i2s",
+            "tdm",
+            "i2c",
+            "spi",
+            "i2c_spi",
+            "uart",
+            "usb",
+            "sdio",
+            "pwm",
+            "phase_enable",
+            "step_dir",
+        ],
+        INTERFACED,
+    ),
     // Transistors
     enumerated(
         "polarity",
@@ -680,13 +812,14 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     num("drain_source_voltage", Q::Voltage, &[C::Transistor]),
     num("drain_current", Q::Current, &[C::Transistor]),
-    num("rds_on", Q::Resistance, &[C::Transistor]),
+    // A motor driver's: one bridge leg, high side + low side.
+    num("rds_on", Q::Resistance, &[C::Transistor, C::MotorDriver]),
     num("gate_threshold_voltage", Q::Voltage, &[C::Transistor]),
     num("collector_emitter_voltage", Q::Voltage, COLLECTOR),
     num("collector_current", Q::Current, COLLECTOR),
     // Optocouplers (input LED: forward_voltage/forward_current/
     // reverse_voltage; output: collector_emitter_voltage/collector_current)
-    num("isolation_voltage", Q::Voltage, &[C::Optocoupler]),
+    num("isolation_voltage", Q::Voltage, &[C::Optocoupler, C::Relay]),
     shown_in(
         num("current_transfer_ratio", Q::Ratio, &[C::Optocoupler]),
         "%",
@@ -695,7 +828,8 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     enumerated("output_type", &["fixed", "adjustable"], &[C::Power]),
     num("output_voltage", Q::Voltage, &[C::Power]),
     num("input_voltage_max", Q::Voltage, &[C::Power]),
-    num("output_current", Q::Current, &[C::Power]),
+    // A driver's: per output (bridge, LED channel), continuous.
+    num("output_current", Q::Current, &[C::Power, C::Driver]),
     num("dropout_voltage", Q::Voltage, &[C::LinearRegulator]),
     // Memory
     num("capacity", Q::Information, &[C::Memory]),
@@ -716,7 +850,10 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     // Amplifiers and comparators
     enumerated(
         "channel_count",
-        &["1", "2", "3", "4", "6", "8", "16"],
+        &[
+            "1", "2", "3", "4", "5", "6", "8", "9", "10", "12", "16", "18", "24", "32", "36", "48",
+            "64", "144",
+        ],
         CHANNELS,
     ),
     within(
@@ -758,7 +895,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     enumerated(
         "output_structure",
         &["push_pull", "open_drain", "open_collector"],
-        DIGITAL,
+        DIGITAL_OUT,
     ),
     // Logic
     enumerated(
@@ -805,6 +942,313 @@ pub const PARAMETERS: &[ParameterSpec] = &[
         -1e3,
         1e3,
     ),
+    // Converters (ADC, DAC, audio codecs)
+    enumerated(
+        "resolution",
+        &["8", "10", "12", "14", "16", "18", "20", "22", "24", "32"],
+        CONVERTERS,
+    ),
+    within(num("sample_rate", Q::Frequency, CONVERTERS), 0.0, 1e11),
+    // Motor drivers (the bridge supply VM; a separate logic supply is
+    // `supply_voltage`)
+    enumerated(
+        "motor_type",
+        &["brushed_dc", "stepper", "brushed_dc_or_stepper", "bldc"],
+        &[C::MotorDriver],
+    ),
+    within(
+        span(num("motor_supply_voltage", Q::Voltage, &[C::MotorDriver])),
+        0.0,
+        1e3,
+    ),
+    within(
+        num("output_current_peak", Q::Current, &[C::Driver]),
+        0.0,
+        1e3,
+    ),
+    // The finest step: `16` is 1/16 step.
+    enumerated(
+        "microstepping",
+        &["1", "2", "4", "8", "16", "32", "64", "128", "256"],
+        &[C::MotorDriver],
+    ),
+    // LED drivers
+    enumerated(
+        "led_driver_type",
+        &["constant_current", "switching", "matrix", "pwm"],
+        &[C::LedDriver],
+    ),
+    // Audio (amplifiers, codecs, microphones)
+    enumerated(
+        "amplifier_class",
+        &["a", "ab", "d", "g", "h"],
+        &[C::AudioAmplifier],
+    ),
+    // Per channel, at the load and distortion it is printed for
+    // (`at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`).
+    within(
+        num("output_power", Q::Power, &[C::AudioAmplifier]),
+        0.0,
+        1e4,
+    ),
+    within(
+        shown_in(
+            num("thd_n", Q::Ratio, &[C::AudioAmplifier, C::AudioCodec]),
+            "%",
+        ),
+        0.0,
+        1.0,
+    ),
+    within(num("snr", Q::Decibel, &[C::Audio]), 0.0, 200.0),
+    // Analog microphones in dBV (re 1 V/Pa), digital ones in dBFS.
+    within(
+        num("sensitivity", Q::DecibelVolt, &[C::Microphone]),
+        -120.0,
+        0.0,
+    ),
+    within(
+        num("sensitivity_digital", Q::DecibelFullScale, &[C::Microphone]),
+        -120.0,
+        0.0,
+    ),
+    within(
+        num(
+            "acoustic_overload_point",
+            Q::SoundPressureLevel,
+            &[C::Microphone],
+        ),
+        60.0,
+        200.0,
+    ),
+    // Buzzers (sound pressure at the printed distance and drive:
+    // `at: { d: 10 cm, VIN: 5 V }`)
+    within(
+        num("sound_pressure", Q::SoundPressureLevel, &[C::Buzzer]),
+        20.0,
+        160.0,
+    ),
+    enumerated("buzzer_type", &["magnetic", "piezo"], &[C::Buzzer]),
+    // `internal`: a built-in oscillator (an "active" buzzer, runs on
+    // DC); `external`: a transducer driven with the tone.
+    enumerated("buzzer_drive", &["internal", "external"], &[C::Buzzer]),
+    // Relays
+    within(num("coil_voltage", Q::Voltage, &[C::Relay]), 0.0, 1e3),
+    within(num("coil_resistance", Q::Resistance, COILS), 0.0, 1e6),
+    within(num("contact_current", Q::Current, &[C::Relay]), 0.0, 1e3),
+    within(num("contact_voltage", Q::Voltage, &[C::Relay]), 0.0, 1e5),
+    // IEC style: `1a` SPST-NO, `1b` SPST-NC, `1c` SPDT, `2c` DPDT.
+    enumerated(
+        "contact_form",
+        &["1a", "1b", "1c", "2a", "2b", "2c", "4c"],
+        &[C::Relay],
+    ),
+    enumerated(
+        "relay_type",
+        &["electromechanical", "latching", "reed", "solid_state"],
+        &[C::Relay],
+    ),
+    // Potentiometers (resistance, tolerance and power_rating as a
+    // resistor's)
+    enumerated(
+        "taper",
+        &["linear", "logarithmic", "reverse_logarithmic"],
+        &[C::Potentiometer],
+    ),
+    within(
+        num(
+            "rotation_angle",
+            Q::Angle,
+            &[C::Potentiometer, C::RotaryEncoder],
+        ),
+        0.0,
+        36000.0,
+    ),
+    enumerated(
+        "resistive_element",
+        &[
+            "carbon",
+            "cermet",
+            "conductive_plastic",
+            "wirewound",
+            "metal_film",
+        ],
+        &[C::Potentiometer],
+    ),
+    // Rotary encoders
+    enumerated("pulses_per_revolution", ENCODER_COUNTS, &[C::RotaryEncoder]),
+    // `0` for a smooth (detent-less) shaft.
+    enumerated(
+        "detents",
+        &[
+            "0", "4", "8", "9", "10", "11", "12", "15", "16", "18", "20", "24", "30", "32", "36",
+        ],
+        &[C::RotaryEncoder],
+    ),
+    enumerated("push_switch", YES_NO, &[C::RotaryEncoder]),
+    // Ferrite beads and common-mode chokes (at the frequency printed:
+    // `at: { f: 100 MHz }`)
+    within(
+        num(
+            "impedance",
+            Q::Resistance,
+            &[C::FerriteBead, C::CommonModeChoke],
+        ),
+        0.0,
+        1e6,
+    ),
+    // Sensors
+    enumerated(
+        "light_sensor_type",
+        &[
+            "ambient",
+            "proximity",
+            "ambient_proximity",
+            "color",
+            "uv",
+            "infrared",
+        ],
+        &[C::LightSensor],
+    ),
+    within(
+        span(num("illuminance_range", Q::Illuminance, &[C::LightSensor])),
+        0.0,
+        1e7,
+    ),
+    enumerated(
+        "target_gas",
+        &[
+            "voc",
+            "nox",
+            "co2",
+            "co",
+            "h2",
+            "ch4",
+            "lpg",
+            "alcohol",
+            "nh3",
+            "no2",
+            "o2",
+            "o3",
+            "h2s",
+            "combustible",
+            "multiple",
+        ],
+        &[C::GasSensor],
+    ),
+    enumerated(
+        "sensing_principle",
+        &[
+            "metal_oxide",
+            "ndir",
+            "photoacoustic",
+            "electrochemical",
+            "catalytic",
+            "thermal_conductivity",
+        ],
+        &[C::GasSensor],
+    ),
+    within(
+        shown_in(
+            span(num("concentration_range", Q::Ratio, &[C::GasSensor])),
+            "ppm",
+        ),
+        0.0,
+        1.0,
+    ),
+    enumerated(
+        "magnetic_sensor_type",
+        &[
+            "unipolar_switch",
+            "omnipolar_switch",
+            "bipolar_latch",
+            "linear",
+            "3d",
+            "angle",
+        ],
+        &[C::MagneticSensor],
+    ),
+    // Switch thresholds BOP / BRP (signed for a latch's south/north).
+    within(
+        shown_in(
+            num(
+                "operate_point",
+                Q::MagneticFluxDensity,
+                &[C::MagneticSensor],
+            ),
+            "mT",
+        ),
+        -1.0,
+        1.0,
+    ),
+    within(
+        shown_in(
+            num(
+                "release_point",
+                Q::MagneticFluxDensity,
+                &[C::MagneticSensor],
+            ),
+            "mT",
+        ),
+        -1.0,
+        1.0,
+    ),
+    // A linear or 3D sensor's full-scale range (±40 mT is -40..40 mT).
+    within(
+        shown_in(
+            span(num(
+                "magnetic_range",
+                Q::MagneticFluxDensity,
+                &[C::MagneticSensor],
+            )),
+            "mT",
+        ),
+        -10.0,
+        10.0,
+    ),
+    // RF: radio modules, transceivers, antennas. Several radios on one
+    // module take the combined value (`wifi_ble`).
+    enumerated(
+        "radio_protocol",
+        &[
+            "wifi",
+            "wifi_ble",
+            "wifi_bluetooth",
+            "wifi_ble_802154",
+            "ble",
+            "bluetooth",
+            "ble_802154",
+            "ieee802154",
+            "lora",
+            "sub_ghz",
+            "cellular",
+            "gnss",
+            "uwb",
+            "nfc",
+        ],
+        &[C::Rf],
+    ),
+    within(
+        span(num("frequency_band", Q::Frequency, &[C::Rf])),
+        0.0,
+        3e11,
+    ),
+    within(num("tx_power", Q::PowerLevel, &[C::Rf]), -60.0, 60.0),
+    within(num("rx_sensitivity", Q::PowerLevel, &[C::Rf]), -200.0, 0.0),
+    // A module's antenna, or an antenna's construction.
+    enumerated(
+        "antenna_type",
+        &[
+            "pcb_trace",
+            "chip",
+            "ceramic_patch",
+            "external_connector",
+            "external_pad",
+            "whip",
+            "flex",
+        ],
+        &[C::Rf],
+    ),
+    within(num("peak_gain", Q::AntennaGain, &[C::Antenna]), -40.0, 40.0),
 ];
 
 /// The vocabulary entry for `key`.
@@ -1493,6 +1937,118 @@ mod tests {
         }
         assert!(!plausible_for(spec("supply_voltage"), C::LinearRegulator));
         assert!(!plausible_for(spec("slew_rate"), C::Logic));
+    }
+
+    #[test]
+    fn keys_of_the_new_categories() {
+        let lab = |v: ParameterValue, k: &str| v.normalize(spec(k)).unwrap().label(spec(k));
+        assert_eq!(
+            lab(val(Some(-26.0), None, None, "dBFS"), "sensitivity_digital"),
+            "-26 dBFS"
+        );
+        assert_eq!(
+            lab(val(Some(-38.0), None, None, "dBV"), "sensitivity"),
+            "-38 dBV"
+        );
+        assert_eq!(lab(val(Some(65.0), None, None, "dB"), "snr"), "65 dB");
+        assert_eq!(
+            lab(val(Some(85.0), None, None, "dB"), "sound_pressure"),
+            "85 dB SPL"
+        );
+        assert_eq!(
+            lab(val(Some(85.0), None, None, "dBA"), "sound_pressure"),
+            "85 dB SPL"
+        );
+        assert_eq!(
+            lab(val(Some(20.0), None, None, "dBm"), "tx_power"),
+            "20 dBm"
+        );
+        assert_eq!(
+            lab(val(Some(-97.0), None, None, "dBm"), "rx_sensitivity"),
+            "-97 dBm"
+        );
+        assert_eq!(
+            lab(val(Some(1.5), None, None, "dBi"), "peak_gain"),
+            "1.5 dBi"
+        );
+        assert_eq!(lab(val(Some(600.0), None, None, "Ω"), "impedance"), "600 Ω");
+        assert_eq!(
+            lab(val(Some(3.0), None, None, "mT"), "operate_point"),
+            "3 mT"
+        );
+        assert_eq!(
+            lab(val(Some(30.0), None, None, "G"), "operate_point"),
+            "3 mT"
+        );
+        assert_eq!(
+            lab(
+                val(None, Some(0.01), Some(83000.0), "lx"),
+                "illuminance_range"
+            ),
+            "10 mlx–83 klx"
+        );
+        assert_eq!(
+            lab(
+                val(None, Some(400.0), Some(5000.0), "ppm"),
+                "concentration_range"
+            ),
+            "400 ppm–5000 ppm"
+        );
+        assert_eq!(
+            lab(val(Some(48.0), None, None, "kSPS"), "sample_rate"),
+            "48 kHz"
+        );
+        assert_eq!(
+            lab(val(Some(2.5), None, None, "W"), "output_power"),
+            "2.5 W"
+        );
+        assert_eq!(lab(val(Some(0.1), None, None, "%"), "thd_n"), "0.1%");
+        assert_eq!(
+            lab(val(Some(270.0), None, None, "°"), "rotation_angle"),
+            "270°"
+        );
+        assert!(close_to(
+            parse_value("-26", spec("sensitivity_digital")),
+            -26.0
+        ));
+        assert!(close_to(parse_value("20dBm", spec("tx_power")), 20.0));
+        assert!(close_to(
+            parse_value("100k", spec("illuminance_range")),
+            1e5
+        ));
+        assert!(close_to(parse_value("5", spec("operate_point")), 5e-3));
+        for (key, c) in [
+            ("output_current", C::MotorDriver),
+            ("output_current", C::LedDriver),
+            ("channel_count", C::LedDriver),
+            ("channel_count", C::AudioAmplifier),
+            ("supply_voltage", C::Microphone),
+            ("supply_voltage", C::WirelessModule),
+            ("data_interface", C::Microphone),
+            ("data_interface", C::LightSensor),
+            ("rds_on", C::MotorDriver),
+            ("resistance", C::Potentiometer),
+            ("power_rating", C::Potentiometer),
+            ("rated_current", C::FerriteBead),
+            ("dcr", C::FerriteBead),
+            ("inductance", C::CommonModeChoke),
+            ("rated_voltage", C::RotaryEncoder),
+            ("rated_voltage", C::Buzzer),
+            ("frequency", C::Buzzer),
+            ("coil_resistance", C::Buzzer),
+            ("isolation_voltage", C::Relay),
+            ("output_structure", C::MagneticSensor),
+            ("peak_wavelength", C::LightSensor),
+            ("frequency_band", C::Antenna),
+            ("radio_protocol", C::Rf),
+            ("resolution", C::Adc),
+        ] {
+            assert!(plausible_for(spec(key), c), "{key} for {c:?}");
+        }
+        assert!(!plausible_for(spec("output_current"), C::Sensor));
+        assert!(!plausible_for(spec("impedance"), C::Inductor));
+        assert!(spec("motor_supply_voltage").span);
+        assert!(!spec("sensitivity").in_range(-200.0));
     }
 
     fn close_to(a: Option<f64>, b: f64) -> bool {

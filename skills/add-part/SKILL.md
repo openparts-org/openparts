@@ -99,7 +99,11 @@ Run `openparts data fmt <files>` before committing; CI runs
   crystal, fuse, connector, optocoupler, or a subcategory such as
   `linear_regulator`, `eeprom`, `imu`, `op_amp`, `can_transceiver`,
   `logic`, `rtc`, `oscillator` (clock oscillators; a bare resonator is
-  `crystal`), `tact_switch`, `gate_driver`; `other` only when the tree
+  `crystal`), `tact_switch`, `gate_driver`, `motor_driver`, `led_driver`,
+  `audio_amplifier`, `audio_codec`, `microphone`, `buzzer`, `relay`,
+  `potentiometer`, `rotary_encoder`, `ferrite_bead`, `common_mode_choke`,
+  `light_sensor`, `gas_sensor`, `magnetic_sensor`, `wireless_module`,
+  `antenna` (a bare RF transceiver IC is the group `rf`); `other` only when the tree
   has no fitting node (the validator warns). The passive/discrete values
   change how the 3D model is drawn. `document_type` also accepts
   `product_page`, `pcn`, `eol_notice`, `other`.
@@ -130,8 +134,10 @@ Run `openparts data fmt <files>` before committing; CI runs
   the key's quantity, a `src` and the printed conditions (`at`) for each,
   and no values decoded from the MPN unless the ordering-code table maps
   the code (cite that table). The key table per category is there
-  (crystals/oscillators, op-amps/comparators, logic, interface ICs and
-  LEDs included); keys for any IC: `supply_voltage` and
+  (crystals/oscillators, op-amps/comparators, logic, interface ICs,
+  LEDs, motor/LED drivers, audio, light/gas/magnetic sensors, relays,
+  buzzers, potentiometers, encoders, ferrite beads, wireless modules and
+  antennas included); keys for any IC: `supply_voltage` and
   `operating_temperature` as `min`/`max` ranges, `supply_current`,
   `esd_hbm`. Magnitudes drop the sign (VOS, IB, IOH/IOL).
 

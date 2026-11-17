@@ -4,7 +4,10 @@
 //! housing with slot and actuator, RF base with its coupling barrel,
 //! micro- and mini-USB shell, USB-B shell around its insulator and plug
 //! mouth -- plus a foot on every SMD pad and a pin or tab down
-//! every plated hole.
+//! every plated hole. The electromechanical families (relay housing,
+//! buzzer can or box with its sound hole, trimmer housing with its
+//! slotted rotor, encoder housing with bushing and shaft) share the
+//! contacts.
 
 use crate::common;
 use crate::script::{looks, mm};
@@ -17,8 +20,10 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
     if g.leads.is_empty() {
         return Err(ModelError::NoLeads(g.family));
     }
-    let openparts_mcad::Details::Connector(f) = g.details else {
-        return Err(ModelError::MissingDetails(g.family));
+    let (tail_length, connector, electromech) = match &g.details {
+        openparts_mcad::Details::Connector(f) => (f.tail_length, Some(*f), None),
+        openparts_mcad::Details::Electromechanical(e) => (e.tail_length, None, Some(*e)),
+        _ => return Err(ModelError::MissingDetails(g.family)),
     };
     let b = &g.body;
     common::body_params(s, g)?;
@@ -26,9 +31,65 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         fragment!("connector_params"),
         &vars!(z0 = mm(b.position.z - b.size.z / 2.0)),
     )?;
-    let shell_t = f.shell_thickness.min(b.size.z * 0.2);
     // (body, look) pairs to paint after the contacts are placed.
     let mut looks_of: Vec<(&str, crate::script::Look)> = Vec::new();
+    match (connector, electromech) {
+        (_, Some(e)) => electromechanical(s, g.family, &e, &mut looks_of)?,
+        (Some(f), None) => housing(s, g, &f, &mut looks_of)?,
+        (None, None) => return Err(ModelError::MissingDetails(g.family)),
+    }
+    contacts(s, g, tail_length, looks_of)
+}
+
+fn electromechanical(
+    s: &mut Script,
+    family: F,
+    e: &openparts_mcad::ElectromechanicalFeatures,
+    looks_of: &mut Vec<(&str, crate::script::Look)>,
+) -> Result<(), ModelError> {
+    match family {
+        F::Relay => {
+            s.fragment(fragment!("relay"), &vars!())?;
+            looks_of.push(("Housing", looks::MOLD));
+        }
+        F::Buzzer => {
+            match e.can_diameter {
+                Some(d) => s.fragment(fragment!("buzzer_round"), &vars!(can_d = mm(d)))?,
+                None => s.fragment(fragment!("buzzer_square"), &vars!())?,
+            }
+            looks_of.push(("Housing", looks::MOLD));
+        }
+        F::Trimmer => {
+            s.fragment(
+                fragment!("trimmer"),
+                &vars!(rotor_d = mm(e.top_diameter), rotor_h = mm(e.top_height)),
+            )?;
+            looks_of.extend([("Housing", looks::TRIMMER), ("Rotor", looks::NYLON_NATURAL)]);
+        }
+        F::RotaryEncoder => {
+            s.fragment(
+                fragment!("rotary_encoder"),
+                &vars!(shaft_d = mm(e.top_diameter), rise = mm(e.top_height)),
+            )?;
+            looks_of.extend([
+                ("Housing", looks::MOLD),
+                ("Bushing", looks::NICKEL),
+                ("Shaft", looks::NICKEL),
+            ]);
+        }
+        _ => return Err(ModelError::MissingDetails(family)),
+    }
+    Ok(())
+}
+
+fn housing(
+    s: &mut Script,
+    g: &openparts_mcad::MechanicalGeometry,
+    f: &openparts_mcad::ConnectorFeatures,
+    looks_of: &mut Vec<(&str, crate::script::Look)>,
+) -> Result<(), ModelError> {
+    let b = &g.body;
+    let shell_t = f.shell_thickness.min(b.size.z * 0.2);
     match g.family {
         F::CardSocket => {
             s.fragment(fragment!("card_socket"), &vars!(shell_t = mm(shell_t)))?;
@@ -106,7 +167,17 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
         }
         _ => return Err(ModelError::MissingDetails(g.family)),
     }
+    Ok(())
+}
 
+/// A foot on every SMD pad and a pin or tab down every plated hole,
+/// then the bodies' looks.
+fn contacts(
+    s: &mut Script,
+    g: &openparts_mcad::MechanicalGeometry,
+    tail_length: f64,
+    looks_of: Vec<(&str, crate::script::Look)>,
+) -> Result<(), ModelError> {
     let mut contacts = Vec::new();
     for (i, l) in g.leads.iter().enumerate() {
         match l.mounting {
@@ -149,7 +220,7 @@ pub fn build(s: &mut Script, input: &ModelInput<'_>) -> Result<(), ModelError> {
                         y = mm(l.position.y),
                         w = mm(tw),
                         l = mm(tl),
-                        tail = mm(f.tail_length),
+                        tail = mm(tail_length),
                     ),
                 )?;
                 contacts.push(name);
@@ -291,6 +362,27 @@ mod tests {
         let b = connector("barrel_jack", "", tht, 3);
         assert_eq!(&b[..2], ["Housing", "Pin"]);
         assert_eq!(b.len(), 5);
+    }
+
+    #[test]
+    fn electromechanical_families_build_their_bodies_and_pins() {
+        let tht = "pads:\n\
+            \x20 - {number: '1', x: -2.5, y: 0, width: 1.8, length: 1.8, drill: 1.0}\n\
+            \x20 - {number: '2', x: 0, y: 0, width: 1.8, length: 1.8, drill: 1.0}\n\
+            \x20 - {number: '3', x: 2.5, y: 0, width: 1.8, length: 1.8, drill: 1.0}\n";
+        let b = connector("relay", "", tht, 3);
+        assert_eq!(b, ["Housing", "Pin1", "Pin2", "Pin3"]);
+        let b = connector("buzzer", "", tht, 3);
+        assert_eq!(b[0], "Housing");
+        let round = "\x20 can_diameter: {nominal: 9.0, unit: mm}\n";
+        let b = connector("buzzer", round, tht, 3);
+        assert_eq!(b[0], "Housing");
+        let b = connector("trimmer", "", tht, 3);
+        assert_eq!(&b[..2], ["Housing", "Rotor"]);
+        let shaft = "\x20 overall_height: {nominal: 20.0, unit: mm}\n";
+        let b = connector("rotary_encoder", shaft, tht, 3);
+        assert_eq!(&b[..3], ["Housing", "Bushing", "Shaft"]);
+        assert_eq!(b.len(), 6);
     }
 
     #[test]

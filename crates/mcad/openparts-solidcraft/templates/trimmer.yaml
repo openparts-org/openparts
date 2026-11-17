@@ -1,0 +1,19 @@
+# Trimmer potentiometer: a housing with a round adjustment rotor on top,
+# a screwdriver slot across the rotor. Vars: rotor_d, rotor_h.
+- params:
+    rotor_d: ["{{rotor_d}}", "rotor diameter (datasheet, else generator default)"]
+    rotor_h: ["{{rotor_h}}", "rotor height above the housing (overall height, else generator default)"]
+    slot_w: [rotor_d * 0.15, "screwdriver slot width (generator default)"]
+    slot_d: [rotor_h * 0.6, "screwdriver slot depth (generator default)"]
+    top: [standoff + body_h + rotor_h, rotor top]
+- solid.box:
+    {length: body_w, width: body_l, height: body_h, center: [0 mm, 0 mm, standoff + body_h / 2],
+     body_name: Housing, name: Housing}
+- solid.cylinder:
+    {diameter: rotor_d, height: rotor_h, axis: Z, base: [0 mm, 0 mm, standoff + body_h],
+     operation: new, body_name: Rotor, name: Rotor}
+- solid.box:
+    {length: rotor_d + 0.2 mm, width: slot_w, height: slot_d + 0.1 mm,
+     center: [0 mm, 0 mm, top - slot_d / 2 + 0.05 mm],
+     operation: new, body_name: Slot, name: Slot}
+- solid.combine: {target: Rotor, tools: [Slot], operation: cut, keep_tools: false}

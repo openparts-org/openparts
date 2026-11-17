@@ -43,7 +43,11 @@ let sort_keys : Array[String] = [
 let enum_param_keys : Array[String] = [
   "dielectric", "color", "polarity", "output_type", "data_interface", "clock_output",
   "channel_count", "rail_to_rail_input", "rail_to_rail_output", "output_structure",
-  "logic_function",
+  "logic_function", "resolution", "motor_type", "microstepping", "led_driver_type",
+  "amplifier_class", "buzzer_type", "buzzer_drive", "contact_form", "relay_type",
+  "taper", "resistive_element", "pulses_per_revolution", "detents", "push_switch",
+  "light_sensor_type", "target_gas", "sensing_principle", "magnetic_sensor_type",
+  "radio_protocol", "antenna_type",
 ]
 
 ///|
@@ -103,6 +107,54 @@ fn param_columns(category : String, root~ : String = category) -> Array[String] 
     "can_transceiver" | "rs485_transceiver" | "rs232_transceiver" =>
       ["data_rate", "supply_voltage", "bus_fault_voltage", "esd_hbm"]
     "level_shifter" => ["channel_count", "data_rate", "supply_voltage"]
+    "motor_driver" =>
+      [
+        "motor_type", "channel_count", "motor_supply_voltage", "output_current",
+        "rds_on", "data_interface",
+      ]
+    "led_driver" =>
+      [
+        "led_driver_type", "channel_count", "output_current", "supply_voltage", "data_interface",
+      ]
+    "gate_driver" | "darlington_array" =>
+      ["channel_count", "supply_voltage", "output_current"]
+    "potentiometer" =>
+      ["resistance", "taper", "tolerance", "power_rating", "rotation_angle"]
+    "ferrite_bead" | "common_mode_choke" =>
+      ["impedance", "rated_current", "dcr", "rated_voltage"]
+    "rotary_encoder" =>
+      ["pulses_per_revolution", "detents", "push_switch", "rated_voltage"]
+    "light_sensor" =>
+      [
+        "light_sensor_type", "illuminance_range", "data_interface", "supply_voltage",
+      ]
+    "gas_sensor" =>
+      [
+        "target_gas", "sensing_principle", "concentration_range", "data_interface",
+      ]
+    "magnetic_sensor" =>
+      [
+        "magnetic_sensor_type", "operate_point", "magnetic_range", "output_structure",
+      ]
+    "audio_amplifier" =>
+      [
+        "amplifier_class", "channel_count", "output_power", "supply_voltage", "thd_n",
+      ]
+    "audio_codec" =>
+      ["resolution", "sample_rate", "snr", "data_interface", "supply_voltage"]
+    "microphone" =>
+      [
+        "data_interface", "sensitivity", "sensitivity_digital", "snr", "acoustic_overload_point",
+      ]
+    "buzzer" =>
+      [
+        "buzzer_type", "buzzer_drive", "rated_voltage", "frequency", "sound_pressure",
+      ]
+    "wireless_module" =>
+      [
+        "radio_protocol", "antenna_type", "tx_power", "supply_voltage", "data_interface",
+      ]
+    "antenna" => ["frequency_band", "peak_gain", "antenna_type"]
     _ => param_columns_of_root(if root.is_empty() { category } else { root })
   }
 }
@@ -146,6 +198,14 @@ fn param_columns_of_root(category : String) -> Array[String] {
     "transistor" =>
       ["polarity", "drain_source_voltage", "drain_current", "rds_on"]
     "fuse" => ["rated_current", "rated_voltage"]
+    "driver" => ["channel_count", "supply_voltage", "output_current"]
+    "relay" =>
+      [
+        "coil_voltage", "contact_form", "contact_current", "contact_voltage", "coil_resistance",
+      ]
+    "audio" => ["channel_count", "supply_voltage", "snr"]
+    "rf" => ["radio_protocol", "frequency_band", "tx_power", "supply_voltage"]
+    "sensor" => ["data_interface", "supply_voltage", "supply_current"]
     _ => []
   }
 }
@@ -687,7 +747,18 @@ fn category_glyph(c : @api.ComponentCategory) -> String {
     | LevelShifter => "I/F"
     Logic => "74"
     Timing | Oscillator | Timer | Rtc => "TMR"
-    Driver | GateDriver | DarlingtonArray => "DRV"
+    Driver | GateDriver | DarlingtonArray | MotorDriver | LedDriver => "DRV"
+    Relay => "K"
+    RotaryEncoder => "ENC"
+    Potentiometer => "RV"
+    FerriteBead => "FB"
+    CommonModeChoke => "FL"
+    LightSensor | GasSensor | MagneticSensor => "SNS"
+    Audio | AudioAmplifier | AudioCodec => "AUD"
+    Microphone => "MIC"
+    Buzzer => "BZ"
+    Rf | WirelessModule => "RF"
+    Antenna => "ANT"
     Other => "IC"
   }
 }

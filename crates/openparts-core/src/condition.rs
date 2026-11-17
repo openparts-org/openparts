@@ -61,6 +61,7 @@ pub const CONDITION_SYMBOLS: &[ConditionSymbol] = &[
     sym("VR", Quantity::Voltage, "reverse voltage"),
     sym("VF", Quantity::Voltage, "forward voltage"),
     sym("VOD", Quantity::Voltage, "input overdrive (comparators)"),
+    sym("VM", Quantity::Voltage, "motor (bridge) supply voltage"),
     sym("ID", Quantity::Current, "drain current"),
     sym("IC", Quantity::Current, "collector current"),
     sym("IB", Quantity::Current, "base current"),
@@ -80,6 +81,16 @@ pub const CONDITION_SYMBOLS: &[ConditionSymbol] = &[
     sym("TT", Quantity::Temperature, "terminal temperature"),
     sym("f", Quantity::Frequency, "frequency"),
     sym("t", Quantity::Time, "duration"),
+    sym(
+        "THD",
+        Quantity::Ratio,
+        "total harmonic distortion + noise (an audio amplifier's output power)",
+    ),
+    sym(
+        "d",
+        Quantity::Length,
+        "measuring distance (a buzzer's sound pressure)",
+    ),
 ];
 
 /// The vocabulary entry for `symbol` (case-sensitive).

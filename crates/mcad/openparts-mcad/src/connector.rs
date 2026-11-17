@@ -1,6 +1,7 @@
 //! The connector families (`card_socket`, `barrel_jack`,
 //! `terminal_block`, `fpc_connector`, `rf_coax`, `micro_usb_b`,
-//! `mini_usb_b`, `usb_b`), from an
+//! `mini_usb_b`, `usb_b`) and the electromechanical ones (`relay`,
+//! `buzzer`, `trimmer`, `rotary_encoder`: no mating face), from an
 //! explicit land pattern: every pad -- signal contacts, shield and hold-down
 //! pads, plated (often slotted) tabs, non-plated peg holes -- is listed in
 //! `Package::pads` as the source's recommended PCB layout gives it.
@@ -22,7 +23,7 @@ use crate::{Body, BodyShape, McadError, MechanicalGeometry, Mounting, Point3, Si
 use openparts_core::{Orientation, Package, PackageFamily as F};
 
 pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadError> {
-    if !openparts_core::is_connector_family(package.family) {
+    if !openparts_core::is_pad_body_family(package.family) {
         return Err(McadError::UnsupportedFamily(package.family));
     }
     if package.pads.is_empty() {
@@ -53,6 +54,15 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
         None => return Err(McadError::MissingDimension("dimensions.body_height")),
     };
     let features = connector_features(package, [body_w, body_l, body_h]);
+    let details = if openparts_core::is_electromechanical_family(package.family) {
+        crate::Details::Electromechanical(electromechanical_features(
+            package,
+            [body_w, body_l, body_h],
+            features.tail_length,
+        ))
+    } else {
+        crate::Details::Connector(features)
+    };
     let z = if features.edge_mount {
         -defaults::connector::EDGE_BOARD_THICKNESS / 2.0
     } else {
@@ -69,7 +79,7 @@ pub fn generate_connector(package: &Package) -> Result<MechanicalGeometry, McadE
         family: package.family,
         lands: vec![],
         pitch: defaults::required(&package.pitch),
-        details: crate::Details::Connector(features),
+        details,
         body: Body {
             position: Point3 {
                 x: 0.0,
@@ -225,10 +235,111 @@ pub fn connector_features(package: &Package, body: [f64; 3]) -> ConnectorFeature
     }
 }
 
+/// What an electromechanical body carries on top (3D only).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ElectromechanicalFeatures {
+    /// Plated pins below the board's top surface.
+    pub tail_length: f64,
+    /// A buzzer's round can (`can_diameter`); `None`: a square housing.
+    pub can_diameter: Option<f64>,
+    /// A trimmer's rotor, an encoder's shaft (`actuator_diameter`, else
+    /// a default); 0 for a relay or buzzer.
+    pub top_diameter: f64,
+    /// How far the rotor or the bushing + shaft rise above the housing
+    /// (`overall_height` - standoff - `body_height`, else a default).
+    pub top_height: f64,
+}
+
+pub fn electromechanical_features(
+    package: &Package,
+    body: [f64; 3],
+    tail_length: f64,
+) -> ElectromechanicalFeatures {
+    use defaults::electromechanical as de;
+    let [body_w, body_l, body_h] = body;
+    let d = &package.dimensions;
+    let side = body_w.min(body_l);
+    let above = value(&d.overall_height)
+        .map(|top| top - value(&d.standoff).unwrap_or(0.0) - body_h)
+        .filter(|h| *h > 0.0);
+    let (top_diameter, top_height) = match package.family {
+        F::Trimmer => (
+            value(&d.actuator_diameter).unwrap_or(side * de::ROTOR_RATIO),
+            above.unwrap_or(de::ROTOR_HEIGHT),
+        ),
+        F::RotaryEncoder => (
+            value(&d.actuator_diameter)
+                .unwrap_or(de::SHAFT_DIAMETER)
+                .min(side * de::MAX_SHAFT_RATIO),
+            above.unwrap_or(de::SHAFT_LENGTH),
+        ),
+        _ => (0.0, 0.0),
+    };
+    ElectromechanicalFeatures {
+        tail_length,
+        can_diameter: (package.family == F::Buzzer)
+            .then(|| value(&d.can_diameter))
+            .flatten(),
+        top_diameter,
+        top_height,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::generate;
+
+    /// An Omron G5V-1-style relay: 12.5 x 7.5 x 10 mm, a 2 x 3 pin grid
+    /// less one (5 plated holes).
+    pub(crate) fn relay() -> Package {
+        pkg("family: relay\nlead_count: 5\npitch: {unit: mm}\n\
+             dimensions:\n\
+             \x20 body_width: {typ: 12.5, unit: mm}\n\
+             \x20 body_length: {typ: 7.5, unit: mm}\n\
+             \x20 body_height: {typ: 10.0, unit: mm}\n\
+             pads:\n\
+             \x20 - {number: '1', x: -5.08, y: -2.54, width: 1.6, length: 1.6, drill: 1.0}\n\
+             \x20 - {number: '2', x: -5.08, y: 2.54, width: 1.6, length: 1.6, drill: 1.0}\n\
+             \x20 - {number: '3', x: 2.54, y: 2.54, width: 1.6, length: 1.6, drill: 1.0}\n\
+             \x20 - {number: '4', x: 5.08, y: 2.54, width: 1.6, length: 1.6, drill: 1.0}\n\
+             \x20 - {number: '5', x: 5.08, y: -2.54, width: 1.6, length: 1.6, drill: 1.0}\n")
+    }
+
+    #[test]
+    fn electromechanical_bodies_sit_over_their_land_pattern() {
+        let g = generate(&relay()).unwrap();
+        assert_eq!(g.leads.len(), 5);
+        assert!((g.body.position.z - 5.0).abs() < 1e-9);
+        let crate::Details::Electromechanical(f) = g.details else {
+            panic!("electromechanical details");
+        };
+        assert_eq!((f.top_diameter, f.can_diameter), (0.0, None));
+        // An encoder's shaft reaches the stated overall height; a
+        // trimmer's rotor takes the default share of the housing.
+        let mut enc = relay();
+        enc.family = F::RotaryEncoder;
+        enc.dimensions.overall_height = Some(openparts_core::Dimension {
+            typ: Some(26.5),
+            unit: "mm".into(),
+            ..Default::default()
+        });
+        let crate::Details::Electromechanical(f) = generate(&enc).unwrap().details else {
+            panic!();
+        };
+        assert!((f.top_height - 16.5).abs() < 1e-9);
+        assert!(
+            (f.top_diameter - 3.75).abs() < 1e-9,
+            "capped at half the side"
+        );
+        let mut trim = relay();
+        trim.family = F::Trimmer;
+        let crate::Details::Electromechanical(f) = generate(&trim).unwrap().details else {
+            panic!();
+        };
+        assert!((f.top_diameter - 7.5 * 0.75).abs() < 1e-9);
+        assert!((f.top_height - 0.5).abs() < 1e-9);
+    }
 
     fn pkg(yaml: &str) -> Package {
         serde_yaml::from_str(&format!(

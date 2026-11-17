@@ -136,6 +136,20 @@ pub fn is_connector_family(family: F) -> bool {
     )
 }
 
+/// The electromechanical families (relay, buzzer, trimmer, rotary
+/// encoder): like a connector, a body over an explicit land pattern
+/// (`Package::pads`) in a frame centred on the body, but no mating face
+/// and no `connector` facts (Canonical Data Specification section 20.14).
+pub fn is_electromechanical_family(family: F) -> bool {
+    matches!(family, F::Relay | F::Buzzer | F::Trimmer | F::RotaryEncoder)
+}
+
+/// The families drawn as a body over the stated land pattern, the
+/// connector and the electromechanical ones.
+pub fn is_pad_body_family(family: F) -> bool {
+    is_connector_family(family) || is_electromechanical_family(family)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

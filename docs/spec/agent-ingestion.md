@@ -507,6 +507,20 @@ MPN, so it goes on the Part).
 | `comparator` (group `analog`) | `channel_count`, `propagation_delay`, `output_structure`, `input_offset_voltage`, `input_bias_current`, `supply_voltage`, `supply_current_per_channel` / `supply_current`, `rail_to_rail_input`, `operating_temperature` |
 | `logic` | `logic_function`, `channel_count`, `supply_voltage`, `propagation_delay`, `output_current_high`, `output_current_low`, `output_structure`, `operating_temperature` |
 | `can_transceiver`, `rs485_transceiver`, `rs232_transceiver`, `level_shifter`, I2C buffers (group `interface`) | `data_rate`, `supply_voltage`, `supply_current`, `bus_fault_voltage`, `esd_hbm`, `channel_count` (level shifters, buffers), `propagation_delay`, `operating_temperature` |
+| `adc`, `dac` (group `analog`) | `resolution`, `sample_rate`, `channel_count`, `data_interface`, `supply_voltage`, `supply_current` |
+| `motor_driver` (group `driver`) | `motor_type`, `motor_supply_voltage` (VM, the bridge supply), `supply_voltage` (only a separate logic supply), `output_current` (continuous per bridge/output), `output_current_peak`, `channel_count` (H-bridges / half-bridges), `rds_on` (HS + LS), `microstepping`, `data_interface` (`pwm`, `phase_enable`, `step_dir`, `spi`...), `operating_temperature` |
+| `led_driver` (group `driver`) | `led_driver_type`, `channel_count`, `output_current` (per channel max), `output_current_peak`, `supply_voltage`, `data_interface`, `operating_temperature` |
+| `audio_amplifier` (group `audio`) | `amplifier_class`, `channel_count`, `output_power` (per channel, `at: { RL: 8 Ω, VDD: 5 V, THD: 10 % }`), `thd_n`, `snr`, `supply_voltage`, `supply_current` |
+| `audio_codec` (group `audio`) | `resolution`, `sample_rate`, `snr`, `thd_n`, `channel_count`, `data_interface` (`i2s`, `tdm`), `supply_voltage` |
+| `microphone` (group `audio`) | `data_interface` (`analog`, `pdm`, `i2s`), `sensitivity` (analog, `dBV`) or `sensitivity_digital` (digital, `dBFS`), `snr`, `acoustic_overload_point` (`dBSPL`), `supply_voltage`, `supply_current` |
+| `buzzer` (group `audio`) | `buzzer_type` (`magnetic`, `piezo`), `buzzer_drive` (`internal`: built-in oscillator; `external`: driven with the tone), `rated_voltage`, `supply_voltage` (operating range), `rated_current`, `frequency`, `sound_pressure` (`at: { d: 10 cm, VIN: 5 V }`), `coil_resistance` |
+| `light_sensor`, `gas_sensor`, `magnetic_sensor` (group `sensor`) | light: `light_sensor_type`, `illuminance_range`, `peak_wavelength`; gas: `target_gas`, `sensing_principle`, `concentration_range`; magnetic: `magnetic_sensor_type`, `operate_point`, `release_point`, `magnetic_range`, `output_structure`; all: `data_interface`, `supply_voltage`, `supply_current` |
+| relay | `coil_voltage`, `coil_resistance`, `contact_form`, `contact_current`, `contact_voltage`, `relay_type`, `isolation_voltage` |
+| `potentiometer` (group `resistor`) | `resistance`, `tolerance`, `power_rating`, `taper`, `rotation_angle`, `resistive_element` |
+| `rotary_encoder` (group `switch`) | `pulses_per_revolution`, `detents`, `push_switch`, `rotation_angle`, `rated_voltage`, `rated_current` |
+| `ferrite_bead`, `common_mode_choke` (group `inductor`) | `impedance` (`at: { f: 100 MHz }`), `tolerance`, `rated_current`, `dcr`, `inductance` (chokes), `rated_voltage` (chokes) |
+| `wireless_module` (group `rf`) | `radio_protocol`, `frequency_band`, `tx_power`, `rx_sensitivity`, `antenna_type`, `data_interface` (host interface), `supply_voltage`, `supply_current` |
+| `antenna` (group `rf`) | `frequency_band`, `peak_gain`, `antenna_type` |
 | any IC | `supply_voltage`, `supply_current`, `operating_temperature`, `esd_hbm` |
 
 No other keys exist. Don't invent one; propose it in the PR text

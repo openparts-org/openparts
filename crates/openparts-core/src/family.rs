@@ -98,6 +98,20 @@ families! {
     /// cylindrical body lying along X with a metal end cap at each end;
     /// the footprint is the source's land pattern (`pads`).
     Melf: "melf",
+    /// PCB relays: a rectangular housing over the source's land pattern
+    /// (`pads`: a THT pin grid, or SMD gull-wing terminals).
+    Relay: "relay",
+    /// Buzzers and sounders: a round can (`can_diameter`) or a square
+    /// housing with a sound hole on top, over the source's land pattern
+    /// (THT pins or SMD terminals).
+    Buzzer: "buzzer" | "sounder",
+    /// Trimmer potentiometers: a housing with an adjustment rotor
+    /// (screwdriver slot) on top, over the source's land pattern.
+    Trimmer: "trimmer" | "trimpot",
+    /// Rotary encoders (EC11-class): a housing with a bushing and a
+    /// vertical shaft, over the source's land pattern (signal and
+    /// switch pins, mounting lugs).
+    RotaryEncoder: "rotary_encoder",
 }
 
 impl PackageFamily {

@@ -50,7 +50,11 @@ pub fn build(input: &ModelInput<'_>) -> Result<Script, ModelError> {
         | F::RfCoax
         | F::MicroUsbB
         | F::MiniUsbB
-        | F::UsbB => connector::build(&mut s, input)?,
+        | F::UsbB
+        | F::Relay
+        | F::Buzzer
+        | F::Trimmer
+        | F::RotaryEncoder => connector::build(&mut s, input)?,
         F::SmdLed => led::build(&mut s, input)?,
         F::SmdElectrolytic => electrolytic::build(&mut s, input)?,
         F::Melf => melf::build(&mut s, input)?,

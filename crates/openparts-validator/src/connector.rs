@@ -101,10 +101,11 @@ pub(crate) fn check_smd_electrolytic(entity: &str, package: &Package) -> Vec<Dia
         ))
     };
     if package.family != F::SmdElectrolytic {
-        if d.can_diameter.is_some() {
+        // A round buzzer states its can too (electromechanical.invalid).
+        if d.can_diameter.is_some() && package.family != F::Buzzer {
             bad(
                 "/dimensions/can_diameter",
-                "can_diameter belongs to the smd_electrolytic family",
+                "can_diameter belongs to the smd_electrolytic and buzzer families",
             );
         }
         return out;
@@ -198,6 +199,102 @@ pub(crate) fn check_melf(entity: &str, package: &Package) -> Vec<Diagnostic> {
     out
 }
 
+/// The land-pattern body checks shared by the connector and the
+/// electromechanical families, reported under `rule`: the pads, one
+/// plated pad per lead, the body height and every SMD pad's size or a
+/// bare slot's axis. (`body_length`, which an edge-mount RF connector
+/// may leave out, is the caller's.)
+fn check_pad_body(package: &Package, mut bad: impl FnMut(&str, String)) {
+    let family = package.family;
+    if package.pads.is_empty() {
+        bad(
+            "/pads",
+            format!("a {family} package lists its land pattern in pads"),
+        );
+    }
+    let plated = package.pads.iter().filter(|p| p.plated).count();
+    if !package.pads.is_empty() && plated != package.lead_count as usize {
+        bad(
+            "/lead_count",
+            format!(
+                "lead_count ({}) must equal the number of plated pads ({plated})",
+                package.lead_count
+            ),
+        );
+    }
+    // An RF connector's base height is often not printed (3D default).
+    if package.dimensions.body_height.is_none() && family != F::RfCoax {
+        bad(
+            "/dimensions/body_height",
+            format!("a {family} package states dimensions.body_height"),
+        );
+    }
+    for (i, p) in package.pads.iter().enumerate() {
+        let problem = if !p.land_unstated() {
+            None
+        } else if p.drill.is_none() {
+            Some("an SMD pad states its width and length")
+        } else if p.drill_length.is_some() && p.slot_axis.is_none() {
+            Some("a slot without a land states slot_axis")
+        } else {
+            None
+        };
+        if let Some(problem) = problem {
+            bad(&format!("/pads/{i}"), problem.to_string());
+        }
+    }
+}
+
+/// `electromechanical.invalid`: a `relay`, `buzzer`, `trimmer` or
+/// `rotary_encoder` package states its land pattern (`pads`, one plated
+/// pad per lead), its body (`body_length`, `body_height`), no `connector`
+/// facts, and a rotor/shaft top (`overall_height`) above the housing.
+pub(crate) fn check_electromechanical(entity: &str, package: &Package) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let family = package.family;
+    if !openparts_core::is_electromechanical_family(family) {
+        return out;
+    }
+    let mut bad = |path: &str, message: String| {
+        out.push(Diagnostic::error(
+            "electromechanical.invalid",
+            entity,
+            Some(path),
+            message,
+        ))
+    };
+    check_pad_body(package, &mut bad);
+    let d = &package.dimensions;
+    if d.body_length
+        .typ
+        .or(d.body_length.min)
+        .or(d.body_length.max)
+        .is_none()
+    {
+        bad(
+            "/dimensions/body_length",
+            format!("a {family} package states dimensions.body_length"),
+        );
+    }
+    if package.connector.is_some() {
+        bad(
+            "/connector",
+            format!("a {family} package has no connector facts"),
+        );
+    }
+    let value =
+        |x: &Option<openparts_core::Dimension>| x.as_ref().and_then(|x| x.typ.or(x.max).or(x.min));
+    if let (Some(top), Some(h)) = (value(&d.overall_height), value(&d.body_height)) {
+        if top + 1e-9 < h + value(&d.standoff).unwrap_or(0.0) {
+            bad(
+                "/dimensions/overall_height",
+                "overall_height (the rotor or shaft top) is below the housing top".into(),
+            );
+        }
+    }
+    out
+}
+
 /// `connector.invalid` and the connector facts' `provenance.missing`.
 pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Diagnostic> {
     let mut out = Vec::new();
@@ -226,22 +323,7 @@ pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Di
         }
     }
     if is_connector_family(family) {
-        if package.pads.is_empty() {
-            bad(
-                "/pads",
-                format!("a {family} package lists its land pattern in pads"),
-            );
-        }
-        let plated = package.pads.iter().filter(|p| p.plated).count();
-        if !package.pads.is_empty() && plated != package.lead_count as usize {
-            bad(
-                "/lead_count",
-                format!(
-                    "lead_count ({}) must equal the number of plated pads ({plated})",
-                    package.lead_count
-                ),
-            );
-        }
+        check_pad_body(package, &mut bad);
         // An edge-mount RF connector's flange depth may be unprinted: its
         // frame then starts at the PCB edge line (20.6).
         let depth = &package.dimensions.body_length;
@@ -257,27 +339,6 @@ pub(crate) fn check_package_connector(entity: &str, package: &Package) -> Vec<Di
                         .to_string(),
                 ),
                 Some(_) => {}
-            }
-        }
-        // An RF connector's base height is often not printed (3D default).
-        if package.dimensions.body_height.is_none() && family != F::RfCoax {
-            bad(
-                "/dimensions/body_height",
-                format!("a {family} package states dimensions.body_height"),
-            );
-        }
-        for (i, p) in package.pads.iter().enumerate() {
-            let problem = if !p.land_unstated() {
-                None
-            } else if p.drill.is_none() {
-                Some("an SMD pad states its width and length")
-            } else if p.drill_length.is_some() && p.slot_axis.is_none() {
-                Some("a slot without a land states slot_axis")
-            } else {
-                None
-            };
-            if let Some(problem) = problem {
-                bad(&format!("/pads/{i}"), problem.to_string());
             }
         }
         let c = package.connector.clone().unwrap_or_default();
@@ -377,6 +438,42 @@ mod tests {
         assert!(paths(&check_melf("p", &p)).contains(&"melf.invalid /pads".to_string()));
         // Other families are not this rule's.
         assert!(check_melf("p", &pkg("smd_led", "")).is_empty());
+    }
+
+    #[test]
+    fn electromechanical_packages_state_pads_and_body() {
+        for family in ["relay", "buzzer", "trimmer", "rotary_encoder"] {
+            assert!(
+                check_electromechanical("p", &pkg(family, "")).is_empty(),
+                "{family}"
+            );
+        }
+        // A round buzzer's can is not the electrolytic rule's business.
+        let mut round = pkg("buzzer", "");
+        round.dimensions.can_diameter = round.dimensions.body_height.clone();
+        assert!(check_smd_electrolytic("p", &round).is_empty());
+        let mut p = pkg("rotary_encoder", "connector: {orientation: vertical}\n");
+        p.lead_count = 3;
+        p.pads.remove(0);
+        p.dimensions.body_height = None;
+        p.dimensions.overall_height = Some(openparts_core::Dimension {
+            typ: Some(1.0),
+            unit: "mm".into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            paths(&check_electromechanical("p", &p)),
+            [
+                "electromechanical.invalid /lead_count",
+                "electromechanical.invalid /dimensions/body_height",
+                "electromechanical.invalid /connector",
+            ]
+        );
+        p.dimensions.body_height = Some(p.dimensions.body_width.clone());
+        assert!(paths(&check_electromechanical("p", &p))
+            .contains(&"electromechanical.invalid /dimensions/overall_height".to_string()));
+        // Other families are not this rule's.
+        assert!(check_electromechanical("p", &pkg("melf", "")).is_empty());
     }
 
     #[test]

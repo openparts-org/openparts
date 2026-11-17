@@ -31,6 +31,8 @@ pub enum ComponentCategory {
     Crystal,
     Fuse,
     Connector,
+    /// Electromechanical, reed and solid-state relays.
+    Relay,
     Other,
     /// Photocouplers (an LED and a photodetector in one package).
     Optocoupler,
@@ -86,11 +88,52 @@ pub enum ComponentCategory {
     // Switches
     Switch,
     TactSwitch,
+    /// Mechanical and optical incremental rotary encoders.
+    RotaryEncoder,
     // Drivers
     Driver,
     /// MOSFET/IGBT gate drivers.
     GateDriver,
     DarlingtonArray,
+    /// Brushed DC, stepper and BLDC motor drivers (bridges and
+    /// pre-drivers with their control logic).
+    MotorDriver,
+    /// LED drivers: constant-current sinks, LED matrix and PWM drivers,
+    /// switching LED drivers.
+    LedDriver,
+    // Resistors
+    /// Potentiometers and trimmers (a resistor with a wiper).
+    Potentiometer,
+    // Inductors
+    /// Ferrite beads (chip EMI suppressors rated by impedance).
+    FerriteBead,
+    /// Common-mode chokes and filters.
+    CommonModeChoke,
+    // Sensors
+    /// Ambient-light, proximity, colour and UV sensors.
+    LightSensor,
+    /// Gas and air-quality sensors (VOC, CO2, ...).
+    GasSensor,
+    /// Hall switches and latches, linear Hall sensors, magnetometers.
+    MagneticSensor,
+    // Audio
+    Audio,
+    /// Audio power amplifiers (class D, AB...).
+    AudioAmplifier,
+    /// Audio codecs (ADC + DAC with an audio interface).
+    AudioCodec,
+    /// Microphones (MEMS, electret).
+    Microphone,
+    /// Buzzers and sounders (magnetic or piezo, with or without a
+    /// driver circuit).
+    Buzzer,
+    // RF
+    Rf,
+    /// Radio modules (Wi-Fi, Bluetooth, 802.15.4, LoRa...): a radio
+    /// with its antenna or antenna connector on one module.
+    WirelessModule,
+    /// Antennas (chip, PCB, patch...).
+    Antenna,
 }
 
 use ComponentCategory as C;
@@ -101,7 +144,10 @@ impl ComponentCategory {
         C::Microcontroller,
         C::Capacitor,
         C::Resistor,
+        C::Potentiometer,
         C::Inductor,
+        C::FerriteBead,
+        C::CommonModeChoke,
         C::Crystal,
         C::Diode,
         C::Transistor,
@@ -109,8 +155,10 @@ impl ComponentCategory {
         C::Optocoupler,
         C::Fuse,
         C::Connector,
+        C::Relay,
         C::Switch,
         C::TactSwitch,
+        C::RotaryEncoder,
         C::Power,
         C::LinearRegulator,
         C::SwitchingRegulator,
@@ -125,6 +173,9 @@ impl ComponentCategory {
         C::PressureSensor,
         C::Imu,
         C::TemperatureSensor,
+        C::LightSensor,
+        C::GasSensor,
+        C::MagneticSensor,
         C::Analog,
         C::OpAmp,
         C::Comparator,
@@ -148,20 +199,37 @@ impl ComponentCategory {
         C::Driver,
         C::GateDriver,
         C::DarlingtonArray,
+        C::MotorDriver,
+        C::LedDriver,
+        C::Audio,
+        C::AudioAmplifier,
+        C::AudioCodec,
+        C::Microphone,
+        C::Buzzer,
+        C::Rf,
+        C::WirelessModule,
+        C::Antenna,
         C::Other,
     ];
 
     /// The group a subcategory belongs to; `None` for a top-level value.
     pub fn parent(self) -> Option<ComponentCategory> {
         Some(match self {
-            C::TactSwitch => C::Switch,
+            C::TactSwitch | C::RotaryEncoder => C::Switch,
+            C::Potentiometer => C::Resistor,
+            C::FerriteBead | C::CommonModeChoke => C::Inductor,
             C::LinearRegulator
             | C::SwitchingRegulator
             | C::BatteryCharger
             | C::VoltageReference
             | C::PowerSwitch => C::Power,
             C::Flash | C::Eeprom | C::Sram => C::Memory,
-            C::PressureSensor | C::Imu | C::TemperatureSensor => C::Sensor,
+            C::PressureSensor
+            | C::Imu
+            | C::TemperatureSensor
+            | C::LightSensor
+            | C::GasSensor
+            | C::MagneticSensor => C::Sensor,
             C::OpAmp
             | C::Comparator
             | C::CurrentSenseAmplifier
@@ -176,7 +244,9 @@ impl ComponentCategory {
             | C::Rs232Transceiver
             | C::LevelShifter => C::Interface,
             C::Oscillator | C::Timer | C::Rtc => C::Timing,
-            C::GateDriver | C::DarlingtonArray => C::Driver,
+            C::GateDriver | C::DarlingtonArray | C::MotorDriver | C::LedDriver => C::Driver,
+            C::AudioAmplifier | C::AudioCodec | C::Microphone | C::Buzzer => C::Audio,
+            C::WirelessModule | C::Antenna => C::Rf,
             _ => return None,
         })
     }
@@ -253,6 +323,24 @@ impl ComponentCategory {
             C::Driver => "driver",
             C::GateDriver => "gate_driver",
             C::DarlingtonArray => "darlington_array",
+            C::Relay => "relay",
+            C::RotaryEncoder => "rotary_encoder",
+            C::MotorDriver => "motor_driver",
+            C::LedDriver => "led_driver",
+            C::Potentiometer => "potentiometer",
+            C::FerriteBead => "ferrite_bead",
+            C::CommonModeChoke => "common_mode_choke",
+            C::LightSensor => "light_sensor",
+            C::GasSensor => "gas_sensor",
+            C::MagneticSensor => "magnetic_sensor",
+            C::Audio => "audio",
+            C::AudioAmplifier => "audio_amplifier",
+            C::AudioCodec => "audio_codec",
+            C::Microphone => "microphone",
+            C::Buzzer => "buzzer",
+            C::Rf => "rf",
+            C::WirelessModule => "wireless_module",
+            C::Antenna => "antenna",
         }
     }
 
@@ -279,7 +367,7 @@ mod tests {
             assert_eq!(C::parse(c.name()), Some(*c));
         }
         // Every variant is in ALL (the match in `name` lists them all).
-        assert_eq!(seen.len(), 51);
+        assert_eq!(seen.len(), 69);
     }
 
     #[test]
@@ -289,6 +377,13 @@ mod tests {
         assert!(!C::Power.is_within(C::LinearRegulator));
         assert!(!C::Capacitor.is_within(C::Power));
         assert_eq!(C::Imu.root(), C::Sensor);
+        assert!(C::Potentiometer.is_within(C::Resistor));
+        assert!(C::FerriteBead.is_within(C::Inductor));
+        assert_eq!(C::Buzzer.root(), C::Audio);
+        assert_eq!(
+            C::Rf.children().collect::<Vec<_>>(),
+            [C::WirelessModule, C::Antenna]
+        );
         assert_eq!(
             C::Memory.children().collect::<Vec<_>>(),
             [C::Flash, C::Eeprom, C::Sram]
