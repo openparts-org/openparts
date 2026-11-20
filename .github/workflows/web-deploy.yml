@@ -1,11 +1,13 @@
-# The web site (web/) on GitHub Pages.
+# GitHub Pages (openparts-org.github.io/openparts/) only redirects to the
+# live site, which openparts-server serves together with its API
+# (deploy/raspberry-pi/). Old links keep their path and query:
+# /openparts/parts?q=rp2040 -> https://openparts.jijinbei.jp/parts?q=rp2040
 name: web-deploy
 
 on:
   push:
     branches: [main]
-    # The part viewer is Rust (crates/viewer) built into the site.
-    paths: ["web/**", "crates/**", "Cargo.toml", "Cargo.lock"]
+    paths: [".github/workflows/web-deploy.yml"]
   workflow_dispatch:
 
 permissions:
@@ -17,75 +19,43 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  SITE: https://openparts.jijinbei.jp
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install MoonBit
+      - name: Redirect pages
         run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      # The part viewer (crates/viewer/openparts-viewer) is Rust compiled
-      # to wasm: bun run build runs scripts/build-wasm.sh, which needs the
-      # wasm32 target and wasm-bindgen-cli at the Cargo.lock version.
-      - name: Install Rust (wasm32)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: cargo-bins/cargo-binstall@main
-      - name: Install wasm-bindgen-cli (the Cargo.lock version)
-        run: cargo binstall -y --force "wasm-bindgen-cli@$(scripts/build-wasm.sh --bindgen-version)"
-      # wasm-opt shrinks the viewer (build-wasm.sh pins the release).
-      - name: Install binaryen (wasm-opt)
-        run: |
-          v="$(scripts/build-wasm.sh --binaryen-version)"
-          f="binaryen-version_$v-x86_64-linux.tar.gz"
-          cd "$RUNNER_TEMP"
-          curl -fsSLO "https://github.com/WebAssembly/binaryen/releases/download/version_$v/$f"
-          curl -fsSLO "https://github.com/WebAssembly/binaryen/releases/download/version_$v/$f.sha256"
-          sha256sum -c "$f.sha256"
-          tar xzf "$f"
-          echo "$RUNNER_TEMP/binaryen-version_$v/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/binaryen-version_$v/bin/wasm-opt" --version
-
-      # Fetches the MoonBit dependencies into .mooncakes/.
-      - run: moon update && moon check --target js
-
-      - run: bun install --frozen-lockfile
-
-      - name: Build
-        env:
-          # Points the deployed site at a live openparts-server. Empty
-          # until one is actually deployed -- until then, every API call
-          # (search, part detail, 3D preview, downloads) fails with a
-          # handled error message rather than breaking the page; the
-          # static content (landing, KiCad plugin, contributing pages)
-          # still works. Set the OPENPARTS_API_BASE repository variable
-          # once a server is live, e.g. https://api.openparts.example.
-          VITE_OPENPARTS_API_BASE: ${{ vars.OPENPARTS_API_BASE || '/api' }}
-          # The project site's path.
-          OPENPARTS_BASE: /openparts/
-        run: |
-          bun run build
-          # Deep links (/openparts/parts?...) land on 404.html: the same app.
-          cp dist/index.html dist/404.html
+          mkdir -p site
+          cat > site/index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>OpenParts has moved</title>
+              <link rel="canonical" href="$SITE/" />
+              <meta name="robots" content="noindex" />
+              <meta http-equiv="refresh" content="0; url=$SITE/" />
+              <script>
+                // Keep the path below /openparts/ and the query.
+                var p = location.pathname.replace(/^\/openparts\/?/, "/");
+                location.replace("$SITE" + p + location.search + location.hash);
+              </script>
+            </head>
+            <body>
+              <p>OpenParts has moved to <a href="$SITE/">$SITE</a>.</p>
+            </body>
+          </html>
+          EOF
+          cp site/index.html site/404.html
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: site
 
   deploy:
     needs: build
