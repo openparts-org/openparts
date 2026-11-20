@@ -14,13 +14,21 @@ const PIN_LENGTH_MM: f64 = 2.54;
 /// (`GPIO26` -> `GPIO`). A name with no shared prefix (`TESTEN`, `RUN`)
 /// becomes its own singleton group, same as any other family.
 ///
+/// A `-` suffix is cut like `/` (STM32 `PA0-WKUP` -> `PA0` -> `PA`).
+///
 /// Deliberately simple/deterministic rather than a fuzzy label-similarity
 /// match: common MCU pin-naming conventions across vendors (STM32
 /// `PA0`/`PA1`, ESP32 `GPIO0`, RP2040 `QSPI_SD0`) already follow this
 /// "prefix + delimiter" pattern, and fuzzy matching would trade that for
 /// grouping decisions that are harder to predict or test.
-fn pin_group_key(name: &str) -> String {
+pub fn pin_group_key(name: &str) -> String {
     let base = name.split('/').next().unwrap_or(name);
+    // A `-` suffix names an alternate function too (STM32's
+    // `PA0-WKUP`, `PC14-OSC32_IN`), unless the name starts with it.
+    let base = match base.split_once('-') {
+        Some((head, _)) if !head.is_empty() => head,
+        _ => base,
+    };
     let first_word = base.split('_').next().unwrap_or(base);
     let trimmed = first_word.trim_end_matches(|c: char| c.is_ascii_digit());
     if trimmed.is_empty() {
@@ -54,22 +62,161 @@ fn pin_group_key(name: &str) -> String {
 /// family grouping: `QSPI_SD0`/`QSPI_SD1` share a *family* (kept
 /// visually close, never merged, since they're different signals), but
 /// only pins sharing the exact same *name* -- the same net -- stack.
-fn group_by_exact_name<'a>(numbers: &[&'a String], device: &Device) -> Vec<Vec<&'a String>> {
-    let mut order: Vec<String> = Vec::new();
-    let mut groups: std::collections::HashMap<String, Vec<&'a String>> =
-        std::collections::HashMap::new();
-    for &number in numbers {
-        let name = device.pins[number].name.clone();
-        groups.entry(name.clone()).or_insert_with(|| {
-            order.push(name.clone());
-            Vec::new()
-        });
-        groups.get_mut(&name).unwrap().push(number);
+fn group_by_exact_name<'a>(pins: &[(&'a str, &'a str)]) -> Vec<PinStack> {
+    let mut stacks: Vec<PinStack> = Vec::new();
+    for &(number, name) in pins {
+        match stacks.iter_mut().find(|s| s.name == name) {
+            Some(s) => s.numbers.push(number.to_string()),
+            None => stacks.push(PinStack {
+                name: name.to_string(),
+                numbers: vec![number.to_string()],
+            }),
+        }
     }
-    order
-        .into_iter()
-        .map(|name| groups.remove(&name).unwrap())
-        .collect()
+    stacks
+}
+
+/// Where [`build_symbol`] puts a pin by its type: power on top, ground
+/// at the bottom, every other pin on the left or right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinRole {
+    Power,
+    Ground,
+    Signal,
+}
+
+impl PinRole {
+    pub fn of(t: PinType) -> Self {
+        match t {
+            PinType::Power | PinType::PowerOut => PinRole::Power,
+            PinType::Ground => PinRole::Ground,
+            _ => PinRole::Signal,
+        }
+    }
+}
+
+/// Pins sharing one exact name, drawn at one position (see
+/// [`group_by_exact_name`]); `numbers[0]` is the visible pin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinStack {
+    pub name: String,
+    pub numbers: Vec<String>,
+}
+
+/// One family ([`pin_group_key`]) on one side, its stacks in natural
+/// name order (`GPIO2` before `GPIO10`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinFamily {
+    pub key: String,
+    pub stacks: Vec<PinStack>,
+}
+
+/// A symbol's pins grouped the way [`build_symbol`] lays them out: each
+/// side's families in drawing order (first appearance by pin number).
+/// `right` holds the bus -- the largest signal family -- and `left`
+/// every other signal family. Shared by every exporter that lays a
+/// symbol out again (PCBCraft's units) so they keep the same grouping.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PinGroups {
+    pub top: Vec<PinFamily>,
+    pub bottom: Vec<PinFamily>,
+    pub left: Vec<PinFamily>,
+    pub right: Vec<PinFamily>,
+}
+
+/// Compares names by their text and digit runs, the digits as numbers:
+/// `GPIO2` < `GPIO10`, `P1.7` < `P2.0`.
+pub fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    fn runs(s: &str) -> Vec<(bool, &str)> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        let bytes = s.as_bytes();
+        for i in 1..=bytes.len() {
+            if i == bytes.len() || bytes[i].is_ascii_digit() != bytes[start].is_ascii_digit() {
+                out.push((bytes[start].is_ascii_digit(), &s[start..i]));
+                start = i;
+            }
+        }
+        out
+    }
+    let (ra, rb) = (runs(a), runs(b));
+    for ((da, ta), (db, tb)) in ra.iter().zip(rb.iter()) {
+        let ord = if *da && *db {
+            let (na, nb) = (ta.trim_start_matches('0'), tb.trim_start_matches('0'));
+            na.len().cmp(&nb.len()).then_with(|| na.cmp(nb))
+        } else {
+            ta.cmp(tb)
+        };
+        if ord.is_ne() {
+            return ord;
+        }
+    }
+    ra.len().cmp(&rb.len()).then_with(|| a.cmp(b))
+}
+
+/// Pin numbers in drawing order: numerically, then as text (`EP`, BGA
+/// balls).
+fn pin_number_order(a: &str, b: &str) -> std::cmp::Ordering {
+    let n = |s: &str| s.parse::<u32>().unwrap_or(u32::MAX);
+    n(a).cmp(&n(b)).then_with(|| a.cmp(b))
+}
+
+/// Groups `(number, name, role)` pins by side and family -- see
+/// [`PinGroups`] and [`build_symbol`].
+pub fn group_pins<'a>(pins: impl IntoIterator<Item = (&'a str, &'a str, PinRole)>) -> PinGroups {
+    let mut pins: Vec<(&str, &str, PinRole)> = pins.into_iter().collect();
+    pins.sort_by(|a, b| pin_number_order(a.0, b.0));
+    let families = |role: PinRole| -> Vec<PinFamily> {
+        let mut order: Vec<(String, Vec<(&str, &str)>)> = Vec::new();
+        for &(number, name, r) in &pins {
+            if r != role {
+                continue;
+            }
+            let key = pin_group_key(name);
+            match order.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, members)) => members.push((number, name)),
+                None => order.push((key, vec![(number, name)])),
+            }
+        }
+        order
+            .into_iter()
+            .map(|(key, members)| {
+                let mut stacks = group_by_exact_name(&members);
+                stacks.sort_by(|a, b| natural_cmp(&a.name, &b.name));
+                PinFamily { key, stacks }
+            })
+            .collect()
+    };
+    let mut left = families(PinRole::Signal);
+    let pin_count = |f: &PinFamily| f.stacks.iter().map(|s| s.numbers.len()).sum::<usize>();
+    // The last of equally large families, as `max_by_key` picks.
+    let bus = left
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, f)| pin_count(f))
+        .map(|(i, _)| i);
+    let right = bus.map(|i| vec![left.remove(i)]).unwrap_or_default();
+    PinGroups {
+        top: families(PinRole::Power),
+        bottom: families(PinRole::Ground),
+        left,
+        right,
+    }
+}
+
+impl PinGroups {
+    /// The groups of a symbol [`build_symbol`] drew: its top pins are
+    /// power, its bottom pins ground, the rest signals.
+    pub fn of_symbol(symbol: &PcbSymbol) -> PinGroups {
+        group_pins(symbol.pins.iter().map(|p| {
+            let role = match p.orientation {
+                PinOrientation::Top => PinRole::Power,
+                PinOrientation::Bottom => PinRole::Ground,
+                PinOrientation::Left | PinOrientation::Right => PinRole::Signal,
+            };
+            (p.number.as_str(), p.name.as_str(), role)
+        }))
+    }
 }
 
 /// Rough per-character glyph width for KiCad's default 1.27mm pin-name
@@ -301,44 +448,13 @@ pub fn reference_prefix(category: openparts_core::ComponentCategory) -> &'static
 }
 
 pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
-    let mut numbers: Vec<&String> = device.pins.keys().collect();
-    numbers.sort_by_key(|n| n.parse::<u32>().unwrap_or(u32::MAX));
-
-    let mut top: Vec<&String> = Vec::new();
-    let mut bottom: Vec<&String> = Vec::new();
-    let mut rest: Vec<&String> = Vec::new();
-    for number in &numbers {
-        match device.pins[*number].pin_type {
-            PinType::Power | PinType::PowerOut => top.push(number),
-            PinType::Ground => bottom.push(number),
-            _ => rest.push(number),
-        }
-    }
-
-    let mut group_order: Vec<String> = Vec::new();
-    let mut groups: std::collections::HashMap<String, Vec<&String>> =
-        std::collections::HashMap::new();
-    for number in &rest {
-        let key = pin_group_key(&device.pins[*number].name);
-        groups.entry(key.clone()).or_insert_with(|| {
-            group_order.push(key.clone());
-            Vec::new()
-        });
-        groups.get_mut(&key).unwrap().push(number);
-    }
-
-    let bus_key = group_order.iter().max_by_key(|k| groups[*k].len()).cloned();
-
-    let mut left: Vec<&String> = Vec::new();
-    let mut right: Vec<&String> = Vec::new();
-    for key in &group_order {
-        let target = if Some(key) == bus_key.as_ref() {
-            &mut right
-        } else {
-            &mut left
-        };
-        target.extend(groups[key].iter().copied());
-    }
+    let groups = group_pins(device.pins.iter().map(|(number, pin)| {
+        (
+            number.as_str(),
+            pin.name.as_str(),
+            PinRole::of(pin.pin_type),
+        )
+    }));
 
     // Stack pins that share the exact same name (e.g. RP2040's six
     // IOVDD pins) at a single schematic position -- see
@@ -346,45 +462,32 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // on one PinSpec per name-group rather than per physical pin; each
     // group's packed position is applied to every member pin when
     // SymbolPins are finally emitted below.
-    let top_groups = group_by_exact_name(&top, device);
-    let bottom_groups = group_by_exact_name(&bottom, device);
-    let left_groups = group_by_exact_name(&left, device);
+    let flatten = |families: &[PinFamily]| -> Vec<(String, Vec<String>)> {
+        families
+            .iter()
+            .flat_map(|f| f.stacks.iter().map(|s| (f.key.clone(), s.numbers.clone())))
+            .collect()
+    };
+    let top_groups = flatten(&groups.top);
+    let bottom_groups = flatten(&groups.bottom);
+    let left_groups = flatten(&groups.left);
+    let right_groups = flatten(&groups.right);
 
     // Every side uses the same flat grid-pitch half-extent (see
     // PIN_PACKING_HALF_EXTENT_MM's docs); the only per-side difference
     // left is which family-boundary gaps apply, e.g. RP2040's IOVDD
     // group packs tightly against DVDD, then gets a gap before
     // ADC_AVDD, the VREG_VIN/VREG_VOUT pair (sharing the "VREG"
-    // family), and USB_VDD.
-    let top_specs: Vec<PinSpec> = top_groups
-        .iter()
-        .map(|g| {
-            (
-                PIN_PACKING_HALF_EXTENT_MM,
-                Some(pin_group_key(&device.pins[g[0]].name)),
-            )
-        })
-        .collect();
-    let bottom_specs: Vec<PinSpec> = bottom_groups
-        .iter()
-        .map(|g| {
-            (
-                PIN_PACKING_HALF_EXTENT_MM,
-                Some(pin_group_key(&device.pins[g[0]].name)),
-            )
-        })
-        .collect();
-    // Left: fixed row height, but grouped -- an extra gap opens up
-    // wherever the pin family changes (e.g. between QSPI_* and USB_*).
-    let left_specs: Vec<PinSpec> = left_groups
-        .iter()
-        .map(|g| {
-            (
-                PIN_PACKING_HALF_EXTENT_MM,
-                Some(pin_group_key(&device.pins[g[0]].name)),
-            )
-        })
-        .collect();
+    // family), and USB_VDD. On the left an extra gap opens up wherever
+    // the pin family changes (e.g. between QSPI_* and USB_*).
+    let specs_of = |side: &[(String, Vec<String>)]| -> Vec<PinSpec> {
+        side.iter()
+            .map(|(key, _)| (PIN_PACKING_HALF_EXTENT_MM, Some(key.clone())))
+            .collect()
+    };
+    let top_specs = specs_of(&top_groups);
+    let bottom_specs = specs_of(&bottom_groups);
+    let left_specs = specs_of(&left_groups);
 
     let top_pos = pack_centered(&top_specs);
     let bottom_pos = pack_centered(&bottom_specs);
@@ -397,21 +500,13 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // behavior. Grouped before chunking so a stacked bus pin (unlikely
     // in practice -- bus signals are normally uniquely named -- but
     // possible) never gets split across a unit boundary.
-    let right_groups = group_by_exact_name(&right, device);
-    let bus_chunks: Vec<&[Vec<&String>]> = right_groups.chunks(BUS_UNIT_MAX_PINS).collect();
+    let bus_chunks: Vec<&[(String, Vec<String>)]> =
+        right_groups.chunks(BUS_UNIT_MAX_PINS).collect();
     let splitting = bus_chunks.len() > 1;
     let chunk_specs_pos: Vec<(Vec<PinSpec>, Vec<f64>)> = bus_chunks
         .iter()
         .map(|chunk| {
-            let specs: Vec<PinSpec> = chunk
-                .iter()
-                .map(|g| {
-                    (
-                        PIN_PACKING_HALF_EXTENT_MM,
-                        Some(pin_group_key(&device.pins[g[0]].name)),
-                    )
-                })
-                .collect();
+            let specs = specs_of(chunk);
             let pos = pack_centered(&specs);
             (specs, pos)
         })
@@ -444,7 +539,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     let snap = |v: f64| (v / HALF_GRID_MM - 1e-9).ceil() * HALF_GRID_MM;
     let (half_width, half_height) = (snap(half_width), snap(half_height));
 
-    let mut pins = Vec::with_capacity(numbers.len());
+    let mut pins = Vec::with_capacity(device.pins.len());
     // Only the first pin in a stacked name-group (see `SymbolPin::hidden`'s
     // docs) is drawn with its real electrical type; every other member
     // is hidden and downgraded to `Passive`, matching KiCad's own
@@ -480,8 +575,8 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // negated. Every member of a name-group shares its group's one
     // packed position (native KiCad pin stacking -- see
     // group_by_exact_name's docs).
-    for (group, &y) in left_groups.iter().zip(left_pos.iter()) {
-        for (i, &number) in group.iter().enumerate() {
+    for ((_, group), &y) in left_groups.iter().zip(left_pos.iter()) {
+        for (i, number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -494,8 +589,8 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             );
         }
     }
-    for (group, &x) in bottom_groups.iter().zip(bottom_pos.iter()) {
-        for (i, &number) in group.iter().enumerate() {
+    for ((_, group), &x) in bottom_groups.iter().zip(bottom_pos.iter()) {
+        for (i, number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -508,8 +603,8 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             );
         }
     }
-    for (group, &x) in top_groups.iter().zip(top_pos.iter()) {
-        for (i, &number) in group.iter().enumerate() {
+    for ((_, group), &x) in top_groups.iter().zip(top_pos.iter()) {
+        for (i, number) in group.iter().enumerate() {
             push_pin(
                 number,
                 Point2 {
@@ -525,8 +620,8 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     for (chunk_index, chunk) in bus_chunks.iter().enumerate() {
         let (_, chunk_pos) = &chunk_specs_pos[chunk_index];
         let unit = if splitting { chunk_index as u32 + 1 } else { 1 };
-        for (group, &y) in chunk.iter().zip(chunk_pos.iter()) {
-            for (i, &number) in group.iter().enumerate() {
+        for ((_, group), &y) in chunk.iter().zip(chunk_pos.iter()) {
+            for (i, number) in group.iter().enumerate() {
                 push_pin(
                     number,
                     Point2 {
@@ -620,25 +715,69 @@ mod tests {
 
     #[test]
     fn group_by_exact_name_groups_and_preserves_first_appearance_order() {
-        let device = device_shaped_like_an_mcu();
-        let numbers: Vec<&String> = ["15", "16", "17", "14"]
-            .iter()
-            .map(|n| {
-                device
-                    .pins
-                    .keys()
-                    .find(|k| k.as_str() == *n)
-                    .expect("fixture has this pin")
-            })
-            .collect();
-        let groups = group_by_exact_name(&numbers, &device);
+        let pins = [
+            ("15", "IOVDD"),
+            ("16", "IOVDD"),
+            ("17", "IOVDD"),
+            ("14", "TESTEN"),
+        ];
+        let groups = group_by_exact_name(&pins);
         // 15/16/17 are all "IOVDD" (one group of 3); 14 is "TESTEN"
         // (its own singleton group), in first-appearance order.
         assert_eq!(groups.len(), 2);
-        assert_eq!(groups[0].len(), 3);
-        assert!(groups[0].iter().all(|n| device.pins[*n].name == "IOVDD"));
-        assert_eq!(groups[1].len(), 1);
-        assert_eq!(device.pins[groups[1][0]].name, "TESTEN");
+        assert_eq!(groups[0].name, "IOVDD");
+        assert_eq!(groups[0].numbers, ["15", "16", "17"]);
+        assert_eq!(groups[1].name, "TESTEN");
+        assert_eq!(groups[1].numbers, ["14"]);
+    }
+
+    #[test]
+    fn natural_cmp_orders_digit_runs_as_numbers() {
+        let mut names = vec!["GPIO10", "GPIO2", "GPIO1", "P2.0", "P1.10", "P1.7", "ADC"];
+        names.sort_by(|a, b| natural_cmp(a, b));
+        assert_eq!(
+            names,
+            ["ADC", "GPIO1", "GPIO2", "GPIO10", "P1.7", "P1.10", "P2.0"]
+        );
+    }
+
+    #[test]
+    fn pin_group_key_cuts_dash_alternate_functions() {
+        assert_eq!(pin_group_key("PA0-WKUP"), "PA");
+        assert_eq!(pin_group_key("PC14-OSC32_IN"), "PC");
+        assert_eq!(pin_group_key("-IN"), "-IN");
+    }
+
+    #[test]
+    fn group_pins_sorts_a_family_naturally_and_picks_the_bus() {
+        let groups = group_pins([
+            ("1", "PB10", PinRole::Signal),
+            ("2", "PB2", PinRole::Signal),
+            ("3", "PB0", PinRole::Signal),
+            ("4", "NRST", PinRole::Signal),
+            ("5", "VDD", PinRole::Power),
+            ("6", "VDD", PinRole::Power),
+            ("7", "VSS", PinRole::Ground),
+        ]);
+        let names = |f: &PinFamily| f.stacks.iter().map(|s| s.name.clone()).collect::<Vec<_>>();
+        assert_eq!(groups.right.len(), 1);
+        assert_eq!(names(&groups.right[0]), ["PB0", "PB2", "PB10"]);
+        assert_eq!(groups.left[0].key, "NRST");
+        assert_eq!(groups.top[0].stacks[0].numbers, ["5", "6"]);
+        assert_eq!(groups.bottom[0].key, "VSS");
+    }
+
+    #[test]
+    fn groups_of_a_built_symbol_match_the_device_groups() {
+        let device = device_shaped_like_an_mcu();
+        let symbol = build_symbol("MCU", &device);
+        let from_device = group_pins(
+            device
+                .pins
+                .iter()
+                .map(|(n, p)| (n.as_str(), p.name.as_str(), PinRole::of(p.pin_type))),
+        );
+        assert_eq!(PinGroups::of_symbol(&symbol), from_device);
     }
 
     #[test]

@@ -352,7 +352,8 @@ fn a_large_symbol_is_split_into_units() {
         serde_json::from_str(&lib.documents["symbols/yageo-rc0603.json"]).unwrap();
     assert_eq!(sym["format"], "pcbcraft-symbol/4");
     let units = sym["units"].as_array().unwrap();
-    assert_eq!(units.len(), 5);
+    // One family of 40 (`P0`..`P39`): units of 16 (left, then right).
+    assert_eq!(units.len(), 3);
     // Pin 1 (the topmost) first, on the 1.27 mm grid within 12.7 mm.
     assert_eq!(units[0]["pins"][0]["terminal"], "1");
     for u in units {

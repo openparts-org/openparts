@@ -32,10 +32,34 @@ checked against PCBCraft's own `scripts/check-library-schemas.py` and
 (PCBCraft points Y down), in nanometres. PCBCraft pins sit on the
 1.27 mm grid at most 12.7 mm from the centre, so a symbol whose pins do
 not fit (RP2040: 70 mm tall) is laid out again into units of at most 8
-pins per side around a 20.32 mm body, each pin keeping its side and
-order (at most 32 units, 1,024 terminals). Pins the IR stacks at one
-position (same name: RP2040's six IOVDD pins) become one terminal,
-numbered by the visible pin.
+pins per side around a 20.32 mm body (at most 32 units, 1,024
+terminals), grouped as the KiCad symbol is: the same pin families
+(`openparts_pcbcad::PinGroups`, shared with `build_symbol`: power,
+ground, the bus and the other signal families by name prefix, each
+family in natural name order, `GPIO2` before `GPIO10`).
+
+- Everything goes in one unit when it fits (8 per side, power on top,
+  ground at the bottom, signals on the left then the right).
+- Otherwise the first unit holds power (top), ground (bottom) and the
+  non-bus signal families (left, then right); families that do not fit
+  move on to the next unit, related neighbours (same first two
+  characters: `MTCK`/`MTDO`, `SPICS`/`SPIHD`) together.
+- The buses -- the IR's bus, every family of 8 or more and the ports of
+  the same series (`PC` next to `PA`/`PB`, `P5.` next to `P1.`), sorted
+  by name -- follow in units of their own, never in the first one.
+- A family stays on one side; one longer than a side fills an empty
+  unit's left then right side; one longer than a unit (16) is cut in
+  order into as few pieces as it takes. Families sharing a side are one
+  empty slot apart when there is room.
+- A symbol with no families (a connector: every pin named by its
+  number) keeps pin number order, 8 per side.
+
+RP2040 becomes power + GND + TESTEN/XIN/XOUT/SWCLK/SWD/RUN/USB/QSPI,
+then GPIO0-15, then GPIO16-29; STM32F103C8 power + ground +
+OSC/NRST/BOOT0, then PA, PB and PC. Only drawing positions and units
+change: the terminals and their pads are the same in any layout. Pins
+the IR stacks at one position (same name: RP2040's six IOVDD pins)
+become one terminal, numbered by the visible pin.
 
 **Footprint.** The package's Placement Model at density level N, built
 without a device: pads (mm -> integer nm, Y flipped, rotation 0),

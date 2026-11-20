@@ -15,7 +15,10 @@ mod symbol;
 pub use footprint::{add_shared_pads, build_footprint, footprint_from_placement};
 pub use openparts_core::PadSide;
 pub use openparts_placement;
-pub use symbol::{build_symbol, reference_prefix};
+pub use symbol::{
+    build_symbol, group_pins, natural_cmp, pin_group_key, reference_prefix, PinFamily, PinGroups,
+    PinRole, PinStack,
+};
 
 use openparts_core::PinType;
 pub(crate) use openparts_mcad::Mounting;
