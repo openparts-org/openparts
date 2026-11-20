@@ -261,6 +261,7 @@ openparts/
 │   │   ├── openparts-pcbcad/
 │   │   ├── openparts-kicad/
 │   │   ├── openparts-librepcb/
+│   │   ├── openparts-pcbcraft/
 │   │   └── openparts-altium/
 │   │
 │   └── mcad/
@@ -537,10 +538,12 @@ openparts-pcbcad
       ↓
 PCB CAD Intermediate Representation
       │
- ┌────┼──────────┐
- ▼    ▼          ▼
-KiCad LibrePCB Altium
+ ┌────┼──────────┬─────────┐
+ ▼    ▼          ▼         ▼
+KiCad LibrePCB PCBCraft  Altium
 ```
+
+PCBCraft Adapter（`openparts-pcbcraft`）の対応・拒否規則・revision ledgerは[PCBCraft Export](pcbcraft-export.md)で定義する。
 
 共通表現の例：
 

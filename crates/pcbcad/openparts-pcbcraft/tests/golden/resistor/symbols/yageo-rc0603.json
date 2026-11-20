@@ -1,0 +1,72 @@
+{
+  "format": "pcbcraft-symbol/1",
+  "id": "yageo-rc0603",
+  "revision": 1,
+  "name": "yageo/RC0603",
+  "reference_prefix": "R",
+  "default_value": "yageo/RC0603",
+  "terminals": [
+    {
+      "id": "1",
+      "name": "~",
+      "electrical_type": "passive"
+    },
+    {
+      "id": "2",
+      "name": "~",
+      "electrical_type": "passive"
+    }
+  ],
+  "units": [
+    {
+      "id": "main",
+      "drawing": [
+        {
+          "type": "rect",
+          "min_nm": [
+            -2540000,
+            -1270000
+          ],
+          "max_nm": [
+            2540000,
+            1270000
+          ]
+        }
+      ],
+      "pins": [
+        {
+          "terminal": "1",
+          "at_nm": [
+            -5080000,
+            0
+          ],
+          "appearance": {
+            "orientation": "right",
+            "length_nm": 2540000,
+            "style": "line",
+            "show_name": true,
+            "show_number": true,
+            "name_height_nm": 1270000,
+            "number_height_nm": 1270000
+          }
+        },
+        {
+          "terminal": "2",
+          "at_nm": [
+            5080000,
+            0
+          ],
+          "appearance": {
+            "orientation": "left",
+            "length_nm": 2540000,
+            "style": "line",
+            "show_name": true,
+            "show_number": true,
+            "name_height_nm": 1270000,
+            "number_height_nm": 1270000
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -49,7 +49,8 @@ crates/
 ├── pcbcad/
 │   ├── openparts-pcbcad    PCB CAD-independent Symbol/Footprint IR
 │   ├── openparts-kicad      KiCad adapter
-│   └── openparts-librepcb   LibrePCB adapter
+│   ├── openparts-librepcb   LibrePCB adapter
+│   └── openparts-pcbcraft   PCBCraft native library adapter
 └── mcad/
     ├── openparts-mcad       Mechanical Geometry generators
     ├── openparts-solidcraft Mechanical Geometry -> detailed parametric

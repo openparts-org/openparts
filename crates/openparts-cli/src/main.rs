@@ -2,6 +2,7 @@ mod bom;
 mod bundle;
 mod data;
 mod diff_facts;
+mod pcbcraft;
 mod stale;
 
 use anyhow::Context;
@@ -137,6 +138,50 @@ enum Commands {
         #[arg(long)]
         markdown: bool,
     },
+    /// Write parts as a PCBCraft native library: a folder (`--out`)
+    /// or a `pcbcraft-library-bundle/1` file (`--bundle`). Symbols,
+    /// footprints, generic parts (one per device, one package variant
+    /// per package), manufacturer parts and categories; what PCBCraft
+    /// cannot represent is refused per part, with the reason.
+    Pcbcraft {
+        /// The openparts-data checkout.
+        #[arg(long, default_value = "../openparts-data")]
+        data: PathBuf,
+        /// The library folder to create (must not exist or be empty).
+        #[arg(long, conflicts_with = "bundle")]
+        out: Option<PathBuf>,
+        /// The bundle file to create (a directory with --group-by).
+        #[arg(long)]
+        bundle: Option<PathBuf>,
+        /// The licence every record declares (SPDX).
+        #[arg(long, default_value = "CC0-1.0")]
+        license: String,
+        /// Revision ledger (read if present, then updated): keeps record
+        /// ids and revisions stable across exports.
+        #[arg(long)]
+        ledger: Option<PathBuf>,
+        #[arg(long, default_value = "openparts")]
+        library_id: String,
+        #[arg(long, default_value = "OpenParts")]
+        library_name: String,
+        /// Split into several libraries (PCBCraft reads at most 8,192
+        /// files per library).
+        #[arg(long, value_enum, default_value = "none")]
+        group_by: pcbcraft::GroupBy,
+        /// The dataset revision recorded in each record's source
+        /// (default: the checkout's git HEAD).
+        #[arg(long)]
+        dataset_revision: Option<String>,
+        /// The registry URL the records' locators point at (default:
+        /// --registry).
+        #[arg(long)]
+        locator_base: Option<String>,
+        /// Exit with an error when a part is refused.
+        #[arg(long)]
+        strict: bool,
+        /// Part ids (`<manufacturer>/<mpn>`); default: every part.
+        parts: Vec<String>,
+    },
     /// Bill of materials tools.
     Bom {
         #[command(subcommand)]
@@ -270,6 +315,33 @@ fn main() -> anyhow::Result<()> {
             out,
             jobs: jobs
                 .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get())),
+            strict,
+        }),
+        Commands::Pcbcraft {
+            data,
+            out,
+            bundle,
+            license,
+            ledger,
+            library_id,
+            library_name,
+            group_by,
+            dataset_revision,
+            locator_base,
+            strict,
+            parts,
+        } => pcbcraft::run(pcbcraft::Options {
+            data,
+            out,
+            bundle,
+            license,
+            ledger,
+            library_id,
+            library_name,
+            group_by,
+            dataset_revision,
+            locator_base: locator_base.unwrap_or_else(|| cli.registry.clone()),
+            parts,
             strict,
         }),
         Commands::Bom {

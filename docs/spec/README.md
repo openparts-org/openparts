@@ -11,3 +11,4 @@ section 34) so the specs travel with the code that implements them.
 | [Testing and Quality Specification](testing-and-quality.md) | 0.1 Draft |
 | [Alternative Parts and BOM Checking](alternatives-and-bom.md) | 0.1 Draft |
 | [Placement Model](placement-model.md) | 1 |
+| [PCBCraft Export](pcbcraft-export.md) | 0.1 Draft |

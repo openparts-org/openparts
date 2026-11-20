@@ -1,0 +1,44 @@
+{
+  "format": "pcbcraft-part/2",
+  "library": "openparts",
+  "id": "yageo-rc0603",
+  "revision": 1,
+  "name": "yageo/RC0603",
+  "license": "CC0-1.0",
+  "source": {
+    "kind": "openparts",
+    "reference": "openparts-data abc; test",
+    "locator": "https://example.org/v1/devices/yageo/RC0603"
+  },
+  "symbol": {
+    "library": "openparts",
+    "id": "yageo-rc0603",
+    "revision": 1
+  },
+  "category": {
+    "definition": {
+      "library": "openparts",
+      "id": "resistor",
+      "revision": 1
+    },
+    "primary_value": "pcbcraft:resistance"
+  },
+  "packages": {
+    "standards-0603": {
+      "name": "standards/0603",
+      "footprint": {
+        "library": "openparts",
+        "id": "standards-0603",
+        "revision": 1
+      },
+      "mapping": {
+        "1": [
+          "1"
+        ],
+        "2": [
+          "2"
+        ]
+      }
+    }
+  }
+}

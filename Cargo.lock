@@ -2790,6 +2790,7 @@ dependencies = [
  "openparts-librepcb",
  "openparts-mcad",
  "openparts-pcbcad",
+ "openparts-pcbcraft",
  "openparts-solidcraft",
  "openparts-validator",
  "serde",
@@ -2881,6 +2882,19 @@ dependencies = [
  "openparts-mcad",
  "openparts-placement",
  "serde_yaml",
+]
+
+[[package]]
+name = "openparts-pcbcraft"
+version = "0.1.0"
+dependencies = [
+ "openparts-core",
+ "openparts-mcad",
+ "openparts-pcbcad",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

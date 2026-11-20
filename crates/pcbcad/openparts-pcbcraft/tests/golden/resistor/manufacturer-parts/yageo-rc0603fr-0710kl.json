@@ -1,0 +1,39 @@
+{
+  "format": "pcbcraft-manufacturer-part/1",
+  "library": "openparts",
+  "id": "yageo-rc0603fr-0710kl",
+  "revision": 1,
+  "name": "RC0603FR-0710KL",
+  "license": "CC0-1.0",
+  "source": {
+    "kind": "openparts",
+    "reference": "openparts-data abc; test",
+    "locator": "https://example.org/v1/parts/yageo/RC0603FR-0710KL"
+  },
+  "manufacturer": "Yageo",
+  "mpn": "RC0603FR-0710KL",
+  "part": {
+    "library": "openparts",
+    "id": "yageo-rc0603",
+    "revision": 1
+  },
+  "package": "standards-0603",
+  "datasheet": "https://example.org/rc.pdf",
+  "specifications": {
+    "openparts:power-rating": {
+      "type": "quantity",
+      "value": "0.1",
+      "unit": "W"
+    },
+    "pcbcraft:resistance": {
+      "type": "quantity",
+      "value": "10000",
+      "unit": "Ohm"
+    },
+    "pcbcraft:tolerance": {
+      "type": "quantity",
+      "value": "0.01",
+      "unit": "1"
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "format": "pcbcraft-footprint/1",
+  "library": "openparts",
+  "id": "standards-0603",
+  "revision": 1,
+  "name": "standards/0603",
+  "license": "CC0-1.0",
+  "source": {
+    "kind": "openparts",
+    "reference": "openparts-data abc; test",
+    "locator": "https://example.org/v1/packages/standards/0603"
+  },
+  "pads": [
+    {
+      "number": "1",
+      "center": {
+        "x_nm": -800000,
+        "y_nm": 0
+      },
+      "width_nm": 800000,
+      "height_nm": 950000,
+      "rotation": 0,
+      "shape": "rectangle",
+      "copper": "component_side"
+    },
+    {
+      "number": "2",
+      "center": {
+        "x_nm": 800000,
+        "y_nm": 0
+      },
+      "width_nm": 800000,
+      "height_nm": 950000,
+      "rotation": 0,
+      "shape": "rectangle",
+      "copper": "component_side"
+    }
+  ],
+  "graphics": [],
+  "artwork": [
+    {
+      "purpose": "fabrication",
+      "graphic": {
+        "geometry": {
+          "type": "polyline",
+          "points": [
+            {
+              "x_nm": -800000,
+              "y_nm": 400000
+            },
+            {
+              "x_nm": 800000,
+              "y_nm": 400000
+            },
+            {
+              "x_nm": 800000,
+              "y_nm": -400000
+            },
+            {
+              "x_nm": -800000,
+              "y_nm": -400000
+            }
+          ],
+          "closed": true
+        },
+        "stroke_nm": 100000,
+        "fill": "none"
+      }
+    },
+    {
+      "purpose": "courtyard",
+      "graphic": {
+        "geometry": {
+          "type": "polyline",
+          "points": [
+            {
+              "x_nm": -1500000,
+              "y_nm": 750000
+            },
+            {
+              "x_nm": 1500000,
+              "y_nm": 750000
+            },
+            {
+              "x_nm": 1500000,
+              "y_nm": -750000
+            },
+            {
+              "x_nm": -1500000,
+              "y_nm": -750000
+            }
+          ],
+          "closed": true
+        },
+        "stroke_nm": 50000,
+        "fill": "none"
+      }
+    }
+  ],
+  "reference": "pcbcraft-technical-1"
+}

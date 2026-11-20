@@ -17,6 +17,7 @@ openparts-solidcraft = { path = "../mcad/openparts-solidcraft" }
 openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
 openparts-kicad = { path = "../pcbcad/openparts-kicad" }
 openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
+openparts-pcbcraft = { path = "../pcbcad/openparts-pcbcraft" }
 openparts-client = { path = "../openparts-client" }
 openparts-artifacts = { path = "../openparts-artifacts" }
 openparts-bom = { path = "../openparts-bom" }
