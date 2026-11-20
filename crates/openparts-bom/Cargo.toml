@@ -2,6 +2,7 @@
 name = "openparts-bom"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "BOM parsing and matching, and alternative-part suggestions with pin-compatibility analysis, over an OpenParts dataset."
 
 [dependencies]

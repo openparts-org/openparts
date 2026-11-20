@@ -2,6 +2,7 @@
 name = "openparts-placement"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The OpenParts Placement Model (docs/spec/placement-model.md): a part's land pattern, courtyard, body and placement frame, built from Mechanical Geometry."
 
 [dependencies]

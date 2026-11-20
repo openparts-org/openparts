@@ -2,6 +2,7 @@
 name = "openparts-artifacts"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Part -> Effective Model -> geometry -> every artifact: the one pipeline the CLI, the bundler and the server share."
 
 [dependencies]

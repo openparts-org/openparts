@@ -1056,6 +1056,17 @@ Contribution Terms
 
 一つのLicenseですべてを扱うことを前提としない。
 
+決定（2026-11-21）:
+
+| 対象 | License | 理由 |
+|---|---|---|
+| Software（このリポジトリのコード） | MIT OR Apache-2.0 | Rust の慣習。SolidCraft / PCBCraft と同じで、コードを行き来させやすい |
+| Database（openparts-data の YAML） | CC-BY-4.0 | 商用利用も自由、出典表示だけを求める。provenance を重視するプロジェクトとして「OpenParts 由来」を表示してもらう |
+| Generated Artifact（Symbol / Footprint / 3D / KiCad・LibrePCB・PCBCraft ライブラリ） | CC0-1.0 | 利用者の基板・製品に条件を持ち込まない。事実からの機械生成で創作性も薄い |
+| Contribution Terms | inbound = outbound（各リポジトリのライセンスで受け入れる） | |
+
+データは事実（値・単位・条件）と短い locator のみで、データシートの文章・図・表やベンダー CAD 形状を含まない（Canonical Data Specification §26.2）。ライセンス本文: `LICENSE-MIT`, `LICENSE-APACHE`, `LICENSES/CC0-1.0.txt`, openparts-data の `LICENSE`。
+
 ---
 
 # 31. Versioning

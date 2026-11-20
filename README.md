@@ -176,3 +176,15 @@ OPENPARTS_DATA_DIR=../openparts-data OPENPARTS_ARTIFACT_DIR=/tmp/openparts-bundl
 cargo run -p openparts-cli -- search RP2040
 cargo run -p openparts-cli -- show raspberrypi RP2040
 ```
+
+## License
+
+| What | License |
+|---|---|
+| This repository's code | [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option |
+| The part data ([openparts-data](https://github.com/openparts-org/openparts-data)) | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Generated artifacts (symbols, footprints, 3D models, KiCad/LibrePCB/PCBCraft libraries) | [CC0-1.0](LICENSES/CC0-1.0.txt): use them in any design or product without conditions |
+
+Values are facts read from manufacturers' datasheets; no datasheet text,
+drawings or vendor CAD geometry is copied (Architecture Specification
+section 30).
