@@ -730,6 +730,7 @@ fn cmd_generate(
         ArtifactKind::KicadSymbol,
         ArtifactKind::KicadFootprint,
         ArtifactKind::FootprintSvg,
+        ArtifactKind::SymbolSvg,
     ] {
         write(kind, &build.render(kind)?)?;
     }

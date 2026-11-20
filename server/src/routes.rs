@@ -5,7 +5,7 @@
 
 use crate::error::ApiError;
 use crate::store::Store;
-use axum::extract::{Path, Query, RawQuery, State};
+use axum::extract::{OriginalUri, Path, Query, RawQuery, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -44,6 +44,14 @@ pub fn build_router(store: Arc<Store>) -> Router {
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts/footprint-svg",
             get(artifact_footprint_svg),
+        )
+        .route(
+            "/v1/parts/:manufacturer/:mpn/artifacts/symbol-svg",
+            get(artifact_symbol_svg),
+        )
+        .route(
+            "/v1/a/:sha256/:manufacturer/:mpn/:kind",
+            get(hashed_artifact),
         )
         .route(
             "/v1/parts/:manufacturer/:mpn/artifacts/step",
@@ -315,6 +323,10 @@ async fn get_revisions(
     Ok(Json(revisions))
 }
 
+/// Every artifact of a part, by kind id: its content-addressed link
+/// (`/v1/a/<sha256>/...`, cacheable for good) where the content is known
+/// without building a 3D model, else its plain link
+/// (`/v1/parts/.../artifacts/<kind>`). Either answers the artifact.
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Serialize)]
 struct ArtifactsResponse {
@@ -324,6 +336,9 @@ struct ArtifactsResponse {
     kicad_footprint: String,
     #[serde(rename = "footprint-svg")]
     footprint_svg: String,
+    /// The KiCad symbol drawn as SVG, every unit.
+    #[serde(rename = "symbol-svg")]
+    symbol_svg: String,
     step: String,
     stl: String,
     #[serde(rename = "3mf")]
@@ -331,30 +346,214 @@ struct ArtifactsResponse {
     /// The part as a `pcbcraft-library-bundle/1` with its dependency
     /// closure (crate::pcbcraft; `422` when PCBCraft can't represent it).
     pcbcraft: String,
+    /// The PCBCraft symbol drawn as SVG (`422` like `pcbcraft`).
+    #[serde(rename = "pcbcraft-symbol-svg")]
+    pcbcraft_symbol_svg: String,
 }
 
-/// `GET /v1/parts/{manufacturer}/{mpn}/artifacts`
+/// The kinds `GET /v1/a/...` serves.
+const SERVED_KINDS: [&str; 9] = [
+    "kicad-symbol",
+    "kicad-footprint",
+    "footprint-svg",
+    "symbol-svg",
+    "step",
+    "stl",
+    "3mf",
+    "pcbcraft",
+    "pcbcraft-symbol-svg",
+];
+
+/// `?silicon_revision=...`, or nothing.
+fn revision_query(revision: Option<&str>) -> String {
+    revision
+        .map(|r| format!("?silicon_revision={}", encode_segment(r)))
+        .unwrap_or_default()
+}
+
+/// An artifact's plain link (names the part, not the content).
+pub(crate) fn plain_artifact_path(
+    manufacturer: &str,
+    mpn: &str,
+    kind: &str,
+    revision: Option<&str>,
+) -> String {
+    format!(
+        "/v1/parts/{}/{}/artifacts/{kind}{}",
+        encode_segment(manufacturer),
+        encode_segment(mpn),
+        revision_query(revision)
+    )
+}
+
+/// An artifact's content-addressed link: what it answers never changes.
+pub(crate) fn hashed_artifact_path(
+    sha256: &str,
+    manufacturer: &str,
+    mpn: &str,
+    kind: &str,
+    revision: Option<&str>,
+) -> String {
+    format!(
+        "/v1/a/{sha256}/{}/{}/{kind}{}",
+        encode_segment(manufacturer),
+        encode_segment(mpn),
+        revision_query(revision)
+    )
+}
+
+/// The response's `x-content-hash` digest (hex, without `sha256:`).
+fn content_hash(response: &Response) -> Option<String> {
+    let v = response.headers().get("x-content-hash")?.to_str().ok()?;
+    Some(v.strip_prefix("sha256:").unwrap_or(v).to_string())
+}
+
+/// The current `kind` artifact of a part, as its plain link answers it.
+pub(crate) async fn current_artifact(
+    store: &Arc<Store>,
+    manufacturer: &str,
+    mpn: &str,
+    revision: Option<&str>,
+    kind: &str,
+) -> Result<Response, ApiError> {
+    match kind {
+        "pcbcraft" => crate::pcbcraft::part_bundle(store, manufacturer, mpn),
+        "pcbcraft-symbol-svg" => crate::pcbcraft::part_symbol_svg(store, manufacturer, mpn),
+        id => match ArtifactKind::from_id(id).filter(|_| SERVED_KINDS.contains(&id)) {
+            Some(kind) => {
+                artifact(
+                    store.clone(),
+                    manufacturer.to_string(),
+                    mpn.to_string(),
+                    RevisionQuery {
+                        silicon_revision: revision.map(str::to_string),
+                    },
+                    kind,
+                )
+                .await
+            }
+            None => Err(ApiError::NotFound(format!("no artifact kind {id}"))),
+        },
+    }
+}
+
+/// The digest of the current `kind` artifact, when it is known without
+/// building a 3D model (a model's comes from the bundle manifest only).
+/// Remembered: nothing it depends on changes while the server runs.
+async fn artifact_hash(
+    store: &Arc<Store>,
+    manufacturer: &str,
+    mpn: &str,
+    revision: Option<&str>,
+    kind: &str,
+) -> Option<String> {
+    let key = format!(
+        "{manufacturer}\0{mpn}\0{kind}\0{}",
+        revision.unwrap_or_default()
+    );
+    if let Some(h) = store.artifact_hashes.lock().ok()?.get(&key) {
+        return Some(h.clone());
+    }
+    let hash = match ArtifactKind::from_id(kind) {
+        Some(k) if k.model_format().is_some() => {
+            let bundled = store.bundle.as_ref()?.get(manufacturer, mpn, k.id())?;
+            bundled.sha256.to_ascii_lowercase()
+        }
+        _ => {
+            let res = current_artifact(store, manufacturer, mpn, revision, kind)
+                .await
+                .ok()?;
+            content_hash(&res)?
+        }
+    };
+    store.artifact_hashes.lock().ok()?.insert(key, hash.clone());
+    Some(hash)
+}
+
+/// `GET /v1/parts/{manufacturer}/{mpn}/artifacts?silicon_revision=...`
 async fn list_artifacts(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
+    Query(q): Query<RevisionQuery>,
 ) -> Result<Json<ArtifactsResponse>, ApiError> {
-    resolve_part(&store, &manufacturer, &mpn)?;
-    // An MPN may contain `/` ("APT1608QBC/D"): each segment is
-    // percent-encoded so the link stays one `:mpn` segment.
-    let base = format!(
-        "/v1/parts/{}/{}/artifacts",
-        encode_segment(&manufacturer),
-        encode_segment(&mpn)
-    );
+    // Checks the part and the revision.
+    build_part(&store, &manufacturer, &mpn, q.silicon_revision.as_deref())?;
+    let rev = q.silicon_revision.as_deref();
+    let mut links = std::collections::HashMap::new();
+    for kind in SERVED_KINDS {
+        // An MPN may contain `/` ("APT1608QBC/D"): each segment is
+        // percent-encoded so the link stays one `:mpn` segment.
+        let link = match artifact_hash(&store, &manufacturer, &mpn, rev, kind).await {
+            Some(h) => hashed_artifact_path(&h, &manufacturer, &mpn, kind, rev),
+            None => plain_artifact_path(&manufacturer, &mpn, kind, rev),
+        };
+        links.insert(kind, link);
+    }
+    let mut take = |k: &str| links.remove(k).unwrap_or_default();
     Ok(Json(ArtifactsResponse {
-        kicad_symbol: format!("{base}/kicad-symbol"),
-        kicad_footprint: format!("{base}/kicad-footprint"),
-        footprint_svg: format!("{base}/footprint-svg"),
-        step: format!("{base}/step"),
-        stl: format!("{base}/stl"),
-        three_mf: format!("{base}/3mf"),
-        pcbcraft: format!("{base}/pcbcraft"),
+        kicad_symbol: take("kicad-symbol"),
+        kicad_footprint: take("kicad-footprint"),
+        footprint_svg: take("footprint-svg"),
+        symbol_svg: take("symbol-svg"),
+        step: take("step"),
+        stl: take("stl"),
+        three_mf: take("3mf"),
+        pcbcraft: take("pcbcraft"),
+        pcbcraft_symbol_svg: take("pcbcraft-symbol-svg"),
     }))
+}
+
+/// How long a stale content-addressed link's redirect may be cached.
+const REDIRECT_CACHE: &str = "public, max-age=60";
+pub const IMMUTABLE: &str = "public, max-age=31536000, immutable";
+
+/// `GET /v1/a/{sha256}/{manufacturer}/{mpn}/{kind}?silicon_revision=...`
+///
+/// The artifact by content: answered with a year-long immutable cache
+/// policy when `sha256` is the current content's digest, else a `302`
+/// to the current content's link (the dataset changed since the link
+/// was given out).
+async fn hashed_artifact(
+    State(store): State<Arc<Store>>,
+    OriginalUri(uri): OriginalUri,
+    Path((sha256, manufacturer, mpn, kind)): Path<(String, String, String, String)>,
+    Query(q): Query<RevisionQuery>,
+) -> Result<Response, ApiError> {
+    let wanted = sha256.to_ascii_lowercase();
+    if wanted.len() != 64 || !wanted.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(ApiError::NotFound(format!(
+            "{sha256} is not a SHA-256 digest"
+        )));
+    }
+    let rev = q.silicon_revision.as_deref();
+    let mut res = current_artifact(&store, &manufacturer, &mpn, rev, &kind).await?;
+    let Some(have) = content_hash(&res) else {
+        return Ok(res);
+    };
+    if have == wanted {
+        res.headers_mut().insert(
+            header::CACHE_CONTROL,
+            header::HeaderValue::from_static(IMMUTABLE),
+        );
+        return Ok(res);
+    }
+    // Under `/api` too: the prefix the request came in under.
+    let path = uri.path();
+    let prefix = path.find("/v1/a/").map_or("", |i| &path[..i]);
+    let location = format!(
+        "{prefix}{}",
+        hashed_artifact_path(&have, &manufacturer, &mpn, &kind, rev)
+    );
+    let mut redirect = StatusCode::FOUND.into_response();
+    let h = redirect.headers_mut();
+    if let Ok(v) = header::HeaderValue::from_str(&location) {
+        h.insert(header::LOCATION, v);
+    }
+    h.insert(
+        header::CACHE_CONTROL,
+        header::HeaderValue::from_static(REDIRECT_CACHE),
+    );
+    Ok(redirect)
 }
 
 /// RFC 3986 percent-encoding of a path segment (everything but the
@@ -427,7 +626,7 @@ async fn get_placement(
     Ok(Json(build.placement(density)?))
 }
 
-fn artifact_response(content: Vec<u8>, content_type: &str) -> Response {
+pub(crate) fn artifact_response(content: Vec<u8>, content_type: &str) -> Response {
     let hash = sha256_hex(&content);
     let mut response = (StatusCode::OK, content).into_response();
     if let Ok(value) = header::HeaderValue::from_str(content_type) {
@@ -522,6 +721,7 @@ macro_rules! artifact_route {
 artifact_route!(artifact_kicad_symbol, ArtifactKind::KicadSymbol);
 artifact_route!(artifact_kicad_footprint, ArtifactKind::KicadFootprint);
 artifact_route!(artifact_footprint_svg, ArtifactKind::FootprintSvg);
+artifact_route!(artifact_symbol_svg, ArtifactKind::SymbolSvg);
 artifact_route!(artifact_step, ArtifactKind::Step);
 artifact_route!(artifact_stl, ArtifactKind::Stl);
 artifact_route!(artifact_3mf, ArtifactKind::ThreeMf);

@@ -125,12 +125,23 @@ pub(crate) async fn mount_model(
     root.set_inner_html("");
     root.class_list().add_1("opv-root").ok();
     let base = part_path(o);
-    let mesh = match super::fetch_bytes(&format!("{base}/artifacts/3mf"))
+    let api = o.api.trim_end_matches('/');
+    let links: super::ModelLinks = super::fetch_json(&format!("{base}/artifacts"))
+        .await
+        .unwrap_or_default();
+    let link = |l: Option<String>, kind: &str| {
+        l.filter(|l| l.starts_with('/')).map_or_else(
+            || format!("{base}/artifacts/{kind}"),
+            |l| format!("{api}{l}"),
+        )
+    };
+    let (three_mf, stl) = (link(links.three_mf, "3mf"), link(links.stl, "stl"));
+    let mesh = match super::fetch_bytes(&three_mf)
         .await
         .and_then(|b| mesh::parse_3mf(&b))
     {
         Ok(m) => m,
-        Err(_) => super::fetch_bytes(&format!("{base}/artifacts/stl"))
+        Err(_) => super::fetch_bytes(&stl)
             .await
             .and_then(|b| mesh::parse_stl(&b))
             .map_err(|_| labels.model_failed.clone())?,

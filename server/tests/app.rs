@@ -35,11 +35,14 @@ async fn the_api_answers_under_api_and_at_the_root() {
 async fn api_json_gets_a_short_cache_policy() {
     let app = openparts_server::app::build_app(store(), None);
     let res = get(app, "/api/v1/parts/raspberrypi/RP2040").await;
-    assert_eq!(res.headers()[header::CACHE_CONTROL], "public, max-age=300");
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "public, max-age=60, stale-while-revalidate=300"
+    );
 }
 
 #[tokio::test]
-async fn kicad_artifacts_revalidate_against_their_hash_as_etag() {
+async fn plain_artifact_links_are_cached_briefly_with_their_hash_as_etag() {
     let app = openparts_server::app::build_app(store(), None);
     let res = get(
         app,
@@ -47,7 +50,10 @@ async fn kicad_artifacts_revalidate_against_their_hash_as_etag() {
     )
     .await;
     assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(res.headers()[header::CACHE_CONTROL], "public, no-cache");
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "public, max-age=300, stale-while-revalidate=86400"
+    );
     let hash = res.headers()["x-content-hash"]
         .to_str()
         .unwrap()
@@ -101,4 +107,56 @@ async fn an_unchanged_artifact_answers_not_modified() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::NOT_MODIFIED);
     assert_eq!(res.headers()[header::ETAG], etag);
+    assert!(res.headers().contains_key(header::CACHE_CONTROL));
+    // In a list, weak, or another tag.
+    for (tag, status) in [
+        (
+            format!("\"x\", W/{}", etag.to_str().unwrap()),
+            StatusCode::NOT_MODIFIED,
+        ),
+        ("\"sha256:0\"".to_string(), StatusCode::OK),
+    ] {
+        let res = openparts_server::app::build_app(store(), None)
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .header(header::IF_NONE_MATCH, tag.as_str())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), status, "{tag}");
+    }
+}
+
+#[tokio::test]
+async fn a_hashed_artifact_link_is_immutable_and_revalidates() {
+    let app = openparts_server::app::build_app(store(), None);
+    let res = get(app.clone(), "/api/v1/parts/raspberrypi/RP2040/artifacts").await;
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let list: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let link = format!("/api{}", list["footprint-svg"].as_str().unwrap());
+    let res = get(app.clone(), &link).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
+    let etag = res.headers()[header::ETAG].clone();
+    let res = app
+        .oneshot(
+            Request::builder()
+                .uri(&link)
+                .header(header::IF_NONE_MATCH, etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(
+        res.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
 }

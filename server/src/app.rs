@@ -32,48 +32,73 @@ pub fn build_app(store: Arc<Store>, web_dir: Option<&Path>) -> Router {
     app.layer(middleware::from_fn(cache_headers))
 }
 
+/// The `If-None-Match` header names `etag` (or is `*`).
+fn matches_etag(if_none_match: Option<&HeaderValue>, etag: &str) -> bool {
+    let Some(v) = if_none_match.and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    v.split(',').map(str::trim).any(|t| {
+        let t = t.strip_prefix("W/").unwrap_or(t);
+        t == "*" || t == etag
+    })
+}
+
 /// How long a response may be cached, by what it is:
-/// - artifacts (`.../artifacts/<kind>`): revalidated on every use
-///   (`no-cache`) -- their URL names the part, not the content, so a
-///   fixed dataset must show at once; the `x-content-hash` is the ETag
-///   and an unchanged artifact answers `304 Not Modified`;
+/// - content-addressed artifacts (`/v1/a/<sha256>/...`): a year,
+///   immutable (set by the route; a stale digest is redirected);
+/// - artifacts by part (`.../artifacts/<kind>`): five minutes, then
+///   served stale while revalidated -- the URL names the part, not the
+///   content; the `x-content-hash` is the ETag and an unchanged
+///   artifact answers `304 Not Modified`;
 /// - Vite's content-hashed assets (`/assets/`): a year, immutable;
-/// - other API JSON: five minutes;
-/// - web pages: one minute.
+/// - other API JSON: a minute;
+/// - web pages: a minute;
+/// - API errors: not stored.
 async fn cache_headers(req: Request<Body>, next: Next) -> Response {
     let path = req.uri().path().to_string();
     let if_none_match = req.headers().get(header::IF_NONE_MATCH).cloned();
     let mut res = next.run(req).await;
-    if res.status() != StatusCode::OK || res.headers().contains_key(header::CACHE_CONTROL) {
+    let api = path.starts_with("/api/") || path.starts_with("/v1/");
+    let status = res.status();
+    if status.is_client_error() || status.is_server_error() {
+        if api && !res.headers().contains_key(header::CACHE_CONTROL) {
+            res.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        }
         return res;
     }
-    let api = path.starts_with("/api/") || path.starts_with("/v1/");
-    let policy = if path.starts_with("/assets/") {
-        "public, max-age=31536000, immutable"
-    } else if api && path.contains("/artifacts/") {
-        if let Some(hash) = res.headers().get("x-content-hash").cloned() {
-            if let Ok(s) = hash.to_str() {
-                if let Ok(etag) = HeaderValue::from_str(&format!("\"{s}\"")) {
-                    if if_none_match.as_ref() == Some(&etag) {
-                        let mut not_modified = StatusCode::NOT_MODIFIED.into_response();
-                        not_modified.headers_mut().insert(header::ETAG, etag);
-                        not_modified.headers_mut().insert(
-                            header::CACHE_CONTROL,
-                            HeaderValue::from_static("public, no-cache"),
-                        );
-                        return not_modified;
-                    }
-                    res.headers_mut().insert(header::ETAG, etag);
-                }
+    if status != StatusCode::OK {
+        return res;
+    }
+    if !res.headers().contains_key(header::CACHE_CONTROL) {
+        let policy = if path.starts_with("/assets/") {
+            routes::IMMUTABLE
+        } else if api && path.contains("/artifacts/") {
+            "public, max-age=300, stale-while-revalidate=86400"
+        } else if api {
+            "public, max-age=60, stale-while-revalidate=300"
+        } else {
+            "public, max-age=60"
+        };
+        res.headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static(policy));
+    }
+    let etag = res
+        .headers()
+        .get("x-content-hash")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| HeaderValue::from_str(&format!("\"{s}\"")).ok());
+    if let Some(etag) = etag {
+        if matches_etag(if_none_match.as_ref(), etag.to_str().unwrap_or_default()) {
+            let mut not_modified = StatusCode::NOT_MODIFIED.into_response();
+            let h = not_modified.headers_mut();
+            h.insert(header::ETAG, etag);
+            if let Some(cc) = res.headers().get(header::CACHE_CONTROL) {
+                h.insert(header::CACHE_CONTROL, cc.clone());
             }
+            return not_modified;
         }
-        "public, no-cache"
-    } else if api {
-        "public, max-age=300"
-    } else {
-        "public, max-age=60"
-    };
-    res.headers_mut()
-        .insert(header::CACHE_CONTROL, HeaderValue::from_static(policy));
+        res.headers_mut().insert(header::ETAG, etag);
+    }
     res
 }

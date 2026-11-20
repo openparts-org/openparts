@@ -133,3 +133,42 @@ registrar and wait until the zone is Active).
 
 Cloudflare creates the DNS record and the certificate; the first HTTPS
 request can fail for a few minutes until the certificate is issued.
+
+### Caching at Cloudflare
+
+The Pi's upload is the bottleneck, so let Cloudflare keep everything
+that never changes. The server sends the cache policy itself:
+
+| Path | `Cache-Control` |
+|---|---|
+| `/api/v1/a/<sha256>/...` (artifacts by content: what the site, the 3D viewer and the KiCad plugin download) | `public, max-age=31536000, immutable` (a stale digest: `302` to the current one, `max-age=60`) |
+| `/assets/...` (Vite's hashed files) | `public, max-age=31536000, immutable` |
+| `/api/v1/parts/.../artifacts/<kind>` (plain links, plugin v0.1.x) | `public, max-age=300, stale-while-revalidate=86400`, ETag = content hash, `304` on `If-None-Match` |
+| other API JSON | `public, max-age=60, stale-while-revalidate=300` |
+| API errors | `no-store` |
+
+On the Free plan Cloudflare caches only by file extension, so these
+extension-less paths stay `cf-cache-status: DYNAMIC` until one Cache
+Rule makes them eligible. Dashboard: your zone → **Caching → Cache
+Rules → Create rule**:
+
+- Rule name: `openparts immutable`
+- *Custom filter expression* → **Edit expression**:
+
+  ```
+  starts_with(http.request.uri.path, "/api/v1/a/") or starts_with(http.request.uri.path, "/v1/a/") or starts_with(http.request.uri.path, "/assets/")
+  ```
+
+  (In the field builder: *URI Path* *starts with* `/api/v1/a/`, OR
+  *URI Path* *starts with* `/v1/a/`, OR *URI Path* *starts with*
+  `/assets/`.)
+- Cache eligibility: **Eligible for cache**
+- Edge TTL: **Use cache-control header if present, bypass cache if not**
+- Browser TTL: **Respect origin TTL**
+- Deploy.
+
+Check with `curl -sI https://<host>/api/v1/a/...` twice: the second
+answers `cf-cache-status: HIT`. The links come from
+`GET /api/v1/parts/<manufacturer>/<mpn>/artifacts`. A dataset update
+needs no purge: the listing points at new digests, and old ones
+redirect.

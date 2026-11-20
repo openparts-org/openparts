@@ -73,13 +73,17 @@ OPENPARTS_DATA_DIR=/path/to/openparts-data OPENPARTS_ARTIFACT_DIR=/path/to/bundl
 | `GET /v1/parts/{manufacturer}/{mpn}` | Part |
 | `GET /v1/parts/{manufacturer}/{mpn}/provenance` | Part+Device+Package provenance |
 | `GET /v1/parts/{manufacturer}/{mpn}/revisions` | Device's declared silicon revisions |
-| `GET /v1/parts/{manufacturer}/{mpn}/artifacts` | links to available artifact kinds |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts?silicon_revision=...` | a link per artifact kind: content-addressed (`/v1/a/...`) where the content is known without building a 3D model, else the plain link |
+| `GET /v1/a/{sha256}/{manufacturer}/{mpn}/{kind}?silicon_revision=...` | the artifact by content, `Cache-Control: public, max-age=31536000, immutable`; a digest that is no longer current answers `302` to the current one (cached 60 s) |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-symbol?silicon_revision=...` | generated `.kicad_sym` text |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/kicad-footprint?silicon_revision=...` | generated `.kicad_mod` text |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/footprint-svg` | the footprint as SVG (top view) |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/symbol-svg?silicon_revision=...` | the KiCad symbol as SVG, every unit (CSS classes, site colour tokens) |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/step?silicon_revision=...` | STEP text (coloured AP242) |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/stl?silicon_revision=...` | binary STL |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/3mf?silicon_revision=...` | 3MF with a colour per body |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft` | the part as a `pcbcraft-library-bundle/1` (its records and their dependency closure); `422` with `reason` when PCBCraft can't represent it |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft-symbol-svg` | the PCBCraft symbol as SVG, drawn with PCBCraft's label rules; `422` with `reason` like `pcbcraft` |
 | `GET /v1/pcbcraft` | PCBCraft catalog status: `building` / `ready` / `failed`, `persistent_revisions` |
 | `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=` | parts as PCBCraft summaries: record addresses, refusal reason; `{total, offset, limit, results}` |
 | `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}` | one summary plus every record address (with SHA-256) its bundle holds |
@@ -94,7 +98,12 @@ OPENPARTS_DATA_DIR=/path/to/openparts-data OPENPARTS_ARTIFACT_DIR=/path/to/bundl
 | `GET /v1/sources/{id}/document` | the Source's PDF, fetched and cached (opt-in, below) |
 
 Artifact responses carry an `X-Content-Hash: sha256:<hex>` header
-(Architecture Specification section 24, Content Addressing). Missing
+(Architecture Specification section 24, Content Addressing), which the
+deployed app (`app::build_app`) also sends as the `ETag`: a matching
+`If-None-Match` answers `304`. Cache policy there: `/v1/a/...` and
+`/assets/...` a year, immutable; plain artifact links
+`max-age=300, stale-while-revalidate=86400`; other API JSON
+`max-age=60, stale-while-revalidate=300`; errors `no-store`. Missing
 required dimensions or an unknown `silicon_revision` return `422` with
 a diagnostic body rather than guessing (Testing and Quality
 Specification section 7). A 3D model that is neither bundled nor

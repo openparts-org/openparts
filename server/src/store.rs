@@ -23,6 +23,10 @@ pub struct Store {
     /// `GET /v1/pcbcraft/...` and `.../artifacts/pcbcraft`: exported
     /// once by [`crate::pcbcraft::PcbcraftService::prepare`].
     pub pcbcraft: crate::pcbcraft::PcbcraftService,
+    /// Content hashes of artifacts already built, for the
+    /// content-addressed links of `GET .../artifacts` (everything they
+    /// depend on is fixed for the process's life).
+    pub artifact_hashes: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -62,5 +66,6 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
         bundle: None,
         source_cache: None,
         pcbcraft: Default::default(),
+        artifact_hashes: Default::default(),
     })
 }

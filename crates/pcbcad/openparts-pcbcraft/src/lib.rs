@@ -30,6 +30,7 @@ mod labels;
 pub mod ledger;
 pub mod record;
 mod spec;
+mod svg;
 mod symbol;
 
 use ledger::{sha256, LedgerLibrary};
@@ -38,6 +39,7 @@ use openparts_core::ComponentCategory;
 use openparts_pcbcad::{PcbFootprint, PcbSymbol};
 use record::*;
 use std::collections::{BTreeMap, BTreeSet};
+pub use svg::render_symbol_svg;
 
 /// A reason a record cannot be written.
 pub(crate) type Refuse = String;

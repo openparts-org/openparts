@@ -290,14 +290,34 @@ impl Client {
             return Ok(Artifact { content, hash });
         }
 
-        let mut path = format!(
-            "{}/artifacts/{}",
+        let revision_query = revision
+            .map(|rev| format!("?silicon_revision={}", percent_encode(rev)))
+            .unwrap_or_default();
+        let plain = format!(
+            "{}/artifacts/{}{revision_query}",
             part_path(manufacturer, mpn),
             kind.as_str()
         );
-        if let Some(rev) = revision {
-            path.push_str(&format!("?silicon_revision={}", percent_encode(rev)));
+        // The listing's content-addressed link, when the server gives
+        // one (servers before it did only have the plain link): content
+        // already cached under its digest needs no download, and the
+        // link is cacheable by a CDN for good.
+        let listing = format!("{}/artifacts{revision_query}", part_path(manufacturer, mpn));
+        let link = self
+            .request_text(&listing)
+            .ok()
+            .and_then(|(body, _)| serde_json::from_str::<serde_json::Value>(&body).ok())
+            .and_then(|v| Some(v.get(kind.as_str())?.as_str()?.to_string()));
+        if let Some(hash) = link.as_deref().and_then(hashed_link_digest) {
+            if let Some(content) = cache::read(&self.cache_dir, &cache::artifact_content_key(&hash))
+            {
+                if sha256_hex(content.as_bytes()) == hash {
+                    let _ = cache::write(&self.cache_dir, &pointer_key, &hash);
+                    return Ok(Artifact { content, hash });
+                }
+            }
         }
+        let path = link.filter(|l| l.starts_with('/')).unwrap_or(plain);
         let url = self.url(&path);
 
         match self.request_text(&path) {
@@ -339,6 +359,14 @@ impl Client {
             }
         }
     }
+}
+
+/// The digest a content-addressed artifact link (`/v1/a/<sha256>/...`)
+/// names.
+fn hashed_link_digest(link: &str) -> Option<String> {
+    let hex = link.strip_prefix("/v1/a/")?.split('/').next()?;
+    (hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| hex.to_ascii_lowercase())
 }
 
 /// The one part among `items` with MPN `mpn`; `Err(manufacturers)`
@@ -443,6 +471,36 @@ mod tests {
         format!("http://{addr}")
     }
 
+    /// Answers one connection per response, in order (each closed after
+    /// it); the handle returns each request's first line.
+    fn mock_server(responses: Vec<String>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for response in responses {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    break;
+                };
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                seen.push(request.lines().next().unwrap_or_default().to_string());
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+            seen
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    fn reply(status: &str, headers: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status}\r\nConnection: close\r\n{headers}Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
     fn temp_cache_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "openparts-client-test-{name}-{}",
@@ -537,18 +595,54 @@ mod tests {
 
     #[test]
     fn artifact_hash_mismatch_is_rejected() {
-        let body = "not the real content";
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Content-Hash: sha256:0000000000000000000000000000000000000000000000000000000000000\r\nContent-Length: {}\r\n\r\n{body}",
-            body.len()
-        );
-        let base_url = mock_server_once(Box::leak(response.into_boxed_str()));
-
+        let (base_url, _) = mock_server(vec![
+            // A server without the listing (v0.1 had it, with plain links).
+            reply("404 Not Found", "", "{}"),
+            reply(
+                "200 OK",
+                "X-Content-Hash: sha256:0000000000000000000000000000000000000000000000000000000000000\r\n",
+                "not the real content",
+            ),
+        ]);
         let client = Client::new(base_url).with_cache_dir(temp_cache_dir("hash-mismatch"));
         let err = client
             .get_artifact("raspberrypi", "RP2040", ArtifactKind::KicadSymbol, None)
             .unwrap_err();
         assert!(matches!(err, ClientError::HashMismatch { .. }));
+    }
+
+    #[test]
+    fn a_hashed_link_is_fetched_once_then_served_from_the_cache() {
+        let body = "(kicad_symbol_lib)";
+        let hash = sha256_hex(body.as_bytes());
+        let link = format!("/v1/a/{hash}/raspberrypi/RP2040/kicad-symbol");
+        let listing = format!("{{\"kicad-symbol\":\"{link}\"}}");
+        let cache_dir = temp_cache_dir("hashed-link");
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        let (base_url, seen) = mock_server(vec![
+            reply("200 OK", "", &listing),
+            reply(
+                "200 OK",
+                &format!("X-Content-Hash: sha256:{hash}\r\n"),
+                body,
+            ),
+            reply("200 OK", "", &listing),
+        ]);
+        let client = Client::new(base_url).with_cache_dir(&cache_dir);
+        for _ in 0..2 {
+            let a = client
+                .get_artifact("raspberrypi", "RP2040", ArtifactKind::KicadSymbol, None)
+                .unwrap();
+            assert_eq!((a.content.as_str(), a.hash.as_str()), (body, hash.as_str()));
+        }
+        assert_eq!(
+            seen.join().unwrap(),
+            vec![
+                "GET /v1/parts/raspberrypi/RP2040/artifacts HTTP/1.1".to_string(),
+                format!("GET {link} HTTP/1.1"),
+                "GET /v1/parts/raspberrypi/RP2040/artifacts HTTP/1.1".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -576,32 +670,22 @@ mod tests {
 
     #[test]
     fn artifact_request_sends_the_encoded_mpn() {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let seen = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut buf = [0u8; 4096];
-            let n = stream.read(&mut buf).unwrap();
-            let request = String::from_utf8_lossy(&buf[..n]).to_string();
-            let body = "x";
-            let _ = stream.write_all(
-                format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
-                    body.len()
-                )
-                .as_bytes(),
-            );
-            request.lines().next().unwrap_or_default().to_string()
-        });
+        let (base_url, seen) = mock_server(vec![
+            reply("404 Not Found", "", "{}"),
+            reply("200 OK", "", "x"),
+        ]);
         let cache_dir = temp_cache_dir("slash-mpn");
-        let client = Client::new(format!("http://{addr}")).with_cache_dir(&cache_dir);
+        let client = Client::new(base_url).with_cache_dir(&cache_dir);
         let a = client
             .get_artifact("kingbright", "APT1608QBC/D", ArtifactKind::Step, None)
             .unwrap();
         assert_eq!(a.content, "x");
         assert_eq!(
             seen.join().unwrap(),
-            "GET /v1/parts/kingbright/APT1608QBC%2FD/artifacts/step HTTP/1.1"
+            vec![
+                "GET /v1/parts/kingbright/APT1608QBC%2FD/artifacts HTTP/1.1",
+                "GET /v1/parts/kingbright/APT1608QBC%2FD/artifacts/step HTTP/1.1"
+            ]
         );
         // The cache keeps the MPN in one file name, not a directory.
         assert!(cache_dir

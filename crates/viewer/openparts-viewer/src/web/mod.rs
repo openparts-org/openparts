@@ -88,7 +88,7 @@ pub(crate) async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     Ok(js_sys::Uint8Array::new(&b).to_vec())
 }
 
-async fn fetch_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
+pub(crate) async fn fetch_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
     let text = fetch_text(url).await?;
     serde_json::from_str(&text).map_err(|e| format!("{url}: {e}"))
 }
@@ -120,6 +120,15 @@ struct SourceDoc {
 #[derive(Deserialize)]
 struct PartSource {
     source: SourceDoc,
+}
+
+/// The 3D models' links from `GET .../artifacts`: content-addressed
+/// (cacheable for good) where the server knows the content.
+#[derive(Deserialize, Default)]
+pub(crate) struct ModelLinks {
+    #[serde(rename = "3mf")]
+    pub(crate) three_mf: Option<String>,
+    pub(crate) stl: Option<String>,
 }
 
 pub(crate) fn part_path(o: &Options) -> String {

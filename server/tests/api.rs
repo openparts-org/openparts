@@ -461,6 +461,94 @@ async fn artifact_index_lists_3mf() {
         .unwrap();
     let body = body_string(response).await;
     assert!(body.contains("\"3mf\":\"/v1/parts/raspberrypi/RP2040/artifacts/3mf\""));
+    assert!(body.contains("\"symbol-svg\":\"/v1/a/"));
+}
+
+/// Content-addressed links: listed with the digest, answered immutable,
+/// and redirected to the current digest when it is stale -- under
+/// `/api` too.
+#[tokio::test]
+async fn hashed_artifact_links_are_immutable_and_redirect_when_stale() {
+    let root = tiny_bundle("hashed");
+    let app = app_with_bundle(&root);
+    let list: serde_json::Value = serde_json::from_str(
+        &body_string(get(app.clone(), "/v1/parts/raspberrypi/RP2040/artifacts").await).await,
+    )
+    .unwrap();
+    // The bundled model by its manifest digest.
+    let step = list["step"].as_str().unwrap();
+    assert_eq!(
+        step,
+        format!(
+            "/v1/a/{}/raspberrypi/RP2040/step",
+            sha256_hex(b"ISO-10303-21; bundled")
+        )
+    );
+    let res = get(app.clone(), step).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()["cache-control"],
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(body_bytes(res).await, b"ISO-10303-21; bundled");
+
+    let symbol = list["symbol-svg"].as_str().unwrap().to_string();
+    let res = get(app.clone(), &symbol).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "image/svg+xml");
+    assert!(body_string(res).await.contains("class=\"sym sym-kicad\""));
+
+    // A digest of other content: to the current one, briefly cached.
+    let stale = format!("/api/v1/a/{}/raspberrypi/RP2040/symbol-svg", "0".repeat(64));
+    let deployed = openparts_server::app::build_app(
+        Arc::new({
+            let mut store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+            store.bundle = Some(openparts_server::bundle::Bundle::load(&root).unwrap());
+            store
+        }),
+        None,
+    );
+    let res = get(deployed.clone(), &stale).await;
+    assert_eq!(res.status(), StatusCode::FOUND);
+    assert_eq!(res.headers()["location"], format!("/api{symbol}").as_str());
+    assert_eq!(res.headers()["cache-control"], "public, max-age=60");
+    // A revision is carried along.
+    let rev = format!(
+        "/v1/a/{}/raspberrypi/RP2040/kicad-symbol?silicon_revision=rev-b2",
+        "0".repeat(64)
+    );
+    let res = get(app.clone(), &rev).await;
+    assert_eq!(res.status(), StatusCode::FOUND);
+    let location = res.headers()["location"].to_str().unwrap();
+    assert!(
+        location.ends_with("/kicad-symbol?silicon_revision=rev-b2"),
+        "{location}"
+    );
+    assert_eq!(get(app.clone(), location).await.status(), StatusCode::OK);
+    // Not a digest, or not a kind.
+    let res = get(app.clone(), "/v1/a/abc/raspberrypi/RP2040/step").await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let bad = format!("/v1/a/{}/raspberrypi/RP2040/solidcraft", "0".repeat(64));
+    assert_eq!(get(app, &bad).await.status(), StatusCode::NOT_FOUND);
+    // Errors are not stored by caches.
+    let res = get(deployed, "/api/v1/parts/nobody/NOPE/artifacts/step").await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    assert_eq!(res.headers()["cache-control"], "no-store");
+}
+
+#[tokio::test]
+async fn symbol_svg_draws_every_unit_and_pin() {
+    let res = get(app(), "/v1/parts/raspberrypi/RP2040/artifacts/symbol-svg").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let svg = body_string(res).await;
+    assert!(svg.contains(">IOVDD</text>") && svg.contains(">GPIO0</text>"));
+    // A revision-specific symbol is built for that revision.
+    let res = get(
+        app(),
+        "/v1/parts/raspberrypi/RP2040/artifacts/symbol-svg?silicon_revision=does-not-exist",
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[test]
@@ -1142,9 +1230,15 @@ async fn an_mpn_containing_a_slash_is_one_percent_encoded_segment() {
     }
     let response = get(app.clone(), &format!("{base}/artifacts")).await;
     let index: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    let link = index["kicad-footprint"].as_str().unwrap();
+    assert!(
+        link.starts_with("/v1/a/") && link.ends_with("/kingbright/APT1608QBC%2FD/kicad-footprint"),
+        "{link}"
+    );
+    // A model the bundle doesn't have keeps its plain link.
     assert_eq!(
-        index["kicad-footprint"],
-        "/v1/parts/kingbright/APT1608QBC%2FD/artifacts/kicad-footprint"
+        index["step"],
+        "/v1/parts/kingbright/APT1608QBC%2FD/artifacts/step"
     );
     // The link it gives works as is.
     let link = index["kicad-symbol"].as_str().unwrap().to_string();
@@ -1500,11 +1594,66 @@ async fn pcbcraft_part_bundle_is_its_dependency_closure() {
         details["dependencies"].as_array().unwrap().len(),
         docs.len() - 1
     );
-    // And the artifact listing points at the bundle.
+    // And the artifact listing points at the bundle, by its content.
+    let res = get(
+        pcbcraft_app(),
+        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft",
+    )
+    .await;
+    let hash = res.headers()["x-content-hash"]
+        .to_str()
+        .unwrap()
+        .to_string();
     let list = json_of(get(pcbcraft_app(), "/v1/parts/raspberrypi/RP2040/artifacts").await).await;
     assert_eq!(
         list["pcbcraft"],
-        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"
+        format!(
+            "/v1/a/{}/raspberrypi/RP2040/pcbcraft",
+            hash.strip_prefix("sha256:").unwrap()
+        )
+    );
+    let res = get(pcbcraft_app(), list["pcbcraft"].as_str().unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["x-content-hash"], hash.as_str());
+    assert_eq!(
+        res.headers()["cache-control"],
+        "public, max-age=31536000, immutable"
+    );
+}
+
+#[tokio::test]
+async fn pcbcraft_symbol_svg_is_drawn_or_refused() {
+    let res = get(
+        pcbcraft_app(),
+        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft-symbol-svg",
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers().contains_key("x-content-hash"));
+    let svg = body_string(res).await;
+    assert!(svg.contains("class=\"sym sym-pcbcraft\"") && svg.contains("GPIO0"));
+    let res = get(
+        pcbcraft_app(),
+        "/v1/parts/bourns/PTV09A-2015F-B103/artifacts/pcbcraft-symbol-svg",
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(json_of(res).await["reason"]
+        .as_str()
+        .unwrap()
+        .contains("slotted hole"));
+    // A refused part keeps the plain link in the listing.
+    let list = json_of(
+        get(
+            pcbcraft_app(),
+            "/v1/parts/bourns/PTV09A-2015F-B103/artifacts",
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(
+        list["pcbcraft-symbol-svg"],
+        "/v1/parts/bourns/PTV09A-2015F-B103/artifacts/pcbcraft-symbol-svg"
     );
 }
 

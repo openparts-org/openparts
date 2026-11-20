@@ -1,7 +1,8 @@
 //! `openparts kicad-install` against a registry, for an MPN containing
 //! `/` (Kingbright "APT1608QBC/D", in the real data): the CLI asks for
 //! `/v1/parts/kingbright/APT1608QBC%2FD/artifacts/<kind>` -- one
-//! percent-encoded segment, what the server's `:mpn` route matches.
+//! percent-encoded segment, what the server's `:mpn` route matches
+//! (after asking the artifact listing for content-addressed links).
 //!
 //! The registry here is a small HTTP stand-in serving the part's real
 //! KiCad symbol and footprint (built from ../openparts-data) and a
@@ -110,9 +111,14 @@ fn kicad_install_fetches_an_mpn_with_a_slash() {
     );
     assert_eq!(
         *seen.lock().unwrap(),
+        // The listing first (this stand-in has none, like a server
+        // before content-addressed links), then each plain link.
         [
+            ENCODED.to_string(),
             format!("{ENCODED}/kicad-symbol"),
+            ENCODED.to_string(),
             format!("{ENCODED}/kicad-footprint"),
+            ENCODED.to_string(),
             format!("{ENCODED}/step"),
         ]
     );

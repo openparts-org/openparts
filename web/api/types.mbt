@@ -135,6 +135,10 @@ pub impl @json.FromJson for AlternativesResponse with fn from_json(json, path) {
 }
 
 ///|
+/// Every artifact of a part, by kind id: its content-addressed link
+/// (`/v1/a/<sha256>/...`, cacheable for good) where the content is known
+/// without building a 3D model, else its plain link
+/// (`/v1/parts/.../artifacts/<kind>`). Either answers the artifact.
 #derive(Eq)
 pub(all) struct ArtifactsResponse {
   x3mf : String
@@ -142,8 +146,10 @@ pub(all) struct ArtifactsResponse {
   kicad_footprint : String
   kicad_symbol : String
   pcbcraft : String
+  pcbcraft_symbol_svg : String
   step : String
   stl : String
+  symbol_svg : String
 }
 
 ///|
@@ -157,8 +163,10 @@ pub impl @json.FromJson for ArtifactsResponse with fn from_json(json, path) {
     kicad_footprint: field(obj, "kicad-footprint", path),
     kicad_symbol: field(obj, "kicad-symbol", path),
     pcbcraft: field(obj, "pcbcraft", path),
+    pcbcraft_symbol_svg: field(obj, "pcbcraft-symbol-svg", path),
     step: field(obj, "step", path),
     stl: field(obj, "stl", path),
+    symbol_svg: field(obj, "symbol-svg", path),
   }
 }
 

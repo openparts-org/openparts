@@ -64,8 +64,10 @@ pub(all) struct ArtifactsResponse {
   kicad_footprint : String
   kicad_symbol : String
   pcbcraft : String
+  pcbcraft_symbol_svg : String
   step : String
   stl : String
+  symbol_svg : String
 }
 pub impl @json.FromJson for ArtifactsResponse
 

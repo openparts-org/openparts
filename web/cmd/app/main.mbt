@@ -26,6 +26,8 @@ struct Model {
   alts : AltState
   /// The part page's reference circuits (circuits.mbt).
   circuits : CircuitUi
+  /// The symbol preview shows PCBCraft's drawing (else KiCad's).
+  symbol_pcbcraft : Bool
 }
 
 ///|
@@ -40,6 +42,8 @@ enum Msg {
   Bom(BomMsg)
   Alt(AltMsg)
   Circuit(CircuitMsg)
+  /// The symbol preview's KiCad / PCBCraft switch.
+  SymbolPcbcraft(Bool)
 }
 
 ///|
@@ -158,9 +162,10 @@ fn update(
     }
     ViewerDone(e) => ({ ..model, viewer_error: e, }, @rabbita.none)
     ZipClicked => {
-      let (m, p) = model.part_key
+      guard model.part is Got(data) else { (model, @rabbita.none) }
+      let p = data.part.mpn
       let cmd = @rabbita.perform(r => emit(ZipDone(r)), async fn() noraise {
-        match kicad_zip(m, p) {
+        match kicad_zip(data) {
           Ok(bytes) => {
             save_file(bytes, "\{p}-kicad.zip", "application/zip")
             None
@@ -175,6 +180,7 @@ fn update(
     Bom(m) => bom_update(model, m, emit)
     Alt(m) => alt_update(model, m)
     Circuit(m) => circuit_update(model, m, emit)
+    SymbolPcbcraft(on) => ({ ..model, symbol_pcbcraft: on, }, @rabbita.none)
   }
 }
 
@@ -194,6 +200,7 @@ fn main {
           bom: BomState::new(),
           alts: AltState::new(),
           circuits: CircuitUi::new(),
+          symbol_pcbcraft: false,
         }
         let url = try! @url.parse(current_href())
         enter(model, url, emit)

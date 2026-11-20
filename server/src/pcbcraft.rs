@@ -59,6 +59,10 @@ pub fn router() -> Router<Arc<Store>> {
             "/v1/parts/:manufacturer/:mpn/artifacts/pcbcraft",
             get(get_part_bundle),
         )
+        .route(
+            "/v1/parts/:manufacturer/:mpn/artifacts/pcbcraft-symbol-svg",
+            get(get_part_symbol_svg),
+        )
 }
 
 /// How the catalog is made.
@@ -743,7 +747,16 @@ async fn get_part_bundle(
     State(store): State<Arc<Store>>,
     Path((manufacturer, mpn)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    let part = crate::routes::resolve_part(&store, &manufacturer, &mpn)?;
+    part_bundle(&store, &manufacturer, &mpn)
+}
+
+/// The part's PCBCraft bundle (`.../artifacts/pcbcraft`).
+pub(crate) fn part_bundle(
+    store: &Store,
+    manufacturer: &str,
+    mpn: &str,
+) -> Result<Response, ApiError> {
+    let part = crate::routes::resolve_part(store, manufacturer, mpn)?;
     let catalog = store.pcbcraft.catalog()?;
     let (_, docs) = part_documents(catalog, part)?;
     let text = bundle_of(&docs);
@@ -758,7 +771,38 @@ async fn get_part_bundle(
         safe(&part.manufacturer.0),
         safe(&part.mpn)
     );
-    Ok(bundle_response(&store, text, &name))
+    Ok(bundle_response(store, text, &name))
+}
+
+/// `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft-symbol-svg`:
+/// the part's PCBCraft symbol drawn as PCBCraft draws it (`422` with
+/// the reason when PCBCraft can't represent the part).
+async fn get_part_symbol_svg(
+    State(store): State<Arc<Store>>,
+    Path((manufacturer, mpn)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    part_symbol_svg(&store, &manufacturer, &mpn)
+}
+
+pub(crate) fn part_symbol_svg(
+    store: &Store,
+    manufacturer: &str,
+    mpn: &str,
+) -> Result<Response, ApiError> {
+    let part = crate::routes::resolve_part(store, manufacturer, mpn)?;
+    let catalog = store.pcbcraft.catalog()?;
+    let (_, docs) = part_documents(catalog, part)?;
+    let symbol = docs
+        .iter()
+        .find(|(path, _)| path.starts_with("symbols/"))
+        .map(|(_, text)| text)
+        .ok_or_else(|| ApiError::GenerationFailed(format!("{}: no symbol record", part.id.0)))?;
+    let svg = openparts_artifacts::pcbcraft::adapter::render_symbol_svg(symbol)
+        .map_err(ApiError::GenerationFailed)?;
+    Ok(crate::routes::artifact_response(
+        svg.into_bytes(),
+        "image/svg+xml",
+    ))
 }
 
 fn library_summary(entry: &LibraryEntry) -> PcbcraftLibrarySummary {

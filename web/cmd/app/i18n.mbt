@@ -79,6 +79,17 @@ struct Copy {
   body_height : String
   footprint : String
   footprint_legend : String
+  /// The schematic symbol preview.
+  symbol : String
+  symbol_legend : String
+  symbol_failed : String
+  /// The part page's notice for data no person has checked yet.
+  unreviewed_title : String
+  unreviewed_body : String
+  unreviewed_link : String
+  /// The one line under the search boxes.
+  ai_note : String
+  ai_note_link : String
   sources_heading : String
   /// The source link's tooltip.
   sources_tip : String
@@ -156,6 +167,14 @@ let ja : Copy = {
   body_height: "本体高さ",
   footprint: "フットプリント",
   footprint_legend: "金: 銅パッド　白: シルク　灰: 部品外形　桃: コートヤード",
+  symbol: "回路図シンボル",
+  symbol_legend: "生成されるシンボルそのもの(全ユニット)。ピン名は本体内側、ピン番号はリード上。",
+  symbol_failed: "シンボルを描画できませんでした。",
+  unreviewed_title: "未レビュー",
+  unreviewed_body: "データシートから AI が抽出した値で、まだ人が確認していません。発注・製造の前にデータシートで確認してください。",
+  unreviewed_link: "レビューに協力する",
+  ai_note: "ほとんどのデータは AI 抽出・未レビューです。必ずデータシートで確認してください。",
+  ai_note_link: "協力する",
   sources_heading: "出典",
   sources_tip: "メーカーのサイト(新しい版に更新されている場合があります)",
   source_cited_by: "根拠にしている項目",
@@ -230,6 +249,14 @@ let en : Copy = {
   body_height: "Body height",
   footprint: "Footprint",
   footprint_legend: "Gold: copper pads · White: silkscreen · Grey: body outline · Pink: courtyard",
+  symbol: "Schematic symbol",
+  symbol_legend: "The generated symbol as is (every unit): pin names inside the body, numbers on the leads.",
+  symbol_failed: "Could not draw the symbol.",
+  unreviewed_title: "Unreviewed",
+  unreviewed_body: "Extracted from the datasheet by AI and not yet checked by a person. Verify against the datasheet before ordering or fabricating.",
+  unreviewed_link: "Help review",
+  ai_note: "Most data is AI-extracted and unreviewed — always check the datasheet.",
+  ai_note_link: "Contribute",
   sources_heading: "Sources",
   sources_tip: "The manufacturer's site (may now serve a newer revision)",
   source_cited_by: "Used for",

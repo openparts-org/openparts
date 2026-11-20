@@ -82,6 +82,7 @@ fn bundle_part(dataset: &Dataset, part: &Part, out: &Path) -> anyhow::Result<Par
             ArtifactKind::KicadSymbol,
             ArtifactKind::KicadFootprint,
             ArtifactKind::FootprintSvg,
+            ArtifactKind::SymbolSvg,
         ] {
             match build.render(kind) {
                 Ok(bytes) => put(&mut entry, &build, kind, &bytes)?,

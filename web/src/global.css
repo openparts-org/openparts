@@ -1299,3 +1299,52 @@ a.chip {
     font-size: clamp(0.75rem, (100cqi - 44px) / 7.6, 0.95rem);
   }
 }
+
+/* The schematic symbol (an inlined SVG drawn in mm; cmd/app/view.mbt). */
+.symbol-preview {
+  margin: 0;
+}
+.symbol-drawing {
+  overflow-x: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+.symbol-drawing svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.symbol-preview figcaption {
+  font-size: 0.85em;
+  margin-top: 0.4em;
+}
+
+/* Data no person has checked yet. */
+.notice {
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+.notice-warn {
+  background: var(--color-status-warn-bg);
+  color: var(--color-status-warn);
+  border: 1px solid color-mix(in srgb, var(--color-status-warn) 30%, transparent);
+}
+.notice a {
+  color: inherit;
+  text-decoration: underline;
+}
+.ai-note {
+  margin: var(--space-2) 0 0;
+  font-size: 0.85em;
+  color: var(--color-status-warn);
+}
+.ai-note a {
+  color: inherit;
+  text-decoration: underline;
+}

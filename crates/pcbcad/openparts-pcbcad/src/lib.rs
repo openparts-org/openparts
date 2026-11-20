@@ -7,9 +7,11 @@
 mod footprint;
 mod outline;
 mod svg;
+pub mod symbol_svg;
 
 pub use outline::COURTYARD_WIDTH;
 pub use svg::render_svg;
+pub use symbol_svg::render_symbol_svg;
 mod symbol;
 
 pub use footprint::{add_shared_pads, build_footprint, footprint_from_placement};

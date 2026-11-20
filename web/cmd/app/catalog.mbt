@@ -806,7 +806,7 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
   let lang = model.lang
   let c = lang.copy()
   let k = lang.catalog()
-  let head = [h1(c.search_title), box]
+  let head = [h1(c.search_title), box, ai_note(lang)]
   guard model.catalog.results is Got(r) else {
     div(
       class="catalog catalog-entry",

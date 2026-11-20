@@ -152,6 +152,7 @@ fn home_view(lang : Lang) -> Html {
         ),
       ],
     ),
+    ai_note(lang),
     div(class="hero-actions", [
       a(
         class="button button-primary",
@@ -161,6 +162,16 @@ fn home_view(lang : Lang) -> Html {
       a(class="button", href=href(lang, "bom"), lang.bom().nav),
       a(class="button", href=href(lang, "kicad-plugin"), c.nav_kicad),
     ]),
+  ])
+}
+
+///|
+/// The one line under a search box: the data is mostly unreviewed.
+fn ai_note(lang : Lang) -> Html {
+  let c = lang.copy()
+  p(class="ai-note", [
+    text(c.ai_note + " "),
+    ext_link(contributing_url(), c.ai_note_link),
   ])
 }
 
@@ -446,18 +457,14 @@ fn part_view(model : Model, emit : Emit[Msg]) -> Html {
 ///|
 /// The PCBCraft bundle's download link, when the part can be exported
 /// (the refusal reason is shown below the buttons instead).
-fn pcbcraft_button(
-  c : Copy,
-  m : String,
-  mpn : String,
-  pcbcraft : Fetch[@api.PcbcraftPartDetails],
-) -> Array[Html] {
-  match pcbcraft {
+fn pcbcraft_button(c : Copy, data : PartData) -> Array[Html] {
+  let (m, mpn) = (data.part.manufacturer, data.part.mpn)
+  match data.pcbcraft {
     Got(d) if !d.summary.refused =>
       [
         a(
           class="button",
-          href=artifact_url(m, mpn, "pcbcraft"),
+          href=artifact_href(data, "pcbcraft"),
           download="\{m}-\{mpn}.pcbcraft.json",
           c.pcbcraft_button,
           escape=true,
@@ -465,6 +472,73 @@ fn pcbcraft_button(
       ]
     _ => []
   }
+}
+
+///|
+/// The schematic symbol, inlined (it takes the page's colours), as KiCad
+/// or as PCBCraft draws it: every unit.
+fn symbol_section(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
+  let c = model.lang.copy()
+  let pcbcraft = model.symbol_pcbcraft && data.symbol_pcbcraft is Some(_)
+  let tab = (label : String, on : Bool) => button(
+    type_="button",
+    class="seg" + (if on == pcbcraft { " seg-on" } else { "" }),
+    attrs=@html.Attrs::build().aria_pressed((on == pcbcraft).to_string()),
+    on_click=emit(SymbolPcbcraft(on)),
+    label,
+  )
+  let tabs = if data.symbol_pcbcraft is Some(_) {
+    [div(class="circuit-tabs", [tab("KiCad", false), tab("PCBCraft", true)])]
+  } else {
+    []
+  }
+  let drawing = match (pcbcraft, data.symbol_pcbcraft) {
+    (true, Some(r)) => r
+    _ => data.symbol_kicad
+  }
+  let body = match drawing {
+    Ok(svg) =>
+      figure(class="symbol-preview", [
+        div(class="symbol-drawing", attrs=svg_markup(svg), nodes([])),
+        figcaption(class="text-muted", c.symbol_legend),
+      ])
+    Err(e) => p(class="text-muted", if e.is_empty() { c.symbol_failed } else { e })
+  }
+  section(class="section", [h3(c.symbol), ..tabs, body])
+}
+
+///|
+/// The notice on a part whose data no person has checked yet (the part,
+/// its device or its package unreviewed): check the datasheet.
+fn unreviewed_notice(lang : Lang, data : PartData) -> Html {
+  let c = lang.copy()
+  let reviewed = match data.documents {
+    Some(d) => d.review is Reviewed
+    None => false
+  }
+  guard !reviewed else { text("") }
+  let links : Array[Html] = []
+  for ps in data.sources {
+    if ps.source.document_type.wire() == "datasheet" {
+      links.push(
+        a(
+          href=ps.source.url,
+          target=Blank,
+          rel="noopener noreferrer",
+          "\{ps.source.publisher.to_upper()} \{ps.source.document_id}",
+          escape=true,
+        ),
+      )
+      links.push(text(" · "))
+      break
+    }
+  }
+  links.push(ext_link(contributing_url(), c.unreviewed_link))
+  div(class="notice notice-warn", [
+    strong(c.unreviewed_title),
+    text(" — " + c.unreviewed_body + " "),
+    span(class="notice-links", links),
+  ])
 }
 
 ///|
@@ -491,12 +565,12 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       ),
       a(
         class="button",
-        href=artifact_url(m, mpn, "stl"),
+        href=artifact_href(data, "stl"),
         download="\{mpn}.stl",
         c.stl_button,
         escape=true,
       ),
-      ..pcbcraft_button(c, m, mpn, data.pcbcraft),
+      ..pcbcraft_button(c, data),
     ]),
   ]
   match data.pcbcraft {
@@ -533,7 +607,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
     )
   }
   let footprint_view = if model.viewer_error is Some(_) {
-    img(src=artifact_url(m, mpn, "footprint-svg"), alt=footprint_alt(lang, mpn))
+    img(src=artifact_href(data, "footprint-svg"), alt=footprint_alt(lang, mpn))
   } else {
     div(id=FOOTPRINT_ID, class="footprint-viewer", nodes([]))
   }
@@ -568,6 +642,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
       lifecycle_badge(part.lifecycle.status),
       review_badge(lang, data.documents),
     ]),
+    unreviewed_notice(lang, data),
     section(class="section", downloads),
     section(class="section", [h3(c.preview3d), ..viewer]),
     section(class="section", [
@@ -577,6 +652,7 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
         figcaption(class="text-muted", c.footprint_legend),
       ]),
     ]),
+    symbol_section(model, data, emit),
     section(class="section", [
       h3(pins_heading(lang, device.id)),
       details(class="pin-table-details", [

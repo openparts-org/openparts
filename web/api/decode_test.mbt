@@ -715,6 +715,8 @@ test "decode ArtifactsResponse 6" {
     #| "kicad-symbol": "/v1/parts/raspberrypi/RP2040/artifacts/kicad-symbol",
     #| "kicad-footprint": "/v1/parts/raspberrypi/RP2040/artifacts/kicad-footprint",
     #| "footprint-svg": "/v1/parts/raspberrypi/RP2040/artifacts/footprint-svg",
+    #| "symbol-svg": "/v1/a/0000000000000000000000000000000000000000000000000000000000000000/raspberrypi/RP2040/symbol-svg",
+    #| "pcbcraft-symbol-svg": "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft-symbol-svg",
     #| "step": "/v1/parts/raspberrypi/RP2040/artifacts/step",
     #| "stl": "/v1/parts/raspberrypi/RP2040/artifacts/stl",
     #| "3mf": "/v1/parts/raspberrypi/RP2040/artifacts/3mf",

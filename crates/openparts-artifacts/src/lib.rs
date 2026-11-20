@@ -24,6 +24,8 @@ pub enum ArtifactKind {
     KicadFootprint,
     /// A browser preview of the footprint (top view).
     FootprintSvg,
+    /// A browser preview of the KiCad symbol (every unit).
+    SymbolSvg,
     Step,
     Stl,
     ThreeMf,
@@ -32,10 +34,11 @@ pub enum ArtifactKind {
 }
 
 impl ArtifactKind {
-    pub const ALL: [ArtifactKind; 7] = [
+    pub const ALL: [ArtifactKind; 8] = [
         ArtifactKind::KicadSymbol,
         ArtifactKind::KicadFootprint,
         ArtifactKind::FootprintSvg,
+        ArtifactKind::SymbolSvg,
         ArtifactKind::Step,
         ArtifactKind::Stl,
         ArtifactKind::ThreeMf,
@@ -55,6 +58,7 @@ impl ArtifactKind {
             ArtifactKind::KicadSymbol => "kicad-symbol",
             ArtifactKind::KicadFootprint => "kicad-footprint",
             ArtifactKind::FootprintSvg => "footprint-svg",
+            ArtifactKind::SymbolSvg => "symbol-svg",
             ArtifactKind::Step => "step",
             ArtifactKind::Stl => "stl",
             ArtifactKind::ThreeMf => "3mf",
@@ -71,6 +75,7 @@ impl ArtifactKind {
             ArtifactKind::KicadSymbol => "kicad_sym",
             ArtifactKind::KicadFootprint => "kicad_mod",
             ArtifactKind::FootprintSvg => "footprint.svg",
+            ArtifactKind::SymbolSvg => "symbol.svg",
             ArtifactKind::Step => "step",
             ArtifactKind::Stl => "stl",
             ArtifactKind::ThreeMf => "3mf",
@@ -81,7 +86,7 @@ impl ArtifactKind {
     pub fn content_type(self) -> &'static str {
         match self {
             ArtifactKind::KicadSymbol | ArtifactKind::KicadFootprint => "text/plain; charset=utf-8",
-            ArtifactKind::FootprintSvg => "image/svg+xml",
+            ArtifactKind::FootprintSvg | ArtifactKind::SymbolSvg => "image/svg+xml",
             ArtifactKind::Step => "model/step",
             ArtifactKind::Stl => "model/stl",
             ArtifactKind::ThreeMf => "model/3mf",
@@ -103,7 +108,7 @@ impl ArtifactKind {
     /// Whether the artifact depends on the silicon revision (pins), not
     /// only on the package.
     pub fn depends_on_revision(self) -> bool {
-        self == ArtifactKind::KicadSymbol
+        matches!(self, ArtifactKind::KicadSymbol | ArtifactKind::SymbolSvg)
     }
 }
 
@@ -464,6 +469,9 @@ impl PartBuild {
             }
             ArtifactKind::FootprintSvg => {
                 openparts_pcbcad::render_svg(&self.footprint()?).into_bytes()
+            }
+            ArtifactKind::SymbolSvg => {
+                openparts_pcbcad::render_symbol_svg(&self.symbol()).into_bytes()
             }
             _ => self.models(&[kind])?.remove(0),
         })
