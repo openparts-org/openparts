@@ -569,10 +569,12 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
     // they land in KiCad's unit-0 sentinel; otherwise (the common case)
     // everything is unit 1, exactly as before this feature existed.
     let shared_unit: u32 = if splitting { 0 } else { 1 };
-    // `pack_centered` lays its first item at the most-negative position;
-    // left/top's first item is conventionally the "start" (top-most /
-    // right-most) side, the opposite direction, so their axis is
-    // negated. Every member of a name-group shares its group's one
+    // `pack_centered` lays its first item at the most-negative position.
+    // Every side reads in ascending (natural) order the way KiCad's own
+    // symbols do (e.g. RP2040's GPIO0 at the top of its bus): left and
+    // right top to bottom, top and bottom left to right. KiCad's symbol
+    // frame is Y-up, so the left/right axis is negated (first item =
+    // highest Y); X already grows rightwards. Every member of a name-group shares its group's one
     // packed position (native KiCad pin stacking -- see
     // group_by_exact_name's docs).
     for ((_, group), &y) in left_groups.iter().zip(left_pos.iter()) {
@@ -608,7 +610,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             push_pin(
                 number,
                 Point2 {
-                    x: -x,
+                    x,
                     y: half_height + PIN_LENGTH_MM,
                 },
                 PinOrientation::Top,
@@ -626,7 +628,7 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
                     number,
                     Point2 {
                         x: half_width + PIN_LENGTH_MM,
-                        y,
+                        y: -y,
                     },
                     PinOrientation::Right,
                     unit,
@@ -1516,6 +1518,150 @@ mod tests {
             symbol.pins.iter().map(|p| p.number.as_str()).collect();
         for i in 1..=8 {
             assert!(numbers.contains(i.to_string().as_str()));
+        }
+    }
+
+    /// A device from `(number, name, type)` triples.
+    fn device_from(pins: &[(String, String, PinType)]) -> Device {
+        let mut device = device_with_names(&[]);
+        for (number, name, pin_type) in pins {
+            device.pins.insert(
+                number.clone(),
+                Pin {
+                    name: name.clone(),
+                    pin_type: *pin_type,
+                    alternate_functions: vec![],
+                    connected_to: None,
+                    diff_pair: None,
+                },
+            );
+        }
+        device
+    }
+
+    /// RP2040's real pin numbering: GPIO0..GPIO29 sit on pins 2..41 with
+    /// power pins interleaved, so pin-number order is not name order.
+    fn rp2040_like() -> Device {
+        let gpio_pins = [
+            2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 27, 28, 29, 30, 31, 32, 34, 35,
+            36, 37, 38, 39, 40, 41,
+        ];
+        let mut pins: Vec<(String, String, PinType)> = gpio_pins
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.to_string(), format!("GPIO{i}"), PinType::Io))
+            .collect();
+        for (n, name) in [
+            ("56", "QSPI_CSn"),
+            ("52", "QSPI_SCLK"),
+            ("53", "QSPI_SD0"),
+            ("55", "QSPI_SD1"),
+            ("54", "QSPI_SD2"),
+            ("51", "QSPI_SD3"),
+        ] {
+            pins.push((n.into(), name.into(), PinType::Io));
+        }
+        for (n, name) in [("1", "IOVDD"), ("23", "DVDD"), ("43", "ADC_AVDD")] {
+            pins.push((n.into(), name.into(), PinType::Power));
+        }
+        pins.push(("57".into(), "GND".into(), PinType::Ground));
+        device_from(&pins)
+    }
+
+    /// The names on one side, in reading order: top to bottom for
+    /// left/right, left to right for top/bottom (KiCad's Y-up frame).
+    fn reading_order(symbol: &PcbSymbol, side: PinOrientation, unit: u32) -> Vec<String> {
+        let mut pins: Vec<&SymbolPin> = symbol
+            .pins
+            .iter()
+            .filter(|p| p.orientation == side && p.unit == unit && !p.hidden)
+            .collect();
+        pins.sort_by(|a, b| match side {
+            PinOrientation::Left | PinOrientation::Right => {
+                b.position.y.partial_cmp(&a.position.y).unwrap()
+            }
+            PinOrientation::Top | PinOrientation::Bottom => {
+                a.position.x.partial_cmp(&b.position.x).unwrap()
+            }
+        });
+        pins.iter().map(|p| p.name.clone()).collect()
+    }
+
+    #[test]
+    fn rp2040_bus_reads_gpio0_at_the_top_down_to_gpio29() {
+        let symbol = build_symbol("RP2040", &rp2040_like());
+        let right = reading_order(&symbol, PinOrientation::Right, 1);
+        let expected: Vec<String> = (0..30).map(|i| format!("GPIO{i}")).collect();
+        assert_eq!(right, expected);
+        // The left side reads top-down too, in the same natural order.
+        let left = reading_order(&symbol, PinOrientation::Left, 1);
+        assert_eq!(
+            left,
+            [
+                "QSPI_CSn",
+                "QSPI_SCLK",
+                "QSPI_SD0",
+                "QSPI_SD1",
+                "QSPI_SD2",
+                "QSPI_SD3"
+            ]
+        );
+        // Top reads left to right in family order (by lowest pin number).
+        let top = reading_order(&symbol, PinOrientation::Top, 1);
+        assert_eq!(top, ["IOVDD", "DVDD", "ADC_AVDD"]);
+    }
+
+    #[test]
+    fn stm32_ports_read_pa0_above_pa1() {
+        // STM32F103C8 (LQFP48): PA0..PA15 and PB0..PB15, PC13..PC15.
+        let mut pins: Vec<(String, String, PinType)> = Vec::new();
+        let pa = [
+            10, 11, 12, 13, 14, 15, 16, 17, 29, 30, 31, 32, 33, 34, 37, 38,
+        ];
+        let pb = [
+            18, 19, 20, 39, 40, 41, 42, 43, 45, 46, 21, 22, 25, 26, 27, 28,
+        ];
+        for (i, n) in pa.iter().enumerate() {
+            pins.push((n.to_string(), format!("PA{i}"), PinType::Io));
+        }
+        for (i, n) in pb.iter().enumerate() {
+            pins.push((n.to_string(), format!("PB{i}"), PinType::Io));
+        }
+        for (n, i) in [(2, 13), (3, 14), (4, 15)] {
+            pins.push((n.to_string(), format!("PC{i}"), PinType::Io));
+        }
+        let symbol = build_symbol("STM32F103C8", &device_from(&pins));
+        for side in [PinOrientation::Left, PinOrientation::Right] {
+            let order = reading_order(&symbol, side, 1);
+            for port in ["PA", "PB", "PC"] {
+                let indices: Vec<u32> = order
+                    .iter()
+                    .filter_map(|n| n.strip_prefix(port)?.parse().ok())
+                    .collect();
+                assert!(
+                    indices.windows(2).all(|w| w[0] < w[1]),
+                    "{port} on {side:?} not ascending top-down: {order:?}"
+                );
+            }
+        }
+        let all: Vec<String> = [PinOrientation::Left, PinOrientation::Right]
+            .into_iter()
+            .flat_map(|s| reading_order(&symbol, s, 1))
+            .collect();
+        let pos = |n: &str| all.iter().position(|x| x == n).unwrap();
+        assert!(pos("PA0") < pos("PA1"));
+    }
+
+    #[test]
+    fn every_bus_unit_reads_ascending_top_down() {
+        let symbol = build_symbol("BIGMCU", &device_with_a_gpio_count(70));
+        for (unit, range) in [(1u32, 0..32), (2, 32..64), (3, 64..70)] {
+            let expected: Vec<String> = range.map(|i| format!("GPIO{i}")).collect();
+            assert_eq!(
+                reading_order(&symbol, PinOrientation::Right, unit),
+                expected,
+                "unit {unit}"
+            );
         }
     }
 }
