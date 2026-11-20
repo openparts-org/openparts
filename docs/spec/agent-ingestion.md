@@ -672,6 +672,23 @@ details). Record what the drawing shows instead of skipping the part:
   `chip_array`, `terminal_shape: convex | concave`, `pads` from the
   recommended land pattern (20.15).
 
+## 19.1a Pin Names
+
+A pin's `name` is its primary name only: the port name on a
+microcontroller (`P1.7`, `PA19`, `PIO0_8`, `P215`), the signal name
+otherwise (`VDD`, `NRST`, `RESV`). When a datasheet's pin table prints
+every function the pin can carry joined by slashes
+(`P1.7/UCA0TXD/UCA0SIMO/TB0.2/TDO/OA1+/A7/VREF+`), put the first name
+in `name` and the rest, in the printed order, in `alternate_functions`.
+A short name the datasheet itself gives one pin with a slash
+(`CS/SHDN`, `EN/UVLO`, `ADJ/GND`, `/CS`) stays as printed.
+
+Reasons: long joined names make unreadable symbols, and CAD libraries
+limit pin names (PCBCraft: 32 characters, so such parts can't be
+exported). Reference circuits refer to pins by `name`
+(`host.P201`), so renaming a pin means updating the circuits that use
+it; `validate` reports any it missed.
+
 ## 19.2 Reference Circuit Ingestion
 
 How an agent records a reference circuit (Canonical Data Specification
