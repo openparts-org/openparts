@@ -5,6 +5,7 @@
 //! cannot drift apart.
 
 pub mod bundle;
+pub mod pcbcraft;
 
 use openparts_core::{Device, EffectiveModel, Package, Part, SourceId};
 use openparts_data::Dataset;

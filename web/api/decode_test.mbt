@@ -717,7 +717,8 @@ test "decode ArtifactsResponse 6" {
     #| "footprint-svg": "/v1/parts/raspberrypi/RP2040/artifacts/footprint-svg",
     #| "step": "/v1/parts/raspberrypi/RP2040/artifacts/step",
     #| "stl": "/v1/parts/raspberrypi/RP2040/artifacts/stl",
-    #| "3mf": "/v1/parts/raspberrypi/RP2040/artifacts/3mf"
+    #| "3mf": "/v1/parts/raspberrypi/RP2040/artifacts/3mf",
+    #| "pcbcraft": "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"
     #|}
   let json = @json.parse(text)
   let _ : @api.ArtifactsResponse = @json.from_json(json)
@@ -1280,4 +1281,59 @@ test "decode Part with conditional parameters" {
     fail("no VGS")
   }
   assert_eq(vgs.value, Some(10.0))
+}
+
+///|
+test "decode PcbcraftPartDetails" {
+  let text =
+    #|{
+    #| "summary": {
+    #|  "manufacturer": "raspberrypi",
+    #|  "manufacturer_name": "Raspberry Pi Ltd",
+    #|  "mpn": "RP2040",
+    #|  "category": "microcontroller",
+    #|  "description": "Microcontroller raspberrypi/RP2040 in standards/QFN56-RP2040",
+    #|  "library": "openparts-microcontroller",
+    #|  "manufacturer_part": {
+    #|   "library": "openparts-microcontroller",
+    #|   "kind": "manufacturer-part",
+    #|   "id": "raspberrypi-rp2040",
+    #|   "revision": 1,
+    #|   "sha256": "53c87b25e78089a3239aadc8e31c4798df01987519377e75a77317057d0938e6"
+    #|  },
+    #|  "part": {
+    #|   "library": "openparts-microcontroller",
+    #|   "kind": "part",
+    #|   "id": "raspberrypi-rp2040",
+    #|   "revision": 1,
+    #|   "sha256": "9bd898ca40314b582ed6e16f519edda6f14b7497a0e1f269ac7d69ddfb5e78e9"
+    #|  },
+    #|  "refused": false,
+    #|  "refusal": null,
+    #|  "bundle": "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"
+    #| },
+    #| "dependencies": [
+    #|  {
+    #|   "library": "openparts-microcontroller",
+    #|   "kind": "category",
+    #|   "id": "microcontroller",
+    #|   "revision": 1,
+    #|   "sha256": "0a67a51a632e32be882d683e19fe4d967a7823e2b525d0b1842915a0d6aa9b44"
+    #|  },
+    #|  {
+    #|   "library": "openparts-microcontroller",
+    #|   "kind": "footprint",
+    #|   "id": "standards-qfn56-rp2040",
+    #|   "revision": 1,
+    #|   "sha256": "2ff28e454272445f60000f8d88457fff6f420acc545df56ecdb60357e148626f"
+    #|  }
+    #| ],
+    #| "license": "CC0-1.0",
+    #| "persistent_revisions": true
+    #|}
+  let json = @json.parse(text)
+  let d : @api.PcbcraftPartDetails = @json.from_json(json)
+  assert_eq(d.summary.refused, false)
+  assert_eq(d.summary.refusal, None)
+  assert_eq(d.dependencies.length(), 2)
 }

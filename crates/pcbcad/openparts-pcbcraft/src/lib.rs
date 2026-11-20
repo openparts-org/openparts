@@ -124,6 +124,9 @@ pub struct Library {
     pub refusals: Vec<Refusal>,
     /// Manufacturer parts written.
     pub parts: usize,
+    /// OpenParts part id -> its manufacturer part's document path
+    /// (`manufacturer-parts/<id>.json`).
+    pub manufacturer_parts: BTreeMap<String, String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -647,6 +650,7 @@ pub fn export(
         part_refs.insert(*device, reference_to(id, revision));
     }
 
+    let mut manufacturer_parts = BTreeMap::new();
     for a in &accepted {
         let key = format!("part:{}", a.part.id);
         let id = &mpart_ids[&key];
@@ -673,12 +677,15 @@ pub fn export(
             specifications,
         };
         let (record, _) = publish(ledger, "manufacturer-part", id, &key, record);
-        documents.insert(format!("manufacturer-parts/{id}.json"), render(&record));
+        let path = format!("manufacturer-parts/{id}.json");
+        documents.insert(path.clone(), render(&record));
+        manufacturer_parts.insert(a.part.id.clone(), path);
     }
 
     Ok(Library {
         id: library,
         parts: accepted.len(),
+        manufacturer_parts,
         documents,
         refusals,
     })
@@ -715,16 +722,56 @@ impl Library {
 
     /// The `pcbcraft-library-bundle/1` document.
     pub fn bundle(&self) -> String {
-        #[derive(serde::Serialize)]
-        struct Bundle<'a> {
-            format: &'static str,
-            documents: &'a BTreeMap<String, String>,
-        }
-        render(&Bundle {
-            format: BUNDLE_FORMAT,
-            documents: &self.documents,
-        })
+        bundle_of(&self.documents)
     }
+
+    /// The documents one OpenParts part needs, as they are in this
+    /// library: `library.json`, its manufacturer part, generic part,
+    /// symbol, category and the footprint of every package variant of
+    /// the generic part (its exact dependency closure). `None` if the
+    /// part is not in the library (or was refused).
+    pub fn part_documents(&self, part: &str) -> Option<BTreeMap<String, String>> {
+        let mut out = BTreeMap::new();
+        let mut take = |path: String| -> Option<serde_json::Value> {
+            let text = self.documents.get(&path)?;
+            let value = serde_json::from_str(text).ok()?;
+            out.insert(path, text.clone());
+            Some(value)
+        };
+        take("library.json".into())?;
+        let mpart = take(self.manufacturer_parts.get(part)?.clone())?;
+        // References inside one library: the id names the file of the
+        // kind the field refers to.
+        let id = |v: &serde_json::Value| -> Option<String> {
+            (v.get("library")?.as_str()? == self.id).then_some(())?;
+            Some(v.get("id")?.as_str()?.to_string())
+        };
+        let generic = take(format!("parts/{}.json", id(mpart.get("part")?)?))?;
+        take(format!("symbols/{}.json", id(generic.get("symbol")?)?))?;
+        if let Some(c) = generic.get("category") {
+            take(format!("categories/{}.json", id(c.get("definition")?)?))?;
+        }
+        for variant in generic.get("packages")?.as_object()?.values() {
+            take(format!(
+                "footprints/{}.json",
+                id(variant.get("footprint")?)?
+            ))?;
+        }
+        Some(out)
+    }
+}
+
+/// A `pcbcraft-library-bundle/1` document of `documents`.
+pub fn bundle_of(documents: &BTreeMap<String, String>) -> String {
+    #[derive(serde::Serialize)]
+    struct Bundle<'a> {
+        format: &'static str,
+        documents: &'a BTreeMap<String, String>,
+    }
+    render(&Bundle {
+        format: BUNDLE_FORMAT,
+        documents,
+    })
 }
 
 #[cfg(test)]

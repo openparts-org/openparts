@@ -63,6 +63,7 @@ pub(all) struct ArtifactsResponse {
   footprint_svg : String
   kicad_footprint : String
   kicad_symbol : String
+  pcbcraft : String
   step : String
   stl : String
 }
@@ -627,6 +628,7 @@ pub impl @json.FromJson for EdgeRequirement
 pub(all) struct ErrorBody {
   diagnostics : Array[DiagnosticBody]
   error : String
+  reason : String?
 }
 pub impl @json.FromJson for ErrorBody
 
@@ -1340,6 +1342,97 @@ pub(all) struct PartSummary {
 pub impl @json.FromJson for PartSummary
 
 #derive(Eq)
+pub(all) struct PcbcraftAddress {
+  id : String
+  kind : String
+  library : String
+  revision : Int32
+  sha256 : String
+}
+pub impl @json.FromJson for PcbcraftAddress
+
+#derive(Eq)
+pub(all) struct PcbcraftLibraries {
+  libraries : Array[PcbcraftLibrarySummary]
+  license : String
+  persistent_revisions : Bool
+}
+pub impl @json.FromJson for PcbcraftLibraries
+
+#derive(Eq)
+pub(all) struct PcbcraftLibrarySummary {
+  bundle : String?
+  bundle_bytes : Int32
+  bundle_sha256 : String
+  category : ComponentCategory?
+  documents : Int32
+  id : String
+  limit_error : String?
+  name : String
+  parts : Int32
+  refused : Int32
+}
+pub impl @json.FromJson for PcbcraftLibrarySummary
+
+#derive(Eq)
+pub(all) struct PcbcraftPartDetails {
+  dependencies : Array[PcbcraftAddress]
+  license : String
+  persistent_revisions : Bool
+  summary : PcbcraftPartSummary
+}
+pub impl @json.FromJson for PcbcraftPartDetails
+
+#derive(Eq)
+pub(all) struct PcbcraftPartSummary {
+  bundle : String?
+  category : ComponentCategory?
+  description : String
+  library : String?
+  manufacturer : String
+  manufacturer_name : String
+  manufacturer_part : PcbcraftAddress?
+  mpn : String
+  part : PcbcraftAddress?
+  refusal : String?
+  refused : Bool
+}
+pub impl @json.FromJson for PcbcraftPartSummary
+
+#derive(Eq)
+pub(all) struct PcbcraftSearchResponse {
+  limit : Int32
+  offset : Int32
+  persistent_revisions : Bool
+  results : Array[PcbcraftPartSummary]
+  total : Int32
+}
+pub impl @json.FromJson for PcbcraftSearchResponse
+
+#derive(Eq, @debug.Debug)
+pub(all) enum PcbcraftState {
+  Ready
+  Building
+  Failed
+}
+pub fn PcbcraftState::all() -> Array[Self]
+pub fn PcbcraftState::wire(Self) -> String
+pub impl @json.FromJson for PcbcraftState
+
+#derive(Eq)
+pub(all) struct PcbcraftStatus {
+  build_ms : Int32?
+  error : String?
+  libraries : Int32
+  license : String
+  parts : Int32
+  persistent_revisions : Bool
+  refused : Int32
+  state : PcbcraftState
+}
+pub impl @json.FromJson for PcbcraftStatus
+
+#derive(Eq)
 pub(all) struct Pin {
   alternate_functions : Array[String]
   connected_to : String?
@@ -1477,6 +1570,7 @@ pub impl @json.FromJson for RuleKind
 
 #derive(Eq)
 pub(all) struct ServerConfig {
+  pcbcraft : PcbcraftStatus
   source_documents : Bool
 }
 pub impl @json.FromJson for ServerConfig

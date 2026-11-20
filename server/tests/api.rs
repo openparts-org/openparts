@@ -1360,3 +1360,286 @@ async fn every_circuit_diagram_is_drawn_cleanly() {
         bad.join("\n")
     );
 }
+
+// ---- PCBCraft catalog --------------------------------------------------
+
+/// The real dataset with its PCBCraft catalog exported (once for all
+/// these tests; in-memory ledger).
+fn pcbcraft_app() -> axum::Router {
+    use openparts_server::store::Store;
+    static STORE: std::sync::OnceLock<Arc<Store>> = std::sync::OnceLock::new();
+    let store = STORE.get_or_init(|| {
+        let store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+        store.pcbcraft.prepare(&store.dataset).unwrap();
+        Arc::new(store)
+    });
+    openparts_server::routes::build_router(store.clone())
+}
+
+async fn json_of(response: axum::response::Response) -> serde_json::Value {
+    serde_json::from_str(&body_string(response).await).unwrap()
+}
+
+#[tokio::test]
+async fn pcbcraft_is_unavailable_until_prepared() {
+    let res = get(app(), "/v1/pcbcraft/search?q=RP2040").await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let status = json_of(get(app(), "/v1/pcbcraft").await).await;
+    assert_eq!(status["state"], "building");
+    assert_eq!(status["persistent_revisions"], false);
+}
+
+#[tokio::test]
+async fn pcbcraft_search_returns_addresses_and_refusals() {
+    let res = get(pcbcraft_app(), "/v1/pcbcraft/search?q=RP2040&limit=5").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = json_of(res).await;
+    assert_eq!(body["persistent_revisions"], false);
+    let first = &body["results"][0];
+    assert_eq!(first["mpn"], "RP2040");
+    assert_eq!(first["manufacturer"], "raspberrypi");
+    assert_eq!(first["refused"], false);
+    assert_eq!(first["library"], "openparts-microcontroller");
+    let mp = &first["manufacturer_part"];
+    assert_eq!(mp["library"], "openparts-microcontroller");
+    assert_eq!(mp["kind"], "manufacturer-part");
+    assert_eq!(mp["id"], "raspberrypi-rp2040");
+    assert_eq!(mp["revision"], 1);
+    assert_eq!(first["part"]["kind"], "part");
+    assert_eq!(
+        first["bundle"],
+        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"
+    );
+
+    // Refused parts are listed with the reason; `exportable` filters.
+    let q = "/v1/pcbcraft/search?q=PTV09A-2015F-B103&exportable=false";
+    let body = json_of(get(pcbcraft_app(), q).await).await;
+    let hit = &body["results"][0];
+    assert_eq!(hit["mpn"], "PTV09A-2015F-B103");
+    assert_eq!(hit["refused"], true);
+    assert!(hit["refusal"].as_str().unwrap().contains("slotted hole"));
+    assert!(hit["manufacturer_part"].is_null() && hit["bundle"].is_null());
+
+    let body = json_of(
+        get(
+            pcbcraft_app(),
+            "/v1/pcbcraft/search?category=resistor&limit=3",
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(body["results"].as_array().unwrap().len(), 3);
+    assert!(body["total"].as_u64().unwrap() > 3);
+    let res = get(pcbcraft_app(), "/v1/pcbcraft/search?limit=0").await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn pcbcraft_part_bundle_is_its_dependency_closure() {
+    let res = get(
+        pcbcraft_app(),
+        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft",
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "application/json");
+    assert_eq!(
+        res.headers()["content-disposition"],
+        "attachment; filename=\"raspberrypi-RP2040.pcbcraft.json\""
+    );
+    assert_eq!(res.headers()["x-pcbcraft-revisions"], "ephemeral");
+    let bundle = json_of(res).await;
+    assert_eq!(bundle["format"], "pcbcraft-library-bundle/1");
+    let docs = bundle["documents"].as_object().unwrap();
+    let dirs: std::collections::BTreeSet<&str> =
+        docs.keys().map(|k| k.split('/').next().unwrap()).collect();
+    for want in [
+        "library.json",
+        "symbols",
+        "footprints",
+        "categories",
+        "parts",
+        "manufacturer-parts",
+    ] {
+        assert!(dirs.contains(want), "no {want} in {dirs:?}");
+    }
+    let manifest: serde_json::Value =
+        serde_json::from_str(docs["library.json"].as_str().unwrap()).unwrap();
+    assert_eq!(manifest["id"], "openparts-microcontroller");
+    assert_eq!(manifest["license"], "CC0-1.0");
+    let mp: serde_json::Value = serde_json::from_str(
+        docs["manufacturer-parts/raspberrypi-rp2040.json"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mp["mpn"], "RP2040");
+    assert_eq!(
+        mp["source"]["locator"],
+        "https://openparts.jijinbei.jp/v1/parts/raspberrypi/RP2040"
+    );
+
+    // The same documents, byte for byte, as in the whole library.
+    let libs = json_of(get(pcbcraft_app(), "/v1/pcbcraft/libraries").await).await;
+    let mcu = libs["libraries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["id"] == "openparts-microcontroller")
+        .unwrap();
+    assert!(mcu["parts"].as_u64().unwrap() > 1);
+    let url = mcu["bundle"].as_str().unwrap();
+    let whole = json_of(get(pcbcraft_app(), url).await).await;
+    for (path, text) in docs {
+        assert_eq!(&whole["documents"][path], text, "{path}");
+    }
+
+    // The details list the same records.
+    let details = json_of(get(pcbcraft_app(), "/v1/pcbcraft/parts/raspberrypi/RP2040").await).await;
+    assert_eq!(
+        details["dependencies"].as_array().unwrap().len(),
+        docs.len() - 1
+    );
+    // And the artifact listing points at the bundle.
+    let list = json_of(get(pcbcraft_app(), "/v1/parts/raspberrypi/RP2040/artifacts").await).await;
+    assert_eq!(
+        list["pcbcraft"],
+        "/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"
+    );
+}
+
+#[tokio::test]
+async fn pcbcraft_refused_part_is_422_with_the_reason() {
+    let res = get(
+        pcbcraft_app(),
+        "/v1/parts/bourns/PTV09A-2015F-B103/artifacts/pcbcraft",
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = json_of(res).await;
+    assert!(body["reason"].as_str().unwrap().contains("slotted hole"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("cannot be exported to PCBCraft"));
+    let res = get(pcbcraft_app(), "/v1/parts/nobody/NOPE/artifacts/pcbcraft").await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+/// A one-part dataset (pin 2 named `pin2`) in a fresh directory.
+fn pcbcraft_fixture(name: &str, pin2: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "openparts-server-pcbcraft-{name}-{}",
+        std::process::id()
+    ));
+    let write = |rel: &str, text: &str| {
+        let path = dir.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write(
+        "sources/ex/DS1.yaml",
+        "schema_version: '0.1'\nkind: source\nid: ex/DS1\npublisher: ex\ndocument_id: DS1\n\
+         document_type: datasheet\nrevision: '2'\ndate: '2026-01'\nurl: 'https://example.com/ds1.pdf'\n",
+    );
+    write(
+        "packages/standards/T.yaml",
+        "schema_version: '0.1'\nkind: package\nid: standards/T\nfamily: soic\nlead_count: 2\n\
+         pitch: {nominal: 1.27, unit: mm}\ndimensions:\n\
+         \x20 body_width: {nominal: 3.9, unit: mm}\n\
+         \x20 body_length: {nominal: 4.9, unit: mm}\n",
+    );
+    write(
+        "devices/ex/D.yaml",
+        &format!(
+            "schema_version: '0.1'\nkind: device\nid: ex/D\nmanufacturer: ex\ncategory: resistor\n\
+             pins:\n  '1': {{name: A, type: passive}}\n  '2': {{name: {pin2}, type: passive}}\n"
+        ),
+    );
+    write(
+        "parts/ex/ex-d/EX-D.yaml",
+        "schema_version: '0.1'\nkind: part\nid: ex/EX-D\nmanufacturer: ex\nmpn: EX-D\n\
+         device: ex/D\npackage: standards/T\nexistence: {status: verified}\n\
+         lifecycle: {status: active}\nsources: [ex/DS1]\n",
+    );
+    dir
+}
+
+/// Loads `data` with the ledger at `ledger`, prepares the catalog and
+/// returns the part's bundle text.
+async fn bundle_with_ledger(data: &std::path::Path, ledger: &std::path::Path) -> String {
+    use openparts_server::pcbcraft::{PcbcraftService, PcbcraftSettings};
+    let mut store = openparts_server::store::discover_and_load(data).unwrap();
+    store.pcbcraft = PcbcraftService::new(PcbcraftSettings {
+        ledger: Some(ledger.to_path_buf()),
+        data_revision: "test".into(),
+        ..PcbcraftSettings::default()
+    });
+    store.pcbcraft.prepare(&store.dataset).unwrap();
+    let app = openparts_server::routes::build_router(Arc::new(store));
+    let res = get(app, "/v1/parts/ex/EX-D/artifacts/pcbcraft").await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["x-pcbcraft-revisions"], "persistent");
+    body_string(res).await
+}
+
+fn revision_of(bundle: &str, path: &str) -> u64 {
+    let b: serde_json::Value = serde_json::from_str(bundle).unwrap();
+    let doc: serde_json::Value =
+        serde_json::from_str(b["documents"][path].as_str().unwrap()).unwrap();
+    doc["revision"].as_u64().unwrap()
+}
+
+#[tokio::test]
+async fn pcbcraft_revisions_survive_a_restart_and_change_with_content() {
+    let data = pcbcraft_fixture("data", "B");
+    let ledger = data.join("../pcbcraft-ledger-test.json");
+    let _ = std::fs::remove_file(&ledger);
+
+    let first = bundle_with_ledger(&data, &ledger).await;
+    assert!(ledger.is_file(), "the ledger is written");
+    let saved = std::fs::read_to_string(&ledger).unwrap();
+    // A second start reads the ledger: the same bytes, the ledger as it was.
+    let second = bundle_with_ledger(&data, &ledger).await;
+    assert_eq!(first, second);
+    assert_eq!(saved, std::fs::read_to_string(&ledger).unwrap());
+    let symbol = "symbols/ex-d.json";
+    let mpart = "manufacturer-parts/ex-ex-d.json";
+    assert_eq!(revision_of(&first, symbol), 1);
+    assert_eq!(revision_of(&first, mpart), 1);
+
+    // Changed content gets the next revision, never the old address.
+    let changed = pcbcraft_fixture("data", "C");
+    let third = bundle_with_ledger(&changed, &ledger).await;
+    assert_eq!(revision_of(&third, symbol), 2);
+    assert_eq!(revision_of(&third, "parts/ex-d.json"), 2);
+    assert_eq!(revision_of(&third, mpart), 2);
+    // The footprint did not change, so it keeps its revision and bytes.
+    let fp = |b: &str| {
+        let v: serde_json::Value = serde_json::from_str(b).unwrap();
+        v["documents"]["footprints/standards-t.json"].clone()
+    };
+    assert_eq!(fp(&first), fp(&third));
+    assert_eq!(revision_of(&third, "footprints/standards-t.json"), 1);
+
+    // Back to the first content: its first revision, byte for byte.
+    let back = pcbcraft_fixture("data", "B");
+    assert_eq!(bundle_with_ledger(&back, &ledger).await, first);
+
+    // A ledger that does not parse is never replaced: the catalog fails.
+    std::fs::write(&ledger, "not json").unwrap();
+    let mut store = openparts_server::store::discover_and_load(&data).unwrap();
+    store.pcbcraft = openparts_server::pcbcraft::PcbcraftService::new(
+        openparts_server::pcbcraft::PcbcraftSettings {
+            ledger: Some(ledger.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(store.pcbcraft.prepare(&store.dataset).is_err());
+    assert_eq!(std::fs::read_to_string(&ledger).unwrap(), "not json");
+    let app = openparts_server::routes::build_router(Arc::new(store));
+    let res = get(app, "/v1/parts/ex/EX-D/artifacts/pcbcraft").await;
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_file(&ledger);
+}

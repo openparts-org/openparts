@@ -397,3 +397,36 @@ fn options_are_checked() {
     o.library_id = "Open Parts".into();
     assert!(export(&resistor_input(), &o, &mut LedgerLibrary::default()).is_err());
 }
+
+#[test]
+fn a_part_s_documents_are_its_dependency_closure() {
+    let mut input = resistor_input();
+    // A second device whose records the resistor doesn't need.
+    let mut other = input.devices[0].clone();
+    other.id = "yageo/RC0402".into();
+    other.name = other.id.clone();
+    input.devices.push(other);
+    let mut part = input.parts[0].clone();
+    part.id = "yageo/RC0402FR-0710KL".into();
+    part.mpn = "RC0402FR-0710KL".into();
+    part.device = "yageo/RC0402".into();
+    input.parts.push(part);
+    let lib = export(&input, &options("r"), &mut LedgerLibrary::default()).unwrap();
+    let docs = lib.part_documents("yageo/RC0603FR-0710KL").unwrap();
+    let paths: Vec<&str> = docs.keys().map(String::as_str).collect();
+    assert_eq!(
+        paths,
+        [
+            "categories/resistor.json",
+            "footprints/standards-0603.json",
+            "library.json",
+            "manufacturer-parts/yageo-rc0603fr-0710kl.json",
+            "parts/yageo-rc0603.json",
+            "symbols/yageo-rc0603.json",
+        ]
+    );
+    for (path, text) in &docs {
+        assert_eq!(&lib.documents[path], text);
+    }
+    assert!(lib.part_documents("yageo/none").is_none());
+}

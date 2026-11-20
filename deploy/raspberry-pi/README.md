@@ -70,12 +70,41 @@ HOST=raspberry.local BUNDLE_DIR=../bundle \
 `deploy.sh` copies the server binary, the web site, the data checkout
 (without `.git`) and, if `BUNDLE_DIR` is given, the bundle to
 `~/openparts/` on the Pi, installs `openparts.service` as a user unit
-and restarts it. Run it again after every data or code update. Without
+and restarts it. It never touches `~/openparts/state/` (the PCBCraft
+ledger, below). Run it again after every data or code update. Without
 `BUNDLE_DIR`, a bundle already on the Pi is kept; rebuild and pass it
 when parts or packages changed.
 
 On the Pi: `systemctl --user status openparts`,
 `journalctl --user -u openparts`.
+
+## PCBCraft catalog and its revision ledger
+
+The server also serves the dataset as PCBCraft native libraries
+(`/v1/pcbcraft/...`, `.../artifacts/pcbcraft`;
+docs/spec/pcbcraft-export.md, "Catalog API"). PCBCraft quarantines two
+different documents under one (library, kind, id, revision), so the
+revisions are kept in a ledger that must outlive every deploy:
+
+- `openparts.service` sets
+  `OPENPARTS_PCBCRAFT_LEDGER=~/openparts/state/pcbcraft-ledger.json`.
+  At each start the server exports every part in the background (a
+  second or two on a PC, expect several on the Pi; the API answers at
+  once and the PCBCraft endpoints `503` until it is done), gives changed
+  records the next revision, and replaces the ledger atomically before
+  serving anything.
+- `deploy.sh` creates `~/openparts/state/` but never writes, copies over
+  or deletes anything in it. It writes the deployed openparts-data
+  commit to `~/openparts/data.env` (`OPENPARTS_DATA_REVISION`), which
+  new records name in their source reference.
+- Back the ledger up now and then
+  (`scp raspberry.local:openparts/state/pcbcraft-ledger.json .`). If it
+  is lost, the next start numbers every record from 1 again, and
+  PCBCraft users who pinned an older copy of a changed record will see
+  it quarantined. If it is corrupted, the server refuses to serve the
+  PCBCraft endpoints (`503`, see `GET /v1/pcbcraft`) instead of
+  replacing it; restore the backup.
+- Run one server per ledger file.
 
 ## 4. Cloudflare Tunnel
 

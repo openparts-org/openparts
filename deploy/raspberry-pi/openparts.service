@@ -12,6 +12,14 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8080
 Environment=OPENPARTS_DATA_DIR=%h/openparts/data
 Environment=OPENPARTS_WEB_DIR=%h/openparts/web
+# The PCBCraft revision ledger: kept across restarts and deploys
+# (deploy.sh never writes ~/openparts/state). Losing it would number
+# changed records afresh, so PCBCraft would quarantine them.
+Environment=OPENPARTS_PCBCRAFT_LEDGER=%h/openparts/state/pcbcraft-ledger.json
+Environment=OPENPARTS_PUBLIC_URL=https://openparts.jijinbei.jp
+# OPENPARTS_DATA_REVISION (the deployed openparts-data commit), written
+# by deploy.sh.
+EnvironmentFile=-%h/openparts/data.env
 # OPENPARTS_ARTIFACT_DIR, written by deploy.sh when a bundle is installed.
 EnvironmentFile=-%h/openparts/bundle.env
 ExecStart=%h/openparts/bin/openparts-server

@@ -141,6 +141,7 @@ pub(all) struct ArtifactsResponse {
   footprint_svg : String
   kicad_footprint : String
   kicad_symbol : String
+  pcbcraft : String
   step : String
   stl : String
 }
@@ -155,6 +156,7 @@ pub impl @json.FromJson for ArtifactsResponse with fn from_json(json, path) {
     footprint_svg: field(obj, "footprint-svg", path),
     kicad_footprint: field(obj, "kicad-footprint", path),
     kicad_symbol: field(obj, "kicad-symbol", path),
+    pcbcraft: field(obj, "pcbcraft", path),
     step: field(obj, "step", path),
     stl: field(obj, "stl", path),
   }
@@ -1786,6 +1788,7 @@ pub impl @json.FromJson for EdgeRequirement with fn from_json(json, path) {
 pub(all) struct ErrorBody {
   diagnostics : Array[DiagnosticBody]
   error : String
+  reason : String?
 }
 
 ///|
@@ -1796,6 +1799,7 @@ pub impl @json.FromJson for ErrorBody with fn from_json(json, path) {
   {
     diagnostics: field(obj, "diagnostics", path),
     error: field(obj, "error", path),
+    reason: opt_field(obj, "reason", path),
   }
 }
 
@@ -3953,6 +3957,242 @@ pub impl @json.FromJson for PartSummary with fn from_json(json, path) {
 }
 
 ///|
+/// A record's PCBCraft address and the SHA-256 of its document text as
+/// served (one address never has two texts here).
+#derive(Eq)
+pub(all) struct PcbcraftAddress {
+  id : String
+  kind : String
+  library : String
+  revision : Int32
+  sha256 : String
+}
+
+///|
+pub impl @json.FromJson for PcbcraftAddress with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PcbcraftAddress object"))
+  }
+  {
+    id: field(obj, "id", path),
+    kind: field(obj, "kind", path),
+    library: field(obj, "library", path),
+    revision: field(obj, "revision", path),
+    sha256: field(obj, "sha256", path),
+  }
+}
+
+///|
+/// `GET /v1/pcbcraft/libraries`.
+#derive(Eq)
+pub(all) struct PcbcraftLibraries {
+  libraries : Array[PcbcraftLibrarySummary]
+  license : String
+  persistent_revisions : Bool
+}
+
+///|
+pub impl @json.FromJson for PcbcraftLibraries with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PcbcraftLibraries object"))
+  }
+  {
+    libraries: field(obj, "libraries", path),
+    license: field(obj, "license", path),
+    persistent_revisions: field(obj, "persistent_revisions", path),
+  }
+}
+
+///|
+/// One library of `GET /v1/pcbcraft/libraries`.
+#derive(Eq)
+pub(all) struct PcbcraftLibrarySummary {
+  bundle : String?
+  bundle_bytes : Int32
+  bundle_sha256 : String
+  category : ComponentCategory?
+  documents : Int32
+  id : String
+  limit_error : String?
+  name : String
+  parts : Int32
+  refused : Int32
+}
+
+///|
+pub impl @json.FromJson for PcbcraftLibrarySummary with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError(
+      (path, "expected a PcbcraftLibrarySummary object"),
+    )
+  }
+  {
+    bundle: opt_field(obj, "bundle", path),
+    bundle_bytes: field(obj, "bundle_bytes", path),
+    bundle_sha256: field(obj, "bundle_sha256", path),
+    category: opt_field(obj, "category", path),
+    documents: field(obj, "documents", path),
+    id: field(obj, "id", path),
+    limit_error: opt_field(obj, "limit_error", path),
+    name: field(obj, "name", path),
+    parts: field(obj, "parts", path),
+    refused: field(obj, "refused", path),
+  }
+}
+
+///|
+/// `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}`.
+#derive(Eq)
+pub(all) struct PcbcraftPartDetails {
+  dependencies : Array[PcbcraftAddress]
+  license : String
+  persistent_revisions : Bool
+  summary : PcbcraftPartSummary
+}
+
+///|
+pub impl @json.FromJson for PcbcraftPartDetails with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PcbcraftPartDetails object"))
+  }
+  {
+    dependencies: field(obj, "dependencies", path),
+    license: field(obj, "license", path),
+    persistent_revisions: field(obj, "persistent_revisions", path),
+    summary: field(obj, "summary", path),
+  }
+}
+
+///|
+/// A part as PCBCraft sees it.
+#derive(Eq)
+pub(all) struct PcbcraftPartSummary {
+  bundle : String?
+  category : ComponentCategory?
+  description : String
+  library : String?
+  manufacturer : String
+  manufacturer_name : String
+  manufacturer_part : PcbcraftAddress?
+  mpn : String
+  part : PcbcraftAddress?
+  refusal : String?
+  refused : Bool
+}
+
+///|
+pub impl @json.FromJson for PcbcraftPartSummary with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PcbcraftPartSummary object"))
+  }
+  {
+    bundle: opt_field(obj, "bundle", path),
+    category: opt_field(obj, "category", path),
+    description: field(obj, "description", path),
+    library: opt_field(obj, "library", path),
+    manufacturer: field(obj, "manufacturer", path),
+    manufacturer_name: field(obj, "manufacturer_name", path),
+    manufacturer_part: opt_field(obj, "manufacturer_part", path),
+    mpn: field(obj, "mpn", path),
+    part: opt_field(obj, "part", path),
+    refusal: opt_field(obj, "refusal", path),
+    refused: field(obj, "refused", path),
+  }
+}
+
+///|
+/// `GET /v1/pcbcraft/search`.
+#derive(Eq)
+pub(all) struct PcbcraftSearchResponse {
+  limit : Int32
+  offset : Int32
+  persistent_revisions : Bool
+  results : Array[PcbcraftPartSummary]
+  total : Int32
+}
+
+///|
+pub impl @json.FromJson for PcbcraftSearchResponse with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError(
+      (path, "expected a PcbcraftSearchResponse object"),
+    )
+  }
+  {
+    limit: field(obj, "limit", path),
+    offset: field(obj, "offset", path),
+    persistent_revisions: field(obj, "persistent_revisions", path),
+    results: field(obj, "results", path),
+    total: field(obj, "total", path),
+  }
+}
+
+///|
+#derive(Eq, Debug)
+pub(all) enum PcbcraftState {
+  Ready
+  Building
+  Failed
+}
+
+///|
+/// The wire (JSON) string.
+pub fn PcbcraftState::wire(self : PcbcraftState) -> String {
+  match self {
+    Ready => "ready"
+    Building => "building"
+    Failed => "failed"
+  }
+}
+
+///|
+/// Every value, in declaration order.
+pub fn PcbcraftState::all() -> Array[PcbcraftState] {
+  [Ready, Building, Failed]
+}
+
+///|
+pub impl @json.FromJson for PcbcraftState with fn from_json(json, path) {
+  match json {
+    String("ready") => Ready
+    String("building") => Building
+    String("failed") => Failed
+    _ => raise @json.JsonDecodeError((path, "expected a PcbcraftState"))
+  }
+}
+
+///|
+/// `GET /v1/pcbcraft` (and `pcbcraft` in `GET /v1/config`).
+#derive(Eq)
+pub(all) struct PcbcraftStatus {
+  build_ms : Int32?
+  error : String?
+  libraries : Int32
+  license : String
+  parts : Int32
+  persistent_revisions : Bool
+  refused : Int32
+  state : PcbcraftState
+}
+
+///|
+pub impl @json.FromJson for PcbcraftStatus with fn from_json(json, path) {
+  guard json is Object(obj) else {
+    raise @json.JsonDecodeError((path, "expected a PcbcraftStatus object"))
+  }
+  {
+    build_ms: opt_field(obj, "build_ms", path),
+    error: opt_field(obj, "error", path),
+    libraries: field(obj, "libraries", path),
+    license: field(obj, "license", path),
+    parts: field(obj, "parts", path),
+    persistent_revisions: field(obj, "persistent_revisions", path),
+    refused: field(obj, "refused", path),
+    state: field(obj, "state", path),
+  }
+}
+
+///|
 #derive(Eq)
 pub(all) struct Pin {
   alternate_functions : Array[String]
@@ -4356,6 +4596,7 @@ pub impl @json.FromJson for RuleKind with fn from_json(json, path) {
 /// What the site may use on this server.
 #derive(Eq)
 pub(all) struct ServerConfig {
+  pcbcraft : PcbcraftStatus
   source_documents : Bool
 }
 
@@ -4364,7 +4605,10 @@ pub impl @json.FromJson for ServerConfig with fn from_json(json, path) {
   guard json is Object(obj) else {
     raise @json.JsonDecodeError((path, "expected a ServerConfig object"))
   }
-  { source_documents: field(obj, "source_documents", path), }
+  {
+    pcbcraft: field(obj, "pcbcraft", path),
+    source_documents: field(obj, "source_documents", path),
+  }
 }
 
 ///|

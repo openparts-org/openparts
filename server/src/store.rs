@@ -20,6 +20,9 @@ pub struct Store {
     /// Downloaded source documents (`OPENPARTS_SOURCE_CACHE`); `None`:
     /// documents aren't fetched, and the site links to the originals.
     pub source_cache: Option<crate::sources::SourceCache>,
+    /// `GET /v1/pcbcraft/...` and `.../artifacts/pcbcraft`: exported
+    /// once by [`crate::pcbcraft::PcbcraftService::prepare`].
+    pub pcbcraft: crate::pcbcraft::PcbcraftService,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -58,5 +61,6 @@ pub fn discover_and_load(data_dir: &Path) -> Result<Store, LoadError> {
         dataset,
         bundle: None,
         source_cache: None,
+        pcbcraft: Default::default(),
     })
 }

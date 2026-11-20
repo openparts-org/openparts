@@ -444,6 +444,30 @@ fn part_view(model : Model, emit : Emit[Msg]) -> Html {
 }
 
 ///|
+/// The PCBCraft bundle's download link, when the part can be exported
+/// (the refusal reason is shown below the buttons instead).
+fn pcbcraft_button(
+  c : Copy,
+  m : String,
+  mpn : String,
+  pcbcraft : Fetch[@api.PcbcraftPartDetails],
+) -> Array[Html] {
+  match pcbcraft {
+    Got(d) if !d.summary.refused =>
+      [
+        a(
+          class="button",
+          href=artifact_url(m, mpn, "pcbcraft"),
+          download="\{m}-\{mpn}.pcbcraft.json",
+          c.pcbcraft_button,
+          escape=true,
+        ),
+      ]
+    _ => []
+  }
+}
+
+///|
 fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
   let lang = model.lang
   let c = lang.copy()
@@ -472,8 +496,21 @@ fn part_loaded_view(model : Model, data : PartData, emit : Emit[Msg]) -> Html {
         c.stl_button,
         escape=true,
       ),
+      ..pcbcraft_button(c, m, mpn, data.pcbcraft),
     ]),
   ]
+  match data.pcbcraft {
+    Got(d) if d.summary.refused =>
+      downloads.push(
+        p(
+          class="text-muted",
+          c.pcbcraft_refused + d.summary.refusal.unwrap_or(""),
+        ),
+      )
+    Failed(e) =>
+      downloads.push(p(class="text-muted", c.pcbcraft_unavailable + e))
+    _ => ()
+  }
   if model.zip is ZipFailed(e) {
     downloads.push(
       p(class="text-muted", if e.is_empty() { c.zip_failed } else { e }),

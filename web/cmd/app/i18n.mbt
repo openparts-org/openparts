@@ -60,6 +60,9 @@ struct Copy {
   zip_building : String
   zip_button : String
   stl_button : String
+  pcbcraft_button : String
+  pcbcraft_refused : String
+  pcbcraft_unavailable : String
   zip_failed : String
   preview3d : String
   model_load_failed : String
@@ -134,6 +137,9 @@ let ja : Copy = {
   zip_building: "zip作成中...",
   zip_button: "KiCad用一式をダウンロード(.zip)",
   stl_button: "STLをダウンロード",
+  pcbcraft_button: "PCBCraftライブラリをダウンロード",
+  pcbcraft_refused: "PCBCraft形式では表現できません: ",
+  pcbcraft_unavailable: "PCBCraftライブラリは現在利用できません: ",
   zip_failed: "ダウンロードに失敗しました。",
   preview3d: "3Dプレビュー",
   model_load_failed: "3Dモデルを表示できませんでした。",
@@ -205,6 +211,9 @@ let en : Copy = {
   zip_building: "Building zip...",
   zip_button: "Download KiCad bundle (.zip)",
   stl_button: "Download STL",
+  pcbcraft_button: "Download PCBCraft library",
+  pcbcraft_refused: "Not available for PCBCraft: ",
+  pcbcraft_unavailable: "The PCBCraft library is unavailable right now: ",
   zip_failed: "Download failed.",
   preview3d: "3D preview",
   model_load_failed: "Could not display the 3D model.",

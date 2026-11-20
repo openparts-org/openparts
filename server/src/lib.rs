@@ -6,6 +6,7 @@ pub mod circuit_diagram;
 pub mod circuits;
 pub mod documents;
 pub mod error;
+pub mod pcbcraft;
 pub mod routes;
 pub mod search;
 pub mod sources;

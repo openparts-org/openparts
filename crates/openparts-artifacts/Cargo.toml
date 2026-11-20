@@ -15,5 +15,6 @@ openparts-pcbcad = { path = "../pcbcad/openparts-pcbcad" }
 openparts-placement = { path = "../pcbcad/openparts-placement" }
 openparts-kicad = { path = "../pcbcad/openparts-kicad" }
 openparts-librepcb = { path = "../pcbcad/openparts-librepcb" }
+openparts-pcbcraft = { path = "../pcbcad/openparts-pcbcraft" }
 thiserror = { workspace = true }
 serde = { workspace = true }

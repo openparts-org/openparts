@@ -111,6 +111,9 @@ pub struct ServerConfig {
     /// (`OPENPARTS_SOURCE_CACHE` is set); otherwise the site links to
     /// the original documents.
     pub source_documents: bool,
+    /// The PCBCraft catalog (`GET /v1/pcbcraft`): whether it is ready
+    /// and whether its revisions persist across restarts.
+    pub pcbcraft: crate::pcbcraft::PcbcraftStatus,
 }
 
 pub fn repo_path(ds: &Dataset, kind: Kind, id: &str) -> Option<String> {
@@ -161,6 +164,7 @@ async fn get_documents(
 async fn get_config(State(store): State<Arc<Store>>) -> Json<ServerConfig> {
     Json(ServerConfig {
         source_documents: store.source_cache.is_some(),
+        pcbcraft: store.pcbcraft.status(),
     })
 }
 

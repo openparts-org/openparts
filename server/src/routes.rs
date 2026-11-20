@@ -63,11 +63,33 @@ pub fn build_router(store: Arc<Store>) -> Router {
         .merge(crate::documents::router())
         .merge(crate::circuits::router())
         .merge(crate::sources::routes())
+        .merge(crate::pcbcraft::router())
         .with_state(store)
 }
 
 async fn health() -> &'static str {
     "ok"
+}
+
+/// The dataset parts matching `query`, best first: by score (ties by
+/// manufacturer and MPN, so results are stable), or every part by name
+/// for an empty query.
+pub(crate) fn ranked_parts(store: &Store, query: &str) -> Vec<usize> {
+    let ds = &store.dataset;
+    let mut hits = store.search.search(query);
+    if query.trim().is_empty() {
+        hits.sort_by(|a, b| {
+            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
+            (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn))
+        });
+    } else {
+        hits.sort_by(|a, b| {
+            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
+            b.1.cmp(&a.1)
+                .then_with(|| (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn)))
+        });
+    }
+    hits.into_iter().map(|(i, _)| i).collect()
 }
 
 #[derive(Deserialize)]
@@ -99,23 +121,10 @@ async fn search(
 ) -> Json<Vec<PartSummary>> {
     let ds = &store.dataset;
     let query = params.q.unwrap_or_default();
-    let mut hits = store.search.search(&query);
-    if query.trim().is_empty() {
-        hits.sort_by(|a, b| {
-            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
-            (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn))
-        });
-    } else {
-        // Best score first; ties by name, so results are stable.
-        hits.sort_by(|a, b| {
-            let (pa, pb) = (&ds.parts[a.0], &ds.parts[b.0]);
-            b.1.cmp(&a.1)
-                .then_with(|| (&pa.manufacturer.0, &pa.mpn).cmp(&(&pb.manufacturer.0, &pb.mpn)))
-        });
-    }
+    let hits = ranked_parts(&store, &query);
     let results: Vec<PartSummary> = hits
         .into_iter()
-        .map(|(i, _)| &ds.parts[i])
+        .map(|i| &ds.parts[i])
         .map(|p| PartSummary {
             manufacturer: p.manufacturer.0.clone(),
             mpn: p.mpn.clone(),
@@ -153,7 +162,11 @@ async fn catalog(
     Ok(Json(store.catalog.query(&hits, &query)))
 }
 
-fn resolve_part<'s>(store: &'s Store, manufacturer: &str, mpn: &str) -> Result<&'s Part, ApiError> {
+pub(crate) fn resolve_part<'s>(
+    store: &'s Store,
+    manufacturer: &str,
+    mpn: &str,
+) -> Result<&'s Part, ApiError> {
     store
         .dataset
         .part(manufacturer, mpn)
@@ -315,6 +328,9 @@ struct ArtifactsResponse {
     stl: String,
     #[serde(rename = "3mf")]
     three_mf: String,
+    /// The part as a `pcbcraft-library-bundle/1` with its dependency
+    /// closure (crate::pcbcraft; `422` when PCBCraft can't represent it).
+    pcbcraft: String,
 }
 
 /// `GET /v1/parts/{manufacturer}/{mpn}/artifacts`
@@ -337,6 +353,7 @@ async fn list_artifacts(
         step: format!("{base}/step"),
         stl: format!("{base}/stl"),
         three_mf: format!("{base}/3mf"),
+        pcbcraft: format!("{base}/pcbcraft"),
     }))
 }
 
@@ -536,6 +553,7 @@ mod schema_export {
         crate::bom::subschemas(&mut gen);
         crate::documents::subschemas(&mut gen);
         crate::circuits::subschemas(&mut gen);
+        crate::pcbcraft::subschemas(&mut gen);
         let defs = serde_json::Value::Object(gen.definitions().clone());
         std::fs::write(out, serde_json::to_string_pretty(&defs).unwrap()).unwrap();
     }

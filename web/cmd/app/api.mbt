@@ -82,6 +82,9 @@ struct PartData {
   /// Reference circuits for its device (circuits.mbt); `None` when the
   /// server didn't answer.
   circuits : Array[@api.CircuitView]?
+  /// The part as PCBCraft sees it: exportable, or refused with the
+  /// reason (`GET /v1/pcbcraft/parts/...`).
+  pcbcraft : Fetch[@api.PcbcraftPartDetails]
 }
 
 ///|
@@ -112,6 +115,9 @@ async fn load_part(
   let provenance = if provenance is Got(p) { Some(p) } else { None }
   let circuits : Fetch[Array[@api.CircuitView]] = get_json(base + "/circuits")
   let circuits = if circuits is Got(c) { Some(c) } else { None }
+  let pcbcraft : Fetch[@api.PcbcraftPartDetails] = get_json(
+    "/v1/pcbcraft/parts/\{encode_uri_component(manufacturer)}/\{encode_uri_component(mpn)}",
+  )
   match (device, package_, revisions, sources) {
     (Got(device), Got(package_), Got(revisions), Got(sources)) => {
       let artifacts_error = match artifacts {
@@ -129,6 +135,7 @@ async fn load_part(
         documents,
         provenance,
         circuits,
+        pcbcraft,
       })
     }
     (Failed(e), _, _, _)

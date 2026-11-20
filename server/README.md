@@ -2,8 +2,8 @@
 
 OpenParts distribution API server (Architecture Specification section
 20). Serves search, part/device/package lookup, provenance, and
-CAD artifacts (KiCad symbol/footprint, STEP, STL, 3MF), prebuilt or
-generated on demand, over HTTP. Canonical Data editing is out of scope here -- this crate is
+CAD artifacts (KiCad symbol/footprint, STEP, STL, 3MF, PCBCraft
+library bundles), prebuilt or generated on demand, over HTTP. Canonical Data editing is out of scope here -- this crate is
 read-only; all writes happen through `openparts-data` Pull Requests.
 
 ## Status
@@ -79,11 +79,17 @@ OPENPARTS_DATA_DIR=/path/to/openparts-data OPENPARTS_ARTIFACT_DIR=/path/to/bundl
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/step?silicon_revision=...` | STEP text (coloured AP242) |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/stl?silicon_revision=...` | binary STL |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/3mf?silicon_revision=...` | 3MF with a colour per body |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft` | the part as a `pcbcraft-library-bundle/1` (its records and their dependency closure); `422` with `reason` when PCBCraft can't represent it |
+| `GET /v1/pcbcraft` | PCBCraft catalog status: `building` / `ready` / `failed`, `persistent_revisions` |
+| `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=` | parts as PCBCraft summaries: record addresses, refusal reason; `{total, offset, limit, results}` |
+| `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}` | one summary plus every record address (with SHA-256) its bundle holds |
+| `GET /v1/pcbcraft/libraries` | the libraries (`openparts-<category group>`) with counts and bundle sizes |
+| `GET /v1/pcbcraft/libraries/{id}` | one whole library as a `pcbcraft-library-bundle/1` |
 | `GET /v1/devices/{id}` | Device (`id` may contain `/`, e.g. `raspberrypi/RP2040`) |
 | `GET /v1/packages/{id}` | Package |
 | `GET /v1/parts/{manufacturer}/{mpn}/documents` | the part's, device's and package's file in openparts-data and `review` block, and the combined status (`reviewed` / `partly` / `unreviewed`) |
 | `GET /v1/catalog?...&review=reviewed,partly,unreviewed` | the catalog; each item carries its `review` summary |
-| `GET /v1/config` | `{source_documents}`: whether the endpoint below is on |
+| `GET /v1/config` | `{source_documents, pcbcraft}`: whether the source document endpoint below is on, and the PCBCraft catalog status |
 | `GET /v1/sources/{id}` | Source |
 | `GET /v1/sources/{id}/document` | the Source's PDF, fetched and cached (opt-in, below) |
 
@@ -93,6 +99,25 @@ required dimensions or an unknown `silicon_revision` return `422` with
 a diagnostic body rather than guessing (Testing and Quality
 Specification section 7). A 3D model that is neither bundled nor
 buildable here (no SolidCraft) returns `503`.
+
+## PCBCraft catalog
+
+The PCBCraft endpoints serve the dataset as PCBCraft native records
+(docs/spec/pcbcraft-export.md, "Catalog API"). The libraries are
+exported once in the background after startup (about 1.3 s for the
+whole dataset on a PC); until then those endpoints answer `503`.
+Settings:
+
+- `OPENPARTS_PCBCRAFT_LEDGER=<file>`: the revision ledger, read at
+  startup and replaced atomically when new revisions are allocated.
+  Without it revisions are numbered afresh on each start and
+  `persistent_revisions` is `false` (fine for development, not for a
+  public server). An unreadable ledger is never overwritten: the
+  endpoints answer `503` with the reason.
+- `OPENPARTS_PUBLIC_URL` (default `https://openparts.jijinbei.jp`): the
+  base of each record's `source.locator`.
+- `OPENPARTS_DATA_REVISION`: the dataset commit named in new records'
+  source reference (default: the data directory's git HEAD).
 
 ## Source documents (opt-in, never on a public deployment)
 

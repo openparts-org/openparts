@@ -2,7 +2,8 @@
 
 Version 0.1 Draft. Implemented by `crates/pcbcad/openparts-pcbcraft` (a
 pure adapter over the PCB CAD IR, like openparts-kicad and
-openparts-librepcb) and run as `openparts pcbcraft`.
+openparts-librepcb) and run as `openparts pcbcraft`; openparts-server
+serves the same records as a parts catalog (section 6).
 
 [PCBCraft](https://github.com/tangency-labs/pcbcraft) reads a *native
 library*: a folder with `library.json` and flat `symbols/`,
@@ -132,3 +133,96 @@ library per top-level category (`openparts-capacitor`, `openparts-power`... as
 and says so. Existing output is never overwritten.
 
 3D models are not exported: PCBCraft footprints have no 3D model field.
+
+## 6. Catalog API
+
+openparts-server serves the same records as an external parts catalog
+for PCBCraft (the provider boundary of
+[tangency-labs/pcbcraft#94](https://github.com/tangency-labs/pcbcraft/issues/94):
+search, details, and on-demand resolution into pinned native records).
+Every route is read-only.
+
+| Route | Answer |
+| --- | --- |
+| `GET /v1/pcbcraft` | status: `state` (`building`, `ready`, `failed` + `error`), `persistent_revisions`, `license`, library/part/refusal counts |
+| `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=` | `{total, offset, limit, persistent_revisions, results}`; a page is complete only when `offset + results.length == total`. `limit` 1-200 (default 50); `exportable=true/false` keeps only exportable or only refused parts; `category` takes a group and its subcategories |
+| `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}` | `{summary, dependencies, license, persistent_revisions}`: `dependencies` is the address of every record the part's bundle holds |
+| `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft` | the part as a `pcbcraft-library-bundle/1`; `422` `{error, reason}` when refused |
+| `GET /v1/pcbcraft/libraries` | the libraries with their part, refusal and document counts, bundle size and SHA-256 |
+| `GET /v1/pcbcraft/libraries/{id}` | one whole library as a `pcbcraft-library-bundle/1` |
+
+A summary carries `manufacturer` (the OpenParts id used in the URLs),
+`manufacturer_name`, `mpn`, `category`, a one-line `description`, the
+`library`, the addresses of its `manufacturer_part` and generic `part`
+(`{library, kind, id, revision, sha256}`, the SHA-256 of the document
+text as served), `refused`/`refusal`, and the `bundle` URL.
+
+**Libraries and addresses.** The server exports the whole dataset once,
+in the background after startup, exactly as
+`openparts pcbcraft --group-by category-group` does (both use
+`openparts_artifacts::pcbcraft`): one library per top-level category,
+`openparts-<group>`. A part's bundle is the subset of its library that
+the part needs -- `library.json`, the manufacturer part, its generic part,
+the generic part's symbol and category, and the footprint of every
+package variant of the generic part (other MPNs of the same device may
+add variants) -- with each document byte for byte as in the whole
+library. A part fetched alone, a library fetched whole and a CLI export
+with the same ledger therefore agree on every address and body. Until
+the export is done (about 1.3 s for the whole dataset on a PC; several
+seconds on a Raspberry Pi 4) the PCBCraft routes answer `503`.
+
+**Revisions.** A served address never has two bodies:
+
+- With `OPENPARTS_PCBCRAFT_LEDGER=<file>` the ledger (section 3) is read
+  at startup; content whose digest it knows keeps that revision (with
+  that revision's own source reference, so the bytes are identical),
+  changed content gets the next revision, and the file is replaced
+  atomically (temporary file, `fsync`, rename) before anything is
+  served. If the ledger cannot be read or written, the PCBCraft routes
+  answer `503` with the reason: an unreadable ledger is never replaced,
+  and no revision is served that would not survive a restart.
+- Without it the ledger lives in memory: every record is revision 1 on
+  each start, `persistent_revisions` is `false`, and bundles carry
+  `X-PCBCraft-Revisions: ephemeral`. Only for development.
+- A change to a dependency changes its dependents too: a new symbol
+  revision gives the generic part (whose reference names it) a new
+  revision, and so its manufacturer parts. Content that returns to an
+  earlier state gets that earlier revision back. One server per ledger
+  file.
+
+Bundles carry `Content-Disposition: attachment;
+filename="<manufacturer>-<mpn>.pcbcraft.json"` (`<id>.pcbcraft.json`
+for a library), `X-Content-Hash: sha256:<hex>` (also the `ETag`) and
+`X-PCBCraft-Revisions: persistent|ephemeral`. They are built from the
+catalog, never from the content-addressed artifact bundle of `openparts
+bundle`: their revisions come from the server's ledger. Every library
+is within PCBCraft's limits today (the largest, `openparts-connector`,
+is 5.9 MB in 1,504 documents); one that is not is listed with
+`limit_error` and no `bundle` URL, and is exported as a folder with the
+CLI instead (section 5). Record locators use `OPENPARTS_PUBLIC_URL`
+(default `https://openparts.jijinbei.jp`) and the source reference names
+`OPENPARTS_DATA_REVISION` (default: the data checkout's git HEAD).
+
+```sh
+curl -s 'https://openparts.jijinbei.jp/api/v1/pcbcraft/search?q=RP2040&limit=1'
+# {"total":12,"offset":0,"limit":1,"persistent_revisions":true,"results":[{
+#   "manufacturer":"raspberrypi","manufacturer_name":"Raspberry Pi Ltd",
+#   "mpn":"RP2040","category":"microcontroller",
+#   "description":"Microcontroller raspberrypi/RP2040 in standards/QFN56-RP2040",
+#   "library":"openparts-microcontroller",
+#   "manufacturer_part":{"library":"openparts-microcontroller",
+#     "kind":"manufacturer-part","id":"raspberrypi-rp2040","revision":1,"sha256":"53c8..."},
+#   "part":{"library":"openparts-microcontroller","kind":"part",
+#     "id":"raspberrypi-rp2040","revision":1,"sha256":"9bd8..."},
+#   "refused":false,"refusal":null,
+#   "bundle":"/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"}]}
+curl -sOJ https://openparts.jijinbei.jp/api/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft
+# raspberrypi-RP2040.pcbcraft.json: library.json + 5 records
+curl -s https://openparts.jijinbei.jp/api/v1/parts/bourns/PTV09A-2015F-B103/artifacts/pcbcraft
+# 422 {"error":"bourns/PTV09A-2015F-B103 cannot be exported to PCBCraft: ...",
+#      "reason":"footprint: pad MP has a slotted hole (PCBCraft has round holes only)"}
+```
+
+The site's part page offers the bundle as "Download PCBCraft library"
+next to the KiCad and STL downloads, and shows the refusal reason
+instead when the part cannot be exported.

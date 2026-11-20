@@ -16,6 +16,12 @@ pub enum ApiError {
     /// The artifact is neither prebuilt nor buildable here (no
     /// SolidCraft on this server).
     Unavailable(String),
+    /// The target format cannot represent the part (`422`): the message
+    /// and the adapter's reason (`reason`).
+    Refused {
+        message: String,
+        reason: String,
+    },
 }
 
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -46,6 +52,10 @@ struct ErrorBody {
     error: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     diagnostics: Vec<DiagnosticBody>,
+    /// Why a format adapter refused the part (`422` from
+    /// `.../artifacts/pcbcraft`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
 impl IntoResponse for ApiError {
@@ -56,6 +66,7 @@ impl IntoResponse for ApiError {
                 ErrorBody {
                     error: msg,
                     diagnostics: vec![],
+                    reason: None,
                 },
             ),
             ApiError::NotFound(msg) => (
@@ -63,6 +74,7 @@ impl IntoResponse for ApiError {
                 ErrorBody {
                     error: msg,
                     diagnostics: vec![],
+                    reason: None,
                 },
             ),
             ApiError::ValidationFailed(diags) => (
@@ -70,6 +82,7 @@ impl IntoResponse for ApiError {
                 ErrorBody {
                     error: "validation failed".to_string(),
                     diagnostics: diags.iter().map(DiagnosticBody::from).collect(),
+                    reason: None,
                 },
             ),
             ApiError::GenerationFailed(msg) => (
@@ -77,6 +90,7 @@ impl IntoResponse for ApiError {
                 ErrorBody {
                     error: msg,
                     diagnostics: vec![],
+                    reason: None,
                 },
             ),
             ApiError::Unavailable(msg) => (
@@ -84,6 +98,15 @@ impl IntoResponse for ApiError {
                 ErrorBody {
                     error: msg,
                     diagnostics: vec![],
+                    reason: None,
+                },
+            ),
+            ApiError::Refused { message, reason } => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ErrorBody {
+                    error: message,
+                    diagnostics: vec![],
+                    reason: Some(reason),
                 },
             ),
         };
