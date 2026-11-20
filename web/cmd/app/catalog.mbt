@@ -759,69 +759,6 @@ fn package_name(id : String) -> String {
 // ---- views ----
 
 ///|
-/// The short mark on a top-level category tile (a reference designator
-/// where there is one).
-fn category_glyph(c : @api.ComponentCategory) -> String {
-  match c {
-    Microcontroller => "U"
-    DevelopmentBoard => "DEV"
-    Capacitor => "C"
-    Resistor => "R"
-    Connector => "J"
-    Crystal => "Y"
-    Diode => "D"
-    Transistor => "Q"
-    Led => "LED"
-    Inductor => "L"
-    Fuse => "F"
-    Optocoupler => "OPT"
-    Switch | TactSwitch => "SW"
-    Power
-    | LinearRegulator
-    | SwitchingRegulator
-    | BatteryCharger
-    | VoltageReference
-    | PowerSwitch
-    | Efuse => "PWR"
-    Memory | Flash | Eeprom | Sram => "MEM"
-    Sensor | PressureSensor | Imu | TemperatureSensor => "SNS"
-    Analog
-    | OpAmp
-    | Comparator
-    | CurrentSenseAmplifier
-    | PowerMonitor
-    | AnalogSwitch
-    | Adc
-    | Dac => "AMP"
-    Interface
-    | IoExpander
-    | CanController
-    | CanTransceiver
-    | Rs485Transceiver
-    | Rs232Transceiver
-    | LevelShifter
-    | UsbPdController
-    | DigitalIsolator => "I/F"
-    Logic => "74"
-    Timing | Oscillator | Timer | Rtc => "TMR"
-    Driver | GateDriver | DarlingtonArray | MotorDriver | LedDriver | DisplayDriver =>
-      "DRV"
-    Relay => "K"
-    RotaryEncoder => "ENC"
-    Potentiometer => "RV"
-    FerriteBead => "FB"
-    CommonModeChoke => "FL"
-    LightSensor | GasSensor | MagneticSensor | TouchSensor => "SNS"
-    Audio | AudioAmplifier | AudioCodec => "AUD"
-    Microphone => "MIC"
-    Buzzer => "BZ"
-    Rf | WirelessModule => "RF"
-    Antenna => "ANT"
-    Other => "IC"
-  }
-}
-
-///|
 /// A category value's label in `lang` (the server's if unknown here).
 fn category_value_label(
   lang : Lang,
@@ -876,9 +813,9 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
       head + [fetch_message(lang, model.catalog.results)],
     )
   }
-  let tile = (path : String, glyph : String, name : String, n : Int32) => {
+  let tile = (path : String, icon : String, name : String, n : Int32) => {
     a(class="catalog-tile", href=href(lang, path), [
-      span(class="catalog-tile-glyph", glyph),
+      span(class="catalog-tile-glyph", attrs=icon_markup(icon), nodes([])),
       span(class="catalog-tile-name", name),
       span(class="catalog-tile-count", parts_count(lang, n)),
     ])
@@ -892,13 +829,9 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
   let groups = []
   for node in r.facets.category_tree {
     guard node.count > 0 else { continue }
-    let glyph = match category_of(node.value) {
-      Some(c) => category_glyph(c)
-      None => "IC"
-    }
     let main = tile(
       pick_path(node.value),
-      glyph,
+      category_icon(category_of(node.value)),
       category_value_label(lang, node.value, node.label),
       node.count,
     )
@@ -923,7 +856,7 @@ fn catalog_entry_view(model : Model, box : Html) -> Html {
   tiles.push(
     tile(
       catalog_path({ ..CatalogQuery::empty(), all: true, }),
-      "*",
+      all_parts_icon(),
       k.browse_all,
       r.total,
     ),
