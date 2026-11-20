@@ -899,6 +899,33 @@ async fn free_text_matches_formatted_parameter_values() {
 }
 
 #[tokio::test]
+async fn development_boards_are_their_own_category() {
+    // Boards (Pico, DevKits, XIAO...) are `development_board`; the bare
+    // chips stay `microcontroller`.
+    let boards = catalog("category=development_board&limit=500").await;
+    assert!(boards["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|it| it["category"] == "development_board"));
+    let found = mpns(&boards);
+    for mpn in ["SC0915", "ESP32-S3-DevKitC-1-N8", "102010428", "A000066"] {
+        assert!(found.contains(&mpn), "{mpn} in {found:?}");
+    }
+    let mcus = catalog("category=microcontroller&limit=500").await;
+    let chips = mpns(&mcus);
+    assert!(chips.contains(&"RP2040") && !chips.contains(&"SC0915"));
+    for q in ["開発ボード", "マイコンボード", "devkit", "dev board"] {
+        let hits = search_mpns(q).await;
+        assert!(!hits.is_empty(), "{q}");
+        assert!(
+            hits.iter().all(|(_, c)| c == "development_board"),
+            "{q}: {hits:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn catalog_rejects_bad_numbers() {
     let response = get(app(), "/v1/catalog?width_min=wide").await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);

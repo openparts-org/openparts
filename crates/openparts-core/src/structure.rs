@@ -94,12 +94,10 @@ impl Package {
             }),
             // An encoder's or potentiometer's shaft stands up from the
             // top or lies parallel to the board.
-            F::RotaryEncoder | F::Potentiometer => {
-                Some(match self.actuation.unwrap_or_default() {
-                    crate::Actuation::Top => Orientation::Vertical,
-                    crate::Actuation::Side => Orientation::RightAngle,
-                })
-            }
+            F::RotaryEncoder | F::Potentiometer => Some(match self.actuation.unwrap_or_default() {
+                crate::Actuation::Top => Orientation::Vertical,
+                crate::Actuation::Side => Orientation::RightAngle,
+            }),
             // Connector families: as the source states it.
             _ => connector.and_then(|c| c.orientation),
         };

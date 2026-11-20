@@ -451,8 +451,8 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `capacity` | information | `memory` |
 | `actuation_force` | force | `switch` |
 | `travel` | length | `switch` |
-| `supply_voltage` | voltage, operating range (the recommended supply range as `min`/`max`; an amplifier's is the total span V+ - V-: "±1.35 V to ±18 V" is `{ min: 2.7 V, max: 36 V }` when the source also prints the single-supply span, else leave it out; an optocoupler's: its output-side VCC) | LED (with an integrated driver), optocoupler, ICs except `power` (a regulator's input is `input_voltage_max`) |
-| `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD) | ICs, LED |
+| `supply_voltage` | voltage, operating range (the recommended supply range as `min`/`max`; an amplifier's is the total span V+ - V-: "±1.35 V to ±18 V" is `{ min: 2.7 V, max: 36 V }` when the source also prints the single-supply span, else leave it out; an optocoupler's: its output-side VCC) | LED (with an integrated driver), optocoupler, ICs except `power` (a regulator's input is `input_voltage_max`), `development_board` (the board's input supply range, e.g. VSYS) |
+| `supply_current` | current (the whole device's quiescent/supply current IQ, ICC, IDD; a board's current draw) | ICs, LED, `development_board` |
 | `analog_supply_voltage`, `digital_supply_voltage` | voltage, operating range (a part with separate analog and digital supply pins: AVDD, DVDD; see below) | as `supply_voltage` |
 | `analog_supply_current`, `digital_supply_current` | current (the current of each rail, IAVDD / IDVDD) | as `supply_current` |
 | `io_supply_voltage` | voltage, operating range (a second, separate I/O supply rail beside the main supply: an MCU's VDDIO2, a CAN controller's VIO, a codec's IOVDD; the main rail stays `supply_voltage` or `digital_supply_voltage`) | as `supply_voltage` |
@@ -521,11 +521,11 @@ Vocabulary (key: quantity or values; categories it is plausible for):
 | `timekeeping_accuracy` | ratio, deviation (an RTC's frequency / timekeeping accuracy in `ppm`; the temperature range in `at: { TA: 0..40 °C }`) | `rtc` |
 | `backup_current` | current (the backup-supply current IBAT, `at: { VBAT: 3 V }`) | `rtc` |
 | `max_frequency` | frequency (a timer's / counter's / flip-flop's maximum operating frequency) | `timer`, `logic` |
-| `radio_protocol` | `wifi` `wifi_ble` `wifi_bluetooth` (Classic + LE) `wifi_ble_802154` `ble` `bluetooth` (Classic + LE) `ble_802154` `ieee802154` (Zigbee/Thread) `lora` `sub_ghz` `cellular` `gnss` `uwb` `nfc` (several radios: the combined value) | `rf` |
+| `radio_protocol` | `wifi` `wifi_ble` `wifi_bluetooth` (Classic + LE) `wifi_ble_802154` `ble` `bluetooth` (Classic + LE) `ble_802154` `ieee802154` (Zigbee/Thread) `lora` `sub_ghz` `cellular` `gnss` `uwb` `nfc` (several radios: the combined value; a development board's on-board radio) | `rf`, `development_board` |
 | `frequency_band` | frequency, operating range (2.4-2.4835 GHz) | `rf` |
 | `tx_power` | RF power level (max output, `dBm`) | `rf` |
 | `rx_sensitivity` | RF power level (`dBm`; the data rate in the locator) | `rf` |
-| `antenna_type` | `pcb_trace` `chip` `ceramic_patch` `external_connector` `external_pad` `whip` `flex` (a module's antenna, or an antenna's construction) | `rf` |
+| `antenna_type` | `pcb_trace` `chip` `ceramic_patch` `external_connector` `external_pad` `whip` `flex` (a module's antenna, or an antenna's construction; a development board's on-board antenna) | `rf`, `development_board` |
 | `peak_gain` | antenna gain (`dBi`) | `antenna` |
 | `display_type` | `oled` `lcd` (segment / passive-matrix LCD) `tft_lcd` `led` (LED 7-segment, bar-graph and dot-matrix displays) `e_paper` `vfd` (the panel technology driven) | `display_driver` |
 | `segment_count` | `4` `7` `8` `16` `24` `32` `40` `48` `64` `80` `96` `100` `101` `102` `104` `120` `128` `132` `160` `176` `240` `256` `320` `384` `396` `480` `720` (segment / column / source outputs as printed; an RGB OLED driver's counts each colour: 128 RGB is `384`) | `display_driver` |
@@ -543,7 +543,9 @@ A group in the last column covers its subcategories (section 14.1);
 (contact ratings). "ICs" are `microcontroller`, `power`, `memory`,
 `sensor`, `analog`, `interface`, `logic`, `timing`, `driver`, `audio`
 and `rf` (`supply_voltage` also fits an active buzzer's or a module's
-operating range).
+operating range). `development_board` is not an IC: of the IC keys it
+takes only `supply_voltage` and `supply_current` (plus
+`operating_temperature`, `radio_protocol`, `antenna_type`).
 
 An *operating-range* key (`supply_voltage`, `analog_supply_voltage`,
 `digital_supply_voltage`, `operating_temperature`,
@@ -816,7 +818,8 @@ of its subcategories fits (a sensor of a kind not listed is `sensor`).
 
 | Top level | Subcategories |
 |---|---|
-| `microcontroller` | |
+| `microcontroller` | (the bare chip; on a board it is `development_board`) |
+| `development_board` | (a microcontroller, SoC or radio module on a board with its supply, USB and headers or castellated edge: Raspberry Pi Pico, Espressif DevKits, Arduino, Seeed XIAO, Adafruit Feather / QT Py, SparkFun Thing Plus; usually a Part with an `assembly`. The board's MCU is not restated: its own Device is `microcontroller` and a certified radio module stays `wireless_module`) |
 | `capacitor` | |
 | `resistor` | `potentiometer` (potentiometers and trimmers) |
 | `inductor` | `ferrite_bead`, `common_mode_choke` |

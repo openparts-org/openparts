@@ -415,6 +415,7 @@ pub(all) enum ComponentCategory {
   DarlingtonArray
   Audio
   Rf
+  DevelopmentBoard
   Relay
   Optocoupler
   PowerSwitch

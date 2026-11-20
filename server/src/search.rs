@@ -365,6 +365,7 @@ fn category_name(c: ComponentCategory) -> &'static str {
     use ComponentCategory as C;
     match c {
         C::Microcontroller => "microcontroller mcu",
+        C::DevelopmentBoard => "development_board devkit dev_board devboard evaluation_board",
         C::Capacitor => "capacitor",
         C::Resistor => "resistor",
         C::Inductor => "inductor",
@@ -444,6 +445,10 @@ fn category_name(c: ComponentCategory) -> &'static str {
 /// Japanese and shorthand terms rewritten to the indexed vocabulary.
 /// Longer keys first, so a compound wins over its parts.
 const SYNONYMS: &[(&str, &str)] = &[
+    ("マイコンボード", "development_board"),
+    ("開発ボード", "development_board"),
+    ("開発キット", "development_board"),
+    ("評価ボード", "development_board"),
     ("デジタルアイソレータ", "digital_isolator"),
     ("デジタルアイソレーター", "digital_isolator"),
     ("アイソレータ", "isolator"),
@@ -957,6 +962,11 @@ mod tests {
             ("eFuse", C::Efuse),
             ("電子ヒューズ", C::Efuse),
             ("ホットスワップ", C::Efuse),
+            ("開発ボード", C::DevelopmentBoard),
+            ("マイコンボード", C::DevelopmentBoard),
+            ("devkit", C::DevelopmentBoard),
+            ("dev board", C::DevelopmentBoard),
+            ("development board", C::DevelopmentBoard),
         ] {
             assert!(hit(c, q), "{q} should find {c:?}");
         }
@@ -965,6 +975,9 @@ mod tests {
         assert!(!hit(C::Comparator, "オペアンプ"));
         assert!(!hit(C::Microcontroller, "マイク"));
         assert!(hit(C::Microcontroller, "マイコン"));
+        assert!(!hit(C::Microcontroller, "開発ボード"));
+        assert!(!hit(C::Microcontroller, "マイコンボード"));
+        assert!(!hit(C::DevelopmentBoard, "マイコン"));
         assert!(!hit(C::Resistor, "可変抵抗"));
         assert!(!hit(C::GateDriver, "モータードライバ"));
     }

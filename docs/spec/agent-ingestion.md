@@ -525,6 +525,7 @@ MPN, so it goes on the Part).
 | `potentiometer` (group `resistor`) | `resistance`, `tolerance`, `power_rating`, `taper`, `rotation_angle`, `resistive_element` |
 | `rotary_encoder` (group `switch`) | `pulses_per_revolution`, `detents`, `push_switch`, `rotation_angle`, `rated_voltage`, `rated_current` |
 | `ferrite_bead`, `common_mode_choke` (group `inductor`) | `impedance` (`at: { f: 100 MHz }`), `tolerance`, `rated_current`, `dcr`, `inductance` (chokes), `rated_voltage` (chokes) |
+| `development_board` | `supply_voltage` (the board's input range, e.g. VSYS / VIN), `supply_current`, `operating_temperature`, `radio_protocol` and `antenna_type` (an on-board radio); MCU figures (flash, clock) are the chip's Device, not the board's |
 | `wireless_module` (group `rf`) | `radio_protocol`, `frequency_band`, `tx_power`, `rx_sensitivity`, `antenna_type`, `data_interface` (host interface), `supply_voltage`, `supply_current` |
 | `antenna` (group `rf`) | `frequency_band`, `peak_gain`, `antenna_type` |
 | `touch_sensor` (group `sensor`) | `touch_sensing_method`, `channel_count` (touch inputs), `data_interface` (none for a part with only a digital touch output), `output_structure` (its touch output), `supply_voltage`, `supply_current` |

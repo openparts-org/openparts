@@ -22,6 +22,12 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ComponentCategory {
     Microcontroller,
+    /// Development boards: a microcontroller (or SoC / radio module) on
+    /// a board with its supply, USB and headers or castellated edge
+    /// (Raspberry Pi Pico, Espressif DevKits, Arduino, Seeed XIAO,
+    /// Adafruit Feather...). The bare chip is `microcontroller`; a
+    /// certified radio module is `wireless_module`.
+    DevelopmentBoard,
     Capacitor,
     Resistor,
     Inductor,
@@ -156,6 +162,7 @@ impl ComponentCategory {
     /// Every value, groups before their subcategories, in catalog order.
     pub const ALL: &'static [ComponentCategory] = &[
         C::Microcontroller,
+        C::DevelopmentBoard,
         C::Capacitor,
         C::Resistor,
         C::Potentiometer,
@@ -300,6 +307,7 @@ impl ComponentCategory {
     pub fn name(self) -> &'static str {
         match self {
             C::Microcontroller => "microcontroller",
+            C::DevelopmentBoard => "development_board",
             C::Capacitor => "capacitor",
             C::Resistor => "resistor",
             C::Inductor => "inductor",
@@ -399,7 +407,7 @@ mod tests {
             assert_eq!(C::parse(c.name()), Some(*c));
         }
         // Every variant is in ALL (the match in `name` lists them all).
-        assert_eq!(seen.len(), 74);
+        assert_eq!(seen.len(), 75);
     }
 
     #[test]
@@ -418,6 +426,8 @@ mod tests {
         );
         assert_eq!(C::Efuse.root(), C::Power);
         assert!(C::TouchSensor.is_within(C::Sensor));
+        assert_eq!(C::DevelopmentBoard.parent(), None);
+        assert!(!C::DevelopmentBoard.is_within(C::Microcontroller));
         assert!(C::DisplayDriver.is_within(C::Driver));
         assert!(C::DigitalIsolator.is_within(C::Interface));
         assert_eq!(C::UsbPdController.root(), C::Interface);

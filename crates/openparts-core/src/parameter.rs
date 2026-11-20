@@ -684,6 +684,42 @@ const SUPPLIED: &[C] = &[
     C::Audio,
     C::Rf,
 ];
+/// [`SUPPLIED`] and development boards (a board's input supply range
+/// and its current draw).
+const SUPPLIED_AND_BOARDS: &[C] = &[
+    C::Led,
+    C::Optocoupler,
+    C::Microcontroller,
+    C::DevelopmentBoard,
+    C::Memory,
+    C::Sensor,
+    C::Analog,
+    C::Interface,
+    C::Logic,
+    C::Timing,
+    C::Driver,
+    C::Audio,
+    C::Rf,
+];
+/// [`ICS_AND_LED`] and development boards.
+const ICS_LED_AND_BOARDS: &[C] = &[
+    C::Led,
+    C::Microcontroller,
+    C::DevelopmentBoard,
+    C::Power,
+    C::Memory,
+    C::Sensor,
+    C::Analog,
+    C::Interface,
+    C::Logic,
+    C::Timing,
+    C::Driver,
+    C::Audio,
+    C::Rf,
+];
+/// Radio parts and development boards with an on-board radio (Pico W,
+/// ESP32 DevKits): the radio and its antenna.
+const RF_AND_BOARDS: &[C] = &[C::Rf, C::DevelopmentBoard];
 /// Amplifier inputs: op-amps, comparators, current-sense amplifiers.
 const AMPS: &[C] = &[C::OpAmp, C::Comparator, C::CurrentSenseAmplifier];
 /// Digital outputs with a timing: comparators, logic, interface ICs
@@ -1018,8 +1054,16 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     shown_in(num("travel", Q::Length, &[C::Switch]), "mm"),
     // Integrated circuits in general. The supply as a range (min/max);
     // an amplifier's is the total span V+ - V- (±18 V is 36 V).
-    within(span(num("supply_voltage", Q::Voltage, SUPPLIED)), -1e3, 1e3),
-    within(num("supply_current", Q::Current, ICS_AND_LED), 0.0, 10.0),
+    within(
+        span(num("supply_voltage", Q::Voltage, SUPPLIED_AND_BOARDS)),
+        -1e3,
+        1e3,
+    ),
+    within(
+        num("supply_current", Q::Current, ICS_LED_AND_BOARDS),
+        0.0,
+        10.0,
+    ),
     // Parts with separate analog and digital supply pins (AVDD / DVDD):
     // each rail's range and current.
     within(
@@ -1044,7 +1088,11 @@ pub const PARAMETERS: &[ParameterSpec] = &[
     ),
     // A second, separate I/O supply rail (an MCU's VDDIO2, a CAN
     // controller's VIO, a codec's IOVDD) beside the main supply.
-    within(span(num("io_supply_voltage", Q::Voltage, SUPPLIED)), -1e3, 1e3),
+    within(
+        span(num("io_supply_voltage", Q::Voltage, SUPPLIED)),
+        -1e3,
+        1e3,
+    ),
     within(
         span(num("operating_temperature", Q::Temperature, C::ALL)),
         -100.0,
@@ -1580,7 +1628,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
             "uwb",
             "nfc",
         ],
-        &[C::Rf],
+        RF_AND_BOARDS,
     ),
     within(
         span(num("frequency_band", Q::Frequency, &[C::Rf])),
@@ -1601,7 +1649,7 @@ pub const PARAMETERS: &[ParameterSpec] = &[
             "whip",
             "flex",
         ],
-        &[C::Rf],
+        RF_AND_BOARDS,
     ),
     within(num("peak_gain", Q::AntennaGain, &[C::Antenna]), -40.0, 40.0),
 ];
@@ -2818,6 +2866,11 @@ mod tests {
             ("peak_pulse_current", C::Diode),
             ("peak_pulse_power", C::Diode),
             ("io_supply_voltage", C::Microcontroller),
+            ("supply_voltage", C::DevelopmentBoard),
+            ("supply_current", C::DevelopmentBoard),
+            ("operating_temperature", C::DevelopmentBoard),
+            ("radio_protocol", C::DevelopmentBoard),
+            ("antenna_type", C::DevelopmentBoard),
             ("io_supply_voltage", C::CanController),
             ("io_supply_voltage", C::AudioCodec),
             ("collector_emitter_voltage", C::DarlingtonArray),
@@ -2825,16 +2878,24 @@ mod tests {
             assert!(plausible_for(spec(key), c), "{key} for {c:?}");
         }
         assert!(!plausible_for(spec("gain"), C::OpAmp));
+        assert!(!plausible_for(spec("esd_hbm"), C::DevelopmentBoard));
+        assert!(!plausible_for(spec("tx_power"), C::DevelopmentBoard));
         assert!(spec("pressure_range").span);
         assert!(spec("common_mode_voltage").span);
         assert!(spec("io_supply_voltage").span);
         assert_eq!(lab(val(Some(50.0), None, None, "V/V"), "gain"), "50 V/V");
         assert_eq!(
-            lab(val(None, Some(300.0), Some(1100.0), "hPa"), "pressure_range"),
+            lab(
+                val(None, Some(300.0), Some(1100.0), "hPa"),
+                "pressure_range"
+            ),
             "30 kPa–110 kPa"
         );
         assert_eq!(
-            lab(val(None, Some(-0.2), Some(26.0), "V"), "common_mode_voltage"),
+            lab(
+                val(None, Some(-0.2), Some(26.0), "V"),
+                "common_mode_voltage"
+            ),
             "-200 mV–26 V"
         );
         assert_eq!(

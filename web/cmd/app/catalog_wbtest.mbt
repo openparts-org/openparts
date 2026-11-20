@@ -10,6 +10,7 @@ test "every results column is a labelled parameter key" {
       "gas_sensor", "magnetic_sensor", "sensor", "audio_amplifier", "audio_codec",
       "microphone", "buzzer", "audio", "wireless_module", "antenna", "rf",
       "touch_sensor", "display_driver", "usb_pd_controller", "digital_isolator", "efuse",
+      "development_board",
     ] {
     let columns = param_columns(category)
     assert_true(!columns.is_empty())

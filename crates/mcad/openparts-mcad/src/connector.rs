@@ -282,11 +282,7 @@ pub fn electromechanical_features(
     let side_shaft = openparts_core::is_shaft_family(package.family)
         && package.actuation == Some(openparts_core::Actuation::Side);
     // A side shaft leaves the +Y face: its size follows that face.
-    let face = if side_shaft {
-        body_w.min(body_h)
-    } else {
-        side
-    };
+    let face = if side_shaft { body_w.min(body_h) } else { side };
     let (top_diameter, top_height) = match package.family {
         F::Trimmer => (
             value(&d.actuator_diameter).unwrap_or(side * de::ROTOR_RATIO),
@@ -295,10 +291,10 @@ pub fn electromechanical_features(
         F::RotaryEncoder | F::Potentiometer => (
             // A stated shaft fits the face it leaves; the default one
             // at most half of it.
-            value(&d.actuator_diameter).map_or(
-                de::SHAFT_DIAMETER.min(face * de::MAX_SHAFT_RATIO),
-                |dia| dia.min(face),
-            ),
+            value(&d.actuator_diameter)
+                .map_or(de::SHAFT_DIAMETER.min(face * de::MAX_SHAFT_RATIO), |dia| {
+                    dia.min(face)
+                }),
             if side_shaft {
                 value(&d.actuator_length).filter(|l| *l > 0.0)
             } else {

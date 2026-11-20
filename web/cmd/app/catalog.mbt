@@ -257,6 +257,8 @@ fn param_columns_of_root(category : String) -> Array[String] {
     "audio" => ["channel_count", "supply_voltage", "snr"]
     "rf" => ["radio_protocol", "frequency_band", "tx_power", "supply_voltage"]
     "sensor" => ["data_interface", "supply_voltage", "supply_current"]
+    "development_board" =>
+      ["radio_protocol", "antenna_type", "supply_voltage", "operating_temperature"]
     _ => []
   }
 }
@@ -762,6 +764,7 @@ fn package_name(id : String) -> String {
 fn category_glyph(c : @api.ComponentCategory) -> String {
   match c {
     Microcontroller => "U"
+    DevelopmentBoard => "DEV"
     Capacitor => "C"
     Resistor => "R"
     Connector => "J"

@@ -996,6 +996,7 @@ pub(all) enum ComponentCategory {
   DarlingtonArray
   Audio
   Rf
+  DevelopmentBoard
   Relay
   Optocoupler
   PowerSwitch
@@ -1076,6 +1077,7 @@ pub fn ComponentCategory::wire(self : ComponentCategory) -> String {
     DarlingtonArray => "darlington_array"
     Audio => "audio"
     Rf => "rf"
+    DevelopmentBoard => "development_board"
     Relay => "relay"
     Optocoupler => "optocoupler"
     PowerSwitch => "power_switch"
@@ -1157,6 +1159,7 @@ pub fn ComponentCategory::all() -> Array[ComponentCategory] {
     DarlingtonArray,
     Audio,
     Rf,
+    DevelopmentBoard,
     Relay,
     Optocoupler,
     PowerSwitch,
@@ -1237,6 +1240,7 @@ pub impl @json.FromJson for ComponentCategory with fn from_json(json, path) {
     String("darlington_array") => DarlingtonArray
     String("audio") => Audio
     String("rf") => Rf
+    String("development_board") => DevelopmentBoard
     String("relay") => Relay
     String("optocoupler") => Optocoupler
     String("power_switch") => PowerSwitch

@@ -208,7 +208,7 @@ mod tests {
         let script = build_script(&ModelInput {
             package: &package,
             geometry: &geometry,
-            category: Some(openparts_core::ComponentCategory::Microcontroller),
+            category: Some(openparts_core::ComponentCategory::DevelopmentBoard),
             marked_pin: None,
         })
         .unwrap();

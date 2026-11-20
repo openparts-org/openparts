@@ -318,6 +318,7 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
     Ja =>
       match c {
         Microcontroller => "マイコン"
+        DevelopmentBoard => "開発ボード"
         Capacitor => "コンデンサ"
         Resistor => "抵抗"
         Inductor => "インダクタ"
@@ -395,6 +396,7 @@ fn category_label(lang : Lang, c : @api.ComponentCategory) -> String {
     En =>
       match c {
         Microcontroller => "Microcontroller"
+        DevelopmentBoard => "Development board"
         Capacitor => "Capacitor"
         Resistor => "Resistor"
         Inductor => "Inductor"

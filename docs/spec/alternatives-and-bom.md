@@ -141,6 +141,11 @@ Canonical Data Specification section 11.1):
   a relay's coil voltage and contact form, an encoder's pulses per
   revolution, a wireless module's radio protocol) must be stated by the
   original too: when it isn't, nothing is `meets`.
+  A `development_board` has no required identity key (like a
+  `microcontroller`): another board is a drop-in only on the same board
+  package, and an on-board `radio_protocol` that differs still makes it
+  a different part. Its catalog (data-coverage) parameters are
+  `supply_voltage` and `operating_temperature`.
 
 The verdict: `meets` (every check passes or is better), `unverified`
 (none fails, some unverified), `worse` (some check fails).

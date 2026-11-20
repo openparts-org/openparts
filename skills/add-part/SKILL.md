@@ -95,7 +95,9 @@ Run `openparts data fmt <files>` before committing; CI runs
   varies (`C0805-DH`, `SOT223-...-TabPin4`).
 - `category`: the most specific node of the category tree
   (canonical-data.md 14.1) the device's own datasheet title supports:
-  microcontroller, capacitor, resistor, inductor, diode, transistor, led,
+  microcontroller (the bare chip), development_board (Pico, DevKits,
+  Arduino, XIAO, Feather...: a board), capacitor, resistor, inductor,
+  diode, transistor, led,
   crystal, fuse, connector, optocoupler, or a subcategory such as
   `linear_regulator`, `eeprom`, `imu`, `op_amp`, `can_transceiver`,
   `logic`, `rtc`, `oscillator` (clock oscillators; a bare resonator is

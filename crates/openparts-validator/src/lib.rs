@@ -1510,7 +1510,7 @@ mod tests {
                     ("frequency_band", num(2.45, "GHz")),
                     ("peak_gain", num(1.5, "dBi")),
                 ],
-            ),            // Round 5: touch, display drivers, USB-C/PD, isolators,
+            ), // Round 5: touch, display drivers, USB-C/PD, isolators,
             // isolated DC/DC, eFuses.
             (
                 C::TouchSensor,
@@ -1586,6 +1586,15 @@ mod tests {
                 ],
             ),
             (C::Microcontroller, &[("io_supply_voltage", num(1.8, "V"))]),
+            (
+                C::DevelopmentBoard,
+                &[
+                    ("supply_voltage", num(5.0, "V")),
+                    ("supply_current", num(0.1, "A")),
+                    ("radio_protocol", word("wifi_ble")),
+                    ("antenna_type", word("pcb_trace")),
+                ],
+            ),
             (
                 C::DarlingtonArray,
                 &[("collector_emitter_voltage", num(50.0, "V"))],
