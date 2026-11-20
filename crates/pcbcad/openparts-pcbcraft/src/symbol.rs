@@ -3,7 +3,8 @@
 //! PCBCraft pins sit on the 1.27 mm grid, at most 12.7 mm from the
 //! symbol's centre on each axis, each at its own position within a
 //! unit; coordinates are nanometres with Y pointing down. The IR's own
-//! drawing (KiCad's, Y up) is kept when it fits. A larger symbol
+//! drawing (KiCad's, Y up) is kept when it fits, labels included. A
+//! larger symbol
 //! (RP2040's 56 pins span 70 mm) is laid out again into units of at
 //! most 8 pins per side, by the IR's own pin families (see
 //! [`relayout`]): PCBCraft supports up to 32 units sharing one terminal
@@ -13,9 +14,19 @@
 //! Pins the IR stacks at one position (same name: RP2040's six IOVDD
 //! pins) become one terminal, numbered by the visible pin, which the
 //! part's package map binds to every stacked pin's pad.
+//!
+//! PCBCraft letters a pin's name upright, centred on a top or bottom
+//! pin, where names 2.54 mm apart run into each other. Such names are
+//! drawn instead as text turned a quarter (reading bottom to top, inside
+//! the body), as KiCad draws them; every unit is checked with
+//! PCBCraft's own label geometry and font metrics ([`crate::labels`])
+//! and laid out so that no label touches another, the outline or
+//! another pin's lead.
 
+use crate::labels::{collisions, lead_end, text_box, PIN_STROKE_NM};
 use crate::record::{
-    Pin, PinAppearance, Shape, Symbol, Terminal, Unit, SYMBOL_FORMAT_V1, SYMBOL_FORMAT_V4,
+    Geometry, Graphic, Pin, PinAppearance, Point, Shape, Symbol, Terminal, Unit, SYMBOL_FORMAT_V1,
+    SYMBOL_FORMAT_V4,
 };
 use crate::{check_terminal_id, clean_text, nm, Refuse};
 use openparts_pcbcad::{
@@ -27,11 +38,23 @@ const GRID_NM: i64 = 1_270_000;
 const PIN_REACH_NM: i64 = 12_700_000;
 const MAX_DRAWING_NM: i64 = 100_000_000;
 const PIN_LENGTH_NM: i64 = 2_540_000;
-const TEXT_HEIGHT_NM: i64 = 1_270_000;
-/// Re-laid-out units: pin rows/columns per side, centred on the body.
-const SLOTS: [i64; 8] = [-7, -5, -3, -1, 1, 3, 5, 7];
-const BODY_NM: i64 = 10_160_000;
+/// Pin names and numbers: PCBCraft's own name height. At 1 mm its
+/// lettering is about 0.83 mm per capital, close to the 1 mm per
+/// character the IR's KiCad layout reserves.
+const TEXT_HEIGHT_NM: i64 = 1_000_000;
+/// A quarter-turned name starts this far inside the body edge, as
+/// PCBCraft insets an upright one.
+const NAME_INSET_NM: i64 = 400_000;
+/// The space kept between two labels: at least this in the IR's own
+/// drawing, about a character's width in a re-laid-out unit.
+const NATIVE_CLEARANCE_NM: i64 = 250_000;
+const LABEL_CLEARANCE_NM: i64 = 1_000_000;
+/// How much longer than its number a side pin's lead is at least.
+const NUMBER_MARGIN_NM: i64 = 400_000;
+/// Re-laid-out units: at most 8 pins per side, 2.54 mm apart.
+const SIDE_PINS: usize = 8;
 const MAX_UNITS: usize = 32;
+const MAX_DRAWING: usize = 256;
 
 /// A converted symbol (id and revision still unset) and, per terminal,
 /// the device pin numbers it stands for.
@@ -76,6 +99,35 @@ fn appearance(o: &'static str, length_nm: i64) -> PinAppearance {
         name_height_nm: TEXT_HEIGHT_NM,
         number_height_nm: TEXT_HEIGHT_NM,
     }
+}
+
+/// The lead a re-laid-out unit's pins need: PCBCraft centres a side
+/// pin's number over its lead, so a number wider than the lead (a
+/// module's `SWCLK`, a connector's `SHELL`) gets a longer one, in grid
+/// steps.
+fn lead_length(plan: &Plan, stacks: &[Stack]) -> i64 {
+    let widest = plan.sides[LEFT]
+        .iter()
+        .chain(&plan.sides[RIGHT])
+        .flatten()
+        .map(|&t| {
+            let r = text_box(
+                &stacks[t].primary.number,
+                TEXT_HEIGHT_NM,
+                [0, 0],
+                "middle",
+                0,
+            );
+            r.x1 - r.x0
+        })
+        .max()
+        .unwrap_or(0);
+    let mut length = PIN_LENGTH_NM;
+    // The number is centred: it must clear the outline at the lead's end.
+    while length < widest + NUMBER_MARGIN_NM && length < PIN_REACH_NM / 2 {
+        length += GRID_NM;
+    }
+    length
 }
 
 /// One terminal: a visible IR pin and the pins stacked under it.
@@ -149,9 +201,14 @@ pub(crate) fn convert(symbol: &PcbSymbol, name: &str) -> Result<SymbolDraft, Ref
         terminals.push((id, s.numbers.clone()));
     }
 
-    let units = match native_unit(symbol, &stacks)? {
+    let names: std::collections::HashMap<String, String> = records
+        .iter()
+        .filter_map(|t| Some((t.id.clone(), t.name.clone()?)))
+        .collect();
+    let name_of = |terminal: &str| names.get(terminal).cloned();
+    let units = match native_unit(symbol, &stacks, &name_of)? {
         Some(unit) => vec![unit],
-        None => relayout(symbol, &stacks)?,
+        None => relayout(symbol, &stacks, &name_of)?,
     };
     Ok(SymbolDraft {
         record: Symbol {
@@ -182,9 +239,63 @@ fn reference_prefix(prefix: &str) -> Result<String, Refuse> {
     }
 }
 
+/// A unit's labels touch nothing they should not, and are `clearance`
+/// apart.
+fn is_clean(unit: &Unit, name_of: NameOf, clearance: i64) -> bool {
+    collisions(unit, name_of, clearance).is_empty()
+}
+
+type NameOf<'a> = &'a dyn Fn(&str) -> Option<String>;
+
+/// `unit` with its top and bottom pins' names drawn as text turned a
+/// quarter, inside the body: a top pin's name hangs down from the edge,
+/// a bottom pin's rises from it, both reading bottom to top.
+fn with_vertical_names(mut unit: Unit, name_of: NameOf) -> Unit {
+    for pin in &mut unit.pins {
+        let top = match pin.appearance.orientation {
+            "down" => true,
+            "up" => false,
+            _ => continue,
+        };
+        let Some(name) = name_of(&pin.terminal).filter(|n| !n.is_empty()) else {
+            continue;
+        };
+        if !pin.appearance.show_name {
+            continue;
+        }
+        pin.appearance.show_name = false;
+        let [x, y] = lead_end(pin);
+        let (y, align) = if top {
+            (y + NAME_INSET_NM, "end")
+        } else {
+            (y - NAME_INSET_NM, "start")
+        };
+        unit.drawing.push(Shape::Graphic {
+            graphic: Graphic {
+                geometry: Geometry::Text {
+                    at: Point { x_nm: x, y_nm: y },
+                    text: name,
+                    height_nm: pin.appearance.name_height_nm,
+                    rotation: 270,
+                    align,
+                },
+                stroke_nm: PIN_STROKE_NM,
+                fill: "none",
+            },
+        });
+    }
+    unit
+}
+
 /// The IR drawing itself, when it is one unit whose pins all sit on
-/// PCBCraft's grid within its reach.
-fn native_unit(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Option<Unit>, Refuse> {
+/// PCBCraft's grid within its reach and whose labels fit it: with top
+/// and bottom names turned (KiCad's way) when they fit so, else upright
+/// (the IR's KiCad layout leaves room for upright names).
+fn native_unit(
+    symbol: &PcbSymbol,
+    stacks: &[Stack],
+    name_of: NameOf,
+) -> Result<Option<Unit>, Refuse> {
     let one_unit = symbol.pins.iter().all(|p| p.unit == symbol.pins[0].unit);
     let fits = |v: i64| v % GRID_NM == 0 && v.abs() <= PIN_REACH_NM;
     if !one_unit || !stacks.iter().all(|s| fits(s.at[0]) && fits(s.at[1])) {
@@ -220,15 +331,19 @@ fn native_unit(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Option<Unit>, Ref
             appearance: appearance(orientation(s.primary.orientation), length),
         });
     }
-    Ok(Some(Unit {
+    let upright = Unit {
         id: "main".into(),
         drawing,
         pins,
-    }))
+    };
+    let turned = with_vertical_names(upright.clone(), name_of);
+    Ok([turned, upright]
+        .into_iter()
+        .find(|u| u.drawing.len() <= MAX_DRAWING && is_clean(u, name_of, NATIVE_CLEARANCE_NM)))
 }
 
 /// Pins per side of a re-laid-out unit.
-const SIDE: usize = SLOTS.len();
+const SIDE: usize = SIDE_PINS;
 
 /// One family to place: its key and its terminals (indices into the
 /// stacks), in drawing order.
@@ -256,17 +371,30 @@ impl Plan {
     fn is_empty(&self) -> bool {
         self.sides.iter().all(Vec::is_empty)
     }
+    fn is_vertical_empty(&self) -> bool {
+        self.sides[LEFT].is_empty() && self.sides[RIGHT].is_empty()
+    }
+    fn with(&self, side: usize, terms: &[usize]) -> Plan {
+        let mut plan = self.clone();
+        plan.sides[side].push(terms.to_vec());
+        plan
+    }
 }
 
-/// Fills units' left then right sides with whole families, in order.
+/// Whether a plan can be drawn with no label collision.
+type Fits<'a> = &'a dyn Fn(&Plan) -> bool;
+
+/// Fills units' left then right sides with whole families, in order,
+/// while their labels fit.
 #[derive(Clone)]
-struct Packer {
+struct Packer<'a> {
     units: Vec<Plan>,
     /// The side being filled in the last unit (`LEFT` or `RIGHT`).
     side: usize,
+    fits: Fits<'a>,
 }
 
-impl Packer {
+impl Packer<'_> {
     fn new_unit(&mut self) {
         self.units.push(Plan::default());
         self.side = LEFT;
@@ -276,11 +404,22 @@ impl Packer {
         self.units.last_mut().expect("a unit")
     }
 
+    /// Adds `terms` to `side` of the last unit when they fit there.
+    fn try_push(&mut self, side: usize, terms: &[usize]) -> bool {
+        let trial = self.unit().with(side, terms);
+        let ok = trial.used(side) <= SIDE && (self.fits)(&trial);
+        if ok {
+            *self.unit() = trial;
+        }
+        ok
+    }
+
     /// Places one family: on the current side when it fits, else on the
     /// next side or unit. A family longer than a side fills an empty
     /// unit's left then right side; one longer than a unit is cut, in
     /// order, into as few unit-sized pieces as it takes. `splittable`
     /// (a connector's pin sequence) fills every side in turn instead.
+    /// What fits nowhere (a name longer than a body) gets a unit alone.
     fn place(&mut self, terms: &[usize], splittable: bool) {
         if terms.is_empty() {
             return;
@@ -289,14 +428,20 @@ impl Packer {
             let mut rest = terms;
             while !rest.is_empty() {
                 let side = self.side;
-                let room = SIDE - self.unit().used(side);
-                if room == 0 {
-                    self.advance();
-                    continue;
+                let mut take = (SIDE - self.unit().used(side)).min(rest.len());
+                while take > 0 && !self.try_push(side, &rest[..take]) {
+                    take -= 1;
                 }
-                let (now, later) = rest.split_at(room.min(rest.len()));
-                self.unit().sides[side].push(now.to_vec());
-                rest = later;
+                if take == 0 {
+                    if self.unit().is_empty() {
+                        self.unit().sides[side].push(vec![rest[0]]);
+                        take = 1;
+                    } else {
+                        self.advance();
+                        continue;
+                    }
+                }
+                rest = &rest[take..];
             }
             return;
         }
@@ -311,6 +456,10 @@ impl Packer {
                 self.new_unit();
             }
             let (left, right) = terms.split_at(SIDE);
+            let trial = self.unit().with(LEFT, left).with(RIGHT, right);
+            if !(self.fits)(&trial) && !self.unit().is_empty() {
+                self.new_unit();
+            }
             let unit = self.unit();
             unit.sides[LEFT].push(left.to_vec());
             unit.sides[RIGHT].push(right.to_vec());
@@ -319,7 +468,10 @@ impl Packer {
         }
         loop {
             let side = self.side;
-            if SIDE - self.unit().used(side) >= terms.len() {
+            if self.try_push(side, terms) {
+                return;
+            }
+            if self.unit().is_empty() {
                 self.unit().sides[side].push(terms.to_vec());
                 return;
             }
@@ -338,6 +490,7 @@ impl Packer {
             let mut fresh = Packer {
                 units: vec![Plan::default()],
                 side: LEFT,
+                fits: self.fits,
             };
             for g in block {
                 fresh.place(&g.terms, false);
@@ -362,29 +515,25 @@ impl Packer {
     }
 }
 
-impl Plan {
-    fn is_vertical_empty(&self) -> bool {
-        self.sides[LEFT].is_empty() && self.sides[RIGHT].is_empty()
-    }
-}
-
 /// Places `families` on one side of `plan` (power on top, ground at the
 /// bottom) while they fit; returns the rest, for the left and right.
-fn fill_edge(plan: &mut Plan, side: usize, families: Vec<Group>) -> Vec<Group> {
+fn fill_edge(plan: &mut Plan, side: usize, families: Vec<Group>, fits: Fits) -> Vec<Group> {
     let mut rest = Vec::new();
     for g in families {
         let room = SIDE - plan.used(side);
         if !rest.is_empty() || room == 0 {
             rest.push(g);
-        } else if g.terms.len() <= room {
+        } else if g.terms.len() <= room && fits(&plan.with(side, &g.terms)) {
             plan.sides[side].push(g.terms);
-        } else if room == SIDE {
-            let (now, later) = g.terms.split_at(SIDE);
+        } else if room == SIDE && fits(&plan.with(side, &g.terms[..SIDE.min(g.terms.len())])) {
+            let (now, later) = g.terms.split_at(SIDE.min(g.terms.len()));
             plan.sides[side].push(now.to_vec());
-            rest.push(Group {
-                key: g.key,
-                terms: later.to_vec(),
-            });
+            if !later.is_empty() {
+                rest.push(Group {
+                    key: g.key,
+                    terms: later.to_vec(),
+                });
+            }
         } else {
             rest.push(g);
         }
@@ -420,9 +569,11 @@ fn sibling_port(key: &str, bus: &str) -> bool {
     key.len() == bus.len() && key.chars().zip(bus.chars()).filter(|(a, b)| a != b).count() == 1
 }
 
-/// Units of up to 8 pins per side around a 20.32 mm body, grouped as the
-/// IR is ([`PinGroups`]: KiCad's layout). Everything in one unit when it
-/// fits; otherwise a first unit holds power (top), ground (bottom) and
+/// Units of up to 8 pins per side, each around the smallest body (at
+/// most 20.32 mm) that keeps its labels apart, grouped as the IR is
+/// ([`PinGroups`]: KiCad's layout). A unit takes a family only when its
+/// labels still fit (the power unit's turned names leave its corners
+/// less room). Everything in one unit when it fits; otherwise a first unit holds power (top), ground (bottom) and
 /// the other signal families (left, then right), and the buses -- the
 /// IR's bus, every family filling a side and the ports of their series
 /// (STM32 `PA`/`PB`/`PC`), in natural order -- follow in units of their
@@ -430,7 +581,7 @@ fn sibling_port(key: &str, bus: &str) -> bool {
 /// family longer than a unit is cut into unit-sized pieces in order. A
 /// symbol with no families (a connector: every name its own) keeps pin
 /// number order.
-fn relayout(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Vec<Unit>, Refuse> {
+fn relayout(symbol: &PcbSymbol, stacks: &[Stack], name_of: NameOf) -> Result<Vec<Unit>, Refuse> {
     let groups = PinGroups::of_symbol(symbol);
     let mut index: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for (i, s) in stacks.iter().enumerate() {
@@ -494,12 +645,25 @@ fn relayout(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Vec<Unit>, Refuse> {
     };
     buses.sort_by(|a, b| natural_cmp(&a.key, &b.key));
 
+    let fits = |plan: &Plan| {
+        let lead = lead_length(plan, stacks);
+        let body = PIN_REACH_NM - lead;
+        arrange(
+            plan,
+            stacks,
+            name_of,
+            [body, body, lead, TEXT_HEIGHT_NM],
+            false,
+        )
+        .is_some()
+    };
     let mut first = Plan::default();
-    let mut vertical = fill_edge(&mut first, TOP, power);
-    vertical.extend(fill_edge(&mut first, BOTTOM, ground));
+    let mut vertical = fill_edge(&mut first, TOP, power, &fits);
+    vertical.extend(fill_edge(&mut first, BOTTOM, ground, &fits));
     let mut packer = Packer {
         units: vec![first],
         side: LEFT,
+        fits: &fits,
     };
     for g in &vertical {
         packer.place(&g.terms, false);
@@ -523,7 +687,7 @@ fn relayout(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Vec<Unit>, Refuse> {
     let plans: Vec<Plan> = packer.units.into_iter().filter(|p| !p.is_empty()).collect();
     if plans.len() > MAX_UNITS {
         return Err(format!(
-            "the symbol needs {} units of 32 pins: PCBCraft allows {MAX_UNITS}",
+            "the symbol needs {} units: PCBCraft allows {MAX_UNITS}",
             plans.len()
         ));
     }
@@ -531,58 +695,144 @@ fn relayout(symbol: &PcbSymbol, stacks: &[Stack]) -> Result<Vec<Unit>, Refuse> {
     let count = plans.len();
     let mut units = Vec::with_capacity(count);
     for (k, plan) in plans.iter().enumerate() {
-        let mut pins = Vec::new();
-        for (side, o) in [
-            (LEFT, PinOrientation::Left),
-            (RIGHT, PinOrientation::Right),
-            (TOP, PinOrientation::Top),
-            (BOTTOM, PinOrientation::Bottom),
-        ] {
-            let runs = &plan.sides[side];
-            let used = plan.used(side);
-            // An empty slot between families, when the side has room.
-            let gaps = used + runs.len().saturating_sub(1) <= SIDE;
-            let total = if gaps {
-                used + runs.len().saturating_sub(1)
-            } else {
-                used
-            };
-            let mut slot = (SIDE - total) / 2;
+        // The smallest body that draws the unit cleanly: half-sizes on
+        // the grid, by area, squarer first.
+        let lead = lead_length(plan, stacks);
+        let largest = PIN_REACH_NM - lead;
+        let mut sizes: Vec<[i64; 2]> = Vec::new();
+        for w in 2..=largest / GRID_NM {
+            for h in 2..=largest / GRID_NM {
+                sizes.push([w * GRID_NM, h * GRID_NM]);
+            }
+        }
+        sizes.sort_by_key(|&[w, h]| (w * h / GRID_NM, (w - h).abs()));
+        let mut unit = sizes
+            .iter()
+            .find_map(|&[w, h]| arrange(plan, stacks, name_of, [w, h, lead, TEXT_HEIGHT_NM], false))
+            // A name longer than the largest body is lettered smaller,
+            // down to 0.5 mm; past that it is drawn anyway.
+            .or_else(|| {
+                (5..10).rev().find_map(|tenths| {
+                    let text = tenths * TEXT_HEIGHT_NM / 10;
+                    arrange(plan, stacks, name_of, [largest, largest, lead, text], false)
+                })
+            })
+            .or_else(|| {
+                let body = PIN_REACH_NM - PIN_LENGTH_NM;
+                let size = [body, body, PIN_LENGTH_NM, TEXT_HEIGHT_NM];
+                arrange(plan, stacks, name_of, size, true)
+            })
+            .expect("a forced layout always draws");
+        unit.id = if count == 1 {
+            "main".into()
+        } else {
+            format!("u{}", k + 1)
+        };
+        units.push(unit);
+    }
+    Ok(units)
+}
+
+/// Draws `plan` around a body of half-sizes `w` x `h`, with leads
+/// `lead` long and names `text` high: each side's runs (one empty slot
+/// apart when there is room) 2.54 mm apart on the odd 1.27 mm steps
+/// (as near the middle as they go), moved along the side until no label
+/// collides (top, bottom, left, then right). `None` when no position fits a side; `force` takes the
+/// centred position then.
+fn arrange(
+    plan: &Plan,
+    stacks: &[Stack],
+    name_of: NameOf,
+    [w, h, lead, text]: [i64; 4],
+    force: bool,
+) -> Option<Unit> {
+    let mut unit = Unit {
+        id: String::new(),
+        drawing: vec![Shape::Rect {
+            min_nm: [-w, -h],
+            max_nm: [w, h],
+        }],
+        pins: Vec::new(),
+    };
+    for (side, o) in [
+        (TOP, PinOrientation::Top),
+        (BOTTOM, PinOrientation::Bottom),
+        (LEFT, PinOrientation::Left),
+        (RIGHT, PinOrientation::Right),
+    ] {
+        let runs = &plan.sides[side];
+        if runs.is_empty() {
+            continue;
+        }
+        let extent = if matches!(side, LEFT | RIGHT) { h } else { w };
+        let mut placed = None;
+        'search: for gaps in [true, false] {
+            if !gaps && runs.len() == 1 {
+                break;
+            }
+            let mut slots: Vec<Option<usize>> = Vec::new();
             for (r, run) in runs.iter().enumerate() {
                 if gaps && r > 0 {
-                    slot += 1;
+                    slots.push(None);
                 }
-                for &t in run {
-                    let along = SLOTS[slot] * GRID_NM;
-                    slot += 1;
-                    let at_nm = match o {
-                        PinOrientation::Left => [-PIN_REACH_NM, along],
-                        PinOrientation::Right => [PIN_REACH_NM, along],
-                        PinOrientation::Top => [along, -PIN_REACH_NM],
-                        PinOrientation::Bottom => [along, PIN_REACH_NM],
-                    };
-                    pins.push(Pin {
-                        terminal: stacks[t].primary.number.clone(),
-                        at_nm,
-                        appearance: appearance(orientation(o), PIN_LENGTH_NM),
-                    });
+                slots.extend(run.iter().map(|&t| Some(t)));
+            }
+            let k = slots.len() as i64;
+            // Slot i sits at (2i - (k - 1)) grid steps, plus the shift:
+            // always an odd number of steps, so that facing rows line
+            // up; every slot stays a grid step inside the body's corners.
+            let room = extent / GRID_NM - 1 - (k - 1);
+            let mut shifts = vec![0];
+            for s in 1..=room {
+                shifts.extend([-s, s]);
+            }
+            shifts.retain(|s| (k + s) % 2 == 0);
+            if room < 0 || shifts.is_empty() {
+                if !force {
+                    continue;
+                }
+                shifts = vec![k % 2];
+            }
+            for shift in shifts {
+                let pins: Vec<Pin> = slots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, t)| Some((i as i64, (*t)?)))
+                    .map(|(i, t)| {
+                        let along = (2 * i - (k - 1) + shift) * GRID_NM;
+                        let at_nm = match o {
+                            PinOrientation::Left => [-w - lead, along],
+                            PinOrientation::Right => [w + lead, along],
+                            PinOrientation::Top => [along, -h - lead],
+                            PinOrientation::Bottom => [along, h + lead],
+                        };
+                        let mut appearance = appearance(orientation(o), lead);
+                        appearance.name_height_nm = text;
+                        Pin {
+                            terminal: stacks[t].primary.number.clone(),
+                            at_nm,
+                            appearance,
+                        }
+                    })
+                    .collect();
+                let mut trial = unit.clone();
+                trial.pins.extend(pins);
+                if is_clean(
+                    &with_vertical_names(trial.clone(), name_of),
+                    name_of,
+                    LABEL_CLEARANCE_NM,
+                ) {
+                    placed = Some(trial);
+                    break 'search;
+                }
+                if force && placed.is_none() {
+                    placed = Some(trial);
                 }
             }
         }
-        units.push(Unit {
-            id: if count == 1 {
-                "main".into()
-            } else {
-                format!("u{}", k + 1)
-            },
-            drawing: vec![Shape::Rect {
-                min_nm: [-BODY_NM, -BODY_NM],
-                max_nm: [BODY_NM, BODY_NM],
-            }],
-            pins,
-        });
+        unit = placed?;
     }
-    Ok(units)
+    Some(with_vertical_names(unit, name_of))
 }
 
 /// Pin numbers in drawing order: numerically, then as text.
@@ -808,8 +1058,12 @@ mod tests {
     #[test]
     fn rp2040_units_follow_the_function_groups() {
         let units = units(&export(&rp2040()));
-        assert_eq!(units.len(), 3, "{units:?}");
-        let first: BTreeSet<&str> = units[0].iter().map(String::as_str).collect();
+        assert_eq!(units.len(), 4, "{units:?}");
+        let first: BTreeSet<&str> = units[0]
+            .iter()
+            .chain(&units[1])
+            .map(String::as_str)
+            .collect();
         let expected: BTreeSet<&str> = [
             "IOVDD",
             "DVDD",
@@ -836,8 +1090,9 @@ mod tests {
         .into_iter()
         .collect();
         assert_eq!(first, expected);
-        // The QSPI family stays together, in natural order.
-        let qspi: Vec<&String> = units[0].iter().filter(|n| n.starts_with("QSPI")).collect();
+        // The QSPI family stays together, in natural order: in a unit of
+        // its own, as the power unit's turned names leave it no room.
+        let qspi: Vec<&String> = units[1].iter().filter(|n| n.starts_with("QSPI")).collect();
         assert_eq!(
             qspi,
             [
@@ -849,8 +1104,139 @@ mod tests {
                 "QSPI_SD3"
             ]
         );
-        assert_eq!(units[1], gpio(0..16));
-        assert_eq!(units[2], gpio(16..30));
+        assert_eq!(units[2], gpio(0..16));
+        assert_eq!(units[3], gpio(16..30));
+    }
+
+    /// A label's box, approximated independently of [`crate::labels`]:
+    /// `chars x 0.6 x height` long, `height` across, centred on its
+    /// anchor; upright or turned a quarter.
+    fn approx_box(text: &str, height: i64, at: [i64; 2], align: &str, turned: bool) -> [i64; 4] {
+        let len = text.chars().count() as i64 * height * 6 / 10;
+        let (a0, a1) = match align {
+            "start" => (0, len),
+            "end" => (-len, 0),
+            _ => (-len / 2, len / 2),
+        };
+        if turned {
+            // Reads bottom to top: "along" runs up the page.
+            [
+                at[0] - height / 2,
+                at[1] - a1,
+                at[0] + height / 2,
+                at[1] - a0,
+            ]
+        } else {
+            [
+                at[0] + a0,
+                at[1] - height / 2,
+                at[0] + a1,
+                at[1] + height / 2,
+            ]
+        }
+    }
+
+    #[test]
+    fn rp2040_power_unit_labels_do_not_overlap() {
+        let draft = export(&rp2040());
+        let unit = &draft.record.units[0];
+        let name: BTreeMap<&str, &str> = draft
+            .record
+            .terminals
+            .iter()
+            .map(|t| (t.id.as_str(), t.name.as_deref().unwrap_or("")))
+            .collect();
+        // (owner, box): every pin name and number as PCBCraft places
+        // them, and the names drawn turned.
+        let mut boxes: Vec<(String, [i64; 4])> = Vec::new();
+        let mut turned = 0;
+        for shape in &unit.drawing {
+            if let Shape::Graphic { graphic } = shape {
+                let Geometry::Text {
+                    at,
+                    text,
+                    height_nm,
+                    rotation,
+                    align,
+                } = &graphic.geometry
+                else {
+                    panic!("only text graphics");
+                };
+                assert_eq!(*rotation, 270);
+                assert!(text.chars().count() <= 128);
+                turned += 1;
+                boxes.push((
+                    text.clone(),
+                    approx_box(text, *height_nm, [at.x_nm, at.y_nm], align, true),
+                ));
+            }
+        }
+        for p in &unit.pins {
+            let a = &p.appearance;
+            let end = lead_end(p);
+            let mid = [(p.at_nm[0] + end[0]) / 2, (p.at_nm[1] + end[1]) / 2];
+            let vertical = matches!(a.orientation, "up" | "down");
+            if vertical {
+                assert!(!a.show_name, "a top or bottom pin's name is drawn turned");
+            }
+            let number = if vertical {
+                approx_box(
+                    &p.terminal,
+                    a.number_height_nm,
+                    [mid[0] + 400_000, mid[1]],
+                    "start",
+                    false,
+                )
+            } else {
+                approx_box(
+                    &p.terminal,
+                    a.number_height_nm,
+                    [mid[0], mid[1] - 600_000],
+                    "middle",
+                    false,
+                )
+            };
+            boxes.push((format!("#{}", p.terminal), number));
+            if a.show_name {
+                let (at, align) = match a.orientation {
+                    "right" => ([end[0] + 400_000, end[1]], "start"),
+                    _ => ([end[0] - 400_000, end[1]], "end"),
+                };
+                boxes.push((
+                    name[p.terminal.as_str()].into(),
+                    approx_box(
+                        name[p.terminal.as_str()],
+                        a.name_height_nm,
+                        at,
+                        align,
+                        false,
+                    ),
+                ));
+            }
+        }
+        // The six power pins on top and GND below are drawn turned.
+        assert_eq!(turned, 7);
+        let Shape::Rect { min_nm, max_nm } = &unit.drawing[0] else {
+            panic!("the body comes first");
+        };
+        for (i, (a, ba)) in boxes.iter().enumerate() {
+            if !a.starts_with('#') {
+                assert!(
+                    ba[0] > min_nm[0]
+                        && ba[2] < max_nm[0]
+                        && ba[1] > min_nm[1]
+                        && ba[3] < max_nm[1],
+                    "{a} leaves the body"
+                );
+            }
+            for (b, bb) in &boxes[i + 1..] {
+                let overlap = ba[0] < bb[2] && bb[0] < ba[2] && ba[1] < bb[3] && bb[1] < ba[3];
+                assert!(!overlap, "{a} overlaps {b}");
+            }
+        }
+        // And by PCBCraft's own font metrics.
+        let name_of = |t: &str| name.get(t).map(|s| s.to_string());
+        assert_eq!(collisions(unit, &name_of, 0), Vec::new());
     }
 
     #[test]

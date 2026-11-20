@@ -26,6 +26,7 @@
 //! across exports by a [`ledger::Ledger`].
 
 mod footprint;
+mod labels;
 pub mod ledger;
 pub mod record;
 mod spec;

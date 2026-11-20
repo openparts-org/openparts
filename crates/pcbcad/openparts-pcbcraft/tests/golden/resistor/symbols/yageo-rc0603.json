@@ -46,8 +46,8 @@
             "style": "line",
             "show_name": true,
             "show_number": true,
-            "name_height_nm": 1270000,
-            "number_height_nm": 1270000
+            "name_height_nm": 1000000,
+            "number_height_nm": 1000000
           }
         },
         {
@@ -62,8 +62,8 @@
             "style": "line",
             "show_name": true,
             "show_number": true,
-            "name_height_nm": 1270000,
-            "number_height_nm": 1270000
+            "name_height_nm": 1000000,
+            "number_height_nm": 1000000
           }
         }
       ]

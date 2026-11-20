@@ -123,7 +123,15 @@ pub struct Unit {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Shape {
-    Rect { min_nm: [i64; 2], max_nm: [i64; 2] },
+    Rect {
+        min_nm: [i64; 2],
+        max_nm: [i64; 2],
+    },
+    /// A drawing item with PCBCraft's shared graphic geometry: here a
+    /// rotated pin name (the plain `text` shape has no rotation).
+    Graphic {
+        graphic: Graphic,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -207,9 +215,29 @@ pub struct Graphic {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Geometry {
-    Line { from: Point, to: Point },
-    Circle { center: Point, radius_nm: i64 },
-    Polyline { points: Vec<Point>, closed: bool },
+    Line {
+        from: Point,
+        to: Point,
+    },
+    Circle {
+        center: Point,
+        radius_nm: i64,
+    },
+    Polyline {
+        points: Vec<Point>,
+        closed: bool,
+    },
+    /// Symbol drawings only: 1-128 characters, `rotation` in degrees
+    /// from +X toward +Y (Y points down, so 90 reads top to bottom and
+    /// 270 bottom to top), `align` along the text (`start`, `middle`,
+    /// `end`); the anchor is the text's vertical centre.
+    Text {
+        at: Point,
+        text: String,
+        height_nm: i64,
+        rotation: u16,
+        align: &'static str,
+    },
 }
 
 // ---- parts ------------------------------------------------------------

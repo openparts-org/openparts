@@ -32,14 +32,16 @@ checked against PCBCraft's own `scripts/check-library-schemas.py` and
 (PCBCraft points Y down), in nanometres. PCBCraft pins sit on the
 1.27 mm grid at most 12.7 mm from the centre, so a symbol whose pins do
 not fit (RP2040: 70 mm tall) is laid out again into units of at most 8
-pins per side around a 20.32 mm body (at most 32 units, 1,024
-terminals), grouped as the KiCad symbol is: the same pin families
+pins per side, each around the smallest body (at most 20.32 mm square)
+that keeps its labels apart (at most 32 units, 1,024 terminals),
+grouped as the KiCad symbol is: the same pin families
 (`openparts_pcbcad::PinGroups`, shared with `build_symbol`: power,
 ground, the bus and the other signal families by name prefix, each
 family in natural name order, `GPIO2` before `GPIO10`).
 
-- Everything goes in one unit when it fits (8 per side, power on top,
-  ground at the bottom, signals on the left then the right).
+- Everything goes in one unit when it fits (8 per side and the labels
+  apart, power on top, ground at the bottom, signals on the left then
+  the right).
 - Otherwise the first unit holds power (top), ground (bottom) and the
   non-bus signal families (left, then right); families that do not fit
   move on to the next unit, related neighbours (same first two
@@ -54,12 +56,42 @@ family in natural name order, `GPIO2` before `GPIO10`).
 - A symbol with no families (a connector: every pin named by its
   number) keeps pin number order, 8 per side.
 
-RP2040 becomes power + GND + TESTEN/XIN/XOUT/SWCLK/SWD/RUN/USB/QSPI,
-then GPIO0-15, then GPIO16-29; STM32F103C8 power + ground +
+RP2040 becomes power + GND + TESTEN/XIN/XOUT/SWCLK/SWD/RUN/USB, then
+QSPI, then GPIO0-15, then GPIO16-29; STM32F103C8 power + ground +
 OSC/NRST/BOOT0, then PA, PB and PC. Only drawing positions and units
 change: the terminals and their pads are the same in any layout. Pins
 the IR stacks at one position (same name: RP2040's six IOVDD pins)
 become one terminal, numbered by the visible pin.
+
+*Labels.* PCBCraft draws each pin's number and name itself
+(`PinAppearance::graphics`), always upright, in its stroke font
+(PCBcraft Technical, about 0.83 x the height per capital); names and
+numbers are 1 mm high (PCBCraft's own name height, and the 1 mm per
+character the KiCad layout reserves). An upright name is centred on a
+top or bottom pin, so names 2.54 mm apart run into each other. Those
+pins' names are hidden (`show_name: false`) and drawn instead as
+`graphic` text in the unit's drawing (`rotation` 270: reading bottom to
+top, as KiCad draws them), 0.4 mm inside the body edge: hanging from the
+top edge (`align: end`), rising from the bottom one (`align: start`).
+Graphic text holds 128 characters (the plain `text` shape: 16, no
+rotation), more than any pin name (32), so no name is shortened.
+
+Every unit is checked with PCBCraft's label geometry and the font's own
+glyph metrics (derived from its `strokes.json`): no label may touch
+another label, the body outline or another pin's lead, and names of
+different pins keep 1 mm apart in a re-laid-out unit (0.25 mm in the
+IR's drawing; numbers 0.25 mm). The IR's drawing is kept with turned
+names if that is clean, else with upright ones (KiCad sized it for
+upright names: LM1117's 5 mm body), else the symbol is laid out again.
+There, rows and columns sit 2.54 mm apart on the odd 1.27 mm steps
+(facing rows line up), as near the middle of their side as the labels
+allow: the left and right names keep clear of the turned names in the
+body's corners. A pin number centred over a lead longer than the lead
+(a module's `SWCLK`, a connector's `SHELL`) gets the unit longer leads,
+in 1.27 mm steps, and a smaller body. A name too long for any body
+(onsemi MC74HC165A's `SERIAL_SHIFT/PARALLEL_LOAD`, 26 characters) is
+lettered smaller, down to 0.5 mm. Across the dataset no exported unit
+has an overlapping label.
 
 **Footprint.** The package's Placement Model at density level N, built
 without a device: pads (mm -> integer nm, Y flipped, rotation 0),
