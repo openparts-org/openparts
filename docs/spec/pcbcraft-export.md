@@ -112,7 +112,8 @@ Every record declares the licence given by `--license` (default
 source triple `kind: "openparts"`, `reference: "openparts-data <git
 revision>; openparts-pcbcraft <version>"` and `locator`: the registry URL
 of the part, device or package (`<base>/v1/parts/<manufacturer>/<mpn>`;
-base `--locator-base`, else `--registry`).
+base `--locator-base`, default `https://openparts.jijinbei.jp`, the
+public OpenParts site).
 
 ## 5. Command
 

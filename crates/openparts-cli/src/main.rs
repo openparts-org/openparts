@@ -172,10 +172,10 @@ enum Commands {
         /// (default: the checkout's git HEAD).
         #[arg(long)]
         dataset_revision: Option<String>,
-        /// The registry URL the records' locators point at (default:
-        /// --registry).
-        #[arg(long)]
-        locator_base: Option<String>,
+        /// The registry URL the records' locators point at: the public
+        /// OpenParts site unless you publish a library for another one.
+        #[arg(long, default_value = "https://openparts.jijinbei.jp")]
+        locator_base: String,
         /// Exit with an error when a part is refused.
         #[arg(long)]
         strict: bool,
@@ -340,7 +340,7 @@ fn main() -> anyhow::Result<()> {
             library_name,
             group_by,
             dataset_revision,
-            locator_base: locator_base.unwrap_or_else(|| cli.registry.clone()),
+            locator_base,
             parts,
             strict,
         }),
