@@ -38,6 +38,7 @@ server/                  openparts-server: REST API + bundled artifacts
 web/                     openparts-web: the MoonBit (rabbita) site (api/types.mbt is
                          generated from the Rust types: web/scripts/gen-api-types.sh)
 kicad-plugin/            KiCad plugin (library sync GUI + launcher)
+deploy/raspberry-pi/     deploy the server on a Raspberry Pi behind a Cloudflare Tunnel
 crates/
 ├── openparts-artifacts  Part -> every artifact; the bundle manifest schema
 ├── openparts-core        Canonical Rust data model

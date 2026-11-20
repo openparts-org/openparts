@@ -1,0 +1,21 @@
+# systemd user unit for openparts-server on the Pi
+# (~/.config/systemd/user/openparts.service; installed by deploy.sh).
+# Listens on localhost only: the public reaches it through the
+# Cloudflare Tunnel. Do NOT add OPENPARTS_SOURCE_CACHE here (README.md).
+[Unit]
+Description=OpenParts server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/openparts
+Environment=HOST=127.0.0.1
+Environment=PORT=8080
+Environment=OPENPARTS_DATA_DIR=%h/openparts/data
+Environment=OPENPARTS_WEB_DIR=%h/openparts/web
+# OPENPARTS_ARTIFACT_DIR, written by deploy.sh when a bundle is installed.
+EnvironmentFile=-%h/openparts/bundle.env
+ExecStart=%h/openparts/bin/openparts-server
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
