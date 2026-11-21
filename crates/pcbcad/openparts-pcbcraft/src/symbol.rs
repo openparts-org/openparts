@@ -229,6 +229,17 @@ pub(crate) fn convert(symbol: &PcbSymbol, name: &str) -> Result<SymbolDraft, Ref
     })
 }
 
+/// Unit ids `a`, `b`, ... `z`, `aa`, `ab`, ...: PCBCraft shows unit
+/// `b` of U1 as "U1 B" (the KiCad "U1B" convention).
+fn unit_letter(k: usize) -> String {
+    let letter = |i: usize| char::from(b'a' + i as u8);
+    if k < 26 {
+        letter(k).to_string()
+    } else {
+        format!("{}{}", letter(k / 26 - 1), letter(k % 26))
+    }
+}
+
 fn reference_prefix(prefix: &str) -> Result<String, Refuse> {
     if (1..=4).contains(&prefix.len()) && prefix.chars().all(|c| c.is_ascii_uppercase()) {
         Ok(prefix.to_string())
@@ -726,7 +737,7 @@ fn relayout(symbol: &PcbSymbol, stacks: &[Stack], name_of: NameOf) -> Result<Vec
         unit.id = if count == 1 {
             "main".into()
         } else {
-            format!("u{}", k + 1)
+            unit_letter(k)
         };
         units.push(unit);
     }
