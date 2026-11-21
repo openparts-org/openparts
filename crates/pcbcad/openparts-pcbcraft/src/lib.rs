@@ -6,7 +6,9 @@
 //! `parts/` and `manufacturer-parts/` directories of canonical JSON
 //! records -- or the same documents in one `pcbcraft-library-bundle/1`
 //! file. Records are addressed by (library, kind, id, revision), and a
-//! revision is immutable. The mapping:
+//! revision is immutable. Each record is written as
+//! `<dir>/<id>-r<revision>.json` (PCBCraft's publishing convention, see
+//! [`document_path`]); the table shortens that to `<id>`. The mapping:
 //!
 //! | OpenParts | PCBCraft |
 //! |---|---|
@@ -122,13 +124,14 @@ pub struct Refusal {
 #[derive(Debug, Clone)]
 pub struct Library {
     pub id: String,
-    /// Relative path (`library.json`, `parts/<id>.json`...) -> text.
+    /// Relative path (`library.json`, `parts/<id>-r<revision>.json`...)
+    /// -> text.
     pub documents: BTreeMap<String, String>,
     pub refusals: Vec<Refusal>,
     /// Manufacturer parts written.
     pub parts: usize,
     /// OpenParts part id -> its manufacturer part's document path
-    /// (`manufacturer-parts/<id>.json`).
+    /// (`manufacturer-parts/<id>-r<revision>.json`).
     pub manufacturer_parts: BTreeMap<String, String>,
 }
 
@@ -577,7 +580,7 @@ pub fn export(
             fields,
         };
         let (record, revision) = publish(ledger, "category", id, &key, record);
-        documents.insert(format!("categories/{id}.json"), render(&record));
+        documents.insert(document_path("categories", id, revision), render(&record));
         category_refs.insert(category, (reference_to(id, revision), field_ids));
     }
 
@@ -588,7 +591,7 @@ pub fn export(
         let mut record = symbols[device].as_ref().expect("accepted").record.clone();
         record.id = id.clone();
         let (record, revision) = publish(ledger, "symbol", id, &key, record);
-        documents.insert(format!("symbols/{id}.json"), render(&record));
+        documents.insert(document_path("symbols", id, revision), render(&record));
         symbol_refs.insert(*device, reference_to(id, revision));
     }
 
@@ -601,7 +604,7 @@ pub fn export(
         record.license = license.clone();
         record.source = source(locator);
         let (record, revision) = publish(ledger, "footprint", id, key, record);
-        documents.insert(format!("footprints/{id}.json"), render(&record));
+        documents.insert(document_path("footprints", id, revision), render(&record));
         footprint_refs.insert(key.clone(), reference_to(id, revision));
     }
 
@@ -649,7 +652,7 @@ pub fn export(
             packages,
         };
         let (record, revision) = publish(ledger, "part", id, &key, record);
-        documents.insert(format!("parts/{id}.json"), render(&record));
+        documents.insert(document_path("parts", id, revision), render(&record));
         part_refs.insert(*device, reference_to(id, revision));
     }
 
@@ -679,8 +682,8 @@ pub fn export(
             datasheet: a.datasheet.clone(),
             specifications,
         };
-        let (record, _) = publish(ledger, "manufacturer-part", id, &key, record);
-        let path = format!("manufacturer-parts/{id}.json");
+        let (record, revision) = publish(ledger, "manufacturer-part", id, &key, record);
+        let path = document_path("manufacturer-parts", id, revision);
         documents.insert(path.clone(), render(&record));
         manufacturer_parts.insert(a.part.id.clone(), path);
     }
@@ -745,23 +748,28 @@ impl Library {
         let mpart = take(self.manufacturer_parts.get(part)?.clone())?;
         // References inside one library: the id names the file of the
         // kind the field refers to.
-        let id = |v: &serde_json::Value| -> Option<String> {
+        let path = |dir: &str, v: &serde_json::Value| -> Option<String> {
             (v.get("library")?.as_str()? == self.id).then_some(())?;
-            Some(v.get("id")?.as_str()?.to_string())
+            let revision = u32::try_from(v.get("revision")?.as_u64()?).ok()?;
+            Some(document_path(dir, v.get("id")?.as_str()?, revision))
         };
-        let generic = take(format!("parts/{}.json", id(mpart.get("part")?)?))?;
-        take(format!("symbols/{}.json", id(generic.get("symbol")?)?))?;
+        let generic = take(path("parts", mpart.get("part")?)?)?;
+        take(path("symbols", generic.get("symbol")?)?)?;
         if let Some(c) = generic.get("category") {
-            take(format!("categories/{}.json", id(c.get("definition")?)?))?;
+            take(path("categories", c.get("definition")?)?)?;
         }
         for variant in generic.get("packages")?.as_object()?.values() {
-            take(format!(
-                "footprints/{}.json",
-                id(variant.get("footprint")?)?
-            ))?;
+            take(path("footprints", variant.get("footprint")?)?)?;
         }
         Some(out)
     }
+}
+
+/// A record's path in a library: `<dir>/<id>-r<revision>.json`,
+/// PCBCraft's publishing convention, so two revisions of one id can
+/// share a folder.
+pub fn document_path(dir: &str, id: &str, revision: u32) -> String {
+    format!("{dir}/{id}-r{revision}.json")
 }
 
 /// A `pcbcraft-library-bundle/1` document of `documents`.

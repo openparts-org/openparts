@@ -3,8 +3,9 @@
 //! on-demand resolution of a part into its exact, immutable PCBCraft
 //! native records.
 //!
-//! - `GET /v1/pcbcraft`: whether the catalog is ready, and whether its
-//!   revisions are persistent;
+//! - `GET /v1/pcbcraft`: the contract it answers (`pcbcraft-catalog/1`),
+//!   whether the catalog is ready, and whether its revisions are
+//!   persistent;
 //! - `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=`;
 //! - `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}`: one part's summary
 //!   and every record address it depends on;
@@ -29,13 +30,13 @@
 
 use crate::error::ApiError;
 use crate::store::Store;
-use axum::extract::{Path, Query, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::extract::{OriginalUri, Path, Query, State};
+use axum::http::{header, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use openparts_artifacts::pcbcraft::adapter::ledger::Ledger;
-use openparts_artifacts::pcbcraft::adapter::{bundle_of, MAX_BUNDLE_BYTES};
+use openparts_artifacts::pcbcraft::adapter::{bundle_of, document_path, MAX_BUNDLE_BYTES};
 use openparts_artifacts::pcbcraft::{self as shared, Exported, GroupBy, Settings};
 use openparts_core::ComponentCategory;
 use openparts_data::Dataset;
@@ -46,6 +47,10 @@ use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 /// The public site the records' locators point at by default.
+/// The remote-catalog contract `GET /v1/pcbcraft` names (PCBCraft's
+/// docs/remote-catalogs.md).
+pub const CONTRACT: &str = "pcbcraft-catalog/1";
+
 pub const DEFAULT_PUBLIC_URL: &str = "https://openparts.jijinbei.jp";
 
 pub fn router() -> Router<Arc<Store>> {
@@ -237,8 +242,12 @@ impl PcbcraftService {
                 let mpart = address(&lib.id, path, &lib.documents[path]);
                 let generic = mpart.as_ref().and_then(|m| {
                     let doc: serde_json::Value = serde_json::from_str(&lib.documents[path]).ok()?;
-                    let id = doc.get("part")?.get("id")?.as_str()?;
-                    let gpath = format!("parts/{id}.json");
+                    let r = doc.get("part")?;
+                    let gpath = document_path(
+                        "parts",
+                        r.get("id")?.as_str()?,
+                        u32::try_from(r.get("revision")?.as_u64()?).ok()?,
+                    );
                     address(&m.library, &gpath, lib.documents.get(&gpath)?)
                 });
                 entries.insert(
@@ -296,6 +305,7 @@ impl PcbcraftService {
             Some(Ok(c)) => (PcbcraftState::Ready, None, Some(c)),
         };
         PcbcraftStatus {
+            contract: CONTRACT.into(),
             state,
             error,
             persistent_revisions: self.persistent(),
@@ -362,26 +372,26 @@ fn write_atomically(path: &FsPath, text: &str) -> std::io::Result<()> {
     result
 }
 
-/// The record kind of a document path (`parts/x.json` -> `part`).
+/// The record kind of a document path (`parts/x-r1.json` -> `part`),
+/// spelt as PCBCraft serializes its `Kind` (`manufacturer_part`).
 fn kind_of(path: &str) -> Option<&'static str> {
     Some(match path.split('/').next()? {
         "symbols" => "symbol",
         "footprints" => "footprint",
         "categories" => "category",
         "parts" => "part",
-        "manufacturer-parts" => "manufacturer-part",
+        "manufacturer-parts" => "manufacturer_part",
         _ => return None,
     })
 }
 
 fn address(library: &str, path: &str, text: &str) -> Option<PcbcraftAddress> {
     let kind = kind_of(path)?;
-    let id = path.rsplit('/').next()?.strip_suffix(".json")?;
     let doc: serde_json::Value = serde_json::from_str(text).ok()?;
     Some(PcbcraftAddress {
         library: library.to_string(),
         kind: kind.to_string(),
-        id: id.to_string(),
+        id: doc.get("id")?.as_str()?.to_string(),
         revision: u32::try_from(doc.get("revision")?.as_u64()?).ok()?,
         sha256: crate::routes::sha256_hex(text.as_bytes()),
     })
@@ -405,6 +415,8 @@ pub enum PcbcraftState {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Serialize)]
 pub struct PcbcraftStatus {
+    /// The catalog contract this API answers (`pcbcraft-catalog/1`).
+    pub contract: String,
     pub state: PcbcraftState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -430,7 +442,8 @@ pub struct PcbcraftStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PcbcraftAddress {
     pub library: String,
-    /// `symbol`, `footprint`, `category`, `part` or `manufacturer-part`.
+    /// `symbol`, `footprint`, `category`, `part` or `manufacturer_part`
+    /// (PCBCraft's `Kind` spelling).
     pub kind: String,
     pub id: String,
     pub revision: u32,
@@ -535,7 +548,20 @@ fn humanize(snake: &str) -> String {
     }
 }
 
-fn summary(store: &Store, catalog: &Catalog, part: &openparts_core::Part) -> PcbcraftPartSummary {
+/// The prefix the request came in under (`""` for `/v1/...`, `/api` for
+/// `/api/v1/...`): links are root-relative paths under that same prefix,
+/// so they resolve against the origin wherever the API is mounted.
+fn prefix(uri: &Uri) -> &str {
+    let path = uri.path();
+    path.find("/v1/").map_or("", |i| &path[..i])
+}
+
+fn summary(
+    store: &Store,
+    catalog: &Catalog,
+    part: &openparts_core::Part,
+    prefix: &str,
+) -> PcbcraftPartSummary {
     let ds = &store.dataset;
     let device = ds.devices.get(&part.device.0);
     let category = device.map(|d| d.category);
@@ -566,7 +592,7 @@ fn summary(store: &Store, catalog: &Catalog, part: &openparts_core::Part) -> Pcb
         refused: refusal.is_some(),
         bundle: refusal.is_none().then(|| {
             format!(
-                "/v1/parts/{}/{}/artifacts/pcbcraft",
+                "{prefix}/v1/parts/{}/{}/artifacts/pcbcraft",
                 crate::routes::encode_segment(&part.manufacturer.0),
                 crate::routes::encode_segment(&part.mpn)
             )
@@ -596,6 +622,7 @@ const MAX_LIMIT: usize = 200;
 /// `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=`
 async fn search(
     State(store): State<Arc<Store>>,
+    OriginalUri(uri): OriginalUri,
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<PcbcraftSearchResponse>, ApiError> {
     let catalog = store.pcbcraft.catalog()?;
@@ -639,7 +666,7 @@ async fn search(
         .iter()
         .skip(offset)
         .take(limit)
-        .map(|p| summary(&store, catalog, p))
+        .map(|p| summary(&store, catalog, p, prefix(&uri)))
         .collect();
     Ok(Json(PcbcraftSearchResponse {
         total: matches.len(),
@@ -681,11 +708,12 @@ fn part_documents<'c>(
 /// `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}`
 async fn get_details(
     State(store): State<Arc<Store>>,
+    OriginalUri(uri): OriginalUri,
     Path((manufacturer, mpn)): Path<(String, String)>,
 ) -> Result<Json<PcbcraftPartDetails>, ApiError> {
     let part = crate::routes::resolve_part(&store, &manufacturer, &mpn)?;
     let catalog = store.pcbcraft.catalog()?;
-    let summary = summary(&store, catalog, part);
+    let summary = summary(&store, catalog, part, prefix(&uri));
     let dependencies = match part_documents(catalog, part) {
         Ok((lib, docs)) => docs
             .iter()
@@ -805,7 +833,7 @@ pub(crate) fn part_symbol_svg(
     ))
 }
 
-fn library_summary(entry: &LibraryEntry) -> PcbcraftLibrarySummary {
+fn library_summary(entry: &LibraryEntry, prefix: &str) -> PcbcraftLibrarySummary {
     let lib = &entry.exported.library;
     let limit_error = lib.check_limits().err().or_else(|| {
         (entry.bundle_bytes > MAX_BUNDLE_BYTES).then(|| {
@@ -829,7 +857,7 @@ fn library_summary(entry: &LibraryEntry) -> PcbcraftLibrarySummary {
         bundle_sha256: entry.bundle_sha256.clone(),
         bundle: limit_error
             .is_none()
-            .then(|| format!("/v1/pcbcraft/libraries/{}", lib.id)),
+            .then(|| format!("{prefix}/v1/pcbcraft/libraries/{}", lib.id)),
         limit_error,
     }
 }
@@ -837,12 +865,17 @@ fn library_summary(entry: &LibraryEntry) -> PcbcraftLibrarySummary {
 /// `GET /v1/pcbcraft/libraries`
 async fn list_libraries(
     State(store): State<Arc<Store>>,
+    OriginalUri(uri): OriginalUri,
 ) -> Result<Json<PcbcraftLibraries>, ApiError> {
     let catalog = store.pcbcraft.catalog()?;
     Ok(Json(PcbcraftLibraries {
         persistent_revisions: store.pcbcraft.persistent(),
         license: store.pcbcraft.settings.license.clone(),
-        libraries: catalog.libraries.iter().map(library_summary).collect(),
+        libraries: catalog
+            .libraries
+            .iter()
+            .map(|l| library_summary(l, prefix(&uri)))
+            .collect(),
     }))
 }
 
@@ -857,7 +890,7 @@ async fn get_library(
         .iter()
         .find(|l| l.exported.library.id == id)
         .ok_or_else(|| ApiError::NotFound(format!("no PCBCraft library {id}")))?;
-    if let Some(e) = library_summary(entry).limit_error {
+    if let Some(e) = library_summary(entry, "").limit_error {
         return Err(ApiError::Refused {
             message: format!("library {id} is over PCBCraft's limits for one bundle"),
             reason: e,

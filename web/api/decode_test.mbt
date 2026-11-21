@@ -1298,7 +1298,7 @@ test "decode PcbcraftPartDetails" {
     #|  "library": "openparts-microcontroller",
     #|  "manufacturer_part": {
     #|   "library": "openparts-microcontroller",
-    #|   "kind": "manufacturer-part",
+    #|   "kind": "manufacturer_part",
     #|   "id": "raspberrypi-rp2040",
     #|   "revision": 1,
     #|   "sha256": "53c87b25e78089a3239aadc8e31c4798df01987519377e75a77317057d0938e6"

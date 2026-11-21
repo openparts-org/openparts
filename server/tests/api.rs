@@ -1480,6 +1480,7 @@ async fn pcbcraft_is_unavailable_until_prepared() {
     assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
     let status = json_of(get(app(), "/v1/pcbcraft").await).await;
     assert_eq!(status["state"], "building");
+    assert_eq!(status["contract"], "pcbcraft-catalog/1");
     assert_eq!(status["persistent_revisions"], false);
 }
 
@@ -1496,7 +1497,7 @@ async fn pcbcraft_search_returns_addresses_and_refusals() {
     assert_eq!(first["library"], "openparts-microcontroller");
     let mp = &first["manufacturer_part"];
     assert_eq!(mp["library"], "openparts-microcontroller");
-    assert_eq!(mp["kind"], "manufacturer-part");
+    assert_eq!(mp["kind"], "manufacturer_part");
     assert_eq!(mp["id"], "raspberrypi-rp2040");
     assert_eq!(mp["revision"], 1);
     assert_eq!(first["part"]["kind"], "part");
@@ -1562,7 +1563,7 @@ async fn pcbcraft_part_bundle_is_its_dependency_closure() {
     assert_eq!(manifest["id"], "openparts-microcontroller");
     assert_eq!(manifest["license"], "CC0-1.0");
     let mp: serde_json::Value = serde_json::from_str(
-        docs["manufacturer-parts/raspberrypi-rp2040.json"]
+        docs["manufacturer-parts/raspberrypi-rp2040-r1.json"]
             .as_str()
             .unwrap(),
     )
@@ -1619,6 +1620,44 @@ async fn pcbcraft_part_bundle_is_its_dependency_closure() {
         res.headers()["cache-control"],
         "public, max-age=31536000, immutable"
     );
+}
+
+/// The deployed app (`/` and `/api`) over the prepared catalog.
+fn pcbcraft_deployed() -> axum::Router {
+    let store = openparts_server::store::discover_and_load(&data_dir()).unwrap();
+    store.pcbcraft.prepare(&store.dataset).unwrap();
+    openparts_server::app::build_app(Arc::new(store), None)
+}
+
+#[tokio::test]
+async fn pcbcraft_links_keep_the_prefix_the_request_came_in_under() {
+    let app = pcbcraft_deployed();
+    let status = json_of(get(app.clone(), "/api/v1/pcbcraft").await).await;
+    assert_eq!(status["contract"], "pcbcraft-catalog/1");
+    assert_eq!(status["state"], "ready");
+    for prefix in ["", "/api"] {
+        let q = format!("{prefix}/v1/pcbcraft/search?q=RP2040&limit=1");
+        let hit = &json_of(get(app.clone(), &q).await).await["results"][0];
+        let bundle = hit["bundle"].as_str().unwrap();
+        assert_eq!(
+            bundle,
+            format!("{prefix}/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft")
+        );
+        assert_eq!(get(app.clone(), bundle).await.status(), StatusCode::OK);
+
+        let q = format!("{prefix}/v1/pcbcraft/parts/raspberrypi/RP2040");
+        let details = json_of(get(app.clone(), &q).await).await;
+        assert_eq!(details["summary"]["bundle"], bundle);
+
+        let q = format!("{prefix}/v1/pcbcraft/libraries");
+        let libs = json_of(get(app.clone(), &q).await).await;
+        let url = libs["libraries"][0]["bundle"].as_str().unwrap();
+        assert!(
+            url.starts_with(&format!("{prefix}/v1/pcbcraft/libraries/")),
+            "{url}"
+        );
+        assert_eq!(get(app.clone(), url).await.status(), StatusCode::OK);
+    }
 }
 
 #[tokio::test]
@@ -1752,24 +1791,24 @@ async fn pcbcraft_revisions_survive_a_restart_and_change_with_content() {
     let second = bundle_with_ledger(&data, &ledger).await;
     assert_eq!(first, second);
     assert_eq!(saved, std::fs::read_to_string(&ledger).unwrap());
-    let symbol = "symbols/ex-d.json";
-    let mpart = "manufacturer-parts/ex-ex-d.json";
-    assert_eq!(revision_of(&first, symbol), 1);
-    assert_eq!(revision_of(&first, mpart), 1);
+    let symbol = |r: u32| format!("symbols/ex-d-r{r}.json");
+    let mpart = |r: u32| format!("manufacturer-parts/ex-ex-d-r{r}.json");
+    assert_eq!(revision_of(&first, &symbol(1)), 1);
+    assert_eq!(revision_of(&first, &mpart(1)), 1);
 
     // Changed content gets the next revision, never the old address.
     let changed = pcbcraft_fixture("data", "C");
     let third = bundle_with_ledger(&changed, &ledger).await;
-    assert_eq!(revision_of(&third, symbol), 2);
-    assert_eq!(revision_of(&third, "parts/ex-d.json"), 2);
-    assert_eq!(revision_of(&third, mpart), 2);
+    assert_eq!(revision_of(&third, &symbol(2)), 2);
+    assert_eq!(revision_of(&third, "parts/ex-d-r2.json"), 2);
+    assert_eq!(revision_of(&third, &mpart(2)), 2);
     // The footprint did not change, so it keeps its revision and bytes.
     let fp = |b: &str| {
         let v: serde_json::Value = serde_json::from_str(b).unwrap();
-        v["documents"]["footprints/standards-t.json"].clone()
+        v["documents"]["footprints/standards-t-r1.json"].clone()
     };
     assert_eq!(fp(&first), fp(&third));
-    assert_eq!(revision_of(&third, "footprints/standards-t.json"), 1);
+    assert_eq!(revision_of(&third, "footprints/standards-t-r1.json"), 1);
 
     // Back to the first content: its first revision, byte for byte.
     let back = pcbcraft_fixture("data", "B");

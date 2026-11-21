@@ -11,7 +11,10 @@ library*: a folder with `library.json` and flat `symbols/`,
 directories of JSON records, or the same documents in one
 `pcbcraft-library-bundle/1` file. Every record is addressed by (library,
 kind, id, revision); a revision is immutable, and two copies of one
-address with different content are both quarantined. The export follows
+address with different content are both quarantined. Each record is
+written as `<dir>/<id>-r<revision>.json` (`parts/yageo-rc0603-r2.json`),
+PCBCraft's publishing convention, so two revisions of one id can share
+a folder; only `library.json` has a fixed name. The export follows
 PCBCraft's published JSON Schemas (`docs/schemas/*.schema.json`) and the
 rules of its part, symbol and footprint schema documents; its output is
 checked against PCBCraft's own `scripts/check-library-schemas.py` and
@@ -154,7 +157,10 @@ gets a hash of the key (`ti-lm358-1a2b3c4d`). Without a ledger every
 record is revision 1.
 
 `--ledger <file>` (`openparts-pcbcraft-ledger/1`, read if present, then
-updated) keeps, per library and `<kind>/<id>`, the OpenParts key and
+updated) keeps, per library and `<kind>/<id>` (its own kind names:
+`symbol`, `footprint`, `category`, `part`, `manufacturer-part`; never a
+file name, so ledgers written before revisioned file names load
+unchanged and keep their revisions), the OpenParts key and
 every published revision with the SHA-256 of its canonical document
 (revision and source reference blanked). An export reuses a revision
 whose digest matches -- with that revision's own source reference, so
@@ -196,11 +202,15 @@ openparts-server serves the same records as an external parts catalog
 for PCBCraft (the provider boundary of
 [tangency-labs/pcbcraft#94](https://github.com/tangency-labs/pcbcraft/issues/94):
 search, details, and on-demand resolution into pinned native records).
-Every route is read-only.
+Every route is read-only. It answers PCBCraft's remote-catalog contract
+`pcbcraft-catalog/1` (PCBCraft `docs/remote-catalogs.md`) with
+`{base}` = `<server>/v1/pcbcraft` (or `/api/v1/pcbcraft`); the bundle
+route lies outside `{base}` and is reached through each hit's `bundle`
+link.
 
 | Route | Answer |
 | --- | --- |
-| `GET /v1/pcbcraft` | status: `state` (`building`, `ready`, `failed` + `error`), `persistent_revisions`, `license`, library/part/refusal counts |
+| `GET /v1/pcbcraft` | status: `contract` (`pcbcraft-catalog/1`), `state` (`building`, `ready`, `failed` + `error`), `persistent_revisions`, `license`, library/part/refusal counts |
 | `GET /v1/pcbcraft/search?q=&category=&manufacturer=&exportable=&offset=&limit=` | `{total, offset, limit, persistent_revisions, results}`; a page is complete only when `offset + results.length == total`. `limit` 1-200 (default 50); `exportable=true/false` keeps only exportable or only refused parts; `category` takes a group and its subcategories |
 | `GET /v1/pcbcraft/parts/{manufacturer}/{mpn}` | `{summary, dependencies, license, persistent_revisions}`: `dependencies` is the address of every record the part's bundle holds |
 | `GET /v1/parts/{manufacturer}/{mpn}/artifacts/pcbcraft` | the part as a `pcbcraft-library-bundle/1`; `422` `{error, reason}` when refused |
@@ -211,7 +221,17 @@ A summary carries `manufacturer` (the OpenParts id used in the URLs),
 `manufacturer_name`, `mpn`, `category`, a one-line `description`, the
 `library`, the addresses of its `manufacturer_part` and generic `part`
 (`{library, kind, id, revision, sha256}`, the SHA-256 of the document
-text as served), `refused`/`refusal`, and the `bundle` URL.
+text as served; `kind` is spelt as PCBCraft serializes it: `symbol`,
+`footprint`, `category`, `part`, `manufacturer_part`), `refused`/`refusal`,
+and the `bundle` URL.
+
+**Links.** `bundle` links (in search hits, details and the library list)
+are root-relative paths under the prefix the request came in under: a
+request to `/api/v1/pcbcraft/search` gets
+`/api/v1/parts/<m>/<mpn>/artifacts/pcbcraft`, one to `/v1/...` gets
+`/v1/...`. PCBCraft resolves a `/path` link against the catalog's
+origin, so the link works wherever the API is mounted, without the
+server knowing its public URL.
 
 **Libraries and addresses.** The server exports the whole dataset once,
 in the background after startup, exactly as
@@ -267,11 +287,11 @@ curl -s 'https://openparts.jijinbei.jp/api/v1/pcbcraft/search?q=RP2040&limit=1'
 #   "description":"Microcontroller raspberrypi/RP2040 in standards/QFN56-RP2040",
 #   "library":"openparts-microcontroller",
 #   "manufacturer_part":{"library":"openparts-microcontroller",
-#     "kind":"manufacturer-part","id":"raspberrypi-rp2040","revision":1,"sha256":"53c8..."},
+#     "kind":"manufacturer_part","id":"raspberrypi-rp2040","revision":1,"sha256":"53c8..."},
 #   "part":{"library":"openparts-microcontroller","kind":"part",
 #     "id":"raspberrypi-rp2040","revision":1,"sha256":"9bd8..."},
 #   "refused":false,"refusal":null,
-#   "bundle":"/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"}]}
+#   "bundle":"/api/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft"}]}
 curl -sOJ https://openparts.jijinbei.jp/api/v1/parts/raspberrypi/RP2040/artifacts/pcbcraft
 # raspberrypi-RP2040.pcbcraft.json: library.json + 5 records
 curl -s https://openparts.jijinbei.jp/api/v1/parts/bourns/PTV09A-2015F-B103/artifacts/pcbcraft

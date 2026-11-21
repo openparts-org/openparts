@@ -200,20 +200,20 @@ fn the_ledger_keeps_revisions_and_bytes_across_runs() {
     let doc = |lib: &Library, path: &str| -> serde_json::Value {
         serde_json::from_str(&lib.documents[path]).unwrap()
     };
-    let fp3 = doc(&third, "footprints/standards-0603.json");
+    let fp3 = doc(&third, "footprints/standards-0603-r2.json");
     assert_eq!(fp3["revision"], 2);
     assert_eq!(fp3["source"]["reference"], "run 3");
-    assert_eq!(doc(&third, "parts/yageo-rc0603.json")["revision"], 2);
+    assert_eq!(doc(&third, "parts/yageo-rc0603-r2.json")["revision"], 2);
     assert_eq!(
-        doc(&third, "parts/yageo-rc0603.json")["packages"]["standards-0603"]["footprint"]
+        doc(&third, "parts/yageo-rc0603-r2.json")["packages"]["standards-0603"]["footprint"]
             ["revision"],
         2
     );
     assert_eq!(
-        doc(&third, "manufacturer-parts/yageo-rc0603fr-0710kl.json")["revision"],
+        doc(&third, "manufacturer-parts/yageo-rc0603fr-0710kl-r2.json")["revision"],
         2
     );
-    assert_eq!(doc(&third, "symbols/yageo-rc0603.json")["revision"], 1);
+    assert_eq!(doc(&third, "symbols/yageo-rc0603-r1.json")["revision"], 1);
     // Back to the first content: its first revisions and bytes again.
     let fourth = export(
         &resistor_input(),
@@ -229,7 +229,7 @@ fn specifications_are_canonical_base_unit_decimals() {
     let mut ledger = LedgerLibrary::default();
     let lib = export(&resistor_input(), &options("r"), &mut ledger).unwrap();
     let m: serde_json::Value =
-        serde_json::from_str(&lib.documents["manufacturer-parts/yageo-rc0603fr-0710kl.json"])
+        serde_json::from_str(&lib.documents["manufacturer-parts/yageo-rc0603fr-0710kl-r1.json"])
             .unwrap();
     let s = &m["specifications"];
     assert_eq!(s["pcbcraft:resistance"]["value"], "10000");
@@ -237,7 +237,7 @@ fn specifications_are_canonical_base_unit_decimals() {
     assert_eq!(s["openparts:power-rating"]["value"], "0.1");
     assert_eq!(s["openparts:power-rating"]["unit"], "W");
     let part: serde_json::Value =
-        serde_json::from_str(&lib.documents["parts/yageo-rc0603.json"]).unwrap();
+        serde_json::from_str(&lib.documents["parts/yageo-rc0603-r1.json"]).unwrap();
     assert_eq!(part["category"]["primary_value"], "pcbcraft:resistance");
 }
 
@@ -306,15 +306,15 @@ fn stacked_pins_and_repeated_pads_map_to_one_terminal() {
     let lib = export(&input, &options("r"), &mut LedgerLibrary::default()).unwrap();
     assert!(lib.refusals.is_empty(), "{:?}", lib.refusals);
     let part: serde_json::Value =
-        serde_json::from_str(&lib.documents["parts/yageo-rc0603.json"]).unwrap();
+        serde_json::from_str(&lib.documents["parts/yageo-rc0603-r1.json"]).unwrap();
     let map = &part["packages"]["standards-0603"]["mapping"];
     assert_eq!(map["1"], serde_json::json!(["1", "1_2"]));
     assert_eq!(map["2"], serde_json::json!(["2", "3"]));
     let sym: serde_json::Value =
-        serde_json::from_str(&lib.documents["symbols/yageo-rc0603.json"]).unwrap();
+        serde_json::from_str(&lib.documents["symbols/yageo-rc0603-r1.json"]).unwrap();
     assert_eq!(sym["terminals"].as_array().unwrap().len(), 2);
     let fp: serde_json::Value =
-        serde_json::from_str(&lib.documents["footprints/standards-0603.json"]).unwrap();
+        serde_json::from_str(&lib.documents["footprints/standards-0603-r1.json"]).unwrap();
     assert_eq!(fp["format"], "pcbcraft-footprint/4");
     assert_eq!(fp["non_plated_holes"][0]["diameter_nm"], 500000);
     // Y points down in PCBCraft.
@@ -349,7 +349,7 @@ fn a_large_symbol_is_split_into_units() {
     let lib = export(&input, &options("r"), &mut LedgerLibrary::default()).unwrap();
     assert!(lib.refusals.is_empty(), "{:?}", lib.refusals);
     let sym: serde_json::Value =
-        serde_json::from_str(&lib.documents["symbols/yageo-rc0603.json"]).unwrap();
+        serde_json::from_str(&lib.documents["symbols/yageo-rc0603-r1.json"]).unwrap();
     assert_eq!(sym["format"], "pcbcraft-symbol/4");
     let units = sym["units"].as_array().unwrap();
     // One family of 40 (`P0`..`P39`): units of 16 (left, then right).
@@ -418,16 +418,83 @@ fn a_part_s_documents_are_its_dependency_closure() {
     assert_eq!(
         paths,
         [
-            "categories/resistor.json",
-            "footprints/standards-0603.json",
+            "categories/resistor-r1.json",
+            "footprints/standards-0603-r1.json",
             "library.json",
-            "manufacturer-parts/yageo-rc0603fr-0710kl.json",
-            "parts/yageo-rc0603.json",
-            "symbols/yageo-rc0603.json",
+            "manufacturer-parts/yageo-rc0603fr-0710kl-r1.json",
+            "parts/yageo-rc0603-r1.json",
+            "symbols/yageo-rc0603-r1.json",
         ]
     );
     for (path, text) in &docs {
         assert_eq!(&lib.documents[path], text);
     }
     assert!(lib.part_documents("yageo/none").is_none());
+}
+
+#[test]
+fn a_ledger_written_before_revisioned_file_names_keeps_its_revisions() {
+    // The ledger format is unchanged by revisioned file names: records
+    // are keyed `<kind>/<id>` (kind `manufacturer-part`, hyphenated, as
+    // ever), never by path, and digests cover the record content only.
+    let literal = r#"{
+  "format": "openparts-pcbcraft-ledger/1",
+  "libraries": {
+    "openparts": {
+      "records": {
+        "manufacturer-part/yageo-rc0603fr-0710kl": {
+          "key": "part:yageo/RC0603FR-0710KL",
+          "revisions": [
+            {"revision": 1, "sha256": "00"},
+            {"revision": 2, "sha256": "11", "reference": "run 3"}
+          ]
+        }
+      }
+    }
+  }
+}"#;
+    let ledger = Ledger::from_json(literal).unwrap();
+    assert_eq!(
+        ledger.libraries["openparts"].records["manufacturer-part/yageo-rc0603fr-0710kl"].revisions
+            [1]
+        .revision,
+        2
+    );
+
+    // A ledger saved after two publications (footprint, part and
+    // manufacturer part at revision 2; symbol and category at 1).
+    let mut ledger = Ledger::default();
+    let mut changed = resistor_input();
+    let mut fp = chip_footprint();
+    fp.pads[0].size = (0.9, 0.95);
+    changed.packages[0].footprint = Ok(fp.clone());
+    changed.parts[0].footprint = Ok(fp);
+    for (input, run) in [(&resistor_input(), "run 1"), (&changed, "run 2")] {
+        export(input, &options(run), ledger.library_mut("openparts")).unwrap();
+    }
+    let saved = ledger.to_json();
+    let mut ledger = Ledger::from_json(&saved).unwrap();
+    let lib = export(&changed, &options("run 3"), ledger.library_mut("openparts")).unwrap();
+    // Nothing renumbered, nothing allocated.
+    assert_eq!(ledger.to_json(), saved);
+    let paths: Vec<&str> = lib.documents.keys().map(String::as_str).collect();
+    assert_eq!(
+        paths,
+        [
+            "categories/resistor-r1.json",
+            "footprints/standards-0603-r2.json",
+            "library.json",
+            "manufacturer-parts/yageo-rc0603fr-0710kl-r2.json",
+            "parts/yageo-rc0603-r2.json",
+            "symbols/yageo-rc0603-r1.json",
+        ]
+    );
+    for (path, text) in &lib.documents {
+        if let Some(rev) = path.strip_suffix(".json").and_then(|p| p.rsplit_once("-r")) {
+            let v: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert_eq!(v["revision"].to_string(), rev.1, "{path}");
+        }
+    }
+    let closure = lib.part_documents("yageo/RC0603FR-0710KL").unwrap();
+    assert_eq!(closure.len(), 6);
 }

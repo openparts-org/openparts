@@ -4174,6 +4174,7 @@ pub impl @json.FromJson for PcbcraftState with fn from_json(json, path) {
 #derive(Eq)
 pub(all) struct PcbcraftStatus {
   build_ms : Int32?
+  contract : String
   error : String?
   libraries : Int32
   license : String
@@ -4190,6 +4191,7 @@ pub impl @json.FromJson for PcbcraftStatus with fn from_json(json, path) {
   }
   {
     build_ms: opt_field(obj, "build_ms", path),
+    contract: field(obj, "contract", path),
     error: opt_field(obj, "error", path),
     libraries: field(obj, "libraries", path),
     license: field(obj, "license", path),

@@ -1424,6 +1424,7 @@ pub impl @json.FromJson for PcbcraftState
 #derive(Eq)
 pub(all) struct PcbcraftStatus {
   build_ms : Int32?
+  contract : String
   error : String?
   libraries : Int32
   license : String
