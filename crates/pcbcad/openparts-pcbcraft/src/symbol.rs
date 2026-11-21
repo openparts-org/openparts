@@ -221,7 +221,9 @@ pub(crate) fn convert(symbol: &PcbSymbol, name: &str) -> Result<SymbolDraft, Ref
             revision: 0,
             name: clean_text("symbol name", name, 64)?,
             reference_prefix: reference_prefix(&symbol.reference)?,
-            default_value: clean_text("symbol value", name, 64)?,
+            // The value shown on the sheet: "RP2040", not the device id
+            // "raspberrypi/RP2040".
+            default_value: clean_text("symbol value", name.rsplit('/').next().unwrap_or(name), 64)?,
             terminals: records,
             units,
         },

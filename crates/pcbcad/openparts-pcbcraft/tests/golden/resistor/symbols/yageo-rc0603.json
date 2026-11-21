@@ -4,7 +4,7 @@
   "revision": 1,
   "name": "yageo/RC0603",
   "reference_prefix": "R",
-  "default_value": "yageo/RC0603",
+  "default_value": "RC0603",
   "terminals": [
     {
       "id": "1",
