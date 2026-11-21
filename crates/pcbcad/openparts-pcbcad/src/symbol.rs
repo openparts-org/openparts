@@ -242,6 +242,9 @@ impl PinGroups {
 /// symbol's size for no visible benefit; removed.
 const CHAR_WIDTH_MM: f64 = 1.0;
 
+/// KiCad's default gap between a pin's body end and its name (mm).
+const NAME_OFFSET_MM: f64 = 0.508;
+
 /// A pin's required half-extent along a packing axis, plus an optional
 /// group key (used by `pack_centered` to insert extra gaps between
 /// different groups).
@@ -533,6 +536,19 @@ pub fn build_symbol(name: &str, device: &Device) -> PcbSymbol {
             corner_boosted_reach(&left_specs, &left_pos, margin),
             f64::max,
         );
+    // Names are drawn inside the body, so opposite sides' names must fit
+    // side by side with a grid of air between them (a TVS diode's
+    // "Anode" | "Cathode" across a body that is otherwise one grid wide).
+    let widest = |groups: &[(String, Vec<String>)]| {
+        groups
+            .iter()
+            .filter_map(|(_, numbers)| device.pins.get(numbers.first()?))
+            .map(|p| p.name.chars().count() as f64 * CHAR_WIDTH_MM)
+            .fold(0.0, f64::max)
+    };
+    let names_across = |a: f64, b: f64| (a + b) / 2.0 + NAME_OFFSET_MM + GRID_MM / 2.0;
+    let half_width = half_width.max(names_across(widest(&left_groups), widest(&right_groups)));
+    let half_height = half_height.max(names_across(widest(&top_groups), widest(&bottom_groups)));
     // Pin ends on KiCad's 1.27 mm (50 mil) grid, so wires and labels
     // snap onto them: the body edges (pins are a 2.54 length beyond them)
     // move out to the next grid line.
@@ -1508,6 +1524,34 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn opposite_names_fit_side_by_side_in_the_body() {
+        // A TVS diode: one pin each side, nothing on top or bottom.
+        let device = device_from(&[
+            ("1".into(), "Anode".into(), PinType::Passive),
+            ("2".into(), "Cathode".into(), PinType::Passive),
+        ]);
+        let symbol = build_symbol("D", &device);
+        let x = |n: &str| {
+            symbol
+                .pins
+                .iter()
+                .find(|p| p.number == n)
+                .unwrap()
+                .position
+                .x
+        };
+        let (left, right) = (x("1").min(x("2")), x("1").max(x("2")));
+        // Body edges are a pin length inside the pin ends; names start
+        // NAME_OFFSET_MM inside the edges.
+        let inner = (right - left) - 2.0 * (PIN_LENGTH_MM + NAME_OFFSET_MM);
+        let names = ("Anode".len() + "Cathode".len()) as f64 * CHAR_WIDTH_MM;
+        assert!(
+            inner >= names + GRID_MM - 1e-6,
+            "inner {inner} < names {names} + a grid"
+        );
     }
 
     #[test]
